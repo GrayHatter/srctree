@@ -58,7 +58,7 @@ fn respond(r: *Server.Response, _: []const u8) EndpointErr!void {
 }
 
 fn serve(srv: *Server, a: std.mem.Allocator) !void {
-    outer: while (true) {
+    connection: while (true) {
         var response = try srv.accept(.{
             .allocator = a,
             .header_strategy = .{ .dynamic = MAX_HEADER_SIZE },
@@ -68,7 +68,7 @@ fn serve(srv: *Server, a: std.mem.Allocator) !void {
 
         while (response.reset() != .closing) {
             response.wait() catch |err| switch (err) {
-                error.HttpHeadersInvalid => continue :outer,
+                error.HttpHeadersInvalid => continue :connection,
                 error.EndOfStream => continue,
                 else => return err,
             };
@@ -88,7 +88,7 @@ fn serve(srv: *Server, a: std.mem.Allocator) !void {
 
             const ep = route(response.request.target);
             ep(&response, body) catch |e| switch (e) {
-                error.AndExit => break :outer,
+                error.AndExit => break :connection,
                 else => return e,
             };
         }
