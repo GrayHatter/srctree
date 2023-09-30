@@ -18,9 +18,10 @@ fn eql(a: []const u8, b: []const u8) bool {
 }
 
 fn route(uri: []const u8) Endpoint {
+    if (eql(uri, "/")) return respond;
     if (eql(uri, "/bye")) return bye;
-    if (eql(uri, "/tree")) return respond;
     if (eql(uri, "/commits")) return respond;
+    if (eql(uri, "/tree")) return respond;
     return notfound;
 }
 
