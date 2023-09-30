@@ -5,33 +5,56 @@ const MAX_HEADER_SIZE = 1 << 14;
 const HOST = "127.0.0.1";
 const PORT = 2000;
 
-fn route() void {}
+const EndpointErr = error{
+    Unknown,
+    AndExit,
+    OutOfMemory,
+};
 
-fn respond(r: *Server.Response) !void {
-    const a = r.allocator;
-    std.log.info("{s} {s} {s}", .{
-        @tagName(r.request.method),
-        @tagName(r.request.version),
-        r.request.target,
-    });
+pub const Endpoint = *const fn (*Server.Response, []const u8) EndpointErr!void;
 
-    const andexit = std.mem.eql(u8, r.request.target, "/bye");
+fn eql(a: []const u8, b: []const u8) bool {
+    return std.mem.eql(u8, a, b);
+}
 
-    const body = try r.reader().readAllAlloc(a, 8192);
-    defer a.free(body);
+fn route(uri: []const u8) Endpoint {
+    if (eql(uri, "/bye")) return bye;
+    if (eql(uri, "/tree")) return respond;
+    if (eql(uri, "/commits")) return respond;
+    return notfound;
+}
 
+fn sendMsg(r: *Server.Response, msg: []const u8) !void {
+    r.transfer_encoding = .{ .content_length = msg.len };
+
+    try r.do();
+    try r.writeAll(msg);
+    try r.finish();
+}
+
+fn bye(r: *Server.Response, _: []const u8) EndpointErr!void {
+    const MSG = "bye!\n";
+    sendMsg(r, MSG) catch |e| {
+        std.log.err("Unexpected error while responding [{}]\n", .{e});
+    };
+    return EndpointErr.AndExit;
+}
+
+fn notfound(r: *Server.Response, _: []const u8) EndpointErr!void {
+    r.status = .not_found;
+    r.do() catch unreachable;
+}
+
+fn respond(r: *Server.Response, _: []const u8) EndpointErr!void {
     if (r.request.headers.contains("connection")) {
         try r.headers.append("connection", "keep-alive");
     }
-    const MSG = if (andexit) "bye!\n" else "Hi, mom!\n";
-    r.transfer_encoding = .{ .content_length = MSG.len };
-
     try r.headers.append("content-type", "text/plain");
-    try r.do();
-    try r.writeAll(MSG);
-    try r.finish();
-
-    if (andexit) return error.AndExit;
+    const MSG = "Hi, mom!\n";
+    sendMsg(r, MSG) catch |e| {
+        std.log.err("Unexpected error while responding [{}]\n", .{e});
+        return EndpointErr.AndExit;
+    };
 }
 
 fn serve(srv: *Server, a: std.mem.Allocator) !void {
@@ -50,7 +73,22 @@ fn serve(srv: *Server, a: std.mem.Allocator) !void {
                 else => return err,
             };
 
-            respond(&response) catch |e| switch (e) {
+            const ep = route(response.request.target);
+
+            std.log.info("{s} {s} {s}", .{
+                @tagName(response.request.method),
+                @tagName(response.request.version),
+                response.request.target,
+            });
+
+            const body = try response.reader().readAllAlloc(a, 8192);
+            defer a.free(body);
+
+            if (response.request.headers.contains("connection")) {
+                try response.headers.append("connection", "keep-alive");
+            }
+
+            ep(&response, body) catch |e| switch (e) {
                 error.AndExit => break :outer,
                 else => return e,
             };
