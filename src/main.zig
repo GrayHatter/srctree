@@ -72,22 +72,21 @@ fn serve(srv: *Server, a: std.mem.Allocator) !void {
                 error.EndOfStream => continue,
                 else => return err,
             };
-
-            const ep = route(response.request.target);
-
             std.log.info("{s} {s} {s}", .{
                 @tagName(response.request.method),
                 @tagName(response.request.version),
                 response.request.target,
             });
-
             const body = try response.reader().readAllAlloc(a, 8192);
             defer a.free(body);
+
+            try response.headers.append("Server", "Source Tree WebServer");
 
             if (response.request.headers.contains("connection")) {
                 try response.headers.append("connection", "keep-alive");
             }
 
+            const ep = route(response.request.target);
             ep(&response, body) catch |e| switch (e) {
                 error.AndExit => break :outer,
                 else => return e,
