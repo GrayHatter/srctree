@@ -58,7 +58,7 @@ fn respond(r: *Server.Response, _: []const u8) EndpointErr!void {
     };
 }
 
-fn serve(srv: *Server, a: std.mem.Allocator) !void {
+fn serveHttp(srv: *Server, a: std.mem.Allocator) !void {
     connection: while (true) {
         var response = try srv.accept(.{
             .allocator = a,
@@ -107,7 +107,7 @@ pub fn main() !void {
     try srv.listen(addr);
     std.log.info("Server listening\n", .{});
 
-    serve(&srv, a) catch {
+    serveHttp(&srv, a) catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
         }
