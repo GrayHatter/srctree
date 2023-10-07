@@ -96,48 +96,96 @@ fn serveHttp(srv: *Server, a: std.mem.Allocator) !void {
     }
 }
 
+test "uwsgi proto" {
+    const a = uProtoHeader{
+        .mod1 = 0,
+        .size = 180,
+        .mod2 = 0,
+    };
+
+    const z = @as([*]const u8, @ptrCast(&a));
+    std.debug.print("{any} \n", .{@as([]const u8, z[0..4])});
+}
+
+// TODO packed
+const uProtoHeader = packed struct {
+    mod1: u8 = 0,
+    size: u16 = 0,
+    mod2: u8 = 0,
+};
+
+const uWSGIVar = struct {
+    key: []const u8,
+    val: []const u8,
+
+    pub fn read(_: []u8) uWSGIVar {
+        return uWSGIVar{ .key = "", .val = "" };
+    }
+};
+
 fn uwsgiHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) ![][]u8 {
     var list = std.ArrayList([]u8).init(a);
 
-    // TODO packed
-    const uHEADER = extern struct {
-        mod1: u8 = 0,
-        size: u16 = 0,
-        mod2: u8 = 0,
-    };
+    var uwsgi_header = uProtoHeader{};
+    var ptr: [*]u8 = @ptrCast(&uwsgi_header);
+    _ = try acpt.stream.read(@alignCast(ptr[0..4]));
 
-    var uwsgi_header: *uHEADER = undefined;
-    var h_buf: [4]u8 align(@alignOf(uHEADER)) = .{ 0, 0, 0, 0 };
-    _ = try acpt.stream.read(&h_buf);
-    uwsgi_header = @as(*uHEADER, @ptrCast(&h_buf));
+    std.log.info("header {any}", .{@as([]const u8, ptr[0..4])});
     std.log.info("header {}", .{uwsgi_header});
-    var rsize = [1]u8{0};
-    var rcount: usize = 0;
 
-    var b: [8192]u8 = undefined;
-    header: while (true) {
-        rcount = 0;
-        while (try acpt.stream.read(&rsize) != 0) {
-            if (rsize[0] == 0) {
-                if (rcount == 0) {
-                    std.log.info("data [empty]", .{});
-                    continue :header;
-                }
-                break;
-            }
-            rcount += rsize[0];
+    var buf: []u8 = try a.alloc(u8, uwsgi_header.size);
+    const read = try acpt.stream.read(buf);
+    if (read != uwsgi_header.size) {
+        std.log.err("unexpected read size {} {}", .{ read, uwsgi_header.size });
+    }
+
+    while (buf.len > 0) {
+        var size = @as(u16, @bitCast(buf[0..2].*));
+        buf = buf[2..];
+        const key = buf[0..size];
+        std.log.info("VAR {s} ({})[{any}] ", .{ key, size, key });
+        buf = buf[size..];
+        size = @as(u16, @bitCast(buf[0..2].*));
+        buf = buf[2..];
+        if (size > 0) {
+            const val = buf[0..size];
+            std.log.info("VAR {s} ({})[{any}] ", .{ val, size, val });
+            buf = buf[size..];
+        } else {
+            std.log.info("VAR [empty value] ", .{});
         }
-        std.debug.assert(rcount > 0);
-        var buf = b[0..rcount];
-        var in = try acpt.stream.read(buf);
-        std.debug.assert(in == rcount);
-        std.log.info("data {any}", .{buf});
-        std.log.info("data {s}", .{buf});
-        if (in == 0 and rcount == 0) break;
     }
 
     return list.toOwnedSlice();
 }
+
+const BLOB =
+    \\HTTP/1.1 200 Found
+    \\Server: zwsgi/0.0.0
+    \\Content-Type: text/html
+    \\Content-Length: 567
+    \\
+    \\<!DOCTYPE html>
+    \\<html>
+    \\<head>
+    \\<title>zWSGI</title>
+    \\<style>
+    \\html { color-scheme: light dark; }
+    \\body { width: 35em; margin: 0 auto;
+    \\font-family: Tahoma, Verdana, Arial, sans-serif; }
+    \\</style>
+    \\</head>
+    \\<body>
+    \\<h1>Task Failed Successfully!</h1>
+    \\<p>The git repo you're looing for is in another castle :(<br/>
+    \\Please try again repeatedly... surely it'll work this time!</p>
+    \\<p>If you are the system administrator you should already know why <br/>
+    \\it's broken what are you still reading this for?!</p>
+    \\<p><em>Faithfully yours, Geoff from Accounting.</em></p>
+    \\</body>
+    \\</html>
+    \\
+;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
@@ -155,11 +203,12 @@ pub fn main() !void {
     const uaddr = try std.net.Address.initUnix(FILE);
     try usock.listen(uaddr);
     std.log.info("Unix server listening\n", .{});
-    var acpt = try usock.accept();
-
-    _ = try uwsgiHeader(a, acpt);
-
-    acpt.stream.close();
+    while (true) {
+        var acpt = try usock.accept();
+        _ = try uwsgiHeader(a, acpt);
+        _ = try acpt.stream.write(BLOB);
+        acpt.stream.close();
+    }
     usock.close();
 
     var srv = Server.init(a, .{ .reuse_address = true });
