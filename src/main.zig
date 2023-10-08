@@ -1,9 +1,15 @@
 const std = @import("std");
 const Server = std.http.Server;
+const HTML = @import("html.zig");
 
 const MAX_HEADER_SIZE = 1 << 14;
 const HOST = "127.0.0.1";
 const PORT = 2000;
+
+test "main" {
+    std.testing.refAllDecls(@This());
+    _ = HTML.html(&[0]HTML.Element{});
+}
 
 const EndpointErr = error{
     Unknown,
@@ -94,17 +100,6 @@ fn serveHttp(srv: *Server, a: std.mem.Allocator) !void {
             };
         }
     }
-}
-
-test "uwsgi proto" {
-    const a = uProtoHeader{
-        .mod1 = 0,
-        .size = 180,
-        .mod2 = 0,
-    };
-
-    const z = @as([*]const u8, @ptrCast(&a));
-    std.debug.print("{any} \n", .{@as([]const u8, z[0..4])});
 }
 
 // TODO packed
