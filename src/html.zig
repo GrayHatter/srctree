@@ -1,7 +1,18 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 
-var _alloc: std.mem.Allocator = undefined;
+var _arena: std.heap.ArenaAllocator = undefined;
+var _alloc: Allocator = undefined;
 // TODO areana allocator with deinit
+
+pub fn init(a: Allocator) void {
+    _arena = std.heap.ArenaAllocator.init(a);
+    _alloc = _arena.allocator();
+}
+
+pub fn raze() void {
+    _arena.deinit();
+}
 
 pub const Attribute = struct {
     key: []const u8,
@@ -99,9 +110,8 @@ pub fn strong(c: anytype) Element {
 
 test "html" {
     var a = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(a);
-    _alloc = arena.allocator();
-    defer arena.deinit();
+    init(a);
+    defer raze();
 
     const str = try std.fmt.allocPrint(a, "{}", .{html(&[_]Element{})});
     defer a.free(str);
@@ -114,9 +124,8 @@ test "html" {
 
 test "nested" {
     var a = std.testing.allocator;
-    var arena = std.heap.ArenaAllocator.init(a);
-    _alloc = arena.allocator();
-    defer arena.deinit();
+    init(a);
+    defer raze();
     const str = try std.fmt.allocPrint(a, "{}", .{
         html(&[_]E{
             head(.{}),
