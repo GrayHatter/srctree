@@ -38,13 +38,13 @@ pub const E = Element;
 
 pub fn element(comptime name: []const u8, children: anytype) Element {
     const ChildrenType = @TypeOf(children);
-    //@compileLog(ChildrenType);
-    //@compileLog(@typeName(ChildrenType));
     const child_type_info = @typeInfo(ChildrenType);
-    //@compileLog(child_type_info);
     if (child_type_info == .Pointer) {
-        // pass
-        //@compileLog("true");
+        return .{
+            .name = name,
+            .attrs = &[0]Attribute{},
+            .children = children,
+        };
     } else if (ChildrenType == Element) {
         const el = _alloc.alloc(Element, 1) catch unreachable;
         el[0] = children;
@@ -56,7 +56,7 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
     } else if (child_type_info == .Struct) {
         const fields_info = child_type_info.Struct.fields;
         if (fields_info.len != 0) {
-            @compileError(".{} is the only child struct type");
+            @compileError(".{} is the only child struct type"); // currently TODO plz fix
         }
         return .{
             .name = name,
@@ -66,12 +66,7 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
     } else {
         @compileError("children must be either Element, or []Element or .{}");
     }
-
-    return .{
-        .name = name,
-        .attrs = &[0]Attribute{},
-        .children = children,
-    };
+    unreachable;
 }
 
 pub fn html(c: anytype) Element {
