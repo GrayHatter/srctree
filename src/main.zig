@@ -1,6 +1,7 @@
 const std = @import("std");
 const Server = std.http.Server;
 const HTML = @import("html.zig");
+const Template = @import("template.zig");
 
 const MAX_HEADER_SIZE = 1 << 14;
 const HOST = "127.0.0.1";
@@ -154,38 +155,13 @@ fn uwsgiHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) ![][
     return list.toOwnedSlice();
 }
 
-const BLOB =
-    \\HTTP/1.1 200 Found
-    \\Server: zwsgi/0.0.0
-    \\Content-Type: text/html
-    \\Content-Length: 568
-    \\
-    \\<!DOCTYPE html>
-    \\<html>
-    \\<head>
-    \\<title>zWSGI</title>
-    \\<style>
-    \\html { color-scheme: light dark; }
-    \\body { width: 35em; margin: 0 auto;
-    \\font-family: Tahoma, Verdana, Arial, sans-serif; }
-    \\</style>
-    \\</head>
-    \\<body>
-    \\<h1>Task Failed Successfully!</h1>
-    \\<p>The git repo you're looking for is in another castle :(<br/>
-    \\Please try again repeatedly... surely it'll work this time!</p>
-    \\<p>If you are the system administrator you should already know why <br/>
-    \\it's broken what are you still reading this for?!</p>
-    \\<p><em>Faithfully yours, Geoff from Accounting.</em></p>
-    \\</body>
-    \\</html>
-    \\
-;
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
     defer _ = gpa.deinit();
     const a = gpa.allocator();
+
+    Template.init(a);
+    defer Template.raze();
 
     var usock = std.net.StreamServer.init(.{});
     const FILE = "./srctree.sock";
@@ -209,7 +185,7 @@ pub fn main() !void {
     while (true) {
         var acpt = try usock.accept();
         _ = try uwsgiHeader(a, acpt);
-        _ = try acpt.stream.write(BLOB);
+        _ = try acpt.stream.write(Template.templates[0].blob);
         acpt.stream.close();
     }
     usock.close();
