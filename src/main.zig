@@ -163,7 +163,7 @@ const BLOB =
     \\HTTP/1.1 200 Found
     \\Server: zwsgi/0.0.0
     \\Content-Type: text/html
-    \\Content-Length: 567
+    \\Content-Length: 568
     \\
     \\<!DOCTYPE html>
     \\<html>
@@ -177,7 +177,7 @@ const BLOB =
     \\</head>
     \\<body>
     \\<h1>Task Failed Successfully!</h1>
-    \\<p>The git repo you're looing for is in another castle :(<br/>
+    \\<p>The git repo you're looking for is in another castle :(<br/>
     \\Please try again repeatedly... surely it'll work this time!</p>
     \\<p>If you are the system administrator you should already know why <br/>
     \\it's broken what are you still reading this for?!</p>
