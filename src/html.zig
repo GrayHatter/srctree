@@ -1,5 +1,8 @@
 const std = @import("std");
 
+var _alloc: std.mem.Allocator = undefined;
+// TODO areana allocator with deinit
+
 pub const Attribute = struct {
     key: []const u8,
     value: ?[]const u8,
@@ -33,7 +36,37 @@ pub const Element = struct {
 
 pub const E = Element;
 
-pub fn element(comptime name: []const u8, comptime children: []const Element) Element {
+pub fn element(comptime name: []const u8, children: anytype) Element {
+    const ChildrenType = @TypeOf(children);
+    //@compileLog(ChildrenType);
+    //@compileLog(@typeName(ChildrenType));
+    const child_type_info = @typeInfo(ChildrenType);
+    //@compileLog(child_type_info);
+    if (child_type_info == .Pointer) {
+        // pass
+        //@compileLog("true");
+    } else if (ChildrenType == Element) {
+        const el = _alloc.alloc(Element, 1) catch unreachable;
+        el[0] = children;
+        return .{
+            .name = name,
+            .attrs = &[0]Attribute{},
+            .children = el,
+        };
+    } else if (child_type_info == .Struct) {
+        const fields_info = child_type_info.Struct.fields;
+        if (fields_info.len != 0) {
+            @compileError(".{} is the only child struct type");
+        }
+        return .{
+            .name = name,
+            .attrs = &[0]Attribute{},
+            .children = &[0]Element{},
+        };
+    } else {
+        @compileError("children must be either Element, or []Element or .{}");
+    }
+
     return .{
         .name = name,
         .attrs = &[0]Attribute{},
@@ -41,57 +74,60 @@ pub fn element(comptime name: []const u8, comptime children: []const Element) El
     };
 }
 
-pub fn html(comptime c: []const Element) Element {
+pub fn html(c: anytype) Element {
     return element("html", c);
 }
 
-pub fn head(comptime c: []const Element) Element {
+pub fn head(c: anytype) Element {
     return element("head", c);
 }
 
-pub fn body(comptime c: []const Element) Element {
+pub fn body(c: anytype) Element {
     return element("body", c);
 }
 
-pub fn div(comptime c: []const Element) Element {
+pub fn div(c: anytype) Element {
     return element("div", c);
 }
 
-pub fn p(comptime c: []const Element) Element {
+pub fn p(c: anytype) Element {
     return element("p", c);
 }
 
-pub fn span(comptime c: []const Element) Element {
+pub fn span(c: anytype) Element {
     return element("span", c);
 }
 
-pub fn strong(comptime c: []const Element) Element {
+pub fn strong(c: anytype) Element {
     return element("strong", c);
 }
 
 test "html" {
     var a = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(a);
+    _alloc = arena.allocator();
+    defer arena.deinit();
+
     const str = try std.fmt.allocPrint(a, "{}", .{html(&[_]Element{})});
     defer a.free(str);
     try std.testing.expectEqualStrings("<html>", str);
 
-    const str2 = try std.fmt.allocPrint(a, "{}", .{html(
-        &[_]Element{body(&[_]Element{})},
-    )});
+    const str2 = try std.fmt.allocPrint(a, "{}", .{html(body(.{}))});
     defer a.free(str2);
     try std.testing.expectEqualStrings("<html>\n<body>\n</html>", str2);
 }
 
 test "nested" {
     var a = std.testing.allocator;
+    var arena = std.heap.ArenaAllocator.init(a);
+    _alloc = arena.allocator();
+    defer arena.deinit();
     const str = try std.fmt.allocPrint(a, "{}", .{
         html(&[_]E{
-            head(&[_]E{}),
-            body(&[_]E{
-                div(&[_]E{
-                    p(&[_]E{}),
-                }),
-            }),
+            head(.{}),
+            body(
+                div(p(.{})),
+            ),
         }),
     });
     defer a.free(str);
