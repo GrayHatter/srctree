@@ -203,6 +203,14 @@ pub fn main() !void {
     const uaddr = try std.net.Address.initUnix(FILE);
     try usock.listen(uaddr);
     std.log.info("Unix server listening\n", .{});
+
+    var path = try std.fs.cwd().realpathAlloc(a, FILE);
+    var zpath = try a.dupeZ(u8, path);
+    a.free(path);
+    var mode = std.os.linux.chmod(zpath, 0o777);
+    if (false) std.debug.print("mode {o}\n", .{mode});
+    defer a.free(zpath);
+
     while (true) {
         var acpt = try usock.accept();
         _ = try uwsgiHeader(a, acpt);
