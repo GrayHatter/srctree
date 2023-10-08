@@ -185,7 +185,7 @@ pub fn main() !void {
     while (true) {
         var acpt = try usock.accept();
         _ = try uwsgiHeader(a, acpt);
-        _ = try acpt.stream.write(Template.templates[0].blob);
+        _ = try acpt.stream.write(Template.builtin[0].blob);
         acpt.stream.close();
     }
     usock.close();

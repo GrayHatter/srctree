@@ -5,11 +5,11 @@ const Allocator = std.mem.Allocator;
 const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
 
-//const template_files = [3][]const u8{
-//    "index.html",
-//    "4XX.html",
-//    "5XX.html",
-//};
+const template_files = [3][]const u8{
+    "index.html",
+    "4XX.html",
+    "5XX.html",
+};
 
 pub const Template = struct {
     name: []const u8,
@@ -27,7 +27,23 @@ pub const Template = struct {
 
 var _alloc: Allocator = undefined;
 
-pub var templates: []Template = undefined;
+pub var builtin: [template_files.len]Template = blk: {
+    var buf: [8192]u8 = undefined;
+    var fba = std.heap.FixedBufferAllocator.init(&buf);
+    var a = fba.allocator();
+    var t: [template_files.len]Template = undefined;
+    inline for (template_files, &t) |file, *dst| {
+        const filename = std.mem.join(a, "", &[2][]const u8{
+            TEMPLATE_PATH,
+            file,
+        }) catch "ERROR GENERATING BLOB";
+        dst.*.name = file;
+        dst.*.blob = @embedFile(filename);
+    }
+    break :blk t;
+};
+
+pub var dynamic: []Template = undefined;
 
 fn load(a: Allocator) !void {
     var cwd = std.fs.cwd();
@@ -49,7 +65,7 @@ fn load(a: Allocator) !void {
             .blob = try cwd.readFileAlloc(a, name, MAX_BYTES),
         });
     }
-    templates = try list.toOwnedSlice();
+    dynamic = try list.toOwnedSlice();
 }
 
 pub fn init(a: Allocator) void {
@@ -58,16 +74,16 @@ pub fn init(a: Allocator) void {
 }
 
 pub fn raze() void {
-    for (templates) |t| {
+    for (dynamic) |t| {
         _alloc.free(t.name);
         _alloc.free(t.blob);
     }
-    _alloc.free(templates);
+    _alloc.free(dynamic);
 }
 
 test "load templates" {
     const a = std.testing.allocator;
     init(a);
     defer raze();
-    try std.testing.expectEqualStrings("HTTP/1.1 200 Found", templates[0].blob[0..18]);
+    try std.testing.expectEqualStrings("HTTP/1.1 200 Found", builtin[0].blob[0..18]);
 }
