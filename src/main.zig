@@ -2,157 +2,18 @@ const std = @import("std");
 const Server = std.http.Server;
 const HTML = @import("html.zig");
 const Template = @import("template.zig");
+const Route = @import("route.zig");
+const Endpoint = @import("endpoint.zig");
+const EndpointErr = Endpoint.Error;
+const HTTP = @import("http.zig");
+const zWSGI = @import("zwsgi.zig");
 
-const MAX_HEADER_SIZE = 1 << 14;
 const HOST = "127.0.0.1";
 const PORT = 2000;
 
 test "main" {
     std.testing.refAllDecls(@This());
     _ = HTML.html(&[0]HTML.Element{});
-}
-
-const EndpointErr = error{
-    Unknown,
-    AndExit,
-    OutOfMemory,
-};
-
-pub const Endpoint = *const fn (*Server.Response, []const u8) EndpointErr!void;
-
-fn eql(a: []const u8, b: []const u8) bool {
-    return std.mem.eql(u8, a, b);
-}
-
-fn route(uri: []const u8) Endpoint {
-    if (eql(uri, "/")) return respond;
-    if (eql(uri, "/bye")) return bye;
-    if (eql(uri, "/commits")) return respond;
-    if (eql(uri, "/tree")) return respond;
-    return notfound;
-}
-
-fn sendMsg(r: *Server.Response, msg: []const u8) !void {
-    r.transfer_encoding = .{ .content_length = msg.len };
-
-    try r.do();
-    try r.writeAll(msg);
-    try r.finish();
-}
-
-fn bye(r: *Server.Response, _: []const u8) EndpointErr!void {
-    const MSG = "bye!\n";
-    sendMsg(r, MSG) catch |e| {
-        std.log.err("Unexpected error while responding [{}]\n", .{e});
-    };
-    return EndpointErr.AndExit;
-}
-
-fn notfound(r: *Server.Response, _: []const u8) EndpointErr!void {
-    r.status = .not_found;
-    r.do() catch unreachable;
-}
-
-fn respond(r: *Server.Response, _: []const u8) EndpointErr!void {
-    if (r.request.headers.contains("connection")) {
-        try r.headers.append("connection", "keep-alive");
-    }
-    try r.headers.append("content-type", "text/plain");
-    const MSG = "Hi, mom!\n";
-    sendMsg(r, MSG) catch |e| {
-        std.log.err("Unexpected error while responding [{}]\n", .{e});
-        return EndpointErr.AndExit;
-    };
-}
-
-fn serveHttp(srv: *Server, a: std.mem.Allocator) !void {
-    connection: while (true) {
-        var response = try srv.accept(.{
-            .allocator = a,
-            .header_strategy = .{ .dynamic = MAX_HEADER_SIZE },
-        });
-        defer response.deinit();
-        //const request = response.request;
-
-        while (response.reset() != .closing) {
-            response.wait() catch |err| switch (err) {
-                error.HttpHeadersInvalid => continue :connection,
-                error.EndOfStream => continue,
-                else => return err,
-            };
-            std.log.info("{s} {s} {s}", .{
-                @tagName(response.request.method),
-                @tagName(response.request.version),
-                response.request.target,
-            });
-            const body = try response.reader().readAllAlloc(a, 8192);
-            defer a.free(body);
-
-            try response.headers.append("Server", "Source Tree WebServer");
-
-            if (response.request.headers.contains("connection")) {
-                try response.headers.append("connection", "keep-alive");
-            }
-
-            const ep = route(response.request.target);
-            ep(&response, body) catch |e| switch (e) {
-                error.AndExit => break :connection,
-                else => return e,
-            };
-        }
-    }
-}
-
-// TODO packed
-const uProtoHeader = packed struct {
-    mod1: u8 = 0,
-    size: u16 = 0,
-    mod2: u8 = 0,
-};
-
-const uWSGIVar = struct {
-    key: []const u8,
-    val: []const u8,
-
-    pub fn read(_: []u8) uWSGIVar {
-        return uWSGIVar{ .key = "", .val = "" };
-    }
-};
-
-fn uwsgiHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) ![][]u8 {
-    var list = std.ArrayList([]u8).init(a);
-
-    var uwsgi_header = uProtoHeader{};
-    var ptr: [*]u8 = @ptrCast(&uwsgi_header);
-    _ = try acpt.stream.read(@alignCast(ptr[0..4]));
-
-    std.log.info("header {any}", .{@as([]const u8, ptr[0..4])});
-    std.log.info("header {}", .{uwsgi_header});
-
-    var buf: []u8 = try a.alloc(u8, uwsgi_header.size);
-    const read = try acpt.stream.read(buf);
-    if (read != uwsgi_header.size) {
-        std.log.err("unexpected read size {} {}", .{ read, uwsgi_header.size });
-    }
-
-    while (buf.len > 0) {
-        var size = @as(u16, @bitCast(buf[0..2].*));
-        buf = buf[2..];
-        const key = buf[0..size];
-        std.log.info("VAR {s} ({})[{any}] ", .{ key, size, key });
-        buf = buf[size..];
-        size = @as(u16, @bitCast(buf[0..2].*));
-        buf = buf[2..];
-        if (size > 0) {
-            const val = buf[0..size];
-            std.log.info("VAR {s} ({})[{any}] ", .{ val, size, val });
-            buf = buf[size..];
-        } else {
-            std.log.info("VAR [empty value] ", .{});
-        }
-    }
-
-    return list.toOwnedSlice();
 }
 
 pub fn main() !void {
@@ -182,12 +43,7 @@ pub fn main() !void {
     if (false) std.debug.print("mode {o}\n", .{mode});
     defer a.free(zpath);
 
-    while (true) {
-        var acpt = try usock.accept();
-        _ = try uwsgiHeader(a, acpt);
-        _ = try acpt.stream.write(Template.builtin[0].blob);
-        acpt.stream.close();
-    }
+    try zWSGI.serve(a, &usock);
     usock.close();
 
     var srv = Server.init(a, .{ .reuse_address = true });
@@ -196,7 +52,7 @@ pub fn main() !void {
     try srv.listen(addr);
     std.log.info("Server listening\n", .{});
 
-    serveHttp(&srv, a) catch {
+    HTTP.serve(a, &srv) catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
         }
