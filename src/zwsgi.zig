@@ -16,11 +16,45 @@ const uWSGIVar = struct {
     pub fn read(_: []u8) uWSGIVar {
         return uWSGIVar{ .key = "", .val = "" };
     }
+
+    pub fn format(self: uWSGIVar, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        try std.fmt.format(out, "\"{s}\" = \"{s}\"", .{
+            self.key,
+            if (self.val.len > 0) self.val else "[Empty]",
+        });
+    }
 };
 
-fn uwsgiHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) ![][]u8 {
-    var list = std.ArrayList([]u8).init(a);
+const Request = struct {
+    header: uProtoHeader,
+    vars: []uWSGIVar,
+    body: ?[]u8 = null,
+};
 
+fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
+    var list = std.ArrayList(uWSGIVar).init(a);
+    var buf = b;
+    while (buf.len > 0) {
+        var keysize = @as(u16, @bitCast(buf[0..2].*));
+        buf = buf[2..];
+        const key = try a.dupe(u8, buf[0..keysize]);
+        buf = buf[keysize..];
+
+        var valsize = @as(u16, @bitCast(buf[0..2].*));
+        buf = buf[2..];
+        const val = try a.dupe(u8, if (valsize == 0) "" else buf[0..valsize]);
+        buf = buf[valsize..];
+
+        try list.append(uWSGIVar{
+            .key = key,
+            .val = val,
+        });
+        std.log.info("VAR {} ", .{list.items[list.items.len - 1]});
+    }
+    return try list.toOwnedSlice();
+}
+
+fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Request {
     var uwsgi_header = uProtoHeader{};
     var ptr: [*]u8 = @ptrCast(&uwsgi_header);
     _ = try acpt.stream.read(@alignCast(ptr[0..4]));
@@ -34,30 +68,27 @@ fn uwsgiHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) ![][
         std.log.err("unexpected read size {} {}", .{ read, uwsgi_header.size });
     }
 
-    while (buf.len > 0) {
-        var size = @as(u16, @bitCast(buf[0..2].*));
-        buf = buf[2..];
-        const key = buf[0..size];
-        std.log.info("VAR {s} ({})[{any}] ", .{ key, size, key });
-        buf = buf[size..];
-        size = @as(u16, @bitCast(buf[0..2].*));
-        buf = buf[2..];
-        if (size > 0) {
-            const val = buf[0..size];
-            std.log.info("VAR {s} ({})[{any}] ", .{ val, size, val });
-            buf = buf[size..];
-        } else {
-            std.log.info("VAR [empty value] ", .{});
+    const vars = try readVars(a, buf);
+    for (vars) |v| {
+        if (std.mem.eql(u8, v.key, "HTTP_CONTENT_LENGTH")) {
+            const post_size = try std.fmt.parseInt(usize, v.val, 10);
+            var post_buf: []u8 = try a.alloc(u8, post_size);
+            _ = try acpt.stream.read(post_buf);
+            std.log.info("post data \"{s}\" {{{any}}}", .{ post_buf, post_buf });
         }
     }
 
-    return list.toOwnedSlice();
+    return .{
+        .header = uwsgi_header,
+        .vars = vars,
+    };
 }
 
 pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
     while (true) {
         var acpt = try streamsrv.accept();
-        _ = try uwsgiHeader(a, acpt);
+        const uheader = try readHeader(a, acpt);
+        _ = uheader;
         _ = try acpt.stream.write(Template.builtin[0].blob);
         acpt.stream.close();
     }
