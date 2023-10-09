@@ -31,16 +31,27 @@ const Request = struct {
     body: ?[]u8 = null,
 };
 
+fn readU16(b: *const [2]u8) u16 {
+    std.debug.assert(b.len >= 2);
+    return @as(u16, @bitCast(b[0..2].*));
+}
+
+test "readu16" {
+    const buffer = [2]u8{ 238, 1 };
+    const size: u16 = 494;
+    try std.testing.expectEqual(size, readU16(&buffer));
+}
+
 fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
     var list = std.ArrayList(uWSGIVar).init(a);
     var buf = b;
     while (buf.len > 0) {
-        var keysize = @as(u16, @bitCast(buf[0..2].*));
+        var keysize = readU16(buf[0..2]);
         buf = buf[2..];
         const key = try a.dupe(u8, buf[0..keysize]);
         buf = buf[keysize..];
 
-        var valsize = @as(u16, @bitCast(buf[0..2].*));
+        var valsize = readU16(buf[0..2]);
         buf = buf[2..];
         const val = try a.dupe(u8, if (valsize == 0) "" else buf[0..valsize]);
         buf = buf[valsize..];
