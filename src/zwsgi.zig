@@ -91,7 +91,8 @@ fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Requ
         }
     }
 
-    return Request.build(
+    return try Request.init(
+        a,
         zWSGIRequest{ .header = uwsgi_header, .vars = vars },
     );
 }
@@ -100,7 +101,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
     while (true) {
         var acpt = try streamsrv.accept();
         const request = try readHeader(a, acpt);
-        var response = Response.build(a, acpt.stream, &request);
+        var response = Response.init(a, acpt.stream, &request);
 
         var endpoint = Router.route(response.request.uri);
         try endpoint(&response, "");

@@ -14,6 +14,7 @@ const endpoints = [_]struct {
     .{ .name = "/", .call = default },
     .{ .name = "/hi", .call = respond },
     .{ .name = "/bye", .call = bye },
+    .{ .name = "/auth", .call = auth },
     .{ .name = "/commits", .call = respond },
     .{ .name = "/tree", .call = respond },
 };
@@ -31,6 +32,23 @@ fn bye(r: *Response, _: []const u8) Error!void {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
     };
     return Error.AndExit;
+}
+
+fn auth(r: *Response, _: []const u8) Error!void {
+    std.debug.print("auth is {}\n", .{r.request.auth});
+    if (r.request.auth.valid()) {
+        r.status = .ok;
+        sendMsg(r, "Oh hi! Welcome back\n") catch |e| {
+            std.log.err("Auth Failed somehow [{}]\n", .{e});
+            return Error.AndExit;
+        };
+        return;
+    }
+    r.status = .forbidden;
+    sendMsg(r, "Kindly Shoo!\n") catch |e| {
+        std.log.err("Auth Failed somehow [{}]\n", .{e});
+        return Error.AndExit;
+    };
 }
 
 fn notfound(r: *Response, _: []const u8) Error!void {

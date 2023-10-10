@@ -35,7 +35,7 @@ phase: Phase = .created,
 writer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
 status: std.http.Status = .internal_server_error,
 
-pub fn build(a: Allocator, stream: std.net.Stream, req: *const Request) Response {
+pub fn init(a: Allocator, stream: std.net.Stream, req: *const Request) Response {
     return .{
         .alloc = a,
         .request = req,
@@ -50,14 +50,16 @@ pub fn headerAdd(res: *Response, name: []const u8, value: []const u8) !void {
 
 pub fn start(res: *Response) !void {
     if (res.phase != .created) return Error.WrongPhase;
-    if (res.status == .internal_server_error) res.status = .found;
+    if (res.status == .internal_server_error) res.status = .ok;
     try res.sendHeaders();
 }
 
 fn sendHeaders(res: *Response) !void {
     res.phase = .headers;
     switch (res.status) {
-        .found => try res.write("HTTP/1.1 200 Found\n"),
+        .ok => try res.write("HTTP/1.1 200 Found\n"),
+        .found => try res.write("HTTP/1.1 302 Found\n"),
+        .forbidden => try res.write("HTTP/1.1 403 Forbidden\n"),
         .not_found => try res.write("HTTP/1.1 404 Not Found\n"),
         else => return Error.UnknownStatus,
     }

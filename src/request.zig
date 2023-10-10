@@ -1,42 +1,51 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const zWSGIRequest = @import("zwsgi.zig").zWSGIRequest;
+const Auth = @import("auth.zig");
 
 pub const Request = @This();
-const zWSGIRequest = @import("zwsgi.zig").zWSGIRequest;
 
 const RawRequests = union {
     zwsgi: zWSGIRequest,
 };
 
 const Pair = struct {
-    name: []u8,
-    val: []u8,
+    name: []const u8,
+    val: []const u8,
 };
 
-const HeaderList = std.ArrayList(Pair);
+pub const HeaderList = std.ArrayList(Pair);
 
 /// TODO this is unstable and likely to be removed
 raw_request: RawRequests,
 
-//headers: HeaderList,
+headers: HeaderList,
 uri: []const u8,
+auth: Auth,
 
-pub fn build(raw_req: anytype) Request {
+pub fn init(a: Allocator, raw_req: anytype) !Request {
     switch (@TypeOf(raw_req)) {
         zWSGIRequest => {
-            var uri: []const u8 = "/";
+            var req = Request{
+                .raw_request = .{ .zwsgi = raw_req },
+                .headers = HeaderList.init(a),
+                .uri = undefined,
+                .auth = undefined,
+            };
             for (raw_req.vars) |v| {
+                try addHeader(&req.headers, v.key, v.val);
                 if (std.mem.eql(u8, v.key, "REQUEST_URI")) {
-                    uri = v.val;
-                    break;
+                    req.uri = v.val;
                 }
             }
-            return .{
-                .raw_request = .{ .zwsgi = raw_req },
-                .uri = uri,
-            };
+            req.auth = Auth.init(&req.headers);
+            return req;
         },
         else => @compileError("rawish isn't a support request type"),
     }
-    unreachable;
+    @compileError("unreachable");
+}
+
+fn addHeader(h: *HeaderList, name: []const u8, val: []const u8) !void {
+    try h.append(.{ .name = name, .val = val });
 }
