@@ -1,7 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StreamServer = std.net.StreamServer;
-const Template = @import("template.zig");
+const Request = @import("request.zig");
+const Response = @import("response.zig");
+const Router = @import("route.zig");
 
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
@@ -25,7 +27,7 @@ const uWSGIVar = struct {
     }
 };
 
-const Request = struct {
+pub const zWSGIRequest = struct {
     header: uProtoHeader,
     vars: []uWSGIVar,
     body: ?[]u8 = null,
@@ -89,18 +91,20 @@ fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Requ
         }
     }
 
-    return .{
-        .header = uwsgi_header,
-        .vars = vars,
-    };
+    return Request.build(
+        zWSGIRequest{ .header = uwsgi_header, .vars = vars },
+    );
 }
 
 pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
     while (true) {
         var acpt = try streamsrv.accept();
-        const uheader = try readHeader(a, acpt);
-        _ = uheader;
-        _ = try acpt.stream.write(Template.builtin[0].blob);
+        const request = try readHeader(a, acpt);
+        var response = Response.build(a, acpt.stream, &request);
+
+        var endpoint = Router.route(response.request.uri);
+        try endpoint(&response, "");
+        if (response.phase != .closed) try response.finish();
         acpt.stream.close();
     }
 }

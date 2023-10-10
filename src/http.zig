@@ -33,11 +33,11 @@ pub fn serve(a: Allocator, srv: *Server) !void {
                 try response.headers.append("connection", "keep-alive");
             }
 
-            const ep = Route.route(response.request.target);
-            ep(&response, body) catch |e| switch (e) {
-                error.AndExit => break :connection,
-                else => return e,
-            };
+            //const ep = Route.route(response.request.target);
+            //ep(&response, body) catch |e| switch (e) {
+            //    error.AndExit => break :connection,
+            //    else => return e,
+            //};
         }
     }
 }

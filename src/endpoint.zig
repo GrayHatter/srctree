@@ -1,5 +1,5 @@
 const std = @import("std");
-const Server = std.http.Server;
+const Response = @import("response.zig");
 
 pub const Error = error{
     Unknown,
@@ -7,4 +7,4 @@ pub const Error = error{
     OutOfMemory,
 };
 
-pub const Endpoint = *const fn (*Server.Response, []const u8) Error!void;
+pub const Endpoint = *const fn (*Response, []const u8) Error!void;
