@@ -36,16 +36,25 @@ writer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
 status: std.http.Status = .internal_server_error,
 
 pub fn init(a: Allocator, stream: std.net.Stream, req: *const Request) Response {
-    return .{
+    var res = Response{
         .alloc = a,
         .request = req,
         .headers = HeaderList.init(a),
         .writer = .{ .unbuffered_writer = stream.writer() },
     };
+
+    res.headersInit() catch @panic("unable to create Response obj");
+    return res;
 }
 
-pub fn headerAdd(res: *Response, name: []const u8, value: []const u8) !void {
-    if (res.phase != .created) return try res.headers.append(.{ .name = name, .val = value });
+fn headersInit(res: *Response) !void {
+    try res.headersAdd("Server", "zwsgi/0.0.0");
+    try res.headersAdd("Content-Type", "text/html");
+}
+
+pub fn headersAdd(res: *Response, name: []const u8, value: []const u8) !void {
+    if (res.phase != .created) return Error.HeadersFinished;
+    try res.headers.append(.{ .name = name, .val = value });
 }
 
 pub fn start(res: *Response) !void {
@@ -88,5 +97,7 @@ pub fn write(res: *Response, data: []const u8) !void {
 
 pub fn finish(res: *Response) !void {
     res.phase = .closed;
-    return res.writer.flush();
+    return res.writer.flush() catch |e| {
+        std.debug.print("Error on flush :< {}\n", .{e});
+    };
 }

@@ -57,8 +57,8 @@ fn notfound(r: *Response, _: []const u8) Error!void {
 }
 
 fn respond(r: *Response, _: []const u8) Error!void {
-    try r.headerAdd("connection", "keep-alive");
-    try r.headerAdd("content-type", "text/plain");
+    r.headersAdd("connection", "keep-alive") catch return Error.ReqResInvalid;
+    r.headersAdd("content-type", "text/plain") catch return Error.ReqResInvalid;
     const MSG = "Hi, mom!\n";
     sendMsg(r, MSG) catch |e| {
         std.log.err("Unexpected error while responding [{}]\n", .{e});

@@ -48,8 +48,8 @@ pub var dynamic: []Template = undefined;
 fn load(a: Allocator) !void {
     var cwd = std.fs.cwd();
     var idir = cwd.openIterableDir(TEMPLATE_PATH, .{}) catch |err| {
-        std.debug.print("template build error {}", .{err});
-        return err;
+        std.debug.print("template build error {}\n", .{err});
+        return;
     };
     var itr = idir.iterate();
     var list = std.ArrayList(Template).init(a);
@@ -85,5 +85,5 @@ test "load templates" {
     const a = std.testing.allocator;
     init(a);
     defer raze();
-    try std.testing.expectEqualStrings("HTTP/1.1 200 Found", builtin[0].blob[0..18]);
+    try std.testing.expectEqualStrings("<!DOCTYPE html>", builtin[0].blob[0..15]);
 }

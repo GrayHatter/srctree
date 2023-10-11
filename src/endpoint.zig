@@ -3,6 +3,7 @@ const Response = @import("response.zig");
 
 pub const Error = error{
     Unknown,
+    ReqResInvalid,
     AndExit,
     OutOfMemory,
 };
