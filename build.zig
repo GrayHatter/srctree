@@ -12,14 +12,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    // const templates = b.addOptions();
-    // templates.addOption(
-    //     []const []const u8,
-    //     "names",
-    //     getTemplates(b) catch @panic("unable to get templates"),
-    // );
-
-    // exe.addOptions("templates", templates);
+    addSrcTemplates(exe);
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
@@ -39,25 +32,51 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    //unit_tests.addOptions("templates", templates);
+    addSrcTemplates(unit_tests);
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 }
 
-/// eventually I'd love to make this comptime but alas
-fn getTemplates(b: *std.Build) ![]const []const u8 {
+var template_list: ?[][]const u8 = null;
+
+fn buildSrcTemplates(b: *std.Build) ![][]const u8 {
+    if (template_list) |tl| return tl;
+
+    const tmplsrcdir = "templates";
     var cwd = std.fs.cwd();
-    var idir = cwd.openIterableDir("templates/", .{}) catch |err| {
+    var idir = cwd.openIterableDir(tmplsrcdir, .{}) catch |err| {
         std.debug.print("template build error {}", .{err});
-        return &[0][]u8{};
+        return err;
     };
+    var arrlist = std.ArrayList([]const u8).init(b.allocator);
     var itr = idir.iterate();
-    var list = std.ArrayList([]const u8).init(b.allocator);
     while (try itr.next()) |file| {
-        std.debug.print("file {s}\n", .{file.name});
-        try list.append(file.name);
+        if (!std.mem.endsWith(u8, file.name, ".html")) continue;
+        try arrlist.append(b.pathJoin(&[2][]const u8{ tmplsrcdir, file.name }));
     }
-    return try list.toOwnedSlice();
+    template_list = try arrlist.toOwnedSlice();
+    return template_list.?;
+}
+
+/// eventually I'd love to make this comptime but alas
+fn addSrcTemplates(cs: *std.Build.Step.Compile) void {
+    var b = cs.step.owner;
+
+    var list = buildSrcTemplates(b) catch @panic("unable to build src files");
+    const templates = b.addOptions();
+    templates.addOption(
+        []const []const u8,
+        "names",
+        list,
+    );
+
+    cs.addOptions("templates", templates);
+
+    for (list) |file| {
+        cs.addAnonymousModule(file, .{
+            .source_file = .{ .path = file },
+        });
+    }
 }

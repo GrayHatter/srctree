@@ -67,7 +67,7 @@ fn respond(r: *Response, _: []const u8) Error!void {
 }
 
 fn default(r: *Response, _: []const u8) Error!void {
-    const MSG = Template.builtin[0].blob;
+    const MSG = Template.find("index.html").blob;
     sendMsg(r, MSG) catch |e| {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
         return Error.AndExit;
