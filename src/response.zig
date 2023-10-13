@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Request = @import("request.zig");
+const Headers = @import("headers.zig");
 
 const Response = @This();
 
@@ -11,8 +12,6 @@ const Pair = struct {
     name: []const u8,
     val: []const u8,
 };
-
-const HeaderList = std.ArrayList(Pair);
 
 const Phase = enum {
     created,
@@ -30,7 +29,7 @@ const Error = error{
 
 alloc: Allocator,
 request: *const Request,
-headers: HeaderList,
+headers: Headers,
 phase: Phase = .created,
 writer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
 status: std.http.Status = .internal_server_error,
@@ -39,7 +38,7 @@ pub fn init(a: Allocator, stream: std.net.Stream, req: *const Request) Response 
     var res = Response{
         .alloc = a,
         .request = req,
-        .headers = HeaderList.init(a),
+        .headers = Headers.init(a),
         .writer = .{ .unbuffered_writer = stream.writer() },
     };
 
@@ -52,9 +51,9 @@ fn headersInit(res: *Response) !void {
     try res.headersAdd("Content-Type", "text/html");
 }
 
-pub fn headersAdd(res: *Response, name: []const u8, value: []const u8) !void {
+pub fn headersAdd(res: *Response, comptime name: []const u8, value: []const u8) !void {
     if (res.phase != .created) return Error.HeadersFinished;
-    try res.headers.append(.{ .name = name, .val = value });
+    try res.headers.add(name, value);
 }
 
 pub fn start(res: *Response) !void {
@@ -72,9 +71,12 @@ fn sendHeaders(res: *Response) !void {
         .not_found => try res.write("HTTP/1.1 404 Not Found\n"),
         else => return Error.UnknownStatus,
     }
-    for (res.headers.items) |header| {
+    var itr = res.headers.index.iterator();
+    while (itr.next()) |header| {
         var buf: [512]u8 = undefined;
-        const b = try std.fmt.bufPrint(&buf, "{s}: {s}\n", .{ header.name, header.val });
+
+        // TODO descend
+        const b = try std.fmt.bufPrint(&buf, "{s}: {s}\n", .{ header.key_ptr.*, header.value_ptr.str });
         try res.write(b);
     }
     try res.write("\n");
