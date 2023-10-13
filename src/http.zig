@@ -1,7 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Server = std.http.Server;
-const Route = @import("route.zig");
+const Route = @import("routes.zig");
 const MAX_HEADER_SIZE = 1 <<| 13;
 
 pub fn serve(a: Allocator, srv: *Server) !void {
