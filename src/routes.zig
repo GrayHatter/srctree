@@ -1,21 +1,26 @@
 const std = @import("std");
+
+const Template = @import("template.zig");
+const Response = @import("response.zig");
 const endpoint = @import("endpoint.zig");
+const HTML = @import("html.zig");
+
 const Endpoint = endpoint.Endpoint;
 const Error = endpoint.Error;
 
-const Template = @import("template.zig");
-
-const Response = @import("response.zig");
+const div = HTML.div;
+const span = HTML.span;
 
 const endpoints = [_]struct {
     name: []const u8,
     call: Endpoint,
 }{
     .{ .name = "/", .call = default },
-    .{ .name = "/hi", .call = respond },
-    .{ .name = "/bye", .call = bye },
     .{ .name = "/auth", .call = auth },
+    .{ .name = "/bye", .call = bye },
+    .{ .name = "/code", .call = code },
     .{ .name = "/commits", .call = respond },
+    .{ .name = "/hi", .call = respond },
     .{ .name = "/tree", .call = respond },
 };
 
@@ -32,6 +37,46 @@ fn bye(r: *Response, _: []const u8) Error!void {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
     };
     return Error.AndExit;
+}
+
+fn code(r: *Response, _: []const u8) Error!void {
+    var tmpl = Template.find("code.html");
+    tmpl.alloc = r.alloc;
+
+    HTML.init(r.alloc);
+    defer HTML.raze();
+
+    const src = @embedFile(@src().file[4..]);
+    const count = std.mem.count(u8, src, "\n");
+
+    var linens = try r.alloc.alloc([]u8, count + 1);
+    defer r.alloc.free(linens);
+    for (0..count + 1) |i| {
+        linens[i] = try std.fmt.allocPrint(r.alloc, "<linenum>{}</linenum>\n", .{i});
+    }
+    defer for (linens) |line| r.alloc.free(line);
+    var lnums = try std.mem.join(r.alloc, "", linens);
+    tmpl.addVar("lines", lnums) catch return Error.Unknown;
+
+    var lines = try r.alloc.alloc([]u8, count + 1);
+    defer r.alloc.free(lines);
+    var itr = std.mem.split(u8, src, "\n");
+    var i: usize = 0;
+    while (itr.next()) |line| {
+        lines[i] = try std.fmt.allocPrint(r.alloc, "{}\n", .{span(HTML.text(line))});
+        i += 1;
+    }
+    defer for (lines) |line| r.alloc.free(line);
+    // TODO better API to avoid join
+    var joined = try std.mem.join(r.alloc, "", lines);
+    defer r.alloc.free(joined);
+
+    tmpl.addVar("code", joined) catch return Error.Unknown;
+    //var page = tmpl.build(r.alloc) catch unreachable;
+    var page = std.fmt.allocPrint(r.alloc, "{}", .{tmpl}) catch unreachable;
+    sendMsg(r, page) catch |e| {
+        std.log.err("Unexpected error while responding [{}]\n", .{e});
+    };
 }
 
 fn auth(r: *Response, _: []const u8) Error!void {

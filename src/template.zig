@@ -1,23 +1,73 @@
 const std = @import("std");
 const bldtmpls = @import("templates");
+
 const Allocator = std.mem.Allocator;
+
+const Element = @import("html.zig");
 
 const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
 
 pub const Template = struct {
+    alloc: ?Allocator = null,
     path: []const u8,
     /// expected to be a pointer to path.
     name: []const u8,
     blob: []const u8,
     parent: ?*const Template = null,
-    vars: ?[]struct {
+    vars: ?[]Var = null,
+    const Var = struct {
         name: []const u8,
         blob: []const u8,
-    } = null,
+    };
 
-    pub fn format(self: *Template, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        try out.print("Template not implemented ({s])\n", .{self.name});
+    fn expandVars(self: *Template) !void {
+        if (self.alloc) |a| {
+            if (self.vars) |vars| {
+                if (!a.resize(vars, vars.len + 1)) {
+                    self.vars = try a.realloc(vars, vars.len + 1);
+                }
+            } else {
+                self.vars = try a.alloc(Var, 1);
+            }
+        } else {
+            return error.UnableToAlloc;
+        }
+    }
+
+    pub fn addVar(self: *Template, name: []const u8, value: []const u8) !void {
+        try self.expandVars();
+        if (self.vars) |vars| {
+            vars[vars.len - 1] = .{
+                .name = name,
+                .blob = value,
+            };
+        }
+    }
+
+    pub fn build(self: Template, a: Allocator) ![]u8 {
+        return std.fmt.allocPrint(a, "{}", .{self});
+    }
+
+    pub fn format(self: Template, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        if (self.vars) |vars| {
+            var start: usize = 0;
+            var end: usize = 0;
+            for (vars) |v| {
+                const needle: []const u8 = std.fmt.allocPrint(self.alloc.?, "<!-- {s} -->", .{v.name}) catch unreachable;
+                defer self.alloc.?.free(needle);
+                if (std.mem.indexOf(u8, self.blob[start..], needle)) |i| {
+                    end = start + i;
+                    try out.writeAll(self.blob[start..end]);
+                    try out.writeAll(v.blob);
+                    start = end + needle.len;
+                }
+            } else {
+                try out.writeAll(self.blob[start..]);
+            }
+        } else {
+            try out.writeAll(self.blob);
+        }
     }
 };
 

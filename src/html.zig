@@ -36,14 +36,22 @@ pub const Element = struct {
     pub fn format(self: Element, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         if (self.children.len == 0) {
             if (self.text) |txt| {
-                return try std.fmt.format(out, "{s}", .{txt});
+                if (self.name[0] == '_') {
+                    return try std.fmt.format(out, "{s}", .{txt});
+                }
+                return try std.fmt.format(out, "<{s}>{s}</{s}>", .{ self.name, txt, self.name });
             }
-            try std.fmt.format(out, "<{s}>", .{self.name});
+            try std.fmt.format(out, "<{s} />", .{self.name});
         } else {
-            try out.print("<{s}>\n", .{self.name});
+            try out.print("<{s}>", .{self.name});
             for (self.children) |child| {
-                try out.print("{}\n", .{child});
-            }
+                if (child.text) |txt| {
+                    try out.print("{s}", .{txt});
+                    if (self.children.len == 1) break;
+                } else {
+                    try out.print("\n{}", .{child});
+                }
+            } else try out.writeAll("\n");
             try out.print("</{s}>", .{self.name});
         }
     }
@@ -51,43 +59,80 @@ pub const Element = struct {
 
 pub const E = Element;
 
+/// TODO this desperately needs to return a type instead
 pub fn element(comptime name: []const u8, children: anytype) Element {
     const ChildrenType = @TypeOf(children);
     const child_type_info = @typeInfo(ChildrenType);
-    if (child_type_info == .Pointer) {
-        if (child_type_info.Pointer.size == .Slice) {
+    switch (child_type_info) {
+        .Pointer => |ptr| switch (ptr.size) {
+            .One => switch (@typeInfo(ptr.child)) {
+                .Array => |arr| switch (arr.child) {
+                    u8 => return .{
+                        .name = name,
+                        .text = children,
+                        .attrs = &[0]Attribute{},
+                        .children = &[0]Element{},
+                    },
+                    Element => {
+                        return .{
+                            .name = name,
+                            .attrs = &[0]Attribute{},
+                            .children = children,
+                        };
+                    },
+                    else => @compileError("Unknown type given to element"),
+                },
+                .Struct => {
+                    @compileLog(ptr);
+                    @compileLog(ptr.size);
+                    @compileLog(ChildrenType);
+                },
+                else => {
+                    @compileLog(ptr);
+                    @compileLog(ptr.size);
+                    @compileLog(ChildrenType);
+                },
+            },
+            .Slice => switch (ptr.child) {
+                u8 => return .{
+                    .name = name,
+                    .text = children,
+                    .attrs = &[0]Attribute{},
+                    .children = &[0]Element{},
+                },
+                else => {
+                    @compileLog(ptr);
+                    @compileLog(ptr.size);
+                    @compileLog(ChildrenType);
+                },
+            },
+            else => {
+                @compileLog(ptr);
+                @compileLog(ptr.size);
+                @compileLog(ChildrenType);
+            },
+        },
+        .Struct => |srt| {
+            const fields_info = srt.fields;
+            if (fields_info.len != 0) {
+                if (ChildrenType == Element) {
+                    const el = _alloc.alloc(Element, 1) catch unreachable;
+                    el[0] = children;
+                    return .{
+                        .name = name,
+                        .attrs = &[0]Attribute{},
+                        .children = el,
+                    };
+                }
+                @compileError(".{} is the only child struct type"); // currently TODO plz fix
+            }
             return .{
                 .name = name,
-                .text = children,
                 .attrs = &[0]Attribute{},
                 .children = &[0]Element{},
             };
-        }
-        return .{
-            .name = name,
-            .attrs = &[0]Attribute{},
-            .children = children,
-        };
-    } else if (ChildrenType == Element) {
-        const el = _alloc.alloc(Element, 1) catch unreachable;
-        el[0] = children;
-        return .{
-            .name = name,
-            .attrs = &[0]Attribute{},
-            .children = el,
-        };
-    } else if (child_type_info == .Struct) {
-        const fields_info = child_type_info.Struct.fields;
-        if (fields_info.len != 0) {
-            @compileError(".{} is the only child struct type"); // currently TODO plz fix
-        }
-        return .{
-            .name = name,
-            .attrs = &[0]Attribute{},
-            .children = &[0]Element{},
-        };
-    } else {
-        @compileError("children must be either Element, or []Element or .{}");
+        },
+        else => @compileError("children must be either Element, or []Element or .{}"),
     }
     unreachable;
 }
@@ -131,11 +176,11 @@ test "html" {
 
     const str = try std.fmt.allocPrint(a, "{}", .{html(&[_]Element{})});
     defer a.free(str);
-    try std.testing.expectEqualStrings("<html>", str);
+    try std.testing.expectEqualStrings("<html />", str);
 
     const str2 = try std.fmt.allocPrint(a, "{}", .{html(body(.{}))});
     defer a.free(str2);
-    try std.testing.expectEqualStrings("<html>\n<body>\n</html>", str2);
+    try std.testing.expectEqualStrings("<html>\n<body />\n</html>", str2);
 }
 
 test "nested" {
@@ -154,10 +199,10 @@ test "nested" {
 
     const example =
         \\<html>
-        \\<head>
+        \\<head />
         \\<body>
         \\<div>
-        \\<p>
+        \\<p />
         \\</div>
         \\</body>
         \\</html>
@@ -174,7 +219,11 @@ test "text" {
     defer a.free(str);
     try std.testing.expectEqualStrings("this is text", str);
 
+    const pt = try std.fmt.allocPrint(a, "{}", .{p("this is text")});
+    defer a.free(pt);
+    try std.testing.expectEqualStrings("<p>this is text</p>", pt);
+
     const p_txt = try std.fmt.allocPrint(a, "{}", .{p(text("this is text"))});
     defer a.free(p_txt);
-    try std.testing.expectEqualStrings("<p>\nthis is text\n</p>", p_txt);
+    try std.testing.expectEqualStrings("<p>this is text</p>", p_txt);
 }
