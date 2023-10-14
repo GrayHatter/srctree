@@ -29,11 +29,15 @@ pub const Attribute = struct {
 
 pub const Element = struct {
     name: []const u8,
+    text: ?[]const u8 = null,
     attrs: []const Attribute,
     children: []const Element,
 
     pub fn format(self: Element, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         if (self.children.len == 0) {
+            if (self.text) |txt| {
+                return try std.fmt.format(out, "{s}", .{txt});
+            }
             try std.fmt.format(out, "<{s}>", .{self.name});
         } else {
             try out.print("<{s}>\n", .{self.name});
@@ -51,6 +55,14 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
     const ChildrenType = @TypeOf(children);
     const child_type_info = @typeInfo(ChildrenType);
     if (child_type_info == .Pointer) {
+        if (child_type_info.Pointer.size == .Slice) {
+            return .{
+                .name = name,
+                .text = children,
+                .attrs = &[0]Attribute{},
+                .children = &[0]Element{},
+            };
+        }
         return .{
             .name = name,
             .attrs = &[0]Attribute{},
@@ -78,6 +90,10 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
         @compileError("children must be either Element, or []Element or .{}");
     }
     unreachable;
+}
+
+pub fn text(c: []const u8) Element {
+    return element("_text", c);
 }
 
 pub fn html(c: anytype) Element {
@@ -147,4 +163,18 @@ test "nested" {
         \\</html>
     ;
     try std.testing.expectEqualStrings(example, str);
+}
+
+test "text" {
+    var a = std.testing.allocator;
+    init(a);
+    defer raze();
+
+    const str = try std.fmt.allocPrint(a, "{}", .{text("this is text")});
+    defer a.free(str);
+    try std.testing.expectEqualStrings("this is text", str);
+
+    const p_txt = try std.fmt.allocPrint(a, "{}", .{p(text("this is text"))});
+    defer a.free(p_txt);
+    try std.testing.expectEqualStrings("<p>\nthis is text\n</p>", p_txt);
 }
