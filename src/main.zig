@@ -15,6 +15,7 @@ const FILE = "./srctree.sock";
 test "main" {
     std.testing.refAllDecls(@This());
     _ = HTML.html(&[0]HTML.Element{});
+    std.testing.refAllDecls(@import("git.zig"));
 }
 
 var print_mutex = std.Thread.Mutex{};
