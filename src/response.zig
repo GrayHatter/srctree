@@ -48,7 +48,7 @@ pub fn init(a: Allocator, stream: std.net.Stream, req: *const Request) Response 
 
 fn headersInit(res: *Response) !void {
     try res.headersAdd("Server", "zwsgi/0.0.0");
-    try res.headersAdd("Content-Type", "text/html");
+    try res.headersAdd("Content-Type", "text/html; charset=utf-8"); // Firefox is trash
 }
 
 pub fn headersAdd(res: *Response, comptime name: []const u8, value: []const u8) !void {
