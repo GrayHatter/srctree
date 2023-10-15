@@ -82,11 +82,6 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
                     },
                     else => @compileError("Unknown type given to element"),
                 },
-                .Struct => {
-                    @compileLog(ptr);
-                    @compileLog(ptr.size);
-                    @compileLog(ChildrenType);
-                },
                 else => {
                     @compileLog(ptr);
                     @compileLog(ptr.size);
@@ -134,7 +129,7 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
         },
         else => @compileError("children must be either Element, or []Element or .{}"),
     }
-    unreachable;
+    @compileError("Invalid type given for children when calling element");
 }
 
 pub fn text(c: []const u8) Element {
