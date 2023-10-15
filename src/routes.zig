@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Allocator = std.mem.Allocator;
+
 const Template = @import("template.zig");
 const Response = @import("response.zig");
 const endpoint = @import("endpoint.zig");
@@ -21,6 +23,7 @@ const endpoints = [_]struct {
     .{ .name = "/code", .call = code },
     .{ .name = "/commits", .call = respond },
     .{ .name = "/hi", .call = respond },
+    .{ .name = "/list", .call = list },
     .{ .name = "/tree", .call = respond },
 };
 
@@ -98,7 +101,11 @@ fn auth(r: *Response, _: []const u8) Error!void {
 
 fn notfound(r: *Response, _: []const u8) Error!void {
     r.status = .not_found;
-    r.start() catch unreachable;
+    const MSG = Template.find("index.html").blob;
+    sendMsg(r, MSG) catch |e| {
+        std.log.err("Unexpected error while responding [{}]\n", .{e});
+        return Error.AndExit;
+    };
 }
 
 fn respond(r: *Response, _: []const u8) Error!void {
@@ -109,6 +116,38 @@ fn respond(r: *Response, _: []const u8) Error!void {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
         return Error.AndExit;
     };
+}
+
+fn sorter(_: void, l: []const u8, r: []const u8) bool {
+    return std.mem.lessThan(u8, l, r);
+}
+
+fn list(r: *Response, _: []const u8) Error!void {
+    var cwd = std.fs.cwd();
+    if (cwd.openIterableDir("./", .{})) |idir| {
+        var flist = std.ArrayList([]u8).init(r.alloc);
+        defer flist.clearAndFree();
+        var itr = idir.iterate();
+        while (itr.next() catch return Error.Unknown) |file| {
+            if (file.kind != .directory) continue;
+            try flist.append(try std.fmt.allocPrint(r.alloc, "<li>{s}</li>", .{file.name}));
+        }
+        defer for (flist.items) |each| r.alloc.free(each);
+
+        std.sort.heap([]u8, flist.items, {}, sorter);
+
+        const joined = try std.mem.join(r.alloc, "", flist.items);
+        defer r.alloc.free(joined);
+        var tmpl = Template.find("repos.html");
+        tmpl.alloc = r.alloc;
+        tmpl.addVar("repos", joined) catch return Error.Unknown;
+        var page = std.fmt.allocPrint(r.alloc, "{}", .{tmpl}) catch unreachable;
+        defer r.alloc.free(page);
+        sendMsg(r, page) catch unreachable;
+    } else |err| {
+        std.debug.print("unable to open given dir {}\n", .{err});
+        return;
+    }
 }
 
 fn default(r: *Response, _: []const u8) Error!void {
