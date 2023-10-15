@@ -39,6 +39,9 @@ fn usage(long: bool) noreturn {
         \\ unix : unix socket [default]
         \\ http : http server
         \\
+        \\ -s [directory] : directory to look for repos
+        \\      (not yet implemented)
+        \\
     , .{arg0}) catch std.process.exit(255);
     if (long) {}
     std.process.exit(0);
@@ -52,6 +55,10 @@ const RunMode = enum {
 };
 
 var runmode: RunMode = .unix;
+
+const Options = struct {
+    source_path: []const u8,
+};
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
