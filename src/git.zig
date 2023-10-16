@@ -3,6 +3,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const zlib = std.compress.zlib;
 
+const DateTime = @import("datetime.zig");
+
 const Types = enum {
     commit,
     blob,
@@ -14,21 +16,20 @@ const SHA = []const u8; // SUPERBAD, I'm sorry!
 const Actor = struct {
     name: []const u8,
     email: []const u8,
-    time: i64,
+    time: DateTime,
     tz_offset: i8,
 
     pub fn make(data: []const u8) !Actor {
         var itr = std.mem.splitBackwards(u8, data, " ");
         var tz = itr.next() orelse return error.ActorParseError;
-        var time = itr.next() orelse return error.ActorParseError;
+        var time = try DateTime.fromEpochStr(itr.next() orelse return error.ActorParseError);
         var email = itr.next() orelse return error.ActorParseError;
         var name = itr.rest();
         _ = tz;
-        _ = time;
         return .{
             .name = name,
             .email = email,
-            .time = 0,
+            .time = time,
             .tz_offset = 0,
         };
     }
