@@ -95,11 +95,6 @@ pub fn format(self: DateTime, comptime _: []const u8, _: std.fmt.FormatOptions, 
 }
 
 test "datetime" {
-    //std.debug.print("{}\n", .{try DateTime.fromEpoch(0)});
-    //std.debug.print("{}\n", .{try DateTime.fromEpoch(60)});
-    //std.debug.print("{}\n", .{try DateTime.fromEpoch(60 * 60)});
-    //std.debug.print("{}\n", .{try DateTime.fromEpoch(60 * 60 * 24)});
-    //std.debug.print("{}\n", .{try DateTime.fromEpoch(60 * 60 * 24 - 1)});
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1697312998,
         .years = 2023,
@@ -109,4 +104,23 @@ test "datetime" {
         .minutes = 49,
         .seconds = 58,
     }, try DateTime.fromEpoch(1697312998));
+
+    try std.testing.expectEqualDeep(DateTime{
+        .timestamp = 915148799,
+        .years = 1998,
+        .months = 12,
+        .days = 31,
+        .hours = 23,
+        .minutes = 59,
+        .seconds = 59,
+    }, try DateTime.fromEpoch(915148799));
+    try std.testing.expectEqualDeep(DateTime{
+        .timestamp = 915148800,
+        .years = 1999,
+        .months = 1,
+        .days = 1,
+        .hours = 0,
+        .minutes = 0,
+        .seconds = 0,
+    }, try DateTime.fromEpoch(915148800));
 }
