@@ -30,11 +30,22 @@ pub const Attribute = struct {
 pub const Element = struct {
     name: []const u8,
     text: ?[]const u8 = null,
-    attrs: []const Attribute,
-    children: []const Element,
+    attrs: ?[]const Attribute = null,
+    children: ?[]const Element = null,
 
     pub fn format(self: Element, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        if (self.children.len == 0) {
+        if (self.children) |children| {
+            try out.print("<{s}>", .{self.name});
+            for (children) |child| {
+                if (child.text) |txt| {
+                    try out.print("{s}", .{txt});
+                    if (children.len == 1) break;
+                } else {
+                    try out.print("\n{}", .{child});
+                }
+            } else try out.writeAll("\n");
+            try out.print("</{s}>", .{self.name});
+        } else {
             if (self.text) |txt| {
                 if (self.name[0] == '_') {
                     return try std.fmt.format(out, "{s}", .{txt});
@@ -42,17 +53,6 @@ pub const Element = struct {
                 return try std.fmt.format(out, "<{s}>{s}</{s}>", .{ self.name, txt, self.name });
             }
             try std.fmt.format(out, "<{s} />", .{self.name});
-        } else {
-            try out.print("<{s}>", .{self.name});
-            for (self.children) |child| {
-                if (child.text) |txt| {
-                    try out.print("{s}", .{txt});
-                    if (self.children.len == 1) break;
-                } else {
-                    try out.print("\n{}", .{child});
-                }
-            } else try out.writeAll("\n");
-            try out.print("</{s}>", .{self.name});
         }
     }
 };
@@ -62,6 +62,7 @@ pub const E = Element;
 /// TODO this desperately needs to return a type instead
 pub fn element(comptime name: []const u8, children: anytype) Element {
     const ChildrenType = @TypeOf(children);
+    if (ChildrenType == @TypeOf(null)) return .{ .name = name };
     const child_type_info = @typeInfo(ChildrenType);
     switch (child_type_info) {
         .Pointer => |ptr| switch (ptr.size) {
@@ -70,13 +71,10 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
                     u8 => return .{
                         .name = name,
                         .text = children,
-                        .attrs = &[0]Attribute{},
-                        .children = &[0]Element{},
                     },
                     Element => {
                         return .{
                             .name = name,
-                            .attrs = &[0]Attribute{},
                             .children = children,
                         };
                     },
@@ -92,8 +90,6 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
                 u8 => return .{
                     .name = name,
                     .text = children,
-                    .attrs = &[0]Attribute{},
-                    .children = &[0]Element{},
                 },
                 else => {
                     @compileLog(ptr);
@@ -115,7 +111,6 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
                     el[0] = children;
                     return .{
                         .name = name,
-                        .attrs = &[0]Attribute{},
                         .children = el,
                     };
                 }
@@ -123,8 +118,6 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
             }
             return .{
                 .name = name,
-                .attrs = &[0]Attribute{},
-                .children = &[0]Element{},
             };
         },
         else => @compileError("children must be either Element, or []Element or .{}"),
@@ -169,7 +162,7 @@ test "html" {
     init(a);
     defer raze();
 
-    const str = try std.fmt.allocPrint(a, "{}", .{html(&[_]Element{})});
+    const str = try std.fmt.allocPrint(a, "{}", .{html(null)});
     defer a.free(str);
     try std.testing.expectEqualStrings("<html />", str);
 
@@ -184,9 +177,9 @@ test "nested" {
     defer raze();
     const str = try std.fmt.allocPrint(a, "{}", .{
         html(&[_]E{
-            head(.{}),
+            head(null),
             body(
-                div(p(.{})),
+                div(p(null)),
             ),
         }),
     });
