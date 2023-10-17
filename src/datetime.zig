@@ -6,12 +6,22 @@ timestamp: i64,
 years: usize,
 months: u8,
 days: u8,
+weekday: u8,
 hours: u8,
 minutes: u8,
 seconds: u8,
 tz: ?i8 = null,
 
 const DAYS_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+const WEEKDAYS = [_][]const u8{
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+};
 
 fn leapYear(year: usize) bool {
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0);
@@ -68,6 +78,8 @@ pub fn fromEpoch(sts: i64) !DateTime {
     self.hours = @truncate(ts / 60 / 60 % 24);
 
     self.years = yearsFrom(ts);
+    self.weekday = @truncate((ts / 60 / 60 / 24 + 4) % 7);
+
     var days = 719162 + ts / 60 / 60 / 24 - daysAtYear(self.years);
     const both = monthsFrom(self.years, days);
     self.months = both[0];
@@ -84,10 +96,11 @@ pub fn fromEpochStr(str: []const u8) !DateTime {
 }
 
 pub fn format(self: DateTime, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    return out.print("{}-{}-{} {:0>2}:{:0>2}:{:0>2}", .{
+    return out.print("{}-{}-{} {s} {:0>2}:{:0>2}:{:0>2}", .{
         self.years,
         self.months,
         self.days,
+        WEEKDAYS[self.weekday],
         self.hours,
         self.minutes,
         self.seconds,
@@ -96,10 +109,22 @@ pub fn format(self: DateTime, comptime _: []const u8, _: std.fmt.FormatOptions, 
 
 test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
+        .timestamp = 0,
+        .years = 1970,
+        .months = 1,
+        .days = 1,
+        .weekday = 4,
+        .hours = 0,
+        .minutes = 0,
+        .seconds = 0,
+    }, try DateTime.fromEpoch(0));
+
+    try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1697312998,
         .years = 2023,
         .months = 10,
         .days = 14,
+        .weekday = 6,
         .hours = 19,
         .minutes = 49,
         .seconds = 58,
@@ -110,17 +135,31 @@ test "datetime" {
         .years = 1998,
         .months = 12,
         .days = 31,
+        .weekday = 4,
         .hours = 23,
         .minutes = 59,
         .seconds = 59,
     }, try DateTime.fromEpoch(915148799));
+
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148800,
         .years = 1999,
         .months = 1,
         .days = 1,
+        .weekday = 5,
         .hours = 0,
         .minutes = 0,
         .seconds = 0,
     }, try DateTime.fromEpoch(915148800));
+
+    try std.testing.expectEqualDeep(DateTime{
+        .timestamp = 1002131014,
+        .years = 2001,
+        .months = 10,
+        .days = 3,
+        .weekday = 3,
+        .hours = 17,
+        .minutes = 43,
+        .seconds = 34,
+    }, try DateTime.fromEpoch(1002131014));
 }
