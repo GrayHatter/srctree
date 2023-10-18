@@ -69,9 +69,9 @@ pub const Element = struct {
 pub const E = Element;
 
 /// TODO this desperately needs to return a type instead
-pub fn element(comptime name: []const u8, children: anytype) Element {
+pub fn element(comptime name: []const u8, children: anytype, attrs: ?[]const Attribute) Element {
     const ChildrenType = @TypeOf(children);
-    if (ChildrenType == @TypeOf(null)) return .{ .name = name };
+    if (ChildrenType == @TypeOf(null)) return .{ .name = name, .attrs = attrs };
     const child_type_info = @typeInfo(ChildrenType);
     switch (child_type_info) {
         .Pointer => |ptr| switch (ptr.size) {
@@ -80,11 +80,13 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
                     u8 => return .{
                         .name = name,
                         .text = children,
+                        .attrs = attrs,
                     },
                     Element => {
                         return .{
                             .name = name,
                             .children = children,
+                            .attrs = attrs,
                         };
                     },
                     else => @compileError("Unknown type given to element"),
@@ -99,6 +101,7 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
                 u8 => return .{
                     .name = name,
                     .text = children,
+                    .attrs = attrs,
                 },
                 else => {
                     @compileLog(ptr);
@@ -121,49 +124,74 @@ pub fn element(comptime name: []const u8, children: anytype) Element {
                     return .{
                         .name = name,
                         .children = el,
+                        .attrs = attrs,
                     };
                 }
                 @compileError(".{} is the only child struct type"); // currently TODO plz fix
             }
             return .{
                 .name = name,
+                .attrs = attrs,
             };
         },
-        else => @compileError("children must be either Element, or []Element or .{}"),
+        .Array => |arr| switch (arr.child) {
+            // TODO, this is probably a compiler error, prefix with &
+            Element => return .{
+                .name = name,
+                .children = children.ptr,
+                .attrs = attrs,
+            },
+            else => {
+                @compileLog(ChildrenType);
+                @compileLog(@typeInfo(ChildrenType));
+                @compileError("children must be either Element, or []Element or .{}");
+            },
+        },
+        else => {
+            @compileLog(ChildrenType);
+            @compileLog(@typeInfo(ChildrenType));
+            @compileError("children must be either Element, or []Element or .{}");
+        },
     }
     @compileError("Invalid type given for children when calling element");
 }
 
 pub fn text(c: []const u8) Element {
-    return element("_text", c);
+    return element("_text", c, null);
 }
 
 pub fn html(c: anytype) Element {
-    return element("html", c);
+    return element("html", c, null);
 }
 
 pub fn head(c: anytype) Element {
-    return element("head", c);
+    return element("head", c, null);
 }
 
 pub fn body(c: anytype) Element {
-    return element("body", c);
+    return element("body", c, null);
 }
 
 pub fn div(c: anytype) Element {
-    return element("div", c);
+    return element("div", c, null);
+}
+
+/// Creating a 2nd type because I'm not sure what I want this API to actually
+/// look like yet
+pub fn divAttr(c: anytype, a: ?[]const Attribute) Element {
+    return element("div", c, a);
 }
 
 pub fn p(c: anytype) Element {
-    return element("p", c);
+    return element("p", c, null);
 }
 
 pub fn span(c: anytype) Element {
-    return element("span", c);
+    return element("span", c, null);
 }
 
 pub fn strong(c: anytype) Element {
-    return element("strong", c);
+    return element("strong", c, null);
 }
 
 test "html" {
@@ -173,18 +201,18 @@ test "html" {
 
     const str = try std.fmt.allocPrint(a, "{}", .{html(null)});
     defer a.free(str);
-    try std.testing.expectEqualStrings("<html />", str);
+    try std.testing.expectEqualStrings("<html></html>", str);
 
-    const str2 = try std.fmt.allocPrint(a, "{}", .{html(body(.{}))});
+    const str2 = try std.fmt.allocPrint(a, "{pretty}", .{html(body(.{}))});
     defer a.free(str2);
-    try std.testing.expectEqualStrings("<html>\n<body />\n</html>", str2);
+    try std.testing.expectEqualStrings("<html>\n<body></body>\n</html>", str2);
 }
 
 test "nested" {
     var a = std.testing.allocator;
     init(a);
     defer raze();
-    const str = try std.fmt.allocPrint(a, "{}", .{
+    const str = try std.fmt.allocPrint(a, "{pretty}", .{
         html(&[_]E{
             head(null),
             body(
@@ -196,10 +224,10 @@ test "nested" {
 
     const example =
         \\<html>
-        \\<head />
+        \\<head></head>
         \\<body>
         \\<div>
-        \\<p />
+        \\<p></p>
         \\</div>
         \\</body>
         \\</html>
@@ -223,4 +251,33 @@ test "text" {
     const p_txt = try std.fmt.allocPrint(a, "{}", .{p(text("this is text"))});
     defer a.free(p_txt);
     try std.testing.expectEqualStrings("<p>this is text</p>", p_txt);
+}
+
+test "attrs" {
+    var a = std.testing.allocator;
+    init(a);
+    defer raze();
+    const str = try std.fmt.allocPrint(a, "{pretty}", .{
+        html(&[_]E{
+            head(null),
+            body(
+                divAttr(p(null), &[_]Attribute{
+                    Attribute{ .key = "class", .value = "something" },
+                }),
+            ),
+        }),
+    });
+    defer a.free(str);
+
+    const example =
+        \\<html>
+        \\<head></head>
+        \\<body>
+        \\<div class="something">
+        \\<p></p>
+        \\</div>
+        \\</body>
+        \\</html>
+    ;
+    try std.testing.expectEqualStrings(example, str);
 }
