@@ -25,6 +25,7 @@ const endpoints = [_]struct {
     .{ .name = "/hi", .call = respond },
     .{ .name = "/list", .call = list },
     .{ .name = "/tree", .call = respond },
+    .{ .name = "/user", .call = commitFlex },
 };
 
 fn sendMsg(r: *Response, msg: []const u8) !void {
@@ -40,6 +41,48 @@ fn bye(r: *Response, _: []const u8) Error!void {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
     };
     return Error.AndExit;
+}
+
+fn commitFlex(r: *Response, _: []const u8) Error!void {
+    var tmpl = Template.find("user_commits.html");
+    tmpl.alloc = r.alloc;
+
+    HTML.init(r.alloc);
+    defer HTML.raze();
+
+    const day = [1]HTML.Attribute{HTML.Attribute{ .key = "class", .value = "day" }};
+
+    const stack = HTML.divAttr(
+        &[_]HTML.Element{
+            HTML.divAttr(null, &[1]HTML.Attribute{HTML.Attribute{ .key = "class", .value = "month" }}),
+        } ++ &[_]HTML.Element{HTML.divAttr(null, &day)} ** 7,
+        &[1]HTML.Attribute{HTML.Attribute{ .key = "class", .value = "col" }},
+    );
+    const flex = HTML.divAttr(
+        &[_]HTML.Element{
+            HTML.divAttr(&[_]HTML.Element{
+                HTML.divAttr("&nbsp;", &day),
+                HTML.divAttr("Sun", &day),
+                HTML.divAttr("Mon", &day),
+                HTML.divAttr("Tue", &day),
+                HTML.divAttr("Wed", &day),
+                HTML.divAttr("Thr", &day),
+                HTML.divAttr("Fri", &day),
+                HTML.divAttr("Sat", &day),
+            }, &[1]HTML.Attribute{HTML.Attribute{ .key = "class", .value = "day-col" }}),
+        } ++ &[_]HTML.Element{stack} ** 52,
+        &[1]HTML.Attribute{HTML.Attribute{ .key = "class", .value = "commit-flex" }},
+    );
+
+    const htm = try std.fmt.allocPrint(r.alloc, "{}", .{flex});
+    defer r.alloc.free(htm);
+
+    tmpl.addVar("flexes", htm) catch return Error.Unknown;
+
+    var page = std.fmt.allocPrint(r.alloc, "{}", .{tmpl}) catch unreachable;
+    sendMsg(r, page) catch |e| {
+        std.log.err("Unexpected error while responding [{}]\n", .{e});
+    };
 }
 
 fn code(r: *Response, _: []const u8) Error!void {
