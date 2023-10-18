@@ -18,6 +18,14 @@ pub const Attribute = struct {
     key: []const u8,
     value: ?[]const u8,
 
+    /// Helper function
+    pub fn class(val: ?[]const u8) Attribute {
+        return .{
+            .key = "class",
+            .value = val,
+        };
+    }
+
     pub fn format(self: Attribute, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         if (self.value) |value| {
             try std.fmt.format(out, " {s}=\"{s}\"", .{ self.key, value });
@@ -103,10 +111,17 @@ pub fn element(comptime name: []const u8, children: anytype, attrs: ?[]const Att
                     .text = children,
                     .attrs = attrs,
                 },
+                Element => return .{
+                    .name = name,
+                    .children = children,
+                    .attrs = attrs,
+                },
                 else => {
                     @compileLog(ptr);
+                    @compileLog(ptr.child);
                     @compileLog(ptr.size);
                     @compileLog(ChildrenType);
+                    @compileError("Invalid pointer children given");
                 },
             },
             else => {
@@ -153,6 +168,8 @@ pub fn element(comptime name: []const u8, children: anytype, attrs: ?[]const Att
             @compileError("children must be either Element, or []Element or .{}");
         },
     }
+    @compileLog(ChildrenType);
+    @compileLog(@typeInfo(ChildrenType));
     @compileError("Invalid type given for children when calling element");
 }
 

@@ -13,8 +13,27 @@ minutes: u8 = 0,
 seconds: u8 = 0,
 tz: ?i8 = null,
 
-const DAYS_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
-const WEEKDAYS = [_][]const u8{
+/// 1 Indexed (index 0 == 0) because Date formatting months start at 1
+pub const DAYS_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+
+/// 1 Indexed (index 0 == undefined) because Date formatting months start at 1
+pub const MONTHS = [_][]const u8{
+    undefined,
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+};
+
+pub const WEEKDAYS = [_][]const u8{
     "Sunday",
     "Monday",
     "Tuesday",
