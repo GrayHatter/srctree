@@ -18,9 +18,9 @@ pub const Attribute = struct {
     key: []const u8,
     value: ?[]const u8,
 
-    pub fn format(self: Element, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+    pub fn format(self: Attribute, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         if (self.value) |value| {
-            try std.fmt.format(out, " {s}=\"{}\"", .{ self.key, value });
+            try std.fmt.format(out, " {s}=\"{s}\"", .{ self.key, value });
         } else {
             try std.fmt.format(out, " {s}", .{self.key});
         }
@@ -32,28 +32,37 @@ pub const Element = struct {
     text: ?[]const u8 = null,
     attrs: ?[]const Attribute = null,
     children: ?[]const Element = null,
+    self_close: bool = false,
 
-    pub fn format(self: Element, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        if (self.children) |children| {
-            try out.print("<{s}>", .{self.name});
-            for (children) |child| {
-                if (child.text) |txt| {
-                    try out.print("{s}", .{txt});
-                    if (children.len == 1) break;
-                } else {
-                    try out.print("\n{}", .{child});
-                }
-            } else try out.writeAll("\n");
-            try out.print("</{s}>", .{self.name});
-        } else {
+    pub fn format(self: Element, comptime fmt: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        const pretty = std.mem.eql(u8, fmt, "pretty");
+
+        if (self.name[0] == '_') {
             if (self.text) |txt| {
-                if (self.name[0] == '_') {
-                    return try std.fmt.format(out, "{s}", .{txt});
-                }
-                return try std.fmt.format(out, "<{s}>{s}</{s}>", .{ self.name, txt, self.name });
+                return try std.fmt.format(out, "{s}", .{txt});
             }
-            try std.fmt.format(out, "<{s} />", .{self.name});
         }
+
+        try out.print("<{s}", .{self.name});
+        if (self.attrs) |attrs| {
+            for (attrs) |attr| try out.print("{}", .{attr});
+        }
+        try out.print(">", .{});
+
+        if (self.children) |children| {
+            for (children) |child| {
+                if (pretty) {
+                    try out.print("\n{pretty}", .{child});
+                } else {
+                    try out.print("{}", .{child});
+                }
+            } else if (pretty) try out.writeAll("\n");
+        } else if (self.text) |txt| {
+            try out.print("{s}", .{txt});
+        } else if (self.self_close) {
+            return try out.print(" />", .{});
+        }
+        try out.print("</{s}>", .{self.name});
     }
 };
 
