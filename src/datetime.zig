@@ -2,14 +2,15 @@ const std = @import("std");
 
 const DateTime = @This();
 
-timestamp: i64,
-years: usize,
-months: u8,
-days: u8,
-weekday: u8,
-hours: u8,
-minutes: u8,
-seconds: u8,
+// Default to Unix Epoch
+timestamp: i64 = 0,
+years: usize = 1970,
+months: u8 = 1,
+days: u8 = 1,
+weekday: u8 = 4,
+hours: u8 = 0,
+minutes: u8 = 0,
+seconds: u8 = 0,
 tz: ?i8 = null,
 
 const DAYS_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -22,6 +23,18 @@ const WEEKDAYS = [_][]const u8{
     "Friday",
     "Saturday",
 };
+
+pub fn now() DateTime {
+    return fromEpoch(std.time.timestamp()) catch unreachable;
+}
+
+pub fn today() DateTime {
+    var self = now();
+    self.hours = 0;
+    self.minutes = 0;
+    self.seconds = 0;
+    return self;
+}
 
 fn leapYear(year: usize) bool {
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0);
@@ -105,6 +118,25 @@ pub fn format(self: DateTime, comptime _: []const u8, _: std.fmt.FormatOptions, 
         self.minutes,
         self.seconds,
     });
+}
+
+test "now" {
+    const timestamp = std.time.timestamp();
+    // If this breaks, I know... I KNOW, non-deterministic tests... and I'm sorry!
+    const this = now();
+    try std.testing.expectEqual(timestamp, this.timestamp);
+}
+
+test "today" {
+    const this = now();
+    const today_ = today();
+    try std.testing.expectEqual(this.years, today_.years);
+    try std.testing.expectEqual(this.months, today_.months);
+    try std.testing.expectEqual(this.days, today_.days);
+    try std.testing.expectEqual(this.weekday, today_.weekday);
+    try std.testing.expectEqual(today_.hours, 0);
+    try std.testing.expectEqual(today_.minutes, 0);
+    try std.testing.expectEqual(today_.seconds, 0);
 }
 
 test "datetime" {
