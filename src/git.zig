@@ -39,10 +39,20 @@ const Actor = struct {
     }
 };
 
+pub fn toParent(a: Allocator, commit: Commit, objs: std.fs.Dir) !Commit {
+    var fb = [_]u8{0} ** 2048;
+    var parent = commit.parent orelse return error.RootCommit;
+    const filename = try std.fmt.bufPrint(&fb, "{s}/{s}", .{ parent[1..3], parent[3..] });
+    var file = try objs.openFile(filename, .{});
+
+    defer file.close();
+    return Commit.readFile(a, file);
+}
+
 const Commit = struct {
     blob: []const u8,
     sha: SHA,
-    parent: SHA,
+    parent: ?SHA,
     author: Actor,
     committer: Actor,
     message: []const u8,
@@ -68,6 +78,7 @@ const Commit = struct {
     pub fn make(data: []const u8) !Commit {
         var lines = std.mem.split(u8, data, "\n");
         var self: Commit = undefined;
+        self.parent = null; // I don't like it either, but... lazy
         self.blob = data;
         while (lines.next()) |line| {
             if (line.len == 0) break;
@@ -98,7 +109,7 @@ const Commit = struct {
             \\
             \\{s}
             \\}}
-        , .{ self.sha, self.parent, self.author, self.committer, self.message });
+        , .{ self.sha, self.parent orelse "ORPHAN COMMIT", self.author, self.committer, self.message });
     }
 };
 
@@ -127,4 +138,34 @@ test "file" {
     defer a.free(commit.blob);
     //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.sha[10..]);
+}
+
+test "toParent" {
+    var a = std.testing.allocator;
+
+    var cwd = std.fs.cwd();
+    var dir = try cwd.openDir("./.git/objects/", .{});
+    defer dir.close();
+
+    var ref_main = try cwd.openFile("./.git/refs/heads/main", .{});
+    var b: [1 << 16]u8 = undefined;
+    var head = try ref_main.read(&b);
+
+    var fb = [_]u8{0} ** 2048;
+    var filename = try std.fmt.bufPrint(&fb, "./.git/objects/{s}/{s}", .{ b[0..2], b[2 .. head - 1] });
+    var file = try cwd.openFile(filename, .{});
+    var commit = try Commit.readFile(a, file);
+    defer a.free(commit.blob);
+
+    var count: usize = 0;
+    while (true) {
+        count += 1;
+        const old = commit.blob;
+        commit = toParent(a, commit, dir) catch |err| {
+            if (err != error.RootCommit) return err;
+            break;
+        };
+        a.free(old);
+    }
+    try std.testing.expect(count >= 31); // LOL SORRY!
 }
