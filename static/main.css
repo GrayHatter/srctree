@@ -115,6 +115,7 @@ li::before { content: "📁";
 	text-decoration: none;
 }
 
+/* Titillium Licence /static/OFL.txt */
 @font-face {
   font-family: 'Titillium Web';
   font-style: italic;
