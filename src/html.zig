@@ -195,8 +195,8 @@ pub fn div(c: anytype) Element {
 
 /// Creating a 2nd type because I'm not sure what I want this API to actually
 /// look like yet
-pub fn divAttr(c: anytype, a: ?[]const Attribute) Element {
-    return element("div", c, a);
+pub fn divAttr(c: anytype, attr: ?[]const Attribute) Element {
+    return element("div", c, attr);
 }
 
 pub fn p(c: anytype) Element {
@@ -209,6 +209,10 @@ pub fn span(c: anytype) Element {
 
 pub fn strong(c: anytype) Element {
     return element("strong", c, null);
+}
+
+pub fn anch(c: anytype, attr: ?[]const Attribute) Element {
+    return element("a", c, attr);
 }
 
 test "html" {
