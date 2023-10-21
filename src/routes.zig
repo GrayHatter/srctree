@@ -13,19 +13,24 @@ const Error = endpoint.Error;
 const div = HTML.div;
 const span = HTML.span;
 
+pub const Router = *const fn (*Response, []const u8) Error!void;
+
 const endpoints = [_]struct {
     name: []const u8,
-    call: Endpoint,
+    match: union(enum) {
+        call: Endpoint,
+        route: Router,
+    },
 }{
-    .{ .name = "/", .call = default },
-    .{ .name = "/auth", .call = auth },
-    .{ .name = "/bye", .call = bye },
-    .{ .name = "/code", .call = code },
-    .{ .name = "/commits", .call = respond },
-    .{ .name = "/hi", .call = respond },
-    .{ .name = "/list", .call = list },
-    .{ .name = "/tree", .call = respond },
-    .{ .name = "/user", .call = endpoint.commitFlex },
+    .{ .name = "/", .match = .{ .call = default } },
+    .{ .name = "/auth", .match = .{ .call = auth } },
+    .{ .name = "/bye", .match = .{ .call = bye } },
+    .{ .name = "/code", .match = .{ .call = code } },
+    .{ .name = "/commits", .match = .{ .call = respond } },
+    .{ .name = "/hi", .match = .{ .call = respond } },
+    .{ .name = "/list", .match = .{ .call = list } },
+    .{ .name = "/tree", .match = .{ .call = respond } },
+    .{ .name = "/user", .match = .{ .call = endpoint.commitFlex } },
 };
 
 fn sendMsg(r: *Response, msg: []const u8) !void {
@@ -163,9 +168,16 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-pub fn route(uri: []const u8) Endpoint {
+pub fn router(uri: []const u8) Endpoint {
     inline for (endpoints) |ep| {
-        if (eql(uri, ep.name)) return ep.call;
+        switch (ep.match) {
+            .call => |call| {
+                if (eql(uri, ep.name)) return call;
+            },
+            .route => |route| {
+                if (eql(uri[0..ep.name.len], ep.name)) return route;
+            },
+        }
     }
     return notfound;
 }

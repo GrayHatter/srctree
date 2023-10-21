@@ -103,7 +103,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         const request = try readHeader(a, acpt);
         var response = Response.init(a, acpt.stream, &request);
 
-        var endpoint = Router.route(response.request.uri);
+        var endpoint = Router.router(response.request.uri);
         try endpoint(&response, "");
         if (response.phase != .closed) try response.finish();
         acpt.stream.close();

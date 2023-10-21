@@ -100,11 +100,6 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
     }
     defer for (stack) |s| r.alloc.free(s.children.?);
 
-    var now = DateTime.now();
-    std.debug.print("{any}\n", .{now});
-
-    std.debug.print("{}\n", .{DateTime.DAYS_IN_MONTH[now.months] - (now.days - now.weekday)});
-
     var days = &[_]HTML.Element{
         HTML.divAttr(&[_]HTML.Element{
             HTML.divAttr("&nbsp;", &day),
