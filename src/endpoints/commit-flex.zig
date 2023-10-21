@@ -69,9 +69,20 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
         date = DateTime.fromEpoch(date.timestamp - 60 * 60 * 24) catch unreachable;
     }
 
-    findCommitsFor(r.alloc, &[_][]const u8{
-        ".",
-    }) catch unreachable;
+    var cwd = std.fs.cwd();
+    if (cwd.openIterableDir("./repos", .{})) |idir| {
+        var itr = idir.iterate();
+        while (itr.next() catch return Error.Unknown) |file| {
+            var buf: [1024]u8 = undefined;
+            switch (file.kind) {
+                .directory, .sym_link => {
+                    var name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
+                    findCommits(r.alloc, name) catch unreachable;
+                },
+                else => {},
+            }
+        }
+    } else |_| unreachable;
 
     var month_i: usize = date.months - 2;
     var stack: [53]HTML.Element = undefined;
@@ -98,7 +109,7 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
         }
         st.* = HTML.divAttr(month, &[1]HTML.Attribute{HTML.Attribute.class("col")});
     }
-    defer for (stack) |s| r.alloc.free(s.children.?);
+    //defer for (stack) |s| r.alloc.free(s.children.?);
 
     var days = &[_]HTML.Element{
         HTML.divAttr(&[_]HTML.Element{

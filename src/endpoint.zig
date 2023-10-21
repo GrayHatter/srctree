@@ -14,3 +14,4 @@ pub const Error = error{
 pub const Endpoint = *const fn (*Response, []const u8) Error!void;
 
 pub const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
+pub const repoList = @import("endpoints/repo-list.zig").list;
