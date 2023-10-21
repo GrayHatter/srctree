@@ -101,11 +101,14 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
     while (true) {
         var acpt = try streamsrv.accept();
         const request = try readHeader(a, acpt);
-        var response = Response.init(a, acpt.stream, &request);
+        var arena = std.heap.ArenaAllocator.init(a);
+        var alloc = arena.allocator();
+        var response = Response.init(alloc, acpt.stream, &request);
 
         var endpoint = Router.router(response.request.uri);
         try endpoint(&response, "");
         if (response.phase != .closed) try response.finish();
+        arena.deinit();
         acpt.stream.close();
     }
 }
