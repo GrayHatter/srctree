@@ -49,6 +49,10 @@ fn findCommits(a: Allocator, gitdir: []const u8) !void {
     try countAll(a, commit, dir);
 }
 
+fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !void {
+    for (gitdirs) |gitdir| try findCommits(a, gitdir);
+}
+
 pub fn commitFlex(r: *Response, _: []const u8) Error!void {
     var tmpl = Template.find("user_commits.html");
     tmpl.alloc = r.alloc;
@@ -65,9 +69,9 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
         date = DateTime.fromEpoch(date.timestamp - 60 * 60 * 24) catch unreachable;
     }
 
-    findCommits(r.alloc, ".") catch unreachable;
-    findCommits(r.alloc, "../hsh/") catch unreachable;
-    findCommits(r.alloc, "../gr.ht.hugo/") catch unreachable;
+    findCommitsFor(r.alloc, &[_][]const u8{
+        ".",
+    }) catch unreachable;
 
     var month_i: usize = date.months - 2;
     var stack: [53]HTML.Element = undefined;
@@ -77,7 +81,7 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
             month_i += 1;
             month[0] = HTML.divAttr(DateTime.MONTHS[month_i % 12 + 1][0..3], &monthAtt);
         } else {
-            month[0] = HTML.divAttr(null, &monthAtt);
+            month[0] = HTML.divAttr("&nbsp;", &monthAtt);
         }
 
         for (month[1..]) |*m| {
