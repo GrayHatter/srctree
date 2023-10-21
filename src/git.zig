@@ -17,20 +17,19 @@ const Actor = struct {
     name: []const u8,
     email: []const u8,
     time: DateTime,
-    tz_offset: i8,
 
     pub fn make(data: []const u8) !Actor {
         var itr = std.mem.splitBackwards(u8, data, " ");
-        var tz = itr.next() orelse return error.ActorParseError;
-        var time = try DateTime.fromEpochStr(itr.next() orelse return error.ActorParseError);
-        var email = itr.next() orelse return error.ActorParseError;
-        var name = itr.rest();
-        _ = tz;
+        const tzstr = itr.next() orelse return error.ActorParseError;
+        const epoch = itr.next() orelse return error.ActorParseError;
+        const time = try DateTime.fromEpochTzStr(epoch, tzstr);
+        const email = itr.next() orelse return error.ActorParseError;
+        const name = itr.rest();
+
         return .{
             .name = name,
             .email = email,
             .time = time,
-            .tz_offset = 0,
         };
     }
 
@@ -39,20 +38,18 @@ const Actor = struct {
     }
 };
 
-pub fn toParent(a: Allocator, commit: Commit, objs: std.fs.Dir) !Commit {
+pub fn toParent(a: Allocator, parent: SHA, objs: std.fs.Dir) !Commit {
     var fb = [_]u8{0} ** 2048;
-    var parent = commit.parent orelse return error.RootCommit;
     const filename = try std.fmt.bufPrint(&fb, "{s}/{s}", .{ parent[1..3], parent[3..] });
     var file = try objs.openFile(filename, .{});
-
     defer file.close();
     return Commit.readFile(a, file);
 }
 
-const Commit = struct {
+pub const Commit = struct {
     blob: []const u8,
     sha: SHA,
-    parent: ?SHA,
+    parent: [3]?SHA,
     author: Actor,
     committer: Actor,
     message: []const u8,
@@ -66,7 +63,12 @@ const Commit = struct {
             if (std.mem.eql(u8, name, "commit")) {
                 self.sha = payload;
             } else if (std.mem.eql(u8, name, "parent")) {
-                self.parent = payload;
+                for (&self.parent) |*parr| {
+                    if (parr.* == null) {
+                        parr.* = payload;
+                        return;
+                    }
+                }
             } else if (std.mem.eql(u8, name, "author")) {
                 self.author = try Actor.make(payload);
             } else if (std.mem.eql(u8, name, "committer")) {
@@ -78,7 +80,7 @@ const Commit = struct {
     pub fn make(data: []const u8) !Commit {
         var lines = std.mem.split(u8, data, "\n");
         var self: Commit = undefined;
-        self.parent = null; // I don't like it either, but... lazy
+        self.parent = .{ null, null, null }; // I don't like it either, but... lazy
         self.blob = data;
         while (lines.next()) |line| {
             if (line.len == 0) break;
@@ -161,10 +163,10 @@ test "toParent" {
     while (true) {
         count += 1;
         const old = commit.blob;
-        commit = toParent(a, commit, dir) catch |err| {
-            if (err != error.RootCommit) return err;
-            break;
-        };
+        if (commit.parent[0]) |parent| {
+            commit = try toParent(a, parent, dir);
+        } else break;
+
         a.free(old);
     }
     try std.testing.expect(count >= 31); // LOL SORRY!
