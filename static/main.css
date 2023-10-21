@@ -1,17 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono:ital@1&display=swap');
-
-@import url('https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@1,300;1,400;1,600;1,700&family=Ubuntu+Mono:ital@1&display=swap');
-
-
-
 html {
 	color-scheme: light dark;
 }
 
 body {
 	margin: 0 auto;
-	font-family: Tahoma, Verdana, Arial, sans-serif;
-	text-align: center;
+	font-family: "Ubunutu Mono", sans-serif;
 }
 
 body > h1 {
@@ -22,18 +15,66 @@ body > h1 {
 	font-family: 'Titillium Web', sans-serif;
 }
 
+lines { 
+	width: 5%;
+	display: inline-block;
+	font-family: monospace;
+	text-align: right;
+}
+
+lines > linenum { 
+	display: inline-block;
+	border-right: 2px black solid;
+	padding-right: 2px;
+}
+
+code { 
+	display: inline-block;
+	width: 94%;
+}
+
+code > span {
+	display: inline-block;
+	width: 90%;
+	white-space: pre;
+	font-family: monospace; 
+}
+
+repos {
+	display: block;
+	margin: auto;
+	padding: 0 0 0 50px;
+	text-align: left;
+	width: 950px;
+}
+
+repos > li {
+	list-style: none;
+}
+
+li::before { content: "📁";
+	padding-right: 8px;
+	color: red;
+}
+
 .commit-flex {
 	height: 126px;
-	display: inline-table;
 	width: 1100px;
+	margin: auto;
+	line-height: 100%;
 }
+
 .commit-flex > .day-col {
 	width: 80px;
 	margin: 0 2px;
 	display: inline-table;
 	text-align: right;
-	padding: 2px 0;
 }
+
+.day-col > .day {
+	padding: 0 0 1px;
+}
+
 .commit-flex > .col {
 	width: 13px;
 	margin: 0 2px;
@@ -41,11 +82,13 @@ body > h1 {
 	text-align: center;
 	padding: 2px 0;
 }
+
 .commit-flex > .col > .month {
 	width: 13px;
 	height: 13px;
 	display: inline-block;
 }
+
 .commit-flex > .col > .day {
 	width: 13px;
 	height: 13px;
@@ -58,6 +101,11 @@ body > h1 {
 	background-color: #303030;
 }
 
+.commit-flex > .col > div:first-child {
+	line-height: 103%;
+	padding: 0 0 6px;
+}
+
 .day-commits {
 	background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 100%);
 }
@@ -67,4 +115,39 @@ body > h1 {
 	text-decoration: none;
 }
 
-
+@font-face {
+  font-family: 'Titillium Web';
+  font-style: italic;
+  font-weight: 300;
+  src: url(/static/TitilliumWeb-LightItalic.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Titillium Web';
+  font-style: italic;
+  font-weight: 400;
+  src: url(/static/TitilliumWeb-Italic.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Titillium Web';
+  font-style: italic;
+  font-weight: 600;
+  src: url(/static/TitilliumWeb-SemiBoldItalic.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Titillium Web';
+  font-style: italic;
+  font-weight: 700;
+  src: url(/static/TitilliumWeb-BoldItalic.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Ubuntu Mono';
+  font-style: normal;
+  font-weight: 400;
+  src: url(/static/UbuntuMono_Regular.ttf) format('truetype');
+}
+@font-face {
+  font-family: 'Ubuntu Mono';
+  font-style: italic;
+  font-weight: 400;
+  src: url(/static/UbuntuMono-Italic.ttf) format('truetype');
+}
