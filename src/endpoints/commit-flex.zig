@@ -11,9 +11,11 @@ const Commit = @import("../git.zig");
 
 const Error = Endpoint.Error;
 
-var hits: [2][13][32]u32 = .{.{.{0} ** 32} ** 13} ** 2;
+const HeatMapArray = [2][13][32]u16;
 
-fn countAll(a: Allocator, root: Commit.Commit, dir: std.fs.Dir) !void {
+var hits: HeatMapArray = .{.{.{0} ** 32} ** 13} ** 2;
+
+fn countAll(a: Allocator, root: Commit.Commit, dir: std.fs.Dir) !*HeatMapArray {
     var commit = root;
     while (true) {
         const old = commit.blob;
@@ -22,15 +24,15 @@ fn countAll(a: Allocator, root: Commit.Commit, dir: std.fs.Dir) !void {
         for (commit.parent[1..]) |par| {
             if (par) |p| {
                 var parent = try Commit.toParent(a, p, dir);
-                try countAll(a, parent, dir);
+                _ = try countAll(a, parent, dir);
             }
         }
-        commit = try Commit.toParent(a, commit.parent[0] orelse return, dir);
+        commit = try Commit.toParent(a, commit.parent[0] orelse return &hits, dir);
         a.free(old);
     }
 }
 
-fn findCommits(a: Allocator, gitdir: []const u8) !void {
+fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
     var repo = try std.fs.cwd().openDir(gitdir, .{});
     defer repo.close();
     var dir = try repo.openDir("./.git/objects/", .{});
@@ -46,11 +48,14 @@ fn findCommits(a: Allocator, gitdir: []const u8) !void {
     var commit = try Commit.Commit.readFile(a, file);
     //defer a.free(commit.blob);
 
-    try countAll(a, commit, dir);
+    return try countAll(a, commit, dir);
 }
 
-fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !void {
-    for (gitdirs) |gitdir| try findCommits(a, gitdir);
+fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !*HeatMapArray {
+    for (gitdirs) |gitdir| {
+        _ = try findCommits(a, gitdir);
+    }
+    return &hits;
 }
 
 pub fn commitFlex(r: *Response, _: []const u8) Error!void {
@@ -78,7 +83,7 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
             switch (file.kind) {
                 .directory, .sym_link => {
                     var name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                    findCommits(r.alloc, name) catch unreachable;
+                    _ = findCommits(r.alloc, name) catch unreachable;
                 },
                 else => {},
             }
