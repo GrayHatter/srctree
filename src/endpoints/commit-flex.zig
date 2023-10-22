@@ -59,9 +59,6 @@ fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !*HeatMapArray {
 }
 
 pub fn commitFlex(r: *Response, _: []const u8) Error!void {
-    var tmpl = Template.find("user_commits.html");
-    tmpl.alloc = r.alloc;
-
     HTML.init(r.alloc);
     defer HTML.raze();
 
@@ -143,9 +140,12 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
     const htm = try std.fmt.allocPrint(r.alloc, "{}", .{flex});
     defer r.alloc.free(htm);
 
-    tmpl.addVar("flexes", htm) catch return Error.Unknown;
+    var tmpl = Template.find("user_commits.html");
+    tmpl.init(r.alloc);
 
-    var page = std.fmt.allocPrint(r.alloc, "{}", .{tmpl}) catch unreachable;
+    tmpl.addVar("flexes", htm) catch return Error.Unknown;
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+
     r.start() catch return Error.Unknown;
     r.write(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;

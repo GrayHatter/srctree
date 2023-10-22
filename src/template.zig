@@ -4,9 +4,14 @@ const bldtmpls = @import("templates");
 const Allocator = std.mem.Allocator;
 
 const Element = @import("html.zig");
+const Response = @import("response.zig");
 
 const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
+
+fn validChar(c: u8) bool {
+    return (c >= 'a' and c <= 'z') or c == '-' or c == '_' or (c >= 'A' and c <= 'Z') or c == '.' or c == ':';
+}
 
 pub const Template = struct {
     alloc: ?Allocator = null,
@@ -21,11 +26,17 @@ pub const Template = struct {
         blob: []const u8,
     };
 
+    pub fn init(self: *Template, a: Allocator) void {
+        self.alloc = a;
+    }
+
     fn expandVars(self: *Template) !void {
         if (self.alloc) |a| {
             if (self.vars) |vars| {
                 if (!a.resize(vars, vars.len + 1)) {
                     self.vars = try a.realloc(vars, vars.len + 1);
+                } else {
+                    self.vars.?.len += 1;
                 }
             } else {
                 self.vars = try a.alloc(Var, 1);
@@ -45,25 +56,50 @@ pub const Template = struct {
         }
     }
 
-    pub fn build(self: Template, a: Allocator) ![]u8 {
+    pub fn build(self: *Template, ext_a: ?Allocator) ![]u8 {
+        var a = ext_a orelse self.alloc orelse return error.AllocatorInvalid;
         return std.fmt.allocPrint(a, "{}", .{self});
+    }
+
+    pub fn buildFor(self: *Template, a: ?Allocator, r: *const Response) ![]u8 {
+        const loggedin = if (r.request.auth.valid()) "Logged In" else "Public";
+        try self.addVar("header.auth", loggedin);
+        return try self.build(a);
     }
 
     pub fn format(self: Template, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         if (self.vars) |vars| {
             var start: usize = 0;
-            var end: usize = 0;
-            for (vars) |v| {
-                const needle: []const u8 = std.fmt.allocPrint(self.alloc.?, "<!-- {s} -->", .{v.name}) catch unreachable;
-                defer self.alloc.?.free(needle);
-                if (std.mem.indexOf(u8, self.blob[start..], needle)) |i| {
-                    end = start + i;
-                    try out.writeAll(self.blob[start..end]);
-                    try out.writeAll(v.blob);
-                    start = end + needle.len;
+            while (start < self.blob.len) {
+                if (std.mem.indexOf(u8, self.blob[start..], "<!-- ")) |offset| {
+                    try out.writeAll(self.blob[start .. start + offset]);
+                    start += offset;
+                    var i: usize = 5;
+                    var c = self.blob[start + i];
+                    while (validChar(c)) {
+                        i += 1;
+                        c = self.blob[start + i];
+                    }
+                    if (!std.mem.eql(u8, " -->", self.blob[start + i .. start + i + 4])) {
+                        try out.writeAll(self.blob[start .. start + i]);
+                        start += i;
+                        continue;
+                    }
+                    const var_name = self.blob[start + 5 .. start + i];
+                    for (vars) |v| {
+                        if (std.mem.eql(u8, var_name, v.name)) {
+                            try out.writeAll(v.blob);
+                            start += i + 4;
+                            break;
+                        }
+                    } else {
+                        try out.writeAll(self.blob[start .. start + i + 4]);
+                        start += i + 4;
+                    }
+                } else {
+                    try out.writeAll(self.blob[start..]);
+                    break;
                 }
-            } else {
-                try out.writeAll(self.blob[start..]);
             }
         } else {
             try out.writeAll(self.blob);
@@ -160,4 +196,11 @@ test "load templates" {
     } else {
         return error.TemplateNotFound;
     }
+}
+
+test "init" {
+    var a = std.testing.allocator;
+
+    var tmpl = find("user_commits.html");
+    tmpl.init(a);
 }
