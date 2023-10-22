@@ -47,7 +47,13 @@ lines {
 lines > ln {
 	border-right: 2px black solid;
 	display: block;
+	height: 100%;
 	padding-right: 2px;
+	width: 100%;
+}
+
+ln::after {
+	content: attr(num);
 }
 
 code {

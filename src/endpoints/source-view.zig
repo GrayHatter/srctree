@@ -18,7 +18,7 @@ pub fn code(r: *Response, _: []const u8) Error!void {
 
     var linens = try r.alloc.alloc([]u8, count + 1);
     for (0..count + 1) |i| {
-        linens[i] = try std.fmt.allocPrint(r.alloc, "<ln>{}</ln>", .{i + 1});
+        linens[i] = try std.fmt.allocPrint(r.alloc, "<ln num=\"{}\"></ln>", .{i + 1});
     }
     var lnums = try std.mem.join(r.alloc, "", linens);
 
