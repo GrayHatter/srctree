@@ -56,7 +56,7 @@ code {
 	width: 94%;
 }
 
-code > span {
+code {
 	display: inline-block;
 	width: 90%;
 	white-space: pre;
@@ -72,6 +72,7 @@ repos {
 }
 
 li {
+	display: block;
 	list-style: none;
 }
 
