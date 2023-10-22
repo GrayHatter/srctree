@@ -28,7 +28,7 @@ const endpoints = [_]struct {
     .{ .name = "/code", .match = .{ .call = endpoint.code } },
     .{ .name = "/commits", .match = .{ .call = respond } },
     .{ .name = "/hi", .match = .{ .call = respond } },
-    .{ .name = "/list", .match = .{ .call = endpoint.repoList } },
+    .{ .name = "/repos", .match = .{ .call = endpoint.repoList } },
     .{ .name = "/tree", .match = .{ .call = respond } },
     .{ .name = "/user", .match = .{ .call = endpoint.commitFlex } },
 };

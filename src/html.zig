@@ -215,6 +215,10 @@ pub fn anch(c: anytype, attr: ?[]const Attribute) Element {
     return element("a", c, attr);
 }
 
+pub fn li(c: anytype, attr: ?[]const Attribute) Element {
+    return element("li", c, attr);
+}
+
 test "html" {
     var a = std.testing.allocator;
     init(a);

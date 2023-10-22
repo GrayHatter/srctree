@@ -15,10 +15,7 @@ pub fn list(r: *Response, _: []const u8) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
         var flist = std.ArrayList([]u8).init(r.alloc);
-
-        defer flist.clearAndFree();
         var itr = idir.iterate();
-
         while (itr.next() catch return Error.Unknown) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
@@ -35,21 +32,16 @@ pub fn list(r: *Response, _: []const u8) Error!void {
                     .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}", .{name}),
                 }},
             );
-
-            repoln.* = HTML.anch(name, attr);
+            var anc = try r.alloc.dupe(HTML.E, &[_]HTML.E{HTML.anch(name, attr)});
+            repoln.* = HTML.li(anc, null);
         }
 
-        const div = HTML.div(repos);
-        const repo = try std.fmt.allocPrint(r.alloc, "{}", .{div});
-        defer r.alloc.free(repo);
-
         var tmpl = Template.find("repos.html");
-        tmpl.alloc = r.alloc;
+        tmpl.init(r.alloc);
+        const repo = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.element("repos", repos, null)});
         tmpl.addVar("repos", repo) catch return Error.Unknown;
 
-        var page = std.fmt.allocPrint(r.alloc, "{}", .{tmpl}) catch unreachable;
-        defer r.alloc.free(page);
-
+        var page = tmpl.buildFor(r.alloc, r) catch unreachable;
         r.start() catch return Error.Unknown;
         r.write(page) catch return Error.Unknown;
         r.finish() catch return Error.Unknown;
