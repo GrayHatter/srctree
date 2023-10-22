@@ -63,6 +63,7 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
     const day = [1]HTML.Attribute{HTML.Attribute.class("day")};
     const monthAtt = [1]HTML.Attribute{HTML.Attribute.class("month")};
 
+    const today = DateTime.today();
     var date = DateTime.today();
     date = DateTime.fromEpoch(date.timestamp + 60 * 60 * 24 - 31_536_000) catch unreachable;
     while (date.weekday != 0) {
@@ -98,8 +99,14 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
         for (month[1..]) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + 60 * 60 * 24) catch unreachable;
             var rows = try r.alloc.alloc(HTML.Attribute, 2);
+            const class = if (hits[date.years - 2022][date.months - 1][date.days - 1] > 0)
+                "day day-commits"
+            else if (date.timestamp > today.timestamp)
+                "day-hide"
+            else
+                "day";
             @memcpy(rows, &[2]HTML.Attribute{
-                HTML.Attribute.class(if (hits[date.years - 2022][date.months - 1][date.days - 1] > 0) "day day-commits" else "day"),
+                HTML.Attribute.class(class),
                 HTML.Attribute{
                     .key = "title",
                     .value = try std.fmt.allocPrint(r.alloc, "{}", .{date}),
@@ -109,7 +116,6 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
         }
         st.* = HTML.divAttr(month, &[1]HTML.Attribute{HTML.Attribute.class("col")});
     }
-    //defer for (stack) |s| r.alloc.free(s.children.?);
 
     var days = &[_]HTML.Element{
         HTML.divAttr(&[_]HTML.Element{

@@ -71,7 +71,8 @@ li {
 	list-style: none;
 }
 
-repos > li::before { content: "📁";
+repos > li::before {
+	content: "📁";
 	padding-right: 8px;
 	color: red;
 }
