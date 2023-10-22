@@ -75,3 +75,8 @@ pub fn init(h: *HeaderList) Auth {
 pub fn valid(auth: Auth) bool {
     return auth.method.valid();
 }
+
+pub fn username(auth: Auth) ![]const u8 {
+    _ = auth;
+    return error.NotImplemented;
+}
