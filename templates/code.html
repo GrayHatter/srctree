@@ -1,25 +1,27 @@
 <!DOCTYPE html>
 <html>
-<head>
-<title>zWSGI</title>
-<style>
-html { color-scheme: light dark; }
-body { width: 35em; margin: 0 auto; font-family: Tahoma, Verdana, Arial, sans-serif; }
-lines { width: 5%; display: inline-block; font-family: monospace; text-align: right; }
-lines > linenum { display: inline-block; border-right: 2px black solid; padding-right: 2px; }
-code { display: inline-block; width: 94% }
-code > span {  display: inline-block; width: 90%; white-space: pre; font-family: monospace; }
-</style>
-</head>
-<body>
-<div>
-    <lines>
+  <head>
+    <title>srctree</title>
+    <link href="/static/main.css" rel="stylesheet">
+  </head>
+  <body>
+    <header>
+    <h1>srctree</h1>
+    <ul>
+      <li><a href="/">home</a></li>
+      <li><a href="/repos">repos</a></li>
+      <li><a href="/user">owner</a></li>
+      <li><a href="/tree">tree</a></li>
+    </ul>
+    <span class="auth"><!-- header.auth --></span>
+    </header>
+    <content>
+      <lines>
       <!-- lines -->
-    </lines>
-    <code>
-      <!-- code -->
-    </code>
-  </div>
-</body>
+      </lines>
+      <code>
+        <!-- code -->
+      </code>
+    </content>
+  </body>
 </html>
-

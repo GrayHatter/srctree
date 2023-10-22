@@ -31,24 +31,28 @@ header > ul > li {
 }
 
 content {
+	display: block;
+	margin: auto;
 	text-align: center;
+	width: 1050px;
 }
 
 lines {
-	width: 5%;
 	display: inline-block;
 	font-family: monospace;
 	text-align: right;
+	width: 50px;
 }
 
-lines > linenum {
-	display: inline-block;
+lines > ln {
 	border-right: 2px black solid;
+	display: block;
 	padding-right: 2px;
 }
 
 code {
 	display: inline-block;
+	text-align: left;
 	width: 94%;
 }
 
