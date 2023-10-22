@@ -104,7 +104,7 @@ pub fn router(uri: []const u8) Endpoint {
                 if (eql(uri, ep.name)) return call;
             },
             .route => |route| {
-                if (eql(uri[0..ep.name.len], ep.name)) return route;
+                if (eql(uri[0..@min(uri.len, ep.name.len)], ep.name)) return route;
             },
         }
     }
