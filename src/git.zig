@@ -115,6 +115,52 @@ pub const Commit = struct {
     }
 };
 
+pub const Object = struct {
+    mode: [6]u8,
+    name: []const u8,
+    hash: [40]u8,
+};
+
+pub const Tree = struct {
+    blob: []const u8,
+    objects: []Object,
+
+    pub fn make(a: Allocator, blob: []const u8) !Tree {
+        var self: Tree = .{
+            .blob = blob,
+            .objects = try a.alloc(Object, std.mem.count(u8, blob, "\x00")),
+        };
+
+        var i: usize = 0;
+        if (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
+            // This is probably wrong for large trees, but #YOLO
+            std.debug.assert(std.mem.eql(u8, "tree ", blob[0..5]));
+            std.debug.assert(index == 8);
+            i = 9;
+        }
+        var obj_i: usize = 0;
+        while (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
+            var obj = &self.objects[obj_i];
+            obj_i += 1;
+            if (blob[i] == '1') {
+                _ = try std.fmt.bufPrint(&obj.mode, "{s}", .{blob[i .. i + 6]});
+                _ = try std.fmt.bufPrint(&obj.hash, "{}", .{std.fmt.fmtSliceHexLower(blob[index + 1 .. index + 21])});
+                obj.name = blob[i + 7 .. index];
+            } else if (blob[i] == '4') {
+                _ = try std.fmt.bufPrint(&obj.mode, "0{s}", .{blob[i .. i + 5]});
+                _ = try std.fmt.bufPrint(&obj.hash, "{}", .{std.fmt.fmtSliceHexLower(blob[index + 1 .. index + 21])});
+                obj.name = blob[i + 6 .. index];
+            } else std.debug.print("panic {s} ", .{blob[i..index]});
+
+            i = index + 21;
+        }
+        if (a.resize(self.objects, obj_i)) {
+            self.objects.len = obj_i;
+        }
+        return self;
+    }
+};
+
 test "read" {
     var a = std.testing.allocator;
 
@@ -170,4 +216,48 @@ test "toParent" {
         a.free(old);
     }
     try std.testing.expect(count >= 31); // LOL SORRY!
+}
+
+test "tree" {
+    var a = std.testing.allocator;
+
+    var cwd = std.fs.cwd();
+    var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
+    const commit = try Commit.readFile(a, file);
+    defer a.free(commit.blob);
+    //std.debug.print("tree {s}\n", .{commit.sha});
+}
+
+test "tree decom" {
+    var a = std.testing.allocator;
+
+    var cwd = std.fs.cwd();
+    var file = try cwd.openFile("./.git/objects/5e/dabf724389ef87fa5a5ddb2ebe6dbd888885ae", .{});
+    var b: [1 << 16]u8 = undefined;
+
+    var d = try zlib.decompressStream(a, file.reader());
+    defer d.deinit();
+    var count = try d.read(&b);
+    var tree = try Tree.make(a, b[0..count]);
+    defer a.free(tree.objects);
+    for (tree.objects) |_| {
+        //std.debug.print("{s} {s} {s}\n", .{ obj.mode, obj.hash, obj.name });
+    }
+    //std.debug.print("{}\n", .{tree});
+}
+
+test "tree child" {
+    var a = std.testing.allocator;
+    var child = try std.ChildProcess.exec(.{
+        .allocator = a,
+        .argv = &[_][]const u8{
+            "git",
+            "cat-file",
+            "-p",
+            "5edabf724389ef87fa5a5ddb2ebe6dbd888885ae",
+        },
+    });
+    //std.debug.print("{s}\n", .{child.stdout});
+    a.free(child.stdout);
+    a.free(child.stderr);
 }
