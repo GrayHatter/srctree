@@ -117,7 +117,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         var response = Response.init(alloc, acpt.stream, &request);
 
         var endpoint = Router.router(response.request.uri);
-        try endpoint(&response, "");
+        try endpoint(&response, response.request.uri);
         if (response.phase != .closed) try response.finish();
         arena.deinit();
         acpt.stream.close();
