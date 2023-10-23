@@ -13,6 +13,44 @@ const Types = enum {
 
 const SHA = []const u8; // SUPERBAD, I'm sorry!
 
+pub const Repo = struct {
+    dir: std.fs.Dir,
+
+    pub fn init(d: std.fs.Dir) Repo {
+        var dir = d;
+        if (d.openFile("./HEAD", .{})) |file| {
+            file.close();
+        } else |_| {
+            dir = d.openDir("./.git", .{}) catch d;
+        }
+        return .{
+            .dir = dir,
+        };
+    }
+
+    /// Caller owns memory
+    pub fn refs(self: Repo, a: Allocator) ![][]u8 {
+        var list = std.ArrayList([]u8).init(a);
+        var idir = try self.dir.openIterableDir("refs/heads", .{});
+        var itr = idir.iterate();
+        while (try itr.next()) |file| {
+            try list.append(try a.dupe(u8, file.name));
+        }
+        return try list.toOwnedSlice();
+    }
+
+    /// TODO I don't want this to take an allocator :(
+    pub fn HEAD(self: *Repo, a: Allocator) ![]u8 {
+        var f = try self.dir.openFile("HEAD", .{});
+        var name = try f.readToEndAlloc(a, 1 <<| 18);
+        return name;
+    }
+
+    pub fn raze(self: *Repo) void {
+        self.dir.close();
+    }
+};
+
 const Actor = struct {
     name: []const u8,
     email: []const u8,
