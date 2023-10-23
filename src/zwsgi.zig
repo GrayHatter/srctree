@@ -62,7 +62,6 @@ fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
             .key = key,
             .val = val,
         });
-        std.log.info("VAR {} ", .{list.items[list.items.len - 1]});
     }
     return try list.toOwnedSlice();
 }
@@ -71,9 +70,6 @@ fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Requ
     var uwsgi_header = uProtoHeader{};
     var ptr: [*]u8 = @ptrCast(&uwsgi_header);
     _ = try acpt.stream.read(@alignCast(ptr[0..4]));
-
-    std.log.info("header {any}", .{@as([]const u8, ptr[0..4])});
-    std.log.info("header {}", .{uwsgi_header});
 
     var buf: []u8 = try a.alloc(u8, uwsgi_header.size);
     const read = try acpt.stream.read(buf);
@@ -97,10 +93,25 @@ fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Requ
     );
 }
 
+fn find(list: []uWSGIVar, search: []const u8) []const u8 {
+    for (list) |each| {
+        if (std.mem.eql(u8, each.key, search)) return each.val;
+    }
+    return "[missing]";
+}
+
 pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
     while (true) {
         var acpt = try streamsrv.accept();
         const request = try readHeader(a, acpt);
+
+        std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
+            find(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
+            find(request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
+            find(request.raw_request.zwsgi.vars, "REQUEST_URI"),
+            find(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
+        });
+
         var arena = std.heap.ArenaAllocator.init(a);
         var alloc = arena.allocator();
         var response = Response.init(alloc, acpt.stream, &request);
