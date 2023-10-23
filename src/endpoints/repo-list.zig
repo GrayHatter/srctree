@@ -5,6 +5,8 @@ const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
 const Template = Endpoint.Template;
 
+const git = @import("../git.zig");
+
 const Error = Endpoint.Error;
 
 fn sorter(_: void, l: []const u8, r: []const u8) bool {
@@ -52,9 +54,22 @@ pub fn list(r: *Response, _: []const u8) Error!void {
 }
 
 pub fn tree(r: *Response, uri: []const u8) Error!void {
-    _ = uri;
     r.status = .ok;
-    const page = Template.find("code.html").blob;
+
+    var cwd = std.fs.cwd();
+    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{uri[6..]});
+    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    var repo = git.Repo.init(dir);
+    var head = repo.HEAD(r.alloc) catch return error.Unknown;
+    var refs = repo.refs(r.alloc) catch return error.Unknown;
+
+    var tmpl = Template.find("repo.html");
+    tmpl.init(r.alloc);
+    var h_refs = try std.mem.join(r.alloc, "\n", refs);
+    tmpl.addVar("branch.default", head) catch return error.Unknown;
+    tmpl.addVar("branches", h_refs) catch return error.Unknown;
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+
     r.start() catch return Error.Unknown;
     r.write(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
