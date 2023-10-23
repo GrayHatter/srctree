@@ -13,7 +13,7 @@ const Error = endpoint.Error;
 const div = HTML.div;
 const span = HTML.span;
 
-pub const Router = *const fn (*Response, []const u8) Error!void;
+pub const Router = *const fn ([]const u8) Error!Endpoint;
 
 const endpoints = [_]struct {
     name: []const u8,
@@ -28,7 +28,7 @@ const endpoints = [_]struct {
     .{ .name = "/code", .match = .{ .call = endpoint.code } },
     .{ .name = "/commits", .match = .{ .call = respond } },
     .{ .name = "/hi", .match = .{ .call = respond } },
-    .{ .name = "/repo/", .match = .{ .route = endpoint.repoList } },
+    .{ .name = "/repo/", .match = .{ .route = endpoint.repo } },
     .{ .name = "/repos", .match = .{ .call = endpoint.repoList } },
     .{ .name = "/tree", .match = .{ .call = respond } },
     .{ .name = "/user", .match = .{ .call = endpoint.commitFlex } },
@@ -104,7 +104,13 @@ pub fn router(uri: []const u8) Endpoint {
                 if (eql(uri, ep.name)) return call;
             },
             .route => |route| {
-                if (eql(uri[0..@min(uri.len, ep.name.len)], ep.name)) return route;
+                const cut = @min(uri.len, ep.name.len);
+                if (eql(uri[0..cut], ep.name)) {
+                    return route(uri[cut..]) catch |err| switch (err) {
+                        error.Unrouteable => return notfound,
+                        else => unreachable,
+                    };
+                }
             },
         }
     }

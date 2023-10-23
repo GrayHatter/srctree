@@ -50,3 +50,12 @@ pub fn list(r: *Response, _: []const u8) Error!void {
         return;
     }
 }
+
+pub fn tree(r: *Response, uri: []const u8) Error!void {
+    _ = uri;
+    r.status = .ok;
+    const page = Template.find("code.html").blob;
+    r.start() catch return Error.Unknown;
+    r.write(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
+}
