@@ -88,6 +88,14 @@ repos > li::before {
 	color: red;
 }
 
+file {
+	display: block;
+	text-align: left;
+	border: 2px solid gray;
+	width: 50%;
+	padding: 4px;
+}
+
 .commit-flex {
 	width: 1050px;
 	margin: auto;

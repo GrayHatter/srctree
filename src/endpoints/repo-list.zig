@@ -76,12 +76,13 @@ pub fn tree(r: *Response, uri: []const u8) Error!void {
     tmpl.addVar("branches", str_refs) catch return error.Unknown;
 
     var files = repo.tree(r.alloc) catch return error.Unknown;
-    var a_files = try r.alloc.alloc([]const u8, files.objects.len);
+    var a_files = try r.alloc.alloc(HTML.E, files.objects.len);
     for (a_files, files.objects) |*dst, src| {
-        dst.* = src.name;
+        dst.* = HTML.element("file", src.name, null);
     }
-    var str_files = try std.mem.join(r.alloc, "<br />\n", a_files);
-    tmpl.addVar("files", str_files) catch return error.Unknown;
+
+    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(a_files)});
+    tmpl.addVar("files", filestr) catch return error.Unknown;
 
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
