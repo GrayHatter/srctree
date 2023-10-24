@@ -35,6 +35,16 @@ pub const Repo = struct {
         return repo;
     }
 
+    fn findPacks(self: *Repo) !void {
+        var idir = try self.dir.openIterableDir("./objects/pack", .{});
+        var itr = idir.iterate();
+        while (try itr.next()) |file| {
+            std.debug.print("{s}\n", .{file.name});
+        }
+    }
+
+    fn readPack() void {}
+
     /// API may disappear
     pub fn objectsDir(self: *Repo) !std.fs.Dir {
         return try self.dir.openDir("./objects/", .{});
@@ -50,6 +60,18 @@ pub const Repo = struct {
         while (try itr.next()) |file| {
             try list.append(try a.dupe(u8, file.name));
         }
+        if (self.dir.openFile("packed-refs", .{})) |file| {
+            var buf: [2048]u8 = undefined;
+            var size = try file.readAll(&buf);
+            const b = buf[0..size];
+            var p_itr = std.mem.split(u8, b, "\n");
+            _ = p_itr.next();
+            while (p_itr.next()) |line| {
+                if (std.mem.indexOf(u8, line, "refs/heads")) |_| {
+                    try list.append(try a.dupe(u8, line[52..]));
+                }
+            }
+        } else |_| {}
         return try list.toOwnedSlice();
     }
 
@@ -75,6 +97,10 @@ pub const Repo = struct {
     pub fn raze(self: *Repo) void {
         self.dir.close();
     }
+};
+
+const Branch = struct {
+    name: []const u8,
 };
 
 const Actor = struct {
@@ -340,3 +366,5 @@ test "tree child" {
     a.free(child.stdout);
     a.free(child.stderr);
 }
+
+test "read pack" {}
