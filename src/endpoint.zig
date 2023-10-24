@@ -18,5 +18,5 @@ pub const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
 pub const code = @import("endpoints/source-view.zig").code;
 
-pub const REPO = @import("endpoints/repo-list.zig");
+pub const REPO = @import("endpoints/repos.zig");
 pub const repo = REPO.router;
