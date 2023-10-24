@@ -9,11 +9,12 @@ const HTML = @import("html.zig");
 
 const Endpoint = endpoint.Endpoint;
 const Error = endpoint.Error;
+const SplitIter = std.mem.SplitIterator(u8, .sequence);
 
 const div = HTML.div;
 const span = HTML.span;
 
-pub const Router = *const fn ([]const u8) Error!Endpoint;
+pub const Router = *const fn (*SplitIter) Error!Endpoint;
 
 const endpoints = [_]struct {
     name: []const u8,
@@ -29,7 +30,7 @@ const endpoints = [_]struct {
     .{ .name = "/commits", .match = .{ .call = respond } },
     .{ .name = "/hi", .match = .{ .call = respond } },
     .{ .name = "/repo/", .match = .{ .route = endpoint.repo } },
-    .{ .name = "/repos", .match = .{ .call = endpoint.repoList } },
+    .{ .name = "/repos", .match = .{ .route = endpoint.repo } },
     .{ .name = "/tree", .match = .{ .call = respond } },
     .{ .name = "/user", .match = .{ .call = endpoint.commitFlex } },
 };
@@ -106,7 +107,9 @@ pub fn router(uri: []const u8) Endpoint {
             .route => |route| {
                 const cut = @min(uri.len, ep.name.len);
                 if (eql(uri[0..cut], ep.name)) {
-                    return route(uri[cut..]) catch |err| switch (err) {
+                    std.debug.assert(uri[0] == '/');
+                    var itr = std.mem.split(u8, uri[1..], "/");
+                    return route(&itr) catch |err| switch (err) {
                         error.Unrouteable => return notfound,
                         else => unreachable,
                     };

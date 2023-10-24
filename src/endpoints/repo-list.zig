@@ -1,19 +1,42 @@
 const std = @import("std");
 
+const SplitIter = std.mem.SplitIterator(u8, .sequence);
+
 const Endpoint = @import("../endpoint.zig");
 const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
 const Template = Endpoint.Template;
+const Error = Endpoint.Error;
 
 const git = @import("../git.zig");
 
-const Error = Endpoint.Error;
+pub fn router(uri: *SplitIter) Error!Endpoint.Endpoint {
+    std.debug.print("ep route {}\n", .{uri});
+
+    const itr_root = uri.first();
+    std.debug.assert(itr_root.len >= 4);
+
+    const repo_name = uri.next() orelse return list;
+
+    for (repo_name) |c| if (!std.ascii.isLower(c) and c != '.') return error.Unrouteable;
+
+    var cwd = std.fs.cwd();
+    if (cwd.openIterableDir("./repos", .{})) |idir| {
+        var itr = idir.iterate();
+
+        while (itr.next() catch return error.Unrouteable) |file| {
+            if (file.kind != .directory and file.kind != .sym_link) continue;
+            if (std.mem.eql(u8, file.name, repo_name)) return tree;
+        }
+    } else |_| {}
+    return error.Unrouteable;
+}
 
 fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-pub fn list(r: *Response, _: []const u8) Error!void {
+fn list(r: *Response, _: []const u8) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
         var flist = std.ArrayList([]u8).init(r.alloc);
@@ -53,9 +76,7 @@ pub fn list(r: *Response, _: []const u8) Error!void {
     }
 }
 
-pub fn tree(r: *Response, uri: []const u8) Error!void {
-    r.status = .ok;
-
+fn tree(r: *Response, uri: []const u8) Error!void {
     var cwd = std.fs.cwd();
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{uri[6..]});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
@@ -86,6 +107,7 @@ pub fn tree(r: *Response, uri: []const u8) Error!void {
 
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
+    r.status = .ok;
     r.start() catch return Error.Unknown;
     r.write(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
