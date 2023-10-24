@@ -7,7 +7,7 @@ const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
 const Template = Endpoint.Template;
 const DateTime = @import("../datetime.zig");
-const Commit = @import("../git.zig");
+const Git = @import("../git.zig");
 
 const Error = Endpoint.Error;
 
@@ -15,7 +15,7 @@ const HeatMapArray = [2][13][32]u16;
 
 var hits: HeatMapArray = .{.{.{0} ** 32} ** 13} ** 2;
 
-fn countAll(a: Allocator, root: Commit.Commit, dir: std.fs.Dir) !*HeatMapArray {
+fn countAll(a: Allocator, root: Git.Commit, dir: std.fs.Dir) !*HeatMapArray {
     var commit = root;
     while (true) {
         const old = commit.blob;
@@ -23,32 +23,28 @@ fn countAll(a: Allocator, root: Commit.Commit, dir: std.fs.Dir) !*HeatMapArray {
         hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
         for (commit.parent[1..]) |par| {
             if (par) |p| {
-                var parent = try Commit.toParent(a, p, dir);
+                var parent = try Git.toParent(a, p, dir);
                 _ = try countAll(a, parent, dir);
             }
         }
-        commit = try Commit.toParent(a, commit.parent[0] orelse return &hits, dir);
+        commit = Git.toParent(a, commit.parent[0] orelse return &hits, dir) catch |err| switch (err) {
+            error.FileNotFound => {
+                std.log.info("{}", .{commit});
+                return &hits;
+            },
+            else => |e| return e,
+        };
         a.free(old);
     }
 }
 
 fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
-    var repo = try std.fs.cwd().openDir(gitdir, .{});
-    defer repo.close();
-    var dir = try repo.openDir("./.git/objects/", .{});
-    defer dir.close();
+    var repo_dir = try std.fs.cwd().openDir(gitdir, .{});
+    var repo = try Git.Repo.init(repo_dir);
+    defer repo.raze();
 
-    var ref_main = try repo.openFile("./.git/refs/heads/main", .{});
-    var b: [1 << 16]u8 = undefined;
-    var head = try ref_main.read(&b);
-
-    var fb = [_]u8{0} ** 2048;
-    var filename = try std.fmt.bufPrint(&fb, "./.git/objects/{s}/{s}", .{ b[0..2], b[2 .. head - 1] });
-    var file = try repo.openFile(filename, .{});
-    var commit = try Commit.Commit.readFile(a, file);
-    //defer a.free(commit.blob);
-
-    return try countAll(a, commit, dir);
+    var commit = repo.headCommit(a) catch return &hits;
+    return try countAll(a, commit, try repo.objectsDir());
 }
 
 fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !*HeatMapArray {

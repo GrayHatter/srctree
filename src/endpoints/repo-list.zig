@@ -59,7 +59,7 @@ pub fn tree(r: *Response, uri: []const u8) Error!void {
     var cwd = std.fs.cwd();
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{uri[6..]});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = git.Repo.init(dir);
+    var repo = git.Repo.init(dir) catch return error.Unknown;
     var head = repo.HEAD(r.alloc) catch return error.Unknown;
     var refs = repo.refs(r.alloc) catch return error.Unknown;
 

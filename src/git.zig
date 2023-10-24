@@ -16,17 +16,31 @@ const SHA = []const u8; // SUPERBAD, I'm sorry!
 pub const Repo = struct {
     dir: std.fs.Dir,
 
-    pub fn init(d: std.fs.Dir) Repo {
-        var dir = d;
+    pub fn init(d: std.fs.Dir) !Repo {
+        var repo = .{
+            .dir = d,
+        };
+
         if (d.openFile("./HEAD", .{})) |file| {
             file.close();
         } else |_| {
-            dir = d.openDir("./.git", .{}) catch d;
+            if (d.openDir("./.git", .{})) |full| {
+                if (full.openFile("./HEAD", .{})) |file| {
+                    file.close();
+                    repo.dir = full;
+                } else |_| return error.NotAGitRepo;
+            } else |_| return error.NotAGitRepo;
         }
-        return .{
-            .dir = dir,
-        };
+
+        return repo;
     }
+
+    /// API may disappear
+    pub fn objectsDir(self: *Repo) !std.fs.Dir {
+        return try self.dir.openDir("./objects/", .{});
+    }
+
+    pub fn deref() Object {}
 
     /// Caller owns memory
     pub fn refs(self: Repo, a: Allocator) ![][]u8 {
@@ -42,8 +56,20 @@ pub const Repo = struct {
     /// TODO I don't want this to take an allocator :(
     pub fn HEAD(self: *Repo, a: Allocator) ![]u8 {
         var f = try self.dir.openFile("HEAD", .{});
+        defer f.close();
         var name = try f.readToEndAlloc(a, 1 <<| 18);
         return name;
+    }
+
+    pub fn headCommit(self: *Repo, a: Allocator) !Commit {
+        var ref_main = try self.dir.openFile("./refs/heads/main", .{});
+        var b: [1 << 16]u8 = undefined;
+        var head = try ref_main.read(&b);
+
+        var fb = [_]u8{0} ** 2048;
+        var filename = try std.fmt.bufPrint(&fb, "./objects/{s}/{s}", .{ b[0..2], b[2 .. head - 1] });
+        var file = try self.dir.openFile(filename, .{});
+        return try Commit.readFile(a, file);
     }
 
     pub fn raze(self: *Repo) void {
@@ -143,17 +169,32 @@ pub const Commit = struct {
         try out.print(
             \\Commit{{
             \\commit {s}
-            \\parent {s}
+            \\
+        , .{self.sha});
+        for (self.parent) |par| {
+            if (par) |p|
+                try out.print("parent {s}\n", .{p});
+        }
+        try out.print(
             \\author {}
             \\commiter {}
             \\
             \\{s}
             \\}}
-        , .{ self.sha, self.parent orelse "ORPHAN COMMIT", self.author, self.committer, self.message });
+        , .{ self.author, self.committer, self.message });
     }
 };
 
-pub const Object = struct {
+pub const Object = union(enum) {
+    blob: Blob,
+    tree: Tree,
+    commit: Commit,
+    tag: Tag,
+};
+
+pub const Tag = struct {};
+
+pub const Blob = struct {
     mode: [6]u8,
     name: []const u8,
     hash: [40]u8,
@@ -161,12 +202,12 @@ pub const Object = struct {
 
 pub const Tree = struct {
     blob: []const u8,
-    objects: []Object,
+    objects: []Blob,
 
     pub fn make(a: Allocator, blob: []const u8) !Tree {
         var self: Tree = .{
             .blob = blob,
-            .objects = try a.alloc(Object, std.mem.count(u8, blob, "\x00")),
+            .objects = try a.alloc(Blob, std.mem.count(u8, blob, "\x00")),
         };
 
         var i: usize = 0;
