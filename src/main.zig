@@ -7,6 +7,7 @@ const Endpoint = @import("endpoint.zig");
 const EndpointErr = Endpoint.Error;
 const HTTP = @import("http.zig");
 const zWSGI = @import("zwsgi.zig");
+const Ini = @import("ini.zig");
 
 const HOST = "127.0.0.1";
 const PORT = 2000;
@@ -86,9 +87,20 @@ pub fn main() !void {
         }
     }
 
+    var cwd = std.fs.cwd();
+    var ini: ?Ini.Config = null;
+
+    if (cwd.openFile("./config.ini", .{})) |conf_file| {
+        ini = try Ini.getConfig(a, conf_file);
+        if (ini.?.get("owner")) |ns| {
+            if (ns.get("email")) |email| {
+                std.log.info("{s}\n", .{email});
+            }
+        }
+    } else |_| {}
+
     switch (runmode) {
         .unix => {
-            var cwd = std.fs.cwd();
             if (cwd.access(FILE, .{})) {
                 try cwd.deleteFile(FILE);
             } else |_| {}
