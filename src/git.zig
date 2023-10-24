@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 const zlib = std.compress.zlib;
+const hexLower = std.fmt.fmtSliceHexLower;
 
 const DateTime = @import("datetime.zig");
 
@@ -18,7 +19,7 @@ const empty_sha = [_]u8{0} ** 20;
 fn openObj(d: std.fs.Dir, in_sha: SHA) !std.fs.File {
     var sha: [40]u8 = undefined;
     if (in_sha.len == 20) {
-        _ = try std.fmt.bufPrint(&sha, "{}", .{std.fmt.fmtSliceHexLower(in_sha)});
+        _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
     } else {
         @memcpy(&sha, in_sha);
     }
@@ -340,11 +341,11 @@ pub const Tree = struct {
             obj_i += 1;
             if (blob[i] == '1') {
                 _ = try std.fmt.bufPrint(&obj.mode, "{s}", .{blob[i .. i + 6]});
-                _ = try std.fmt.bufPrint(&obj.hash, "{}", .{std.fmt.fmtSliceHexLower(blob[index + 1 .. index + 21])});
+                _ = try std.fmt.bufPrint(&obj.hash, "{}", .{hexLower(blob[index + 1 .. index + 21])});
                 obj.name = blob[i + 7 .. index];
             } else if (blob[i] == '4') {
                 _ = try std.fmt.bufPrint(&obj.mode, "0{s}", .{blob[i .. i + 5]});
-                _ = try std.fmt.bufPrint(&obj.hash, "{}", .{std.fmt.fmtSliceHexLower(blob[index + 1 .. index + 21])});
+                _ = try std.fmt.bufPrint(&obj.hash, "{}", .{hexLower(blob[index + 1 .. index + 21])});
                 obj.name = blob[i + 6 .. index];
             } else std.debug.print("panic {s} ", .{blob[i..index]});
 
