@@ -16,13 +16,15 @@ const span = HTML.span;
 
 pub const Router = *const fn (*SplitIter) Error!Endpoint;
 
-const endpoints = [_]struct {
+pub const MatchRouter = struct {
     name: []const u8,
     match: union(enum) {
         call: Endpoint,
         route: Router,
     },
-}{
+};
+
+const endpoints = [_]MatchRouter{
     .{ .name = "/", .match = .{ .call = default } },
     .{ .name = "/auth", .match = .{ .call = auth } },
     .{ .name = "/bye", .match = .{ .call = bye } },
