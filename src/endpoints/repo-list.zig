@@ -60,14 +60,29 @@ pub fn tree(r: *Response, uri: []const u8) Error!void {
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{uri[6..]});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
-    var head = repo.HEAD(r.alloc) catch return error.Unknown;
-    var refs = repo.refs(r.alloc) catch return error.Unknown;
 
     var tmpl = Template.find("repo.html");
     tmpl.init(r.alloc);
-    var h_refs = try std.mem.join(r.alloc, "\n", refs);
-    tmpl.addVar("branch.default", head) catch return error.Unknown;
-    tmpl.addVar("branches", h_refs) catch return error.Unknown;
+
+    var head = repo.HEAD(r.alloc) catch return error.Unknown;
+    tmpl.addVar("branch.default", head.branch.name) catch return error.Unknown;
+
+    var refs = repo.refs(r.alloc) catch return error.Unknown;
+    var a_refs = try r.alloc.alloc([]const u8, refs.len);
+    for (a_refs, refs) |*dst, src| {
+        dst.* = src.branch.name;
+    }
+    var str_refs = try std.mem.join(r.alloc, "\n", a_refs);
+    tmpl.addVar("branches", str_refs) catch return error.Unknown;
+
+    var files = repo.tree(r.alloc) catch return error.Unknown;
+    var a_files = try r.alloc.alloc([]const u8, files.objects.len);
+    for (a_files, files.objects) |*dst, src| {
+        dst.* = src.name;
+    }
+    var str_files = try std.mem.join(r.alloc, "<br />\n", a_files);
+    tmpl.addVar("files", str_files) catch return error.Unknown;
+
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
     r.start() catch return Error.Unknown;

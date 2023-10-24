@@ -13,6 +13,23 @@ const Types = enum {
 
 const SHA = []const u8; // SUPERBAD, I'm sorry!
 
+const empty_sha = [_]u8{0} ** 20;
+
+fn openObj(d: std.fs.Dir, in_sha: SHA) !std.fs.File {
+    var sha: [40]u8 = undefined;
+    if (in_sha.len == 20) {
+        _ = try std.fmt.bufPrint(&sha, "{}", .{std.fmt.fmtSliceHexLower(in_sha)});
+    } else {
+        @memcpy(&sha, in_sha);
+    }
+    var fb = [_]u8{0} ** 2048;
+    var filename = try std.fmt.bufPrint(&fb, "./objects/{s}/{s}", .{ sha[0..2], sha[2..] });
+    return d.openFile(filename, .{}) catch {
+        filename = try std.fmt.bufPrint(&fb, "./objects/{s}", .{sha});
+        return try d.openFile(filename, .{});
+    };
+}
+
 pub const Repo = struct {
     dir: std.fs.Dir,
 
@@ -53,12 +70,22 @@ pub const Repo = struct {
     pub fn deref() Object {}
 
     /// Caller owns memory
-    pub fn refs(self: Repo, a: Allocator) ![][]u8 {
-        var list = std.ArrayList([]u8).init(a);
+    pub fn refs(self: Repo, a: Allocator) ![]Ref {
+        var list = std.ArrayList(Ref).init(a);
         var idir = try self.dir.openIterableDir("refs/heads", .{});
         var itr = idir.iterate();
         while (try itr.next()) |file| {
-            try list.append(try a.dupe(u8, file.name));
+            var filename = [_]u8{0} ** 2048;
+            var fname: []u8 = &filename;
+            fname = try std.fmt.bufPrint(&filename, "./refs/heads/{s}", .{file.name});
+            var f = try self.dir.openFile(fname, .{});
+            var buf: [40]u8 = undefined;
+            var read = try f.readAll(&buf);
+            std.debug.assert(read == 40);
+            try list.append(Ref{ .branch = .{
+                .name = try a.dupe(u8, file.name),
+                .sha = try a.dupe(u8, &buf),
+            } });
         }
         if (self.dir.openFile("packed-refs", .{})) |file| {
             var buf: [2048]u8 = undefined;
@@ -68,29 +95,71 @@ pub const Repo = struct {
             _ = p_itr.next();
             while (p_itr.next()) |line| {
                 if (std.mem.indexOf(u8, line, "refs/heads")) |_| {
-                    try list.append(try a.dupe(u8, line[52..]));
+                    try list.append(Ref{ .branch = .{
+                        .name = try a.dupe(u8, line[52..]),
+                        .sha = try a.dupe(u8, line[0..40]),
+                    } });
                 }
             }
         } else |_| {}
         return try list.toOwnedSlice();
     }
 
+    /// TODO write the real function that goes here
+    pub fn ref(self: *Repo, a: Allocator, str: []const u8) !SHA {
+        var lrefs = try self.refs(a);
+        for (lrefs) |r| {
+            switch (r) {
+                .tag => unreachable,
+                .branch => |b| {
+                    if (std.mem.eql(u8, b.name, str)) {
+                        return try a.dupe(u8, b.sha);
+                    }
+                },
+            }
+        }
+        return error.RefMissing;
+    }
+
+    pub fn resolve(self: *Repo, r: Ref) !SHA {
+        switch (r) {
+            .tag => unreachable,
+            .branch => {
+                return try self.ref(r);
+            },
+        }
+    }
+
     /// TODO I don't want this to take an allocator :(
-    pub fn HEAD(self: *Repo, a: Allocator) ![]u8 {
+    pub fn HEAD(self: *Repo, a: Allocator) !Ref {
         var f = try self.dir.openFile("HEAD", .{});
         defer f.close();
         var name = try f.readToEndAlloc(a, 1 <<| 18);
-        return name;
+        if (!std.mem.eql(u8, name[0..5], "ref: ")) {
+            std.debug.print("unexpected HEAD {s}\n", .{name});
+            unreachable;
+        }
+
+        return .{
+            .branch = Branch{
+                .name = name[5..],
+                .sha = try self.ref(a, name[16 .. name.len - 1]),
+                .repo = self,
+            },
+        };
     }
 
-    pub fn headCommit(self: *Repo, a: Allocator) !Commit {
+    pub fn tree(self: *Repo, a: Allocator) !Tree {
+        const sha = try self.HEAD(a);
+        const cmt = try Commit.readFile(a, try openObj(self.dir, sha.branch.sha));
+        return try Tree.fromRepo(a, self, cmt.sha);
+    }
+
+    pub fn commit(self: *Repo, a: Allocator) !Commit {
         var ref_main = try self.dir.openFile("./refs/heads/main", .{});
         var b: [1 << 16]u8 = undefined;
         var head = try ref_main.read(&b);
-
-        var fb = [_]u8{0} ** 2048;
-        var filename = try std.fmt.bufPrint(&fb, "./objects/{s}/{s}", .{ b[0..2], b[2 .. head - 1] });
-        var file = try self.dir.openFile(filename, .{});
+        var file = try openObj(self.dir, b[0 .. head - 1]);
         return try Commit.readFile(a, file);
     }
 
@@ -99,8 +168,20 @@ pub const Repo = struct {
     }
 };
 
-const Branch = struct {
+pub const Branch = struct {
     name: []const u8,
+    sha: SHA,
+    repo: ?*const Repo = null,
+};
+
+pub const Tag = struct {
+    name: []const u8,
+    sha: SHA,
+};
+
+pub const Ref = union(enum) {
+    tag: Tag,
+    branch: Branch,
 };
 
 const Actor = struct {
@@ -143,6 +224,7 @@ pub const Commit = struct {
     author: Actor,
     committer: Actor,
     message: []const u8,
+    repo: ?*const Repo = null,
 
     ptr_parent: ?*Commit = null, // TOOO multiple parents
 
@@ -151,7 +233,9 @@ pub const Commit = struct {
             const name = data[0..brk];
             const payload = data[brk..];
             if (std.mem.eql(u8, name, "commit")) {
-                self.sha = payload;
+                if (std.mem.indexOf(u8, data, "\x00")) |nl| {
+                    self.sha = payload[nl..][0..40];
+                } else unreachable;
             } else if (std.mem.eql(u8, name, "parent")) {
                 for (&self.parent) |*parr| {
                     if (parr.* == null) {
@@ -215,10 +299,8 @@ pub const Object = union(enum) {
     blob: Blob,
     tree: Tree,
     commit: Commit,
-    tag: Tag,
+    ref: Ref,
 };
-
-pub const Tag = struct {};
 
 pub const Blob = struct {
     mode: [6]u8,
@@ -229,6 +311,15 @@ pub const Blob = struct {
 pub const Tree = struct {
     blob: []const u8,
     objects: []Blob,
+
+    pub fn fromRepo(a: Allocator, r: *Repo, sha: SHA) !Tree {
+        var b: [1 << 16]u8 = undefined;
+        var file = try openObj(r.dir, sha);
+        var d = try zlib.decompressStream(a, file.reader());
+        defer d.deinit();
+        var count = try d.read(&b);
+        return try Tree.make(a, b[0..count]);
+    }
 
     pub fn make(a: Allocator, blob: []const u8) !Tree {
         var self: Tree = .{
@@ -279,7 +370,7 @@ test "read" {
     //std.debug.print("{s}\n", .{b[0..count]});
     const commit = try Commit.make(b[0..count]);
     //std.debug.print("{}\n", .{commit});
-    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.sha[10..]);
+    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.sha);
 }
 
 test "file" {
@@ -290,7 +381,7 @@ test "file" {
     const commit = try Commit.readFile(a, file);
     defer a.free(commit.blob);
     //std.debug.print("{}\n", .{commit});
-    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.sha[10..]);
+    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.sha);
 }
 
 test "toParent" {
