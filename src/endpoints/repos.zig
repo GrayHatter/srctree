@@ -74,12 +74,14 @@ fn commits(r: *Response, uri: []const u8) Error!void {
     var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
     for (lcommits, 0..) |*c, i| {
         if (i % 2 == 0) {
-            const commitstr = try std.fmt.allocPrint(r.alloc, "{s}", .{current.message});
+            const commitstr = try std.fmt.allocPrint(r.alloc, "{s}<br>{s}", .{ current.sha[0..8], current.message });
             c.* = HTML.commit(commitstr, null);
         } else {
             var parent = try r.alloc.alloc(HTML.E, 2);
             parent[0] = HTML.element("author", current.author.name, null);
-            parent[1] = HTML.span(current.parent[0].?[0..8]);
+            const prnt = current.parent[0] orelse "00000000";
+            const parstr = try std.fmt.allocPrint(r.alloc, "parent {s}", .{prnt[0..8]});
+            parent[1] = HTML.span(parstr);
             c.* = HTML.element("commitfoot", parent, null);
             current = git.toParent(r.alloc, current.parent[0].?, repo.dir) catch {
                 lcommits.len = i;

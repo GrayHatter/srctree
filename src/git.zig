@@ -160,7 +160,7 @@ pub const Repo = struct {
 
     pub fn tree(self: *Repo, a: Allocator) !Tree {
         const sha = try self.HEAD(a);
-        const cmt = try Commit.readFile(a, try openObj(self.dir, sha.branch.sha));
+        const cmt = try Commit.readFile(a, sha.branch.sha, try openObj(self.dir, sha.branch.sha));
         return try Tree.fromRepo(a, self, cmt.sha);
     }
 
@@ -169,7 +169,7 @@ pub const Repo = struct {
         var b: [1 << 16]u8 = undefined;
         var head = try ref_main.read(&b);
         var file = try openObj(self.dir, b[0 .. head - 1]);
-        return try Commit.readFile(a, file);
+        return try Commit.readFile(a, b[0 .. head - 1], file);
     }
 
     pub fn raze(self: *Repo) void {
@@ -221,12 +221,13 @@ const Actor = struct {
 pub fn toParent(a: Allocator, parent: SHA, objs: std.fs.Dir) !Commit {
     var file = try openObj(objs, parent);
     defer file.close();
-    return Commit.readFile(a, file);
+    return Commit.readFile(a, parent, file);
 }
 
 pub const Commit = struct {
     blob: []const u8,
     sha: SHA,
+    tree: SHA,
     parent: [3]?SHA,
     author: Actor,
     committer: Actor,
@@ -241,7 +242,7 @@ pub const Commit = struct {
             const payload = data[brk..];
             if (std.mem.eql(u8, name, "commit")) {
                 if (std.mem.indexOf(u8, data, "\x00")) |nl| {
-                    self.sha = payload[nl..][0..40];
+                    self.tree = payload[nl..][0..40];
                 } else unreachable;
             } else if (std.mem.eql(u8, name, "parent")) {
                 for (&self.parent) |*parr| {
@@ -258,7 +259,7 @@ pub const Commit = struct {
         } else return error.MalformedHeader;
     }
 
-    pub fn make(data: []const u8) !Commit {
+    pub fn make(sha: SHA, data: []const u8) !Commit {
         var lines = std.mem.split(u8, data, "\n");
         var self: Commit = undefined;
         self.parent = .{ null, null, null }; // I don't like it either, but... lazy
@@ -268,17 +269,19 @@ pub const Commit = struct {
             try self.header(line);
         }
         self.message = lines.rest();
+        self.sha = sha;
         return self;
     }
 
-    pub fn readFile(a: Allocator, file: std.fs.File) !Commit {
+    pub fn readFile(a: Allocator, sha: SHA, file: std.fs.File) !Commit {
         var d = try zlib.decompressStream(a, file.reader());
         defer d.deinit();
         var buf = try a.alloc(u8, 1 << 16);
         const count = try d.read(buf);
         if (count == 1 << 16) return error.FileDataTooLarge;
-        var self = try make(buf[0..count]);
+        var self = try make(sha, buf[0..count]);
         self.blob = buf;
+        self.sha = sha;
         return self;
     }
 
@@ -375,9 +378,10 @@ test "read" {
     defer d.deinit();
     var count = try d.read(&b);
     //std.debug.print("{s}\n", .{b[0..count]});
-    const commit = try Commit.make(b[0..count]);
+    const commit = try Commit.make("370303630b3fc631a0cb3942860fb6f77446e9c1", b[0..count]);
     //std.debug.print("{}\n", .{commit});
-    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.sha);
+    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree);
+    try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha);
 }
 
 test "file" {
@@ -385,10 +389,11 @@ test "file" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    const commit = try Commit.readFile(a, file);
+    const commit = try Commit.readFile(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", file);
     defer a.free(commit.blob);
     //std.debug.print("{}\n", .{commit});
-    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.sha);
+    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree);
+    try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha);
 }
 
 test "toParent" {
@@ -405,7 +410,7 @@ test "toParent" {
     var fb = [_]u8{0} ** 2048;
     var filename = try std.fmt.bufPrint(&fb, "./.git/objects/{s}/{s}", .{ b[0..2], b[2 .. head - 1] });
     var file = try cwd.openFile(filename, .{});
-    var commit = try Commit.readFile(a, file);
+    var commit = try Commit.readFile(a, b[0 .. head - 1], file);
     defer a.free(commit.blob);
 
     var count: usize = 0;
@@ -426,7 +431,7 @@ test "tree" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    const commit = try Commit.readFile(a, file);
+    const commit = try Commit.readFile(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", file);
     defer a.free(commit.blob);
     //std.debug.print("tree {s}\n", .{commit.sha});
 }
