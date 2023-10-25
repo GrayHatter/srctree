@@ -10,6 +10,20 @@ const Error = Endpoint.Error;
 
 const git = @import("../git.zig");
 
+const Verbs = enum {
+    tree,
+    blob,
+    commit,
+    commits,
+
+    pub fn from(str: []const u8) ?Verbs {
+        inline for (@typeInfo(Verbs).Enum.fields) |v| {
+            if (std.mem.eql(u8, v.name, str)) return @enumFromInt(v.value);
+        }
+        return null;
+    }
+};
+
 pub fn router(uri: *SplitIter) Error!Endpoint.Endpoint {
     std.debug.print("ep route {}\n", .{uri});
 
@@ -19,6 +33,15 @@ pub fn router(uri: *SplitIter) Error!Endpoint.Endpoint {
     const repo_name = uri.next() orelse return list;
 
     for (repo_name) |c| if (!std.ascii.isLower(c) and c != '.') return error.Unrouteable;
+
+    if (uri.next()) |verb| {
+        if (Verbs.from(verb)) |vrb| switch (vrb) {
+            .tree => {},
+            .blob => {},
+            .commit => return commit,
+            .commits => return commits,
+        };
+    } else {}
 
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
@@ -30,6 +53,55 @@ pub fn router(uri: *SplitIter) Error!Endpoint.Endpoint {
         }
     } else |_| {}
     return error.Unrouteable;
+}
+
+fn commit(r: *Response, uri: []const u8) Error!void {
+    return commits(r, uri);
+}
+
+fn commits(r: *Response, uri: []const u8) Error!void {
+    var cwd = std.fs.cwd();
+    var itr = std.mem.split(u8, uri, "/");
+    _ = itr.next();
+    _ = itr.next();
+    var name = itr.next() orelse return error.Unrouteable;
+    _ = itr.next();
+    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{name});
+    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    var repo = git.Repo.init(dir) catch return error.Unknown;
+
+    var lcommits = try r.alloc.alloc(HTML.E, 20);
+    var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
+    for (lcommits, 0..) |*c, i| {
+        if (i % 2 == 0) {
+            const commitstr = try std.fmt.allocPrint(r.alloc, "{s}", .{current.message});
+            c.* = HTML.commit(commitstr, null);
+        } else {
+            var parent = try r.alloc.alloc(HTML.E, 2);
+            parent[0] = HTML.element("author", current.author.name, null);
+            parent[1] = HTML.span(current.parent[0].?[0..8]);
+            c.* = HTML.element("commitfoot", parent, null);
+            current = git.toParent(r.alloc, current.parent[0].?, repo.dir) catch {
+                lcommits.len = i;
+                break;
+            };
+        }
+    }
+
+    const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{
+        HTML.div(lcommits),
+    });
+
+    var tmpl = Template.find("commits.html");
+    tmpl.init(r.alloc);
+    tmpl.addVar("commits", htmlstr) catch return error.Unknown;
+
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+
+    r.status = .ok;
+    r.start() catch return Error.Unknown;
+    r.write(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
 }
 
 fn sorter(_: void, l: []const u8, r: []const u8) bool {

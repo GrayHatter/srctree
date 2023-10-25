@@ -20,6 +20,8 @@ fn openObj(d: std.fs.Dir, in_sha: SHA) !std.fs.File {
     var sha: [40]u8 = undefined;
     if (in_sha.len == 20) {
         _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
+    } else if (in_sha.len > 40) {
+        unreachable;
     } else {
         @memcpy(&sha, in_sha);
     }
@@ -27,7 +29,13 @@ fn openObj(d: std.fs.Dir, in_sha: SHA) !std.fs.File {
     var filename = try std.fmt.bufPrint(&fb, "./objects/{s}/{s}", .{ sha[0..2], sha[2..] });
     return d.openFile(filename, .{}) catch {
         filename = try std.fmt.bufPrint(&fb, "./objects/{s}", .{sha});
-        return try d.openFile(filename, .{});
+        return d.openFile(filename, .{}) catch |err| switch (err) {
+            error.FileNotFound => {
+                std.debug.print("unable to find commit '{s}'\n", .{sha});
+                return err;
+            },
+            else => return err,
+        };
     };
 }
 
@@ -211,9 +219,7 @@ const Actor = struct {
 };
 
 pub fn toParent(a: Allocator, parent: SHA, objs: std.fs.Dir) !Commit {
-    var fb = [_]u8{0} ** 2048;
-    const filename = try std.fmt.bufPrint(&fb, "{s}/{s}", .{ parent[1..3], parent[3..] });
-    var file = try objs.openFile(filename, .{});
+    var file = try openObj(objs, parent);
     defer file.close();
     return Commit.readFile(a, file);
 }
@@ -240,7 +246,7 @@ pub const Commit = struct {
             } else if (std.mem.eql(u8, name, "parent")) {
                 for (&self.parent) |*parr| {
                     if (parr.* == null) {
-                        parr.* = payload;
+                        parr.* = payload[1..41];
                         return;
                     }
                 }
@@ -389,7 +395,7 @@ test "toParent" {
     var a = std.testing.allocator;
 
     var cwd = std.fs.cwd();
-    var dir = try cwd.openDir("./.git/objects/", .{});
+    var dir = try cwd.openDir("./.git/", .{});
     defer dir.close();
 
     var ref_main = try cwd.openFile("./.git/refs/heads/main", .{});

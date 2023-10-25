@@ -44,7 +44,7 @@ fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
     defer repo.raze();
 
     var commit = repo.commit(a) catch return &hits;
-    return try countAll(a, commit, try repo.objectsDir());
+    return try countAll(a, commit, repo.dir);
 }
 
 fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !*HeatMapArray {

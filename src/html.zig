@@ -219,6 +219,10 @@ pub fn li(c: anytype, attr: ?[]const Attribute) Element {
     return element("li", c, attr);
 }
 
+pub fn commit(c: anytype, attr: ?[]const Attribute) Element {
+    return element("commit", c, attr);
+}
+
 test "html" {
     var a = std.testing.allocator;
     init(a);
