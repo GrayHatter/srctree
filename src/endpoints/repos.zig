@@ -1,5 +1,6 @@
 const std = @import("std");
 
+const Allocator = std.mem.Allocator;
 const SplitIter = std.mem.SplitIterator(u8, .sequence);
 
 const Endpoint = @import("../endpoint.zig");
@@ -59,6 +60,23 @@ fn commit(r: *Response, uri: []const u8) Error!void {
     return commits(r, uri);
 }
 
+fn htmlCommit(a: Allocator, c: git.Commit) !HTML.E {
+    var foot = try a.alloc(HTML.E, 2);
+    const prnt = c.parent[0] orelse "00000000";
+    foot[0] = HTML.element("author", try a.dupe(u8, c.author.name), null);
+    foot[1] = HTML.span(try std.fmt.allocPrint(a, "parent {s}", .{prnt[0..8]}));
+
+    var data = try a.alloc(HTML.E, 2);
+    data[0] = HTML.element(
+        "data",
+        try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }),
+        null,
+    );
+    data[1] = HTML.element("foot", foot, null);
+
+    return HTML.commit(data, null);
+}
+
 fn commits(r: *Response, uri: []const u8) Error!void {
     var cwd = std.fs.cwd();
     var itr = std.mem.split(u8, uri, "/");
@@ -73,21 +91,11 @@ fn commits(r: *Response, uri: []const u8) Error!void {
     var lcommits = try r.alloc.alloc(HTML.E, 20);
     var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
     for (lcommits, 0..) |*c, i| {
-        if (i % 2 == 0) {
-            const commitstr = try std.fmt.allocPrint(r.alloc, "{s}<br>{s}", .{ current.sha[0..8], current.message });
-            c.* = HTML.commit(commitstr, null);
-        } else {
-            var parent = try r.alloc.alloc(HTML.E, 2);
-            parent[0] = HTML.element("author", current.author.name, null);
-            const prnt = current.parent[0] orelse "00000000";
-            const parstr = try std.fmt.allocPrint(r.alloc, "parent {s}", .{prnt[0..8]});
-            parent[1] = HTML.span(parstr);
-            c.* = HTML.element("commitfoot", parent, null);
-            current = git.toParent(r.alloc, current.parent[0].?, repo.dir) catch {
-                lcommits.len = i;
-                break;
-            };
-        }
+        c.* = try htmlCommit(r.alloc, current);
+        current = git.toParent(r.alloc, current.parent[0].?, repo.dir) catch {
+            lcommits.len = i;
+            break;
+        };
     }
 
     const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{

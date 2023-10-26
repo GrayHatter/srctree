@@ -161,7 +161,7 @@ pub const Repo = struct {
     pub fn tree(self: *Repo, a: Allocator) !Tree {
         const sha = try self.HEAD(a);
         const cmt = try Commit.readFile(a, sha.branch.sha, try openObj(self.dir, sha.branch.sha));
-        return try Tree.fromRepo(a, self, cmt.sha);
+        return try Tree.fromRepo(a, self, cmt.tree);
     }
 
     pub fn commit(self: *Repo, a: Allocator) !Commit {

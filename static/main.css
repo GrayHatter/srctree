@@ -98,7 +98,7 @@ file {
 	padding: 4px;
 }
 
-commit {
+commit > data{
 	display: block;
 	text-align: left;
 	padding: 8px;
@@ -107,7 +107,7 @@ commit {
 
 }
 
-commitfoot{
+commit > foot{
 	display: block;
 	background-color: #686868;
 	border-bottom: #7a003f solid 2px;
@@ -117,7 +117,7 @@ commitfoot{
 	padding: 8px;
 }
 
-commitfoot > span {
+commit > foot > span {
 	display: inline-block;
 	float: right;
 }
