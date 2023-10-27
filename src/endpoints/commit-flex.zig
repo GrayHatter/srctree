@@ -15,23 +15,24 @@ const HeatMapArray = [2][13][32]u16;
 
 var hits: HeatMapArray = .{.{.{0} ** 32} ** 13} ** 2;
 
-fn countAll(a: Allocator, root: Git.Commit, dir: std.fs.Dir) !*HeatMapArray {
+fn countAll(a: Allocator, root: Git.Commit) !*HeatMapArray {
     var commit = root;
     while (true) {
         const old = commit.blob;
         const d = commit.author.time;
         hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
-        for (commit.parent[1..]) |par| {
-            if (par) |p| {
-                var parent = try Git.toParent(a, p, dir);
-                _ = try countAll(a, parent, dir);
+        for (commit.parent[1..], 1..) |par, pidx| {
+            if (par) |_| {
+                var parent = try commit.toParent(a, @truncate(pidx));
+                _ = try countAll(a, parent);
             }
         }
-        commit = Git.toParent(a, commit.parent[0] orelse return &hits, dir) catch |err| switch (err) {
+        commit = commit.toParent(a, 0) catch |err| switch (err) {
             error.FileNotFound => {
                 std.log.info("{}", .{commit});
                 return &hits;
             },
+            error.NoParent => return &hits,
             else => |e| return e,
         };
         a.free(old);
@@ -41,10 +42,10 @@ fn countAll(a: Allocator, root: Git.Commit, dir: std.fs.Dir) !*HeatMapArray {
 fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
     var repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
-    defer repo.raze();
+    defer repo.raze(a);
 
     var commit = repo.commit(a) catch return &hits;
-    return try countAll(a, commit, repo.dir);
+    return try countAll(a, commit);
 }
 
 fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !*HeatMapArray {

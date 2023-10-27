@@ -14,39 +14,48 @@ const Types = enum {
 
 const SHA = []const u8; // SUPERBAD, I'm sorry!
 
-const empty_sha = [_]u8{0} ** 20;
+const Pack = extern struct {
+    sig: u32 = 0,
+    vnum: u32 = 0,
+    onum: u32 = 0,
+};
 
-fn openObj(d: std.fs.Dir, in_sha: SHA) !std.fs.File {
-    var sha: [40]u8 = undefined;
-    if (in_sha.len == 20) {
-        _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
-    } else if (in_sha.len > 40) {
-        unreachable;
-    } else {
-        @memcpy(&sha, in_sha);
-    }
-    var fb = [_]u8{0} ** 2048;
-    var filename = try std.fmt.bufPrint(&fb, "./objects/{s}/{s}", .{ sha[0..2], sha[2..] });
-    return d.openFile(filename, .{}) catch {
-        filename = try std.fmt.bufPrint(&fb, "./objects/{s}", .{sha});
-        return d.openFile(filename, .{}) catch |err| switch (err) {
-            error.FileNotFound => {
-                std.debug.print("unable to find commit '{s}'\n", .{sha});
-                return err;
-            },
-            else => return err,
-        };
-    };
-}
+/// Packfile v2 support only at this time
+/// marked as extern to enable mmaping the header if useful
+const PackIdxHeader = extern struct {
+    magic: u32,
+    vnum: u32,
+    fanout: [256]u32,
+};
+
+const PackIdx = struct {
+    header: PackIdxHeader,
+    objnames: ?[]u8 = null,
+    crc: ?[]u32 = null,
+    offsets: ?[]u32 = null,
+    hugeoffsets: ?[]u64 = null,
+};
+
+const PackObjType = enum(u3) {
+    invalid = 0,
+    commit = 1,
+    tree = 2,
+    blob = 3,
+    tag = 4,
+    ofs_delta = 6,
+    ref_delta = 7,
+};
 
 pub const Repo = struct {
     dir: std.fs.Dir,
+    packs: []PackIdx,
 
     pub fn init(d: std.fs.Dir) !Repo {
-        var repo = .{
+        var repo = Repo{
             .dir = d,
+            .packs = undefined,
         };
-
+        repo.packs.len = 0;
         if (d.openFile("./HEAD", .{})) |file| {
             file.close();
         } else |_| {
@@ -61,11 +70,123 @@ pub const Repo = struct {
         return repo;
     }
 
-    fn findPacks(self: *Repo) !void {
+    const empty_sha = [_]u8{0} ** 20;
+
+    pub fn openObj(self: *Repo, in_sha: SHA) !std.fs.File {
+        var sha: [40]u8 = undefined;
+        if (in_sha.len == 20) {
+            _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
+        } else if (in_sha.len > 40) {
+            unreachable;
+        } else {
+            @memcpy(&sha, in_sha);
+        }
+        var fb = [_]u8{0} ** 2048;
+        var filename = try std.fmt.bufPrint(&fb, "./objects/{s}/{s}", .{ sha[0..2], sha[2..] });
+        return self.dir.openFile(filename, .{}) catch {
+            filename = try std.fmt.bufPrint(&fb, "./objects/{s}", .{sha});
+            return self.dir.openFile(filename, .{}) catch |err| switch (err) {
+                error.FileNotFound => {
+                    std.debug.print("unable to find commit '{s}'\n", .{sha});
+                    return err;
+                },
+                else => return err,
+            };
+        };
+    }
+
+    fn readPackIdx(self: *Repo, a: Allocator) !void {
+        var idir = try self.dir.openIterableDir("./objects/pack", .{});
+        var itr = idir.iterate();
+        var i: usize = 0;
+        while (try itr.next()) |file| {
+            if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
+            i += 1;
+        }
+        self.packs = try a.alloc(PackIdx, i);
+        itr.reset();
+        i = 0;
+        while (try itr.next()) |file| {
+            if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
+            var filename = try std.fmt.allocPrint(a, "./objects/pack/{s}", .{file.name});
+            defer a.free(filename);
+            var fd = try self.dir.openFile(filename, .{});
+            defer fd.close();
+            var freader = fd.reader();
+            var header = &self.packs[i].header;
+            header.magic = try freader.readIntBig(u32);
+            header.vnum = try freader.readIntBig(u32);
+            header.fanout = undefined;
+            for (&header.fanout) |*fo| {
+                fo.* = try freader.readIntBig(u32);
+            }
+            var pack = &self.packs[i];
+            pack.objnames = try a.alloc(u8, 20 * header.fanout[255]);
+            pack.crc = try a.alloc(u32, header.fanout[255]);
+            pack.offsets = try a.alloc(u32, header.fanout[255]);
+            pack.hugeoffsets = null;
+
+            _ = try freader.read(pack.objnames.?[0 .. 20 * header.fanout[255]]);
+            for (pack.crc.?) |*crc| {
+                crc.* = try freader.readIntNative(u32);
+            }
+            for (pack.offsets.?) |*crc| {
+                crc.* = try freader.readIntBig(u32);
+            }
+
+            i += 1;
+        }
+    }
+
+    fn findPacks(self: *Repo, a: Allocator) !void {
         var idir = try self.dir.openIterableDir("./objects/pack", .{});
         var itr = idir.iterate();
         while (try itr.next()) |file| {
-            std.debug.print("{s}\n", .{file.name});
+            if (file.name[file.name.len - 1] == 'x') continue;
+            //std.debug.print("{s}\n", .{file.name});
+            var filename = try std.fmt.allocPrint(a, "./objects/pack/{s}", .{file.name});
+            defer a.free(filename);
+            var fd = try self.dir.openFile(filename, .{});
+            defer fd.close();
+            var freader = fd.reader();
+            var vpack = Pack{
+                .sig = try freader.readIntBig(u32),
+                .vnum = try freader.readIntBig(u32),
+                .onum = try freader.readIntBig(u32),
+            };
+            _ = vpack;
+            //std.debug.print("{}\n", .{vpack});
+
+            var buf = [_]u8{0};
+            var cont: bool = false;
+
+            _ = try freader.read(&buf);
+            cont = buf[0] >= 128;
+            const objtype: PackObjType = @enumFromInt((buf[0] & 0b01110000) >> 4);
+            var objsize: usize = 0;
+
+            if (cont) {
+                _ = try freader.read(&buf);
+                objsize |= @as(u16, buf[0]) << 4;
+                cont = buf[0] >= 128;
+                std.debug.assert(!cont); // not implemented
+            }
+            var pack1 = try a.alloc(u8, objsize);
+            defer a.free(pack1);
+            _ = try freader.read(pack1);
+
+            switch (objtype) {
+                .tree => {
+                    //var cmt = try Tree.fromPack(a, pack1);
+                    //std.debug.print("{}\n", .{cmt});
+                    //for (cmt.objects) |obj| {
+                    //    std.debug.print("{s} {}\n", .{ obj.name, obj });
+                    //}
+                },
+                else => {},
+            }
+
+            break;
         }
     }
 
@@ -84,6 +205,10 @@ pub const Repo = struct {
         var idir = try self.dir.openIterableDir("refs/heads", .{});
         var itr = idir.iterate();
         while (try itr.next()) |file| {
+            if (file.kind != .file) {
+                std.log.info("Not desending {s}", .{file.name});
+                continue;
+            }
             var filename = [_]u8{0} ** 2048;
             var fname: []u8 = &filename;
             fname = try std.fmt.bufPrint(&filename, "./refs/heads/{s}", .{file.name});
@@ -160,7 +285,7 @@ pub const Repo = struct {
 
     pub fn tree(self: *Repo, a: Allocator) !Tree {
         const sha = try self.HEAD(a);
-        const cmt = try Commit.readFile(a, sha.branch.sha, try openObj(self.dir, sha.branch.sha));
+        const cmt = try Commit.fromFile(a, sha.branch.sha, try self.openObj(sha.branch.sha));
         return try Tree.fromRepo(a, self, cmt.tree);
     }
 
@@ -168,12 +293,21 @@ pub const Repo = struct {
         var ref_main = try self.dir.openFile("./refs/heads/main", .{});
         var b: [1 << 16]u8 = undefined;
         var head = try ref_main.read(&b);
-        var file = try openObj(self.dir, b[0 .. head - 1]);
-        return try Commit.readFile(a, b[0 .. head - 1], file);
+        var file = try self.openObj(b[0 .. head - 1]);
+        var cmt = try Commit.fromFile(a, b[0 .. head - 1], file);
+        cmt.repo = self;
+        return cmt;
     }
 
-    pub fn raze(self: *Repo) void {
+    pub fn raze(self: *Repo, a: Allocator) void {
         self.dir.close();
+        for (self.packs) |pack| {
+            a.free(pack.objnames.?);
+            a.free(pack.crc.?);
+            a.free(pack.offsets.?);
+            // a.free(pack.hugeoffsets); // not implemented
+        }
+        a.free(self.packs);
     }
 };
 
@@ -218,12 +352,6 @@ const Actor = struct {
     }
 };
 
-pub fn toParent(a: Allocator, parent: SHA, objs: std.fs.Dir) !Commit {
-    var file = try openObj(objs, parent);
-    defer file.close();
-    return Commit.readFile(a, parent, file);
-}
-
 pub const Commit = struct {
     blob: []const u8,
     sha: SHA,
@@ -232,7 +360,7 @@ pub const Commit = struct {
     author: Actor,
     committer: Actor,
     message: []const u8,
-    repo: ?*const Repo = null,
+    repo: ?*Repo = null,
 
     ptr_parent: ?*Commit = null, // TOOO multiple parents
 
@@ -262,6 +390,7 @@ pub const Commit = struct {
     pub fn make(sha: SHA, data: []const u8) !Commit {
         var lines = std.mem.split(u8, data, "\n");
         var self: Commit = undefined;
+        self.repo = null;
         self.parent = .{ null, null, null }; // I don't like it either, but... lazy
         self.blob = data;
         while (lines.next()) |line| {
@@ -273,7 +402,7 @@ pub const Commit = struct {
         return self;
     }
 
-    pub fn readFile(a: Allocator, sha: SHA, file: std.fs.File) !Commit {
+    pub fn fromFile(a: Allocator, sha: SHA, file: std.fs.File) !Commit {
         var d = try zlib.decompressStream(a, file.reader());
         defer d.deinit();
         var buf = try a.alloc(u8, 1 << 16);
@@ -283,6 +412,21 @@ pub const Commit = struct {
         self.blob = buf;
         self.sha = sha;
         return self;
+    }
+
+    pub fn toParent(self: *Commit, a: Allocator, idx: u8) !Commit {
+        if (idx >= self.parent.len) return error.NoParent;
+        if (self.parent[idx]) |parent| {
+            if (self.repo) |repo| {
+                var file = try repo.openObj(parent);
+                defer file.close();
+                var cmt = try Commit.fromFile(a, parent, file);
+                cmt.repo = repo;
+                return cmt;
+            }
+            return error.DetachedCommit;
+        }
+        return error.NoParent;
     }
 
     pub fn format(self: Commit, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
@@ -324,11 +468,20 @@ pub const Tree = struct {
 
     pub fn fromRepo(a: Allocator, r: *Repo, sha: SHA) !Tree {
         var b: [1 << 16]u8 = undefined;
-        var file = try openObj(r.dir, sha);
+        var file = try r.openObj(sha);
         var d = try zlib.decompressStream(a, file.reader());
         defer d.deinit();
         var count = try d.read(&b);
         return try Tree.make(a, b[0..count]);
+    }
+
+    pub fn fromPack(a: Allocator, cblob: []const u8) !Tree {
+        var al = std.ArrayList(u8).init(a);
+        var fbs = std.io.fixedBufferStream(cblob);
+        var d = try zlib.decompressStream(a, fbs.reader());
+        defer d.deinit();
+        try d.reader().readAllArrayList(&al, 65536);
+        return try Tree.make(a, try al.toOwnedSlice());
     }
 
     pub fn make(a: Allocator, blob: []const u8) !Tree {
@@ -338,11 +491,15 @@ pub const Tree = struct {
         };
 
         var i: usize = 0;
-        if (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
-            // This is probably wrong for large trees, but #YOLO
-            std.debug.assert(std.mem.eql(u8, "tree ", blob[0..5]));
-            std.debug.assert(index == 8);
-            i = 9;
+        if (std.mem.indexOf(u8, blob, "tree ")) |tidx| {
+            if (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
+                // This is probably wrong for large trees, but #YOLO
+                std.debug.assert(tidx == 0);
+                std.debug.assert(std.mem.eql(u8, "tree ", blob[0..5]));
+                std.debug.assert(index == 8);
+
+                i = 9;
+            }
         }
         var obj_i: usize = 0;
         while (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
@@ -389,7 +546,7 @@ test "file" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    const commit = try Commit.readFile(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", file);
+    const commit = try Commit.fromFile(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", file);
     defer a.free(commit.blob);
     //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree);
@@ -400,29 +557,21 @@ test "toParent" {
     var a = std.testing.allocator;
 
     var cwd = std.fs.cwd();
-    var dir = try cwd.openDir("./.git/", .{});
-    defer dir.close();
 
-    var ref_main = try cwd.openFile("./.git/refs/heads/main", .{});
-    var b: [1 << 16]u8 = undefined;
-    var head = try ref_main.read(&b);
-
-    var fb = [_]u8{0} ** 2048;
-    var filename = try std.fmt.bufPrint(&fb, "./.git/objects/{s}/{s}", .{ b[0..2], b[2 .. head - 1] });
-    var file = try cwd.openFile(filename, .{});
-    var commit = try Commit.readFile(a, b[0 .. head - 1], file);
-    defer a.free(commit.blob);
+    var repo = try Repo.init(cwd);
+    var commit = try repo.commit(a);
 
     var count: usize = 0;
     while (true) {
         count += 1;
         const old = commit.blob;
-        if (commit.parent[0]) |parent| {
-            commit = try toParent(a, parent, dir);
+        if (commit.parent[0]) |_| {
+            commit = try commit.toParent(a, 0);
         } else break;
 
         a.free(old);
     }
+    a.free(commit.blob);
     try std.testing.expect(count >= 31); // LOL SORRY!
 }
 
@@ -431,7 +580,7 @@ test "tree" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    const commit = try Commit.readFile(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", file);
+    const commit = try Commit.fromFile(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", file);
     defer a.free(commit.blob);
     //std.debug.print("tree {s}\n", .{commit.sha});
 }
@@ -470,4 +619,16 @@ test "tree child" {
     a.free(child.stderr);
 }
 
-test "read pack" {}
+test "read pack" {
+    var a = std.testing.allocator;
+
+    var cwd = std.fs.cwd();
+
+    var dir = try cwd.openDir("repos/hastur", .{});
+
+    var repo = try Repo.init(dir);
+
+    try repo.findPacks(a);
+    try repo.readPackIdx(a);
+    repo.raze(a);
+}

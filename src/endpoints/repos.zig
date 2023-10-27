@@ -92,7 +92,7 @@ fn commits(r: *Response, uri: []const u8) Error!void {
     var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
     for (lcommits, 0..) |*c, i| {
         c.* = try htmlCommit(r.alloc, current);
-        current = git.toParent(r.alloc, current.parent[0].?, repo.dir) catch {
+        current = current.toParent(r.alloc, 0) catch {
             lcommits.len = i;
             break;
         };
