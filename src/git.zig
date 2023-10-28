@@ -48,6 +48,8 @@ const PackObjType = enum(u3) {
     ref_delta = 7,
 };
 
+const Reader = std.fs.File.Reader;
+
 pub const Repo = struct {
     dir: std.fs.Dir,
     packs: []PackIdx,
@@ -97,9 +99,33 @@ pub const Repo = struct {
         };
     }
 
-    fn loadPackDelta(_: *Repo, _: Allocator) ![]u8 {
-        // wow
+    fn loadPackDeltaRef(_: *Repo, _: Allocator) ![]u8 {
+        // sigh
         return error.NotImplemnted;
+    }
+
+    fn deltaCopy() ![]u8 {}
+
+    fn deltaInsert() ![]u8 {}
+
+    fn loadPackDelta(_: Allocator) ![]u8 {
+        return error.NotImplemnted;
+    }
+
+    fn loadPackBlob(a: Allocator, header: u8, reader: Reader) ![]u8 {
+        var objsize: usize = 0;
+        var buf: [1]u8 = .{header};
+        var cont: bool = buf[0] >= 128;
+
+        if (cont) {
+            _ = try reader.read(&buf);
+            objsize |= @as(u16, buf[0]) << 4;
+            cont = buf[0] >= 128;
+            std.debug.assert(!cont); // not implemented
+        }
+        var blob = try a.alloc(u8, objsize);
+        _ = try reader.read(blob);
+        return blob;
     }
 
     fn loadPackObj(self: *Repo, a: Allocator, pkname: []const u8, offset: usize) ![]u8 {
@@ -112,24 +138,12 @@ pub const Repo = struct {
         try freader.skipBytes(offset, .{});
 
         var buf = [_]u8{0};
-        var cont: bool = false;
         _ = try freader.read(&buf);
-        cont = buf[0] >= 128;
         const objtype: PackObjType = @enumFromInt((buf[0] & 0b01110000) >> 4);
-        var objsize: usize = 0;
 
-        if (cont) {
-            _ = try freader.read(&buf);
-            objsize |= @as(u16, buf[0]) << 4;
-            cont = buf[0] >= 128;
-            std.debug.assert(!cont); // not implemented
-        }
-        var obj = try a.alloc(u8, objsize);
-        _ = try freader.read(obj);
         switch (objtype) {
-            .commit => return obj,
-            .tree => return obj,
-            .ofs_delta => return self.loadPackDelta(a),
+            .commit, .tree => return loadPackBlob(a, buf[0], freader),
+            .ofs_delta => return loadPackDelta(a),
             else => {
                 std.debug.print("obj type ({}) not implemened\n", .{objtype});
                 unreachable; // not implemented
