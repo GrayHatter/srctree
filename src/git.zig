@@ -34,6 +34,8 @@ const PackIdx = struct {
     crc: ?[]u32 = null,
     offsets: ?[]u32 = null,
     hugeoffsets: ?[]u64 = null,
+    // not stoked with this API/layout
+    name: []u8,
 };
 
 const PackObjType = enum(u3) {
@@ -72,7 +74,7 @@ pub const Repo = struct {
 
     const empty_sha = [_]u8{0} ** 20;
 
-    pub fn openObj(self: *Repo, in_sha: SHA) !std.fs.File {
+    pub fn loadFileObj(self: *Repo, in_sha: SHA) !std.fs.File {
         var sha: [40]u8 = undefined;
         if (in_sha.len == 20) {
             _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
@@ -95,7 +97,150 @@ pub const Repo = struct {
         };
     }
 
-    fn readPackIdx(self: *Repo, a: Allocator) !void {
+    fn loadPackDelta(_: *Repo, _: Allocator) ![]u8 {
+        // wow
+        return error.NotImplemnted;
+    }
+
+    fn loadPackObj(self: *Repo, a: Allocator, pkname: []const u8, offset: usize) ![]u8 {
+        var filename = try std.fmt.allocPrint(a, "./objects/pack/{s}.pack", .{pkname[0 .. pkname.len - 4]});
+        defer a.free(filename);
+        var fd = try self.dir.openFile(filename, .{});
+        defer fd.close();
+        var freader = fd.reader();
+
+        try freader.skipBytes(offset, .{});
+
+        var buf = [_]u8{0};
+        var cont: bool = false;
+        _ = try freader.read(&buf);
+        cont = buf[0] >= 128;
+        const objtype: PackObjType = @enumFromInt((buf[0] & 0b01110000) >> 4);
+        var objsize: usize = 0;
+
+        if (cont) {
+            _ = try freader.read(&buf);
+            objsize |= @as(u16, buf[0]) << 4;
+            cont = buf[0] >= 128;
+            std.debug.assert(!cont); // not implemented
+        }
+        var obj = try a.alloc(u8, objsize);
+        _ = try freader.read(obj);
+        switch (objtype) {
+            .commit => return obj,
+            .tree => return obj,
+            .ofs_delta => return self.loadPackDelta(a),
+            else => {
+                std.debug.print("obj type ({}) not implemened\n", .{objtype});
+                unreachable; // not implemented
+            },
+        }
+        unreachable;
+    }
+
+    /// TODO binary search lol
+    fn findObj(self: *Repo, a: Allocator, in_sha: SHA) ![]u8 {
+        var shabuf: [20]u8 = undefined;
+        var sha: []const u8 = &shabuf;
+        if (in_sha.len == 40) {
+            for (&shabuf, 0..) |*s, i| {
+                std.debug.print("{s} {}\n", .{ in_sha[i * 2 .. (i + 1) * 2], i });
+                s.* = try std.fmt.parseInt(u8, in_sha[i * 2 .. (i + 1) * 2], 16);
+            }
+            sha.len = 20;
+        } else {
+            sha = in_sha;
+        }
+
+        for (self.packs) |pack| {
+            const fanout = pack.header.fanout;
+            var start: usize = 0;
+            var count: usize = 0;
+            if (sha[0] == 0 and fanout[0] > 0) {
+                count = fanout[0];
+            } else if (fanout[sha[0]] - fanout[sha[0] - 1] > 0) {
+                start = fanout[sha[0] - 1];
+                count = fanout[sha[0]] - fanout[sha[0] - 1];
+            } else continue;
+
+            for (start..start + count) |i| {
+                const objname = pack.objnames.?[i * 20 .. (i + 1) * 20];
+                if (std.mem.eql(u8, sha, objname)) {
+                    return self.loadPackObj(a, pack.name, pack.offsets.?[i]);
+                }
+            }
+        }
+        if (self.loadFileObj(sha)) |fd| {
+            defer fd.close();
+            var r = fd.reader();
+            return try r.readAllAlloc(a, 2 << 16);
+        } else |_| {}
+        return error.Missing;
+    }
+
+    fn loadPack(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !void {
+        var vpack = Pack{
+            .sig = try reader.readIntBig(u32),
+            .vnum = try reader.readIntBig(u32),
+            .onum = try reader.readIntBig(u32),
+        };
+        _ = vpack;
+
+        var buf = [_]u8{0};
+        var cont: bool = false;
+
+        _ = try reader.read(&buf);
+        cont = buf[0] >= 128;
+        const objtype: PackObjType = @enumFromInt((buf[0] & 0b01110000) >> 4);
+        var objsize: usize = 0;
+
+        if (cont) {
+            _ = try reader.read(&buf);
+            objsize |= @as(u16, buf[0]) << 4;
+            cont = buf[0] >= 128;
+            std.debug.assert(!cont); // not implemented
+        }
+        var pack1 = try a.alloc(u8, objsize);
+        defer a.free(pack1);
+        _ = try reader.read(pack1);
+
+        switch (objtype) {
+            .tree => {
+                //var cmt = try Tree.fromPack(a, pack1);
+                //std.debug.print("{}\n", .{cmt});
+                //for (cmt.objects) |obj| {
+                //    std.debug.print("{s} {}\n", .{ obj.name, obj });
+                //}
+            },
+            else => {},
+        }
+    }
+
+    fn loadPackIdx(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !PackIdx {
+        var pack: PackIdx = undefined;
+        var header = &pack.header;
+        header.magic = try reader.readIntBig(u32);
+        header.vnum = try reader.readIntBig(u32);
+        header.fanout = undefined;
+        for (&header.fanout) |*fo| {
+            fo.* = try reader.readIntBig(u32);
+        }
+        pack.objnames = try a.alloc(u8, 20 * header.fanout[255]);
+        pack.crc = try a.alloc(u32, header.fanout[255]);
+        pack.offsets = try a.alloc(u32, header.fanout[255]);
+        pack.hugeoffsets = null;
+
+        _ = try reader.read(pack.objnames.?[0 .. 20 * header.fanout[255]]);
+        for (pack.crc.?) |*crc| {
+            crc.* = try reader.readIntNative(u32);
+        }
+        for (pack.offsets.?) |*crc| {
+            crc.* = try reader.readIntBig(u32);
+        }
+        return pack;
+    }
+
+    pub fn loadPacks(self: *Repo, a: Allocator) !void {
         var idir = try self.dir.openIterableDir("./objects/pack", .{});
         var itr = idir.iterate();
         var i: usize = 0;
@@ -112,89 +257,10 @@ pub const Repo = struct {
             defer a.free(filename);
             var fd = try self.dir.openFile(filename, .{});
             defer fd.close();
-            var freader = fd.reader();
-            var header = &self.packs[i].header;
-            header.magic = try freader.readIntBig(u32);
-            header.vnum = try freader.readIntBig(u32);
-            header.fanout = undefined;
-            for (&header.fanout) |*fo| {
-                fo.* = try freader.readIntBig(u32);
-            }
-            var pack = &self.packs[i];
-            pack.objnames = try a.alloc(u8, 20 * header.fanout[255]);
-            pack.crc = try a.alloc(u32, header.fanout[255]);
-            pack.offsets = try a.alloc(u32, header.fanout[255]);
-            pack.hugeoffsets = null;
-
-            _ = try freader.read(pack.objnames.?[0 .. 20 * header.fanout[255]]);
-            for (pack.crc.?) |*crc| {
-                crc.* = try freader.readIntNative(u32);
-            }
-            for (pack.offsets.?) |*crc| {
-                crc.* = try freader.readIntBig(u32);
-            }
-
+            self.packs[i] = try self.loadPackIdx(a, fd.reader());
+            self.packs[i].name = try a.dupe(u8, file.name);
             i += 1;
         }
-    }
-
-    fn findPacks(self: *Repo, a: Allocator) !void {
-        var idir = try self.dir.openIterableDir("./objects/pack", .{});
-        var itr = idir.iterate();
-        while (try itr.next()) |file| {
-            if (file.name[file.name.len - 1] == 'x') continue;
-            //std.debug.print("{s}\n", .{file.name});
-            var filename = try std.fmt.allocPrint(a, "./objects/pack/{s}", .{file.name});
-            defer a.free(filename);
-            var fd = try self.dir.openFile(filename, .{});
-            defer fd.close();
-            var freader = fd.reader();
-            var vpack = Pack{
-                .sig = try freader.readIntBig(u32),
-                .vnum = try freader.readIntBig(u32),
-                .onum = try freader.readIntBig(u32),
-            };
-            _ = vpack;
-            //std.debug.print("{}\n", .{vpack});
-
-            var buf = [_]u8{0};
-            var cont: bool = false;
-
-            _ = try freader.read(&buf);
-            cont = buf[0] >= 128;
-            const objtype: PackObjType = @enumFromInt((buf[0] & 0b01110000) >> 4);
-            var objsize: usize = 0;
-
-            if (cont) {
-                _ = try freader.read(&buf);
-                objsize |= @as(u16, buf[0]) << 4;
-                cont = buf[0] >= 128;
-                std.debug.assert(!cont); // not implemented
-            }
-            var pack1 = try a.alloc(u8, objsize);
-            defer a.free(pack1);
-            _ = try freader.read(pack1);
-
-            switch (objtype) {
-                .tree => {
-                    //var cmt = try Tree.fromPack(a, pack1);
-                    //std.debug.print("{}\n", .{cmt});
-                    //for (cmt.objects) |obj| {
-                    //    std.debug.print("{s} {}\n", .{ obj.name, obj });
-                    //}
-                },
-                else => {},
-            }
-
-            break;
-        }
-    }
-
-    fn readPack() void {}
-
-    /// API may disappear
-    pub fn objectsDir(self: *Repo) !std.fs.Dir {
-        return try self.dir.openDir("./objects/", .{});
     }
 
     pub fn deref() Object {}
@@ -285,7 +351,13 @@ pub const Repo = struct {
 
     pub fn tree(self: *Repo, a: Allocator) !Tree {
         const sha = try self.HEAD(a);
-        const cmt = try Commit.fromFile(a, sha.branch.sha, try self.openObj(sha.branch.sha));
+        var file = self.loadFileObj(sha.branch.sha) catch {
+            var data = try self.findObj(a, sha.branch.sha);
+            const cmt = try Commit.fromPack(a, sha.branch.sha, data);
+            std.debug.print("{}\n", .{cmt});
+            return try Tree.fromRepo(a, self, cmt.tree);
+        };
+        const cmt = try Commit.fromFile(a, sha.branch.sha, file);
         return try Tree.fromRepo(a, self, cmt.tree);
     }
 
@@ -293,7 +365,7 @@ pub const Repo = struct {
         var ref_main = try self.dir.openFile("./refs/heads/main", .{});
         var b: [1 << 16]u8 = undefined;
         var head = try ref_main.read(&b);
-        var file = try self.openObj(b[0 .. head - 1]);
+        var file = try self.loadFileObj(b[0 .. head - 1]);
         var cmt = try Commit.fromFile(a, b[0 .. head - 1], file);
         cmt.repo = self;
         return cmt;
@@ -306,6 +378,7 @@ pub const Repo = struct {
             a.free(pack.crc.?);
             a.free(pack.offsets.?);
             // a.free(pack.hugeoffsets); // not implemented
+            a.free(pack.name);
         }
         a.free(self.packs);
     }
@@ -352,6 +425,8 @@ const Actor = struct {
     }
 };
 
+const GPGSig = struct {};
+
 pub const Commit = struct {
     blob: []const u8,
     sha: SHA,
@@ -361,6 +436,7 @@ pub const Commit = struct {
     committer: Actor,
     message: []const u8,
     repo: ?*Repo = null,
+    gpgsig: GPGSig,
 
     ptr_parent: ?*Commit = null, // TOOO multiple parents
 
@@ -372,6 +448,8 @@ pub const Commit = struct {
                 if (std.mem.indexOf(u8, data, "\x00")) |nl| {
                     self.tree = payload[nl..][0..40];
                 } else unreachable;
+            } else if (std.mem.eql(u8, name, "tree")) {
+                self.tree = payload[1..41];
             } else if (std.mem.eql(u8, name, "parent")) {
                 for (&self.parent) |*parr| {
                     if (parr.* == null) {
@@ -383,8 +461,19 @@ pub const Commit = struct {
                 self.author = try Actor.make(payload);
             } else if (std.mem.eql(u8, name, "committer")) {
                 self.committer = try Actor.make(payload);
-            } else return error.UnknownHeader;
+            } else {
+                std.debug.print("unknown header: {s}\n", .{name});
+                return error.UnknownHeader;
+            }
         } else return error.MalformedHeader;
+    }
+
+    /// TODO this
+    fn gpgSig(_: *Commit, itr: *std.mem.SplitIterator(u8, .sequence)) !void {
+        while (itr.next()) |line| {
+            if (std.mem.indexOf(u8, line, "-----END PGP SIGNATURE-----") != null) return;
+        }
+        return error.InvalidGpgsig;
     }
 
     pub fn make(sha: SHA, data: []const u8) !Commit {
@@ -394,10 +483,29 @@ pub const Commit = struct {
         self.parent = .{ null, null, null }; // I don't like it either, but... lazy
         self.blob = data;
         while (lines.next()) |line| {
+            if (std.mem.startsWith(u8, line, "gpgsig")) {
+                try self.gpgSig(&lines);
+                continue;
+            }
             if (line.len == 0) break;
+
             try self.header(line);
         }
         self.message = lines.rest();
+        self.sha = sha;
+        return self;
+    }
+
+    pub fn fromPack(a: Allocator, sha: SHA, data: []const u8) !Commit {
+        var fbs = std.io.fixedBufferStream(data);
+        var d = try zlib.decompressStream(a, fbs.reader());
+        defer d.deinit();
+        var buf = try a.alloc(u8, 1 << 16);
+        const count = try d.read(buf);
+        if (count == 1 << 16) return error.FileDataTooLarge;
+        //std.debug.print("{s}\n", .{buf[0..count]});
+        var self = try make(sha, buf[0..count]);
+        self.blob = buf;
         self.sha = sha;
         return self;
     }
@@ -418,7 +526,7 @@ pub const Commit = struct {
         if (idx >= self.parent.len) return error.NoParent;
         if (self.parent[idx]) |parent| {
             if (self.repo) |repo| {
-                var file = try repo.openObj(parent);
+                var file = try repo.loadFileObj(parent);
                 defer file.close();
                 var cmt = try Commit.fromFile(a, parent, file);
                 cmt.repo = repo;
@@ -468,8 +576,9 @@ pub const Tree = struct {
 
     pub fn fromRepo(a: Allocator, r: *Repo, sha: SHA) !Tree {
         var b: [1 << 16]u8 = undefined;
-        var file = try r.openObj(sha);
-        var d = try zlib.decompressStream(a, file.reader());
+        var blob = try r.findObj(a, sha);
+        var fbs = std.io.fixedBufferStream(blob);
+        var d = try zlib.decompressStream(a, fbs.reader());
         defer d.deinit();
         var count = try d.read(&b);
         return try Tree.make(a, b[0..count]);
@@ -627,8 +736,29 @@ test "read pack" {
     var dir = try cwd.openDir("repos/hastur", .{});
 
     var repo = try Repo.init(dir);
+    defer repo.raze(a);
 
-    try repo.findPacks(a);
-    try repo.readPackIdx(a);
-    repo.raze(a);
+    //const ref = try repo.HEAD(a);
+    //const branch = ref.branch;
+    //const head = repo.ref(
+
+    try repo.loadPacks(a);
+    var lol: []u8 = "";
+
+    for (repo.packs, 0..) |pack, pi| {
+        for (0..pack.header.fanout[255]) |oi| {
+            const hexy = pack.objnames.?[oi * 20 .. oi * 20 + 20];
+            if (hexy[0] != 0xd2) continue;
+            if (false) std.debug.print("{} {} -> {}\n", .{ pi, oi, hexLower(hexy) });
+            if (hexy[1] == 0xb4 and hexy[2] == 0xd1) {
+                if (false) std.debug.print("{s} -> {}\n", .{ pack.name, pack.offsets.?[oi] });
+                lol = hexy;
+            }
+        }
+    }
+    var obj = try repo.findObj(a, lol);
+    defer a.free(obj);
+    const commit = try Commit.fromPack(a, lol, obj);
+    defer a.free(commit.blob);
+    if (false) std.debug.print("{}\n", .{commit});
 }

@@ -163,6 +163,7 @@ fn tree(r: *Response, uri: []const u8) Error!void {
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{uri[6..]});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
+    repo.loadPacks(r.alloc) catch return error.Unknown;
 
     var tmpl = Template.find("repo.html");
     tmpl.init(r.alloc);
