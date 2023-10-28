@@ -6,6 +6,14 @@ const hexLower = std.fmt.fmtSliceHexLower;
 
 const DateTime = @import("datetime.zig");
 
+pub const Error = error{
+    NotAGitRepo,
+    RefMissing,
+    CommitMissing,
+    BlobMissing,
+    TreeMissing,
+};
+
 const Types = enum {
     commit,
     blob,
