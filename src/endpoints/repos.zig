@@ -171,9 +171,8 @@ fn tree(r: *Response, uri: []const u8) Error!void {
     var head = repo.HEAD(r.alloc) catch return error.Unknown;
     tmpl.addVar("branch.default", head.branch.name) catch return error.Unknown;
 
-    var refs = repo.refs(r.alloc) catch return error.Unknown;
-    var a_refs = try r.alloc.alloc([]const u8, refs.len);
-    for (a_refs, refs) |*dst, src| {
+    var a_refs = try r.alloc.alloc([]const u8, repo.refs.len);
+    for (a_refs, repo.refs) |*dst, src| {
         dst.* = src.branch.name;
     }
     var str_refs = try std.mem.join(r.alloc, "\n", a_refs);
