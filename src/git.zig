@@ -153,7 +153,7 @@ pub const Repo = struct {
 
     const empty_sha = [_]u8{0} ** 20;
 
-    pub fn loadFileObj(self: *Repo, in_sha: SHA) !std.fs.File {
+    fn loadFileObj(self: *Repo, in_sha: SHA) !std.fs.File {
         var sha: [40]u8 = undefined;
         if (in_sha.len == 20) {
             _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
@@ -180,64 +180,103 @@ pub const Repo = struct {
         return error.NotImplemnted;
     }
 
-    fn deltaCopy(header: u8) ![]u8 {
-        std.debug.print("{b}", .{header});
-        return error.NotImplemented;
+    fn deltaInst(reader: anytype, writer: anytype, base: []u8) !usize {
+        var readb: usize = try reader.readByte();
+        if (readb == 0) {
+            std.debug.print("INVALID INSTRUCTION 0x00\n", .{});
+            @panic("Invalid state :<");
+        }
+        if (readb >= 0x80) {
+            // std.debug.print("COPY {b:0>3} {b:0>4}\n", .{
+            //     (readb & 0b1110000) >> 4,
+            //     (readb & 0b1111),
+            // });
+            var offs: usize = 0;
+            if (readb & 1 != 0) offs |= @as(usize, try reader.readByte()) << 0;
+            if (readb & 2 != 0) offs |= @as(usize, try reader.readByte()) << 8;
+            if (readb & 4 != 0) offs |= @as(usize, try reader.readByte()) << 16;
+            if (readb & 8 != 0) offs |= @as(usize, try reader.readByte()) << 24;
+            //std.debug.print("    offs: {:12} {b:0>32} \n", .{ offs, offs });
+            var size: usize = 0;
+            if (readb & 16 != 0) size |= @as(usize, try reader.readByte()) << 0;
+            if (readb & 32 != 0) size |= @as(usize, try reader.readByte()) << 8;
+            if (readb & 64 != 0) size |= @as(usize, try reader.readByte()) << 16;
+
+            if (size == 0) size = 0x10000;
+            //std.debug.print("    size: {:12}         {b:0>24} \n", .{ size, size });
+            //std.debug.print("COPY {: >4} {: >4}\n", .{ offs, size });
+            if (size != try writer.write(base[offs..][0..size])) @panic("write didn't not fail");
+            return size;
+        } else {
+            var stage: [128]u8 = undefined;
+            var s = stage[0..readb];
+            _ = try reader.read(s);
+            _ = try writer.write(s);
+            //std.debug.print("INSERT {} \n", .{readb});
+            return readb;
+        }
     }
 
-    fn deltaInsert() ![]u8 {
-        return error.NotImplemnted;
+    fn readVarInt(reader: anytype) !usize {
+        var byte: usize = try reader.readByte();
+        var base: usize = byte & 0x7F;
+        while (byte >= 0x80) {
+            base += 1;
+            byte = try reader.readByte();
+            base = (base << 7) + (byte & 0x7F);
+        }
+        //std.debug.print("varint = {}\n", .{base});
+        return base;
     }
 
-    fn loadPackDelta(a: Allocator, header: u8, reader: FsReader) ![]u8 {
-        var msb = header & 0x80;
+    fn loadPackDelta(a: Allocator, fd: std.fs.File, offset: usize) ![]u8 {
+        // fd pos is offset + 2-ish because of the header read
+        var reader = fd.reader();
+        var srclen = try readVarInt(reader);
+
+        var _zlib = try zlib.decompressStream(a, reader);
+        defer _zlib.deinit();
+        var zr = _zlib.reader();
+        var inst = try zr.readAllAlloc(a, 0xffffff);
+        defer a.free(inst);
+        var inst_fbs = std.io.fixedBufferStream(inst);
+        var inst_reader = inst_fbs.reader();
+        // We don't actually need these when zlib works :)
+        _ = try readVarInt(inst_reader);
+        _ = try readVarInt(inst_reader);
+
+        const baseobj_offset = offset - srclen;
+        try fd.seekTo(baseobj_offset);
+        var basez = try loadPackObj(a, fd, baseobj_offset);
+        defer a.free(basez);
+
+        var buffer = std.ArrayList(u8).init(a);
         while (true) {
-            var data = switch (msb) {
-                0x80 => try deltaCopy(header),
-                else => try deltaInsert(),
+            _ = deltaInst(inst_reader, buffer.writer(), basez) catch {
+                break;
             };
-            _ = data;
-            _ = a;
-            _ = reader;
-            return error.NotImplemented;
         }
-        unreachable;
+        return try buffer.toOwnedSlice();
     }
 
-    fn loadPackBlob(a: Allocator, header: u8, reader: FsReader) ![]u8 {
-        var objsize: usize = 0;
-        var buf: [1]u8 = .{header};
-        var cont: bool = buf[0] >= 0x80;
-
-        if (cont) {
-            _ = try reader.read(&buf);
-            objsize |= @as(u16, buf[0]) << 4;
-            cont = buf[0] >= 0x80;
-            std.debug.assert(!cont); // not implemented
-        }
-        var blob = try a.alloc(u8, objsize);
-        _ = try reader.read(blob);
-        return blob;
+    fn loadPackBlob(a: Allocator, reader: FsReader) ![]u8 {
+        var _zlib = try zlib.decompressStream(a, reader);
+        defer _zlib.deinit();
+        var zr = _zlib.reader();
+        return try zr.readAllAlloc(a, 0xffff);
     }
 
-    fn loadPackObj(self: *Repo, a: Allocator, pkname: []const u8, offset: usize) ![]u8 {
-        var filename = try std.fmt.allocPrint(a, "./objects/pack/{s}.pack", .{pkname[0 .. pkname.len - 4]});
-        defer a.free(filename);
-        var fd = try self.dir.openFile(filename, .{});
-        defer fd.close();
-        var freader = fd.reader();
+    fn loadPackObj(a: Allocator, pk: std.fs.File, offset: usize) Error![]u8 {
+        pk.seekTo(offset) catch return error.PackCorrupt;
+        var freader = pk.reader();
 
-        try freader.skipBytes(offset, .{});
+        var h = packObjHeader(freader) catch return error.PackCorrupt;
 
-        var buf = [_]u8{0};
-        _ = try freader.read(&buf);
-        const objtype: PackObjType = @enumFromInt((buf[0] & 0b01110000) >> 4);
-
-        switch (objtype) {
-            .commit, .tree => return loadPackBlob(a, buf[0], freader),
-            .ofs_delta => return loadPackDelta(a, buf[0], freader),
+        switch (h.kind) {
+            .commit, .tree => return loadPackBlob(a, freader) catch return error.PackCorrupt,
+            .ofs_delta => return loadPackDelta(a, pk, offset) catch return error.PackCorrupt,
             else => {
-                std.debug.print("obj type ({}) not implemened\n", .{objtype});
+                std.debug.print("obj type ({}) not implemened\n", .{h.kind});
                 unreachable; // not implemented
             },
         }
@@ -261,7 +300,8 @@ pub const Repo = struct {
             const fanout = pack.header.fanout;
             var start: usize = 0;
             var count: usize = 0;
-            if (sha[0] == 0 and fanout[0] > 0) {
+            if (sha[0] == 0) {
+                if (fanout[0] == 0) continue;
                 count = fanout[0];
             } else if (fanout[sha[0]] - fanout[sha[0] - 1] > 0) {
                 start = fanout[sha[0] - 1];
@@ -271,16 +311,46 @@ pub const Repo = struct {
             for (start..start + count) |i| {
                 const objname = pack.objnames.?[i * 20 .. (i + 1) * 20];
                 if (std.mem.eql(u8, sha, objname)) {
-                    return Object.init(try self.loadPackObj(a, pack.name, pack.offsets.?[i]));
+                    var fnbuf: [2048]u8 = undefined;
+                    var filename = try std.fmt.bufPrint(&fnbuf, "./objects/pack/{s}.pack", .{
+                        pack.name[0 .. pack.name.len - 4],
+                    });
+                    const offset = pack.offsets.?[i];
+                    var fd = try self.dir.openFile(filename, .{});
+                    defer fd.close();
+                    try fd.seekTo(offset);
+
+                    return Object.init(try loadPackObj(a, fd, offset));
                 }
             }
         }
         if (self.loadFileObj(sha)) |fd| {
             defer fd.close();
-            var r = fd.reader();
-            return Object.init(try r.readAllAlloc(a, 2 << 16));
+            var _zlib = try zlib.decompressStream(a, fd.reader());
+            defer _zlib.deinit();
+            var reader = _zlib.reader();
+            var data = try reader.readAllAlloc(a, 0xffff);
+            return Object.init(data);
         } else |_| {}
-        return error.Missing;
+        return error.ObjectMissing;
+    }
+
+    fn packObjHeader(reader: std.fs.File.Reader) !PackObjHeader {
+        var byte: usize = 0;
+        byte = try reader.readByte();
+        var h = PackObjHeader{
+            .size = byte & 0b1111,
+            .kind = @enumFromInt((byte & 0b01110000) >> 4),
+        };
+        var cont: bool = byte & 0x80 != 0;
+        var shift: u6 = 4;
+        while (cont) {
+            byte = try reader.readByte();
+            h.size |= (byte << shift);
+            shift += 7;
+            cont = byte >= 0x80;
+        }
+        return h;
     }
 
     fn loadPack(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !void {
@@ -291,25 +361,13 @@ pub const Repo = struct {
         };
         _ = vpack;
 
-        var buf = [_]u8{0};
-        var cont: bool = false;
+        const header = try packObjHeader(reader);
 
-        _ = try reader.read(&buf);
-        cont = buf[0] >= 128;
-        const objtype: PackObjType = @enumFromInt((buf[0] & 0b01110000) >> 4);
-        var objsize: usize = 0;
-
-        if (cont) {
-            _ = try reader.read(&buf);
-            objsize |= @as(u16, buf[0]) << 4;
-            cont = buf[0] >= 128;
-            std.debug.assert(!cont); // not implemented
-        }
-        var pack1 = try a.alloc(u8, objsize);
+        var pack1 = try a.alloc(u8, header.size);
         defer a.free(pack1);
         _ = try reader.read(pack1);
 
-        switch (objtype) {
+        switch (header.kind) {
             .tree => {
                 //var cmt = try Tree.fromPack(a, pack1);
                 //std.debug.print("{}\n", .{cmt});
@@ -319,6 +377,7 @@ pub const Repo = struct {
             },
             else => {},
         }
+        unreachable;
     }
 
     fn loadPackIdx(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !PackIdx {
@@ -603,34 +662,19 @@ pub const Commit = struct {
             }
             if (line.len == 0) break;
 
-            try self.header(line);
+            self.header(line) catch |e| {
+                std.debug.print("header failed {} '{s}'\n", .{ e, line });
+                return e;
+            };
         }
         self.message = lines.rest();
         self.sha = sha;
         return self;
     }
 
-    //pub fn fromPack(a: Allocator, sha: SHA, data: []const u8) !Commit {
-    //    var fbs = std.io.fixedBufferStream(data);
-    //    var d = try zlib.decompressStream(a, fbs.reader());
-    //    defer d.deinit();
-    //    var buf = try a.alloc(u8, 1 << 16);
-    //    const count = try d.read(buf);
-    //    if (count == 1 << 16) return error.FileDataTooLarge;
-    //    //std.debug.print("{s}\n", .{buf[0..count]});
-    //    var self = try make(sha, buf[0..count]);
-    //    self.blob = buf;
-    //    self.sha = sha;
-    //    return self;
-    //}
-
     pub fn fromReader(a: Allocator, sha: SHA, reader: Reader) !Commit {
-        var d = try zlib.decompressStream(a, reader);
-        defer d.deinit();
-        var buf = try a.alloc(u8, 1 << 16);
-        const count = try d.read(buf);
-        if (count == 1 << 16) return error.FileDataTooLarge;
-        var self = try make(sha, buf[0..count]);
+        var buf = try reader.readAllAlloc(a, 0xFFFF);
+        var self = try make(sha, buf);
         self.blob = buf;
         self.sha = sha;
         return self;
@@ -640,10 +684,9 @@ pub const Commit = struct {
         if (idx >= self.parent.len) return error.NoParent;
         if (self.parent[idx]) |parent| {
             if (self.repo) |repo| {
-                var file = try repo.loadFileObj(parent);
-                defer file.close();
-                var buffer = Object.init(file);
-                var cmt = try Commit.fromReader(a, parent, buffer.reader());
+                var obj = try repo.findObj(a, parent);
+                defer obj.raze(a);
+                var cmt = try Commit.fromReader(a, parent, obj.reader());
                 cmt.repo = repo;
                 return cmt;
             }
@@ -656,8 +699,9 @@ pub const Commit = struct {
         try out.print(
             \\Commit{{
             \\commit {s}
+            \\tree {s}
             \\
-        , .{self.sha});
+        , .{ self.sha, self.tree });
         for (self.parent) |par| {
             if (par) |p|
                 try out.print("parent {s}\n", .{p});
@@ -683,20 +727,14 @@ pub const Tree = struct {
     objects: []Blob,
 
     pub fn fromRepo(a: Allocator, r: *Repo, sha: SHA) !Tree {
-        var b: [1 << 16]u8 = undefined;
         var blob = try r.findObj(a, sha);
-        var d = try zlib.decompressStream(a, blob.reader());
-        defer d.deinit();
-        var count = try d.read(&b);
-        return try Tree.make(a, b[0..count]);
+        var b = try blob.reader().readAllAlloc(a, 0xffff);
+        return try Tree.make(a, b);
     }
 
     pub fn fromReader(a: Allocator, reader: Reader) !Tree {
-        var al = std.ArrayList(u8).init(a);
-        var d = try zlib.decompressStream(a, reader);
-        defer d.deinit();
-        try d.reader().readAllArrayList(&al, 65536);
-        return try Tree.make(a, try al.toOwnedSlice());
+        var buf = try reader.readAllAlloc(a, 0xffff);
+        return try Tree.make(a, buf);
     }
 
     pub fn make(a: Allocator, blob: []const u8) !Tree {
@@ -761,7 +799,11 @@ test "file" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    var buffer = Object.init(file);
+    var d = try zlib.decompressStream(a, file.reader());
+    defer d.deinit();
+    var dz = try d.reader().readAllAlloc(a, 0xffff);
+    var buffer = Object.init(dz);
+    defer buffer.raze(a);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
     defer a.free(commit.blob);
     //std.debug.print("{}\n", .{commit});
@@ -797,7 +839,12 @@ test "tree" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    var buffer = Object.init(file);
+    var _zlib = try zlib.decompressStream(a, file.reader());
+    defer _zlib.deinit();
+    var reader = _zlib.reader();
+    var data = try reader.readAllAlloc(a, 0xffff);
+    defer a.free(data);
+    var buffer = Object.init(data);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
     defer a.free(commit.blob);
     //std.debug.print("tree {s}\n", .{commit.sha});
@@ -874,13 +921,14 @@ test "hopefully a delta" {
 
     try repo.loadPacks(a);
 
-    //var head = try repo.commit(a);
-    //defer a.free(head.blob);
+    var head = try repo.commit(a);
+    defer a.free(head.blob);
     //std.debug.print("{}\n", .{head});
 
-    //var obj = try repo.findObj(a, head.tree);
-    //defer a.free(obj);
-    //const commit = try Commit.fromReader(a, lol, obj.reader());
-    //defer a.free(commit.blob);
-    //if (false) std.debug.print("{}\n", .{commit});
+    var obj = try repo.findObj(a, head.tree);
+    defer obj.raze(a);
+    const tree = try Tree.fromReader(a, obj.reader());
+    defer a.free(tree.blob);
+    defer a.free(tree.objects);
+    if (false) std.debug.print("{}\n", .{tree});
 }
