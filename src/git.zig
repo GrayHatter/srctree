@@ -12,6 +12,10 @@ pub const Error = error{
     CommitMissing,
     BlobMissing,
     TreeMissing,
+    ObjectMissing,
+    OutOfMemory,
+    NotImplemented,
+    PackCorrupt,
 };
 
 const Types = enum {
