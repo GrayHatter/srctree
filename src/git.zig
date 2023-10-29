@@ -60,6 +60,11 @@ const PackObjType = enum(u3) {
     ref_delta = 7,
 };
 
+const PackObjHeader = struct {
+    kind: PackObjType,
+    size: usize,
+};
+
 const Object = struct {
     ctx: union(enum) {
         fs: std.fs.File,
