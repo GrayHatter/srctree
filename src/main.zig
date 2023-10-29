@@ -89,7 +89,6 @@ pub fn main() !void {
 
     var cwd = std.fs.cwd();
     var ini: ?Ini.Config = null;
-
     if (cwd.openFile("./config.ini", .{})) |conf_file| {
         ini = try Ini.getConfig(a, conf_file);
         if (ini.?.get("owner")) |ns| {

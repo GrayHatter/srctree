@@ -8,6 +8,7 @@ const HTML = Endpoint.HTML;
 const Template = Endpoint.Template;
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
+const Ini = @import("../ini.zig");
 
 const Error = Endpoint.Error;
 
@@ -15,12 +16,18 @@ const HeatMapArray = [2][13][32]u16;
 
 var hits: HeatMapArray = .{.{.{0} ** 32} ** 13} ** 2;
 
-fn countAll(a: Allocator, root: Git.Commit) !*HeatMapArray {
-    var commit = root;
+var owner_email: ?[]const u8 = null;
+
+fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
+    var commit = root_cmt;
     while (true) {
         const old = commit.blob;
         const d = commit.author.time;
-        hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
+        if (d.years < 2022) return &hits;
+        if (owner_email) |email| {
+            if (std.mem.eql(u8, email, commit.author.email))
+                hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
+        } else hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
         for (commit.parent[1..], 1..) |par, pidx| {
             if (par) |_| {
                 var parent = try commit.toParent(a, @truncate(pidx));
@@ -29,7 +36,7 @@ fn countAll(a: Allocator, root: Git.Commit) !*HeatMapArray {
         }
         commit = commit.toParent(a, 0) catch |err| switch (err) {
             error.FileNotFound => {
-                std.log.info("{}", .{commit});
+                std.log.info("unable to hit parent file not found \n {}", .{commit});
                 return &hits;
             },
             error.NoParent => return &hits,
@@ -42,22 +49,27 @@ fn countAll(a: Allocator, root: Git.Commit) !*HeatMapArray {
 fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
     var repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
+    try repo.loadPacks(a);
     defer repo.raze(a);
 
     var commit = repo.commit(a) catch return &hits;
     return try countAll(a, commit);
 }
 
-fn findCommitsFor(a: Allocator, gitdirs: []const []const u8) !*HeatMapArray {
-    for (gitdirs) |gitdir| {
-        _ = try findCommits(a, gitdir);
-    }
-    return &hits;
-}
-
 pub fn commitFlex(r: *Response, _: []const u8) Error!void {
     HTML.init(r.alloc);
     defer HTML.raze();
+
+    if (std.fs.cwd().openFile("./config.ini", .{})) |conf_file| {
+        if (Ini.getConfig(r.alloc, conf_file)) |ini| {
+            if (ini.get("owner")) |ns| {
+                if (ns.get("email")) |email| {
+                    std.log.info("{s}\n", .{email});
+                    owner_email = email;
+                }
+            }
+        } else |_| {}
+    } else |_| {}
 
     const day = [1]HTML.Attribute{HTML.Attribute.class("day")};
     const monthAtt = [1]HTML.Attribute{HTML.Attribute.class("month")};
