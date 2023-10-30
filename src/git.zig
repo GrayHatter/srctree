@@ -109,7 +109,7 @@ const Object = struct {
         };
     }
 
-    fn reader(self: *Object) Object.Reader {
+    pub fn reader(self: *Object) Object.Reader {
         return .{ .context = self };
     }
 
@@ -273,7 +273,7 @@ pub const Repo = struct {
         var h = packObjHeader(freader) catch return error.PackCorrupt;
 
         switch (h.kind) {
-            .commit, .tree => return loadPackBlob(a, freader) catch return error.PackCorrupt,
+            .commit, .tree, .blob => return loadPackBlob(a, freader) catch return error.PackCorrupt,
             .ofs_delta => return loadPackDelta(a, pk, offset) catch return error.PackCorrupt,
             else => {
                 std.debug.print("obj type ({}) not implemened\n", .{h.kind});
@@ -524,6 +524,17 @@ pub const Repo = struct {
         var cmt = try Commit.fromReader(a, resolv, obj.reader());
         cmt.repo = self;
         return cmt;
+    }
+
+    pub fn blob(self: Repo, a: Allocator, sha: SHA) !Object {
+        var obj = try self.findObj(a, sha);
+        // Yes, I know, but it might be a file :/
+        const r = obj.reader();
+        const blobb = try r.readAllAlloc(a, 0xffff);
+
+        if (std.mem.indexOf(u8, blobb, "\x00")) |i| {
+            return Object.init(blobb[i + 1 ..]);
+        } else return obj;
     }
 
     pub fn raze(self: *Repo, a: Allocator) void {

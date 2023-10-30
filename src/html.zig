@@ -26,6 +26,12 @@ pub const Attribute = struct {
         };
     }
 
+    pub fn alloc(a: Allocator, k: []const u8, v: ?[]const u8) ![]Attribute {
+        var all = try a.alloc(Attribute, 1);
+        all[0] = Attribute{ .key = try a.dupe(u8, k), .value = if (v) |va| try a.dupe(u8, va) else v };
+        return all;
+    }
+
     pub fn format(self: Attribute, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         if (self.value) |value| {
             try std.fmt.format(out, " {s}=\"{s}\"", .{ self.key, value });

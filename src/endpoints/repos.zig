@@ -13,9 +13,9 @@ const UriIter = Endpoint.Router.UriIter;
 const git = @import("../git.zig");
 
 const endpoints = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "blob", .match = .{ .call = tree } },
+    .{ .name = "blob", .match = .{ .call = treeBlob } },
     .{ .name = "commits", .match = .{ .call = commits } },
-    .{ .name = "tree", .match = .{ .call = tree } },
+    .{ .name = "tree", .match = .{ .call = treeBlob } },
 };
 
 pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
@@ -32,7 +32,7 @@ pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
 
         while (itr.next() catch return error.Unrouteable) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
-            if (std.mem.eql(u8, file.name, repo_name)) return tree;
+            if (std.mem.eql(u8, file.name, repo_name)) return treeBlob;
         }
     } else |_| {}
     return error.Unrouteable;
@@ -146,18 +146,7 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
     return out;
 }
 
-fn mkTree(a: Allocator, repo: git.Repo, uri: *UriIter, pfiles: git.Tree) !git.Tree {
-    var files: git.Tree = pfiles;
-    if (uri.next()) |udir| for (files.objects) |obj| {
-        if (std.mem.eql(u8, udir, obj.name)) {
-            files = try git.Tree.fromRepo(a, repo, &obj.hash);
-            return try mkTree(a, repo, uri, files);
-        }
-    };
-    return files;
-}
-
-fn tree(r: *Response, uri: *UriIter) Error!void {
+fn treeBlob(r: *Response, uri: *UriIter) Error!void {
     uri.reset();
     _ = uri.next() orelse return error.InvalidURI; // repo
     const repo_name = uri.next() orelse return error.InvalidURI;
@@ -170,19 +159,89 @@ fn tree(r: *Response, uri: *UriIter) Error!void {
 
     const cmt = repo.commit(r.alloc) catch return error.Unknown;
     var files: git.Tree = cmt.mkTree(r.alloc) catch return error.Unknown;
-    var file_uri_name: ?[]const u8 = null;
-    if (uri.next()) |blob| {
-        if (std.mem.eql(u8, blob, "blob")) {} else if (std.mem.eql(u8, blob, "tree")) {
-            file_uri_name = uri.rest();
+    if (uri.next()) |blb| {
+        if (std.mem.eql(u8, blb, "blob")) {
+            return blob(r, uri, repo, files);
+        } else if (std.mem.eql(u8, blb, "tree")) {
             files = mkTree(r.alloc, repo, uri, files) catch return error.Unknown;
+            return tree(r, uri, repo, files);
         } else return error.InvalidURI;
     } else files = cmt.mkTree(r.alloc) catch return error.Unknown;
+    return tree(r, uri, repo, files);
+}
 
+fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!void {
+    var tmpl = Template.find("blob.html");
+    tmpl.init(r.alloc);
+
+    var blb: git.Blob = undefined;
+
+    var files = pfiles;
+    search: while (uri.next()) |bname| {
+        for (files.objects) |obj| {
+            if (std.mem.eql(u8, bname, obj.name)) {
+                blb = obj;
+                if (obj.isFile()) {
+                    if (uri.next()) |_| return error.InvalidURI;
+                    break :search;
+                }
+                files = git.Tree.fromRepo(r.alloc, repo, &obj.hash) catch return error.Unknown;
+                continue :search;
+            }
+        } else return error.InvalidURI;
+    }
+
+    var dom = DOM.new(r.alloc);
+
+    var resolve = repo.blob(r.alloc, &blb.hash) catch return error.Unknown;
+    var reader = resolve.reader();
+    var d2 = reader.readAllAlloc(r.alloc, 0xffff) catch unreachable;
+    const count = std.mem.count(u8, d2, "\n");
+    dom = dom.open(HTML.element("lines", null, null));
+    for (0..count) |i| {
+        var buf: [10]u8 = undefined;
+        const b = std.fmt.bufPrint(&buf, "{}", .{i + 1}) catch unreachable;
+        dom.push(HTML.element("ln", null, try HTML.Attribute.alloc(r.alloc, "num", b)));
+    }
+    dom = dom.close();
+    dom = dom.open(HTML.element("code", null, null));
+    var litr = std.mem.split(u8, d2, "\n");
+    while (litr.next()) |line| {
+        dom.push(HTML.span(line));
+        dom.push(HTML.text("\n"));
+    }
+    dom = dom.close();
+
+    //std.debug.print("res {s}\n", .{d2});
+    var data = dom.done();
+
+    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(data)});
+    tmpl.addVar("files", filestr) catch return error.Unknown;
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+
+    r.status = .ok;
+    r.start() catch return Error.Unknown;
+    r.write(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
+}
+
+fn mkTree(a: Allocator, repo: git.Repo, uri: *UriIter, pfiles: git.Tree) !git.Tree {
+    var files: git.Tree = pfiles;
+    if (uri.next()) |udir| for (files.objects) |obj| {
+        if (std.mem.eql(u8, udir, obj.name)) {
+            files = try git.Tree.fromRepo(a, repo, &obj.hash);
+            return try mkTree(a, repo, uri, files);
+        }
+    };
+    return files;
+}
+
+fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void {
     var tmpl = Template.find("repo.html");
     tmpl.init(r.alloc);
 
-    var head = repo.HEAD(r.alloc) catch return error.Unknown;
-    tmpl.addVar("branch.default", head.branch.name) catch return error.Unknown;
+    var head = repo._head orelse "unknown";
+    tmpl.addVar("branch.default", head) catch return error.Unknown;
 
     var a_refs = try r.alloc.alloc([]const u8, repo.refs.len);
     for (a_refs, repo.refs) |*dst, src| {
@@ -191,6 +250,12 @@ fn tree(r: *Response, uri: *UriIter) Error!void {
     var str_refs = try std.mem.join(r.alloc, "\n", a_refs);
     tmpl.addVar("branches", str_refs) catch return error.Unknown;
 
+    uri.reset();
+    _ = uri.next();
+    const repo_name = uri.next() orelse return error.InvalidURI;
+    _ = uri.next();
+    const file_uri_name = uri.rest();
+
     var dom = DOM.new(r.alloc);
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
@@ -198,7 +263,7 @@ fn tree(r: *Response, uri: *UriIter) Error!void {
             .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
                 repo_name,
                 if (obj.isFile()) "blob" else "tree",
-                file_uri_name orelse "",
+                file_uri_name,
                 obj.name,
                 if (obj.isFile()) "" else "/",
             }),
