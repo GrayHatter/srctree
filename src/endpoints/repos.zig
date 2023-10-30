@@ -199,7 +199,7 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
     var d2 = reader.readAllAlloc(r.alloc, 0xffff) catch unreachable;
     const count = std.mem.count(u8, d2, "\n");
     dom = dom.open(HTML.element("lines", null, null));
-    for (0..count) |i| {
+    for (0..count + 1) |i| {
         var buf: [10]u8 = undefined;
         const b = std.fmt.bufPrint(&buf, "{}", .{i + 1}) catch unreachable;
         dom.push(HTML.element("ln", null, try HTML.Attribute.alloc(r.alloc, "num", b)));
@@ -207,9 +207,11 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
     dom = dom.close();
     dom = dom.open(HTML.element("code", null, null));
     var litr = std.mem.split(u8, d2, "\n");
+
+    dom.push(HTML.span(litr.next().?));
     while (litr.next()) |line| {
-        dom.push(HTML.span(line));
         dom.push(HTML.text("\n"));
+        dom.push(HTML.span(line));
     }
     dom = dom.close();
     var data = dom.done();
