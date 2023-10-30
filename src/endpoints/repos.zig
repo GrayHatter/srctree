@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
-const SplitIter = std.mem.SplitIterator(u8, .sequence);
 
 const Endpoint = @import("../endpoint.zig");
 const Response = Endpoint.Response;
@@ -9,40 +8,22 @@ const HTML = Endpoint.HTML;
 const DOM = Endpoint.DOM;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
+const UriIter = Endpoint.Router.UriIter;
 
 const git = @import("../git.zig");
 
-const Verbs = enum {
-    tree,
-    blob,
-    commit,
-    commits,
-
-    pub fn from(str: []const u8) ?Verbs {
-        inline for (@typeInfo(Verbs).Enum.fields) |v| {
-            if (std.mem.eql(u8, v.name, str)) return @enumFromInt(v.value);
-        }
-        return null;
-    }
+const endpoints = [_]Endpoint.Router.MatchRouter{
+    .{ .name = "blob", .match = .{ .call = tree } },
+    .{ .name = "commits", .match = .{ .call = commits } },
+    .{ .name = "tree", .match = .{ .call = tree } },
 };
 
-pub fn router(uri: *SplitIter) Error!Endpoint.Endpoint {
-    std.debug.print("ep route {}\n", .{uri});
-
-    const itr_root = uri.first();
-    std.debug.assert(itr_root.len >= 4);
-
+pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
     const repo_name = uri.next() orelse return list;
-
     for (repo_name) |c| if (!std.ascii.isLower(c) and c != '.') return error.Unrouteable;
 
-    if (uri.next()) |verb| {
-        if (Verbs.from(verb)) |vrb| switch (vrb) {
-            .tree => {},
-            .blob => {},
-            .commit => return commit,
-            .commits => return commits,
-        };
+    if (uri.peek()) |_| {
+        return Endpoint.Router.router(uri, &endpoints);
     } else {}
 
     var cwd = std.fs.cwd();
@@ -78,13 +59,12 @@ fn htmlCommit(a: Allocator, c: git.Commit) !HTML.E {
     return HTML.commit(data, null);
 }
 
-fn commits(r: *Response, uri: []const u8) Error!void {
+fn commits(r: *Response, uri: *UriIter) Error!void {
     var cwd = std.fs.cwd();
-    var itr = std.mem.split(u8, uri, "/");
-    _ = itr.next();
-    _ = itr.next();
-    var name = itr.next() orelse return error.Unrouteable;
-    _ = itr.next();
+    uri.reset();
+    _ = uri.next();
+    var name = uri.next() orelse return error.Unrouteable;
+
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
@@ -119,7 +99,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn list(r: *Response, _: []const u8) Error!void {
+fn list(r: *Response, _: *UriIter) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
         var flist = std.ArrayList([]u8).init(r.alloc);
@@ -166,9 +146,13 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
     return out;
 }
 
-fn tree(r: *Response, uri: []const u8) Error!void {
+fn tree(r: *Response, uri: *UriIter) Error!void {
+    uri.reset();
+    _ = uri.next() orelse return error.InvalidURI; // repo
+    const repo_name = uri.next() orelse return error.InvalidURI;
+
     var cwd = std.fs.cwd();
-    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{uri[6..]});
+    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{repo_name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadPacks(r.alloc) catch return error.Unknown;
@@ -192,7 +176,11 @@ fn tree(r: *Response, uri: []const u8) Error!void {
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
             .key = "href",
-            .value = try std.fmt.allocPrint(r.alloc, "/repo/tree/{s}", .{obj.name}),
+            .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}/{s}/{s}", .{
+                repo_name,
+                if (obj.isFile()) "blob" else "tree",
+                obj.name,
+            }),
         }};
         dom = dom.open(HTML.anch(null, href));
         if (obj.isFile()) {

@@ -4,6 +4,9 @@ pub const HTML = @import("html.zig");
 pub const DOM = @import("dom.zig");
 pub const Response = @import("response.zig");
 pub const Template = @import("template.zig");
+pub const Router = @import("routes.zig");
+
+pub const UriIter = Router.UriIter;
 
 pub const Error = error{
     Unknown,
@@ -11,9 +14,12 @@ pub const Error = error{
     AndExit,
     OutOfMemory,
     Unrouteable,
+    InvalidURI,
 };
 
-pub const Endpoint = *const fn (*Response, []const u8) Error!void;
+pub const router = Router.router;
+
+pub const Endpoint = *const fn (*Response, *Router.UriIter) Error!void;
 
 pub const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 

@@ -65,7 +65,7 @@ fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
     return try countAll(a, commit);
 }
 
-pub fn commitFlex(r: *Response, _: []const u8) Error!void {
+pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     HTML.init(r.alloc);
     defer HTML.raze();
 

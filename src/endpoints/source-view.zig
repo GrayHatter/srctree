@@ -9,7 +9,7 @@ const Error = Endpoint.Error;
 
 const span = HTML.span;
 
-pub fn code(r: *Response, _: []const u8) Error!void {
+pub fn code(r: *Response, _: *Endpoint.UriIter) Error!void {
     HTML.init(r.alloc);
     defer HTML.raze();
 

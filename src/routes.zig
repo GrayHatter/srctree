@@ -9,12 +9,12 @@ const HTML = @import("html.zig");
 
 const Endpoint = endpoint.Endpoint;
 const Error = endpoint.Error;
-const SplitIter = std.mem.SplitIterator(u8, .sequence);
+pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 
 const div = HTML.div;
 const span = HTML.span;
 
-pub const Router = *const fn (*SplitIter) Error!Endpoint;
+pub const Router = *const fn (*UriIter) Error!Endpoint;
 
 pub const MatchRouter = struct {
     name: []const u8,
@@ -25,16 +25,15 @@ pub const MatchRouter = struct {
 };
 
 const endpoints = [_]MatchRouter{
-    .{ .name = "/", .match = .{ .call = default } },
-    .{ .name = "/auth", .match = .{ .call = auth } },
-    .{ .name = "/bye", .match = .{ .call = bye } },
-    .{ .name = "/code", .match = .{ .call = endpoint.code } },
-    .{ .name = "/commits", .match = .{ .call = respond } },
-    .{ .name = "/hi", .match = .{ .call = respond } },
-    .{ .name = "/repo/", .match = .{ .route = endpoint.repo } },
-    .{ .name = "/repos", .match = .{ .route = endpoint.repo } },
-    .{ .name = "/tree", .match = .{ .call = respond } },
-    .{ .name = "/user", .match = .{ .call = endpoint.commitFlex } },
+    .{ .name = "auth", .match = .{ .call = auth } },
+    .{ .name = "bye", .match = .{ .call = bye } },
+    .{ .name = "code", .match = .{ .call = endpoint.code } },
+    .{ .name = "commits", .match = .{ .call = respond } },
+    .{ .name = "hi", .match = .{ .call = respond } },
+    .{ .name = "repo", .match = .{ .route = endpoint.repo } },
+    .{ .name = "repos", .match = .{ .route = endpoint.repo } },
+    .{ .name = "tree", .match = .{ .call = respond } },
+    .{ .name = "user", .match = .{ .call = endpoint.commitFlex } },
 };
 
 fn sendMsg(r: *Response, msg: []const u8) !void {
@@ -44,7 +43,7 @@ fn sendMsg(r: *Response, msg: []const u8) !void {
     try r.finish();
 }
 
-fn bye(r: *Response, _: []const u8) Error!void {
+fn bye(r: *Response, _: *UriIter) Error!void {
     const MSG = "bye!\n";
     sendMsg(r, MSG) catch |e| {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
@@ -52,7 +51,7 @@ fn bye(r: *Response, _: []const u8) Error!void {
     return Error.AndExit;
 }
 
-fn auth(r: *Response, _: []const u8) Error!void {
+fn auth(r: *Response, _: *UriIter) Error!void {
     std.debug.print("auth is {}\n", .{r.request.auth});
     if (r.request.auth.valid()) {
         r.status = .ok;
@@ -69,7 +68,7 @@ fn auth(r: *Response, _: []const u8) Error!void {
     };
 }
 
-fn notfound(r: *Response, _: []const u8) Error!void {
+fn notfound(r: *Response, _: *UriIter) Error!void {
     r.status = .not_found;
     const MSG = Template.find("index.html").blob;
     sendMsg(r, MSG) catch |e| {
@@ -78,7 +77,7 @@ fn notfound(r: *Response, _: []const u8) Error!void {
     };
 }
 
-fn respond(r: *Response, _: []const u8) Error!void {
+fn respond(r: *Response, _: *UriIter) Error!void {
     r.headersAdd("connection", "keep-alive") catch return Error.ReqResInvalid;
     r.headersAdd("content-type", "text/plain") catch return Error.ReqResInvalid;
     const MSG = "Hi, mom!\n";
@@ -88,7 +87,7 @@ fn respond(r: *Response, _: []const u8) Error!void {
     };
 }
 
-fn default(r: *Response, _: []const u8) Error!void {
+fn default(r: *Response, _: *UriIter) Error!void {
     const MSG = Template.find("index.html").blob;
     sendMsg(r, MSG) catch |e| {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
@@ -100,24 +99,28 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-pub fn router(uri: []const u8) Endpoint {
-    inline for (endpoints) |ep| {
-        switch (ep.match) {
-            .call => |call| {
-                if (eql(uri, ep.name)) return call;
-            },
-            .route => |route| {
-                const cut = @min(uri.len, ep.name.len);
-                if (eql(uri[0..cut], ep.name)) {
-                    std.debug.assert(uri[0] == '/');
-                    var itr = std.mem.split(u8, uri[1..], "/");
-                    return route(&itr) catch |err| switch (err) {
+pub fn router(uri: *UriIter, comptime routes: []const MatchRouter) Endpoint {
+    const search = uri.next() orelse return notfound;
+    inline for (routes) |ep| {
+        if (eql(search, ep.name)) {
+            switch (ep.match) {
+                .call => |call| return call,
+                .route => |route| {
+                    return route(uri) catch |err| switch (err) {
                         error.Unrouteable => return notfound,
                         else => unreachable,
                     };
-                }
-            },
+                },
+            }
         }
     }
     return notfound;
+}
+
+pub fn baseRouter(r: *Response, uri: []const u8) Error!void {
+    std.debug.assert(uri[0] == '/');
+    var itr = std.mem.split(u8, uri[1..], "/");
+    if (uri.len <= 1) return default(r, &itr);
+    const route: Endpoint = router(&itr, &endpoints);
+    return route(r, &itr);
 }

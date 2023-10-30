@@ -116,8 +116,17 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         var alloc = arena.allocator();
         var response = Response.init(alloc, acpt.stream, &request);
 
-        var endpoint = Router.router(response.request.uri);
-        try endpoint(&response, response.request.uri);
+        Router.baseRouter(&response, response.request.uri) catch |err| {
+            switch (err) {
+                error.Unknown => return err,
+                error.OutOfMemory,
+                error.ReqResInvalid,
+                error.AndExit,
+                error.Unrouteable,
+                error.InvalidURI,
+                => {},
+            }
+        };
         if (response.phase != .closed) try response.finish();
         arena.deinit();
         acpt.stream.close();
