@@ -195,6 +195,7 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
 
     var resolve = repo.blob(r.alloc, &blb.hash) catch return error.Unknown;
     var reader = resolve.reader();
+
     var d2 = reader.readAllAlloc(r.alloc, 0xffff) catch unreachable;
     const count = std.mem.count(u8, d2, "\n");
     dom = dom.open(HTML.element("lines", null, null));
@@ -211,10 +212,7 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
         dom.push(HTML.text("\n"));
     }
     dom = dom.close();
-
-    //std.debug.print("res {s}\n", .{d2});
     var data = dom.done();
-
     const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(data)});
     tmpl.addVar("files", filestr) catch return error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;

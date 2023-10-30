@@ -113,6 +113,13 @@ const Object = struct {
         return .{ .context = self };
     }
 
+    pub fn reset(self: *Object) void {
+        switch (self.ctx) {
+            .buf => |*b| b.pos = 0,
+            else => {},
+        }
+    }
+
     pub fn raze(self: Object, a: Allocator) void {
         switch (self.ctx) {
             .buf => |b| a.free(b.buffer),
@@ -534,7 +541,9 @@ pub const Repo = struct {
 
         if (std.mem.indexOf(u8, blobb, "\x00")) |i| {
             return Object.init(blobb[i + 1 ..]);
-        } else return obj;
+        }
+        obj.reset();
+        return obj;
     }
 
     pub fn raze(self: *Repo, a: Allocator) void {
