@@ -146,6 +146,17 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
     return out;
 }
 
+fn mkTree(a: Allocator, repo: git.Repo, uri: *UriIter, pfiles: git.Tree) !git.Tree {
+    var files: git.Tree = pfiles;
+    if (uri.next()) |udir| for (files.objects) |obj| {
+        if (std.mem.eql(u8, udir, obj.name)) {
+            files = try git.Tree.fromRepo(a, repo, &obj.hash);
+            return try mkTree(a, repo, uri, files);
+        }
+    };
+    return files;
+}
+
 fn tree(r: *Response, uri: *UriIter) Error!void {
     uri.reset();
     _ = uri.next() orelse return error.InvalidURI; // repo
@@ -156,6 +167,16 @@ fn tree(r: *Response, uri: *UriIter) Error!void {
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadPacks(r.alloc) catch return error.Unknown;
+
+    const cmt = repo.commit(r.alloc) catch return error.Unknown;
+    var files: git.Tree = cmt.mkTree(r.alloc) catch return error.Unknown;
+    var file_uri_name: ?[]const u8 = null;
+    if (uri.next()) |blob| {
+        if (std.mem.eql(u8, blob, "blob")) {} else if (std.mem.eql(u8, blob, "tree")) {
+            file_uri_name = uri.rest();
+            files = mkTree(r.alloc, repo, uri, files) catch return error.Unknown;
+        } else return error.InvalidURI;
+    } else files = cmt.mkTree(r.alloc) catch return error.Unknown;
 
     var tmpl = Template.find("repo.html");
     tmpl.init(r.alloc);
@@ -170,16 +191,16 @@ fn tree(r: *Response, uri: *UriIter) Error!void {
     var str_refs = try std.mem.join(r.alloc, "\n", a_refs);
     tmpl.addVar("branches", str_refs) catch return error.Unknown;
 
-    const cmt = repo.commit(r.alloc) catch return error.Unknown;
-    var files = cmt.mkTree(r.alloc) catch return error.Unknown;
     var dom = DOM.new(r.alloc);
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
             .key = "href",
-            .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}/{s}/{s}", .{
+            .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
                 repo_name,
                 if (obj.isFile()) "blob" else "tree",
+                file_uri_name orelse "",
                 obj.name,
+                if (obj.isFile()) "" else "/",
             }),
         }};
         dom = dom.open(HTML.anch(null, href));

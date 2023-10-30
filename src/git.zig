@@ -153,7 +153,7 @@ pub const Repo = struct {
 
     const empty_sha = [_]u8{0} ** 20;
 
-    fn loadFileObj(self: *Repo, in_sha: SHA) !std.fs.File {
+    fn loadFileObj(self: Repo, in_sha: SHA) !std.fs.File {
         var sha: [40]u8 = undefined;
         if (in_sha.len == 20) {
             _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
@@ -284,7 +284,7 @@ pub const Repo = struct {
     }
 
     /// TODO binary search lol
-    fn findObj(self: *Repo, a: Allocator, in_sha: SHA) !Object {
+    fn findObj(self: Repo, a: Allocator, in_sha: SHA) !Object {
         var shabuf: [20]u8 = undefined;
         var sha: []const u8 = &shabuf;
         if (in_sha.len == 40) {
@@ -690,7 +690,7 @@ pub const Commit = struct {
 
     pub fn mkTree(self: Commit, a: Allocator) !Tree {
         if (self.repo) |repo| {
-            return try Tree.fromRepo(a, repo, self.tree);
+            return try Tree.fromRepo(a, repo.*, self.tree);
         } else return error.DetachedCommit;
     }
 
@@ -746,7 +746,7 @@ pub const Tree = struct {
     blob: []const u8,
     objects: []Blob,
 
-    pub fn fromRepo(a: Allocator, r: *Repo, sha: SHA) !Tree {
+    pub fn fromRepo(a: Allocator, r: Repo, sha: SHA) !Tree {
         var blob = try r.findObj(a, sha);
         defer blob.raze(a);
         var b = try blob.reader().readAllAlloc(a, 0xffff);
@@ -770,9 +770,7 @@ pub const Tree = struct {
                 // This is probably wrong for large trees, but #YOLO
                 std.debug.assert(tidx == 0);
                 std.debug.assert(std.mem.eql(u8, "tree ", blob[0..5]));
-                std.debug.assert(index == 8);
-
-                i = 9;
+                i = index + 1;
             }
         }
         var obj_i: usize = 0;
