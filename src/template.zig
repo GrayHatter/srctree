@@ -176,9 +176,18 @@ pub fn find(comptime name: []const u8) Template {
 
 test "build.zig included templates" {
     //try std.testing.expectEqual(3, bldtmpls.names.len);
-    try std.testing.expectEqualStrings("templates/4XX.html", bldtmpls.names[0]);
-    try std.testing.expectEqualStrings("templates/5XX.html", bldtmpls.names[1]);
-    try std.testing.expectEqualStrings("templates/index.html", bldtmpls.names[2]);
+    const names = [_][]const u8{
+        "templates/4XX.html",
+        "templates/5XX.html",
+        "templates/index.html",
+        "templates/code.html",
+    };
+
+    names: for (names) |name| {
+        for (bldtmpls.names) |bld| {
+            if (std.mem.eql(u8, name, bld)) continue :names;
+        } else return error.TemplateMissing;
+    }
 }
 
 test "load templates" {
