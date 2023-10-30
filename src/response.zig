@@ -27,21 +27,28 @@ const Error = error{
     UnknownStatus,
 };
 
+pub const Writer = std.io.Writer(*Response, Error, write);
+
 alloc: Allocator,
 request: *const Request,
 headers: Headers,
 phase: Phase = .created,
-writer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
+upstream_writer: union(enum) {
+    buffer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
+    zwsgi: std.net.Stream.Writer,
+    http: std.http.Server.Response.Writer,
+},
 status: std.http.Status = .internal_server_error,
 
-pub fn init(a: Allocator, stream: std.net.Stream, req: *const Request) Response {
+pub fn init(a: Allocator, uwriter: anytype, req: *const Request) Response {
     var res = Response{
         .alloc = a,
         .request = req,
         .headers = Headers.init(a),
-        .writer = .{ .unbuffered_writer = stream.writer() },
+        .upstream_writer = uwriter,
     };
 
+    //BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
     res.headersInit() catch @panic("unable to create Response obj");
     return res;
 }
@@ -64,22 +71,22 @@ pub fn start(res: *Response) !void {
 
 fn sendHeaders(res: *Response) !void {
     res.phase = .headers;
-    switch (res.status) {
+    _ = switch (res.status) {
         .ok => try res.write("HTTP/1.1 200 Found\n"),
         .found => try res.write("HTTP/1.1 302 Found\n"),
         .forbidden => try res.write("HTTP/1.1 403 Forbidden\n"),
         .not_found => try res.write("HTTP/1.1 404 Not Found\n"),
         else => return Error.UnknownStatus,
-    }
+    };
     var itr = res.headers.index.iterator();
     while (itr.next()) |header| {
         var buf: [512]u8 = undefined;
 
         // TODO descend
         const b = try std.fmt.bufPrint(&buf, "{s}: {s}\n", .{ header.key_ptr.*, header.value_ptr.str });
-        try res.write(b);
+        _ = try res.write(b);
     }
-    try res.write("\n");
+    _ = try res.write("\n");
 }
 
 pub fn send(res: *Response, data: []const u8) !void {
@@ -92,14 +99,30 @@ pub fn send(res: *Response, data: []const u8) !void {
     try res.write(data);
 }
 
+pub fn writer(res: *Response) Writer {
+    return .{ .context = res };
+}
+
 /// Raw writer, use with caution! To use phase checking, use send();
 pub fn write(res: *Response, data: []const u8) !void {
-    _ = try res.writer.write(data);
+    _ = switch (res.upstream_writer) {
+        .zwsgi => |*w| try w.write(data),
+        .http => |*w| try w.write(data),
+        .buffer => |*w| try w.write(data),
+    };
+    return;
+}
+
+fn flush(res: *Response) !void {
+    switch (res.upstream_writer) {
+        .buffer => |*w| try w.flush(),
+        else => {},
+    }
 }
 
 pub fn finish(res: *Response) !void {
     res.phase = .closed;
-    return res.writer.flush() catch |e| {
+    return res.flush() catch |e| {
         std.debug.print("Error on flush :< {}\n", .{e});
     };
 }

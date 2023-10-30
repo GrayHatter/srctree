@@ -7,6 +7,7 @@ pub const Request = @This();
 
 const RawRequests = union {
     zwsgi: zWSGIRequest,
+    http: std.http.Server.Response,
 };
 
 const Pair = struct {
@@ -39,6 +40,23 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
                 }
             }
             req.auth = Auth.init(&req.headers);
+            return req;
+        },
+        std.http.Server.Response => {
+            var req = Request{
+                .raw_request = .{ .http = raw_req },
+                .headers = HeaderList.init(a),
+                .uri = undefined,
+                .auth = undefined,
+            };
+            req.uri = raw_req.request.target;
+            //for (raw_req.request.headers) |v| {
+            //    try addHeader(&req.headers, v.key, v.val);
+            //    if (std.mem.eql(u8, v.key, "REQUEST_URI")) {
+            //        req.uri = v.val;
+            //    }
+            //}
+            //req.auth = Auth.init(&req.headers);
             return req;
         },
         else => @compileError("rawish isn't a support request type"),
