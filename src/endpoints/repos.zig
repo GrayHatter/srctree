@@ -158,6 +158,13 @@ fn list(r: *Response, _: []const u8) Error!void {
     }
 }
 
+fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
+    var out = try a.alloc(u8, name.len + 1);
+    @memcpy(out[0..name.len], name);
+    out[name.len] = '/';
+    return out;
+}
+
 fn tree(r: *Response, uri: []const u8) Error!void {
     var cwd = std.fs.cwd();
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{uri[6..]});
@@ -178,10 +185,15 @@ fn tree(r: *Response, uri: []const u8) Error!void {
     var str_refs = try std.mem.join(r.alloc, "\n", a_refs);
     tmpl.addVar("branches", str_refs) catch return error.Unknown;
 
-    var files = repo.tree(r.alloc) catch return error.Unknown;
+    const cmt = repo.commit(r.alloc) catch return error.Unknown;
+    var files = cmt.mkTree(r.alloc) catch return error.Unknown;
     var a_files = try r.alloc.alloc(HTML.E, files.objects.len);
     for (a_files, files.objects) |*dst, src| {
-        dst.* = HTML.element("file", src.name, null);
+        if (src.isFile()) {
+            dst.* = HTML.element("file", src.name, null);
+        } else {
+            dst.* = HTML.element("tree", try dupeDir(r.alloc, src.name), null);
+        }
     }
 
     const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(a_files)});

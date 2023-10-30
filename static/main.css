@@ -90,6 +90,14 @@ repos > li::before {
 	color: red;
 }
 
+tree {
+	display: block;
+	text-align: left;
+	border: 2px solid gray;
+	width: 50%;
+	padding: 4px;
+}
+
 file {
 	display: block;
 	text-align: left;

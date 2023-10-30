@@ -516,13 +516,6 @@ pub const Repo = struct {
         };
     }
 
-    pub fn tree(self: *Repo, a: Allocator) !Tree {
-        const sha = try self.HEAD(a);
-        var obj = try self.findObj(a, sha.branch.sha);
-        const cmt = try Commit.fromReader(a, sha.branch.sha, obj.reader());
-        return try Tree.fromRepo(a, self, cmt.tree);
-    }
-
     pub fn commit(self: *Repo, a: Allocator) !Commit {
         var head = try self.HEAD(a);
         var resolv = try self.ref(head.branch.name["refs/heads/".len..]);
@@ -695,6 +688,16 @@ pub const Commit = struct {
         return error.NoParent;
     }
 
+    pub fn mkTree(self: Commit, a: Allocator) !Tree {
+        if (self.repo) |repo| {
+            return try Tree.fromRepo(a, repo, self.tree);
+        } else return error.DetachedCommit;
+    }
+
+    /// Warning; this function is probably unsafe
+    pub fn raze(self: Commit, a: Allocator) void {
+        a.free(self.blob);
+    }
     pub fn format(self: Commit, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         try out.print(
             \\Commit{{
@@ -720,6 +723,23 @@ pub const Blob = struct {
     mode: [6]u8,
     name: []const u8,
     hash: [40]u8,
+
+    pub fn isFile(self: Blob) bool {
+        return self.mode[0] != 48;
+    }
+
+    pub fn format(self: Blob, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        if (self.isFile())
+            try out.print(
+                "Blob{{ File {s} @ {s} }}",
+                .{ self.name, self.hash },
+            )
+        else
+            try out.print(
+                "Blob{{ Tree {s} @ {s} }}",
+                .{ self.name, self.hash },
+            );
+    }
 };
 
 pub const Tree = struct {
@@ -728,6 +748,7 @@ pub const Tree = struct {
 
     pub fn fromRepo(a: Allocator, r: *Repo, sha: SHA) !Tree {
         var blob = try r.findObj(a, sha);
+        defer blob.raze(a);
         var b = try blob.reader().readAllAlloc(a, 0xffff);
         return try Tree.make(a, b);
     }
@@ -774,6 +795,25 @@ pub const Tree = struct {
             self.objects.len = obj_i;
         }
         return self;
+    }
+
+    pub fn raze(self: Tree, a: Allocator) void {
+        a.free(self.objects);
+        a.free(self.blob);
+    }
+
+    pub fn format(self: Tree, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        var f: usize = 0;
+        var d: usize = 0;
+        for (self.objects) |obj| {
+            if (obj.mode[0] == 48)
+                d += 1
+            else
+                f += 1;
+        }
+        try out.print(
+            \\Tree{{ {} Objects, {} files {} directories }}
+        , .{ self.objects.len, f, d });
     }
 };
 
@@ -931,4 +971,20 @@ test "hopefully a delta" {
     defer a.free(tree.blob);
     defer a.free(tree.objects);
     if (false) std.debug.print("{}\n", .{tree});
+}
+
+test "commit to tree" {
+    var a = std.testing.allocator;
+    var cwd = std.fs.cwd();
+    var repo = try Repo.init(cwd);
+    defer repo.raze(a);
+
+    //try repo.loadPacks(a);
+
+    const cmt = try repo.commit(a);
+    defer cmt.raze(a);
+    const tree = try cmt.mkTree(a);
+    defer tree.raze(a);
+    std.debug.print("tree {}\n", .{tree});
+    for (tree.objects) |obj| std.debug.print("    {}\n", .{obj});
 }
