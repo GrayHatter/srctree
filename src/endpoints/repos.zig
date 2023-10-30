@@ -6,6 +6,7 @@ const SplitIter = std.mem.SplitIterator(u8, .sequence);
 const Endpoint = @import("../endpoint.zig");
 const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
+const DOM = Endpoint.DOM;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 
@@ -187,18 +188,24 @@ fn tree(r: *Response, uri: []const u8) Error!void {
 
     const cmt = repo.commit(r.alloc) catch return error.Unknown;
     var files = cmt.mkTree(r.alloc) catch return error.Unknown;
-    var a_files = try r.alloc.alloc(HTML.E, files.objects.len);
-    for (a_files, files.objects) |*dst, src| {
-        if (src.isFile()) {
-            dst.* = HTML.element("file", src.name, null);
+    var dom = DOM.new(r.alloc);
+    for (files.objects) |obj| {
+        var href = &[_]HTML.Attribute{.{
+            .key = "href",
+            .value = try std.fmt.allocPrint(r.alloc, "/repo/tree/{s}", .{obj.name}),
+        }};
+        dom = dom.open(HTML.anch(null, href));
+        if (obj.isFile()) {
+            dom.push(HTML.element("file", obj.name, null));
         } else {
-            dst.* = HTML.element("tree", try dupeDir(r.alloc, src.name), null);
+            dom.push(HTML.element("tree", try dupeDir(r.alloc, obj.name), null));
         }
+        //HTML.element("file", link, null);
+        dom = dom.close();
     }
-
-    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(a_files)});
+    var data = dom.done();
+    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(data)});
     tmpl.addVar("files", filestr) catch return error.Unknown;
-
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
     r.status = .ok;

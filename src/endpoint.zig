@@ -1,6 +1,7 @@
 const std = @import("std");
 
 pub const HTML = @import("html.zig");
+pub const DOM = @import("dom.zig");
 pub const Response = @import("response.zig");
 pub const Template = @import("template.zig");
 
