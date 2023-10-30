@@ -18,6 +18,13 @@ var hits: HeatMapArray = .{.{.{0} ** 32} ** 13} ** 2;
 
 var owner_email: ?[]const u8 = null;
 
+fn reset_hits() void {
+    for (&hits) |*y|
+        for (y) |*m| {
+            for (m) |*d| d.* = 0;
+        };
+}
+
 fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
     var commit = root_cmt;
     while (true) {
@@ -25,8 +32,10 @@ fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
         const d = commit.author.time;
         if (d.years < 2022) return &hits;
         if (owner_email) |email| {
-            if (std.mem.eql(u8, email, commit.author.email))
+            if (std.mem.eql(u8, email, commit.author.email)) {
                 hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
+                //std.log.info("BAH! {}", .{commit});
+            }
         } else hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
         for (commit.parent[1..], 1..) |par, pidx| {
             if (par) |_| {
@@ -60,17 +69,6 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
     HTML.init(r.alloc);
     defer HTML.raze();
 
-    if (std.fs.cwd().openFile("./config.ini", .{})) |conf_file| {
-        if (Ini.getConfig(r.alloc, conf_file)) |ini| {
-            if (ini.get("owner")) |ns| {
-                if (ns.get("email")) |email| {
-                    std.log.info("{s}\n", .{email});
-                    owner_email = email;
-                }
-            }
-        } else |_| {}
-    } else |_| {}
-
     const day = [1]HTML.Attribute{HTML.Attribute.class("day")};
     const monthAtt = [1]HTML.Attribute{HTML.Attribute.class("month")};
 
@@ -83,6 +81,19 @@ pub fn commitFlex(r: *Response, _: []const u8) Error!void {
 
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
+        reset_hits();
+        if (std.fs.cwd().openFile("./config.ini", .{})) |conf_file| {
+            if (Ini.getConfig(r.alloc, conf_file)) |ini| {
+                if (ini.get("owner")) |ns| {
+                    if (ns.get("email")) |email| {
+                        std.log.info("{s}\n", .{email});
+                        owner_email = email;
+                    }
+                }
+            } else |_| {}
+        } else |_| {}
+        defer owner_email = null;
+
         var itr = idir.iterate();
         while (itr.next() catch return Error.Unknown) |file| {
             var buf: [1024]u8 = undefined;
