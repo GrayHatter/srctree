@@ -114,7 +114,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
 
         var arena = std.heap.ArenaAllocator.init(a);
         var alloc = arena.allocator();
-        var response = Response.init(alloc, acpt.stream, &request);
+        var response = Response.init(alloc, .{ .zwsgi = acpt.stream.writer() }, &request);
 
         Router.baseRouter(&response, response.request.uri) catch |err| {
             switch (err) {
