@@ -68,6 +68,7 @@ fn commits(r: *Response, uri: *UriIter) Error!void {
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
+    repo.loadPacks(r.alloc) catch return error.Unknown;
 
     var lcommits = try r.alloc.alloc(HTML.E, 20);
     var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
