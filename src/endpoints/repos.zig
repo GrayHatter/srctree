@@ -112,23 +112,25 @@ fn list(r: *Response, _: *UriIter) Error!void {
         }
         std.sort.heap([]u8, flist.items, {}, sorter);
 
-        var repos = try r.alloc.alloc(HTML.E, flist.items.len);
-        for (repos, flist.items) |*repoln, name| {
-            var attr = try r.alloc.dupe(
-                HTML.Attribute,
-                &[_]HTML.Attribute{.{
-                    .key = "href",
-                    .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}", .{name}),
-                }},
-            );
-            var anc = try r.alloc.dupe(HTML.E, &[_]HTML.E{HTML.anch(name, attr)});
-            repoln.* = HTML.li(anc, null);
-        }
+        var dom = DOM.new(r.alloc);
+        dom = dom.open(HTML.element("repos", null, null));
 
+        for (flist.items) |name| {
+            dom = dom.open(HTML.element("repo", null, null));
+            dom = dom.open(HTML.element("name", name, null));
+            dom.push(HTML.anch(name, &[_]HTML.Attribute{
+                .{ .key = "href", .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}", .{name}) },
+            }));
+            dom = dom.close();
+            dom.push(HTML.element("desc", null, null));
+            dom.push(HTML.element("last", null, null));
+            dom = dom.close();
+        }
+        dom = dom.close();
+        var data = dom.done();
         var tmpl = Template.find("repos.html");
         tmpl.init(r.alloc);
-        const repo = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.element("repos", repos, null)});
-        tmpl.addVar("repos", repo) catch return Error.Unknown;
+        _ = tmpl.addElements(r.alloc, "repos", data) catch return Error.Unknown;
 
         var page = tmpl.buildFor(r.alloc, r) catch unreachable;
         r.start() catch return Error.Unknown;
@@ -216,7 +218,7 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
     }
     dom = dom.close();
     var data = dom.done();
-    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(data)});
+    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.divAttr(data, &[_]HTML.Attribute{HTML.Attribute.class("code-block")})});
     tmpl.addVar("files", filestr) catch return error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 

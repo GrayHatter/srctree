@@ -3,7 +3,7 @@ const bldtmpls = @import("templates");
 
 const Allocator = std.mem.Allocator;
 
-const Element = @import("html.zig");
+const HTML = @import("html.zig");
 const Response = @import("response.zig");
 
 const MAX_BYTES = 2 <<| 15;
@@ -44,6 +44,28 @@ pub const Template = struct {
         } else {
             return error.UnableToAlloc;
         }
+    }
+
+    // caller is responsable to free the returned slice *AFTER* the final use
+    pub fn addElements(self: *Template, a: Allocator, name: []const u8, els: []const HTML.Element) ![]const u8 {
+        try self.expandVars();
+        var list = try a.alloc([]u8, els.len);
+        defer a.free(list);
+        for (list, els) |*l, e| {
+            l.* = try std.fmt.allocPrint(a, "{}", .{e});
+        }
+        defer {
+            for (list) |l| a.free(l);
+        }
+        var value = try std.mem.join(a, "", list);
+
+        if (self.vars) |vars| {
+            vars[vars.len - 1] = .{
+                .name = name,
+                .blob = value,
+            };
+        }
+        return value;
     }
 
     pub fn addVar(self: *Template, name: []const u8, value: []const u8) !void {
