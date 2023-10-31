@@ -118,7 +118,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
         for (flist.items) |name| {
             dom = dom.open(HTML.element("repo", null, null));
             dom = dom.open(HTML.element("name", name, null));
-            dom.push(HTML.anch(name, &[_]HTML.Attribute{
+            dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
                 .{ .key = "href", .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}", .{name}) },
             }));
             dom = dom.close();

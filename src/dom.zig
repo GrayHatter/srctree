@@ -37,6 +37,15 @@ pub fn push(self: *DOM, elem: HTML.E) void {
     self.elems.append(elem) catch unreachable;
 }
 
+pub fn dupe(self: *DOM, elem: HTML.E) void {
+    self.elems.append(HTML.E{
+        .name = elem.name,
+        .text = elem.text,
+        .children = if (elem.children) |c| self.alloc.dupe(HTML.E, c) catch null else null,
+        .attrs = if (elem.attrs) |a| self.alloc.dupe(HTML.Attribute, a) catch null else null,
+    }) catch unreachable;
+}
+
 pub fn close(self: *DOM) *DOM {
     if (self.parent) |p| {
         self.next.?.children = self.elems.toOwnedSlice() catch unreachable;
