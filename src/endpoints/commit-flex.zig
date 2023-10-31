@@ -2,13 +2,15 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Endpoint = @import("../endpoint.zig");
-const Response = Endpoint.Response;
-const HTML = Endpoint.HTML;
-const Template = Endpoint.Template;
 const DateTime = @import("../datetime.zig");
+const Endpoint = @import("../endpoint.zig");
 const Git = @import("../git.zig");
 const Ini = @import("../ini.zig");
+
+const DOM = Endpoint.DOM;
+const HTML = Endpoint.HTML;
+const Response = Endpoint.Response;
+const Template = Endpoint.Template;
 
 const Error = Endpoint.Error;
 

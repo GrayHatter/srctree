@@ -257,6 +257,15 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
     _ = uri.next();
     const file_uri_name = uri.rest();
 
+    var lcommits = try r.alloc.alloc(HTML.E, 1);
+    var repoo = repo;
+    var current: git.Commit = repoo.commit(r.alloc) catch return error.Unknown;
+    lcommits[0] = try htmlCommit(r.alloc, current);
+    const commitstr = try std.fmt.allocPrint(r.alloc, "{}", .{
+        HTML.div(lcommits),
+    });
+    tmpl.addVar("head-commit", commitstr) catch return Error.Unknown;
+
     var dom = DOM.new(r.alloc);
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
