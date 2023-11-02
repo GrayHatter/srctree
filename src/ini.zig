@@ -3,8 +3,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Setting = struct {
-    name: []u8,
-    val: []u8,
+    name: []const u8,
+    val: []const u8,
 };
 
 pub const Namespace = struct {
@@ -24,10 +24,10 @@ pub const Namespace = struct {
 pub const Config = struct {
     ns: []Namespace,
 
-    pub fn get(self: Config, name: []const u8) ?*const Namespace {
+    pub fn get(self: Config, name: []const u8) ?Namespace {
         for (self.ns) |ns| {
             if (std.mem.eql(u8, name, ns.name)) {
-                return &ns;
+                return ns;
             }
         }
         return null;
@@ -81,7 +81,20 @@ pub fn getConfig(a: Allocator, file: std.fs.File) !Config {
         }
     }
 
-    return .{
+    return Config{
         .ns = try list.toOwnedSlice(),
     };
+}
+
+var _default: ?Config = null;
+
+pub fn getDefault(a: Allocator) !Config {
+    if (_default) |d| return d;
+
+    var cwd = std.fs.cwd();
+    var file = try cwd.openFile("./config.ini", .{});
+    defer file.close();
+
+    _default = try getConfig(a, file);
+    return _default.?;
 }

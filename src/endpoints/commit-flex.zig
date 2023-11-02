@@ -74,7 +74,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     const day = [1]HTML.Attribute{HTML.Attribute.class("day")};
     const monthAtt = [1]HTML.Attribute{HTML.Attribute.class("month")};
 
-    const today = DateTime.today();
+    var today = DateTime.today();
     var date = DateTime.today();
     date = DateTime.fromEpoch(date.timestamp + 60 * 60 * 24 - 31_536_000) catch unreachable;
     while (date.weekday != 0) {
@@ -84,15 +84,17 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
         reset_hits();
-        if (std.fs.cwd().openFile("./config.ini", .{})) |conf_file| {
-            if (Ini.getConfig(r.alloc, conf_file)) |ini| {
-                if (ini.get("owner")) |ns| {
-                    if (ns.get("email")) |email| {
-                        std.log.info("{s}\n", .{email});
-                        owner_email = email;
+        if (Ini.getDefault(r.alloc)) |ini| {
+            if (ini.get("owner")) |ns| {
+                if (ns.get("email")) |email| {
+                    owner_email = email;
+                }
+                if (ns.get("tz")) |ts| {
+                    if (DateTime.tzToMinutes(ts) catch @as(?i16, 0)) |tzs| {
+                        today = DateTime.fromEpoch(today.timestamp + tzs * 60) catch unreachable;
                     }
                 }
-            } else |_| {}
+            }
         } else |_| {}
         defer owner_email = null;
 

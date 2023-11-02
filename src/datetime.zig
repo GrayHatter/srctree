@@ -133,12 +133,16 @@ pub fn fromEpochStr(str: []const u8) !DateTime {
     return fromEpoch(int);
 }
 
+pub fn tzToMinutes(tzstr: []const u8) !i16 {
+    const tzm = try std.fmt.parseInt(i16, tzstr[tzstr.len - 2 .. tzstr.len], 10);
+    const tzh = try std.fmt.parseInt(i16, tzstr[0 .. tzstr.len - 2], 10);
+    return tzh * 60 + tzm;
+}
+
 /// Accepts a Unix Epoch int as a string of numbers and timezone in -HHMM format
 pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
     var epoch = try std.fmt.parseInt(i64, str, 10);
-    const tzm = try std.fmt.parseInt(i16, tzstr[tzstr.len - 2 .. tzstr.len], 10);
-    const tzh = try std.fmt.parseInt(i16, tzstr[0 .. tzstr.len - 2], 10);
-    const tz = tzh * 60 + tzm;
+    var tz = try tzToMinutes(tzstr);
     return fromEpochTz(epoch, tz);
 }
 

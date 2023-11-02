@@ -89,14 +89,12 @@ pub fn main() !void {
 
     var cwd = std.fs.cwd();
     var ini: ?Ini.Config = null;
-    if (cwd.openFile("./config.ini", .{})) |conf_file| {
-        ini = try Ini.getConfig(a, conf_file);
-        if (ini.?.get("owner")) |ns| {
-            if (ns.get("email")) |email| {
-                std.log.info("{s}\n", .{email});
-            }
+    ini = try Ini.getDefault(a);
+    if (ini.?.get("owner")) |ns| {
+        if (ns.get("email")) |email| {
+            if (false) std.log.info("{s}\n", .{email});
         }
-    } else |_| {}
+    }
 
     switch (runmode) {
         .unix => {
