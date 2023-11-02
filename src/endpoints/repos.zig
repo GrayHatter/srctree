@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const Endpoint = @import("../endpoint.zig");
 const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
+const elm = HTML.element;
 const DOM = Endpoint.DOM;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
@@ -42,21 +43,27 @@ fn commit(r: *Response, uri: []const u8) Error!void {
     return commits(r, uri);
 }
 
-fn htmlCommit(a: Allocator, c: git.Commit) !HTML.E {
-    var foot = try a.alloc(HTML.E, 2);
-    const prnt = c.parent[0] orelse "00000000";
-    foot[0] = HTML.element("author", try a.dupe(u8, c.author.name), null);
-    foot[1] = HTML.span(try std.fmt.allocPrint(a, "parent {s}", .{prnt[0..8]}));
+fn htmlCommit(a: Allocator, c: git.Commit, comptime top: bool) ![]HTML.E {
+    var dom = DOM.new(a);
+    dom = dom.open(HTML.element("commit", null, null));
 
-    var data = try a.alloc(HTML.E, 2);
-    data[0] = HTML.element(
-        "data",
-        try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }),
-        null,
-    );
-    data[1] = HTML.element("foot", foot, null);
+    if (!top) {
+        dom.push(HTML.element("data", try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }), null));
+    }
 
-    return HTML.commit(data, null);
+    dom = dom.open(HTML.element(if (top) "top" else "foot", null, null));
+    {
+        const prnt = c.parent[0] orelse "00000000";
+        dom.push(HTML.element("author", try a.dupe(u8, c.author.name), null));
+        dom.push(HTML.span(try std.fmt.allocPrint(a, "parent {s}", .{prnt[0..8]})));
+    }
+    dom = dom.close();
+
+    if (top) {
+        dom.push(HTML.element("data", try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }), null));
+    }
+    dom = dom.close();
+    return dom.done();
 }
 
 fn commits(r: *Response, uri: *UriIter) Error!void {
@@ -73,7 +80,7 @@ fn commits(r: *Response, uri: *UriIter) Error!void {
     var lcommits = try r.alloc.alloc(HTML.E, 20);
     var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
     for (lcommits, 0..) |*c, i| {
-        c.* = try htmlCommit(r.alloc, current);
+        c.* = (try htmlCommit(r.alloc, current, false))[0];
         current = current.toParent(r.alloc, 0) catch {
             lcommits.len = i;
             break;
@@ -259,16 +266,19 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
     _ = uri.next();
     const file_uri_name = uri.rest();
 
-    var lcommits = try r.alloc.alloc(HTML.E, 1);
+    var dom = DOM.new(r.alloc);
     var repoo = repo;
     var current: git.Commit = repoo.commit(r.alloc) catch return error.Unknown;
-    lcommits[0] = try htmlCommit(r.alloc, current);
-    const commitstr = try std.fmt.allocPrint(r.alloc, "{}", .{
-        HTML.div(lcommits),
-    });
-    tmpl.addVar("head-commit", commitstr) catch return Error.Unknown;
+    dom.pushSlice(try htmlCommit(r.alloc, current, true));
 
-    var dom = DOM.new(r.alloc);
+    var commitblob = dom.done();
+    const commitstr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.divAttr(
+        commitblob,
+        &[_]HTML.Attribute{HTML.Attribute.class("treecommit")},
+    )});
+    tmpl.addVar("commit", commitstr) catch return error.Unknown;
+
+    dom = DOM.new(r.alloc);
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
             .key = "href",

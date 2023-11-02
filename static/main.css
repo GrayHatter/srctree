@@ -115,6 +115,7 @@ repos {
 	text-align: left;
 
 }
+
 repo name {
 	font-family: 'Titillium Web', sans-serif;
 	background: #333;
@@ -178,13 +179,36 @@ file {
 	padding: 4px;
 }
 
-commit > data{
+.treecommit commit {
+	display: block;
+	text-align: left;
+	padding: 0 0 8px;
+	margin-bottom: 20px;
+	background: #333;
+	border-radius: 3px 3px 0 0;
+	border-top: #7a003f solid 2px;
+}
+
+.treecommit commit > top {
+	display: block;
+	background-color: #686868;
+	text-align: left;
+	border-radius: 3px 3px 0 0;
+	padding: 8px;
+}
+
+
+commit > top > span {
+	display: inline-block;
+	float: right;
+}
+
+commit > data {
 	display: block;
 	text-align: left;
 	padding: 8px;
 	background: #333;
-	border-radius: 5px 5px 0 0;
-
+	border-radius: 3px 3px 0 0;
 }
 
 commit > foot{
@@ -193,7 +217,7 @@ commit > foot{
 	border-bottom: #7a003f solid 2px;
 	margin-bottom: 20px;
 	text-align: left;
-	border-radius: 0 0 5px 5px;
+	border-radius: 0 0 3px 3px;
 	padding: 8px;
 }
 
@@ -202,11 +226,13 @@ commit > foot > span {
 	float: right;
 }
 
-.treelist {
+.treelist > div {
 	background: #333;
 	color: #FFFFEB;
 	padding: 10px 0;
 }
+
+
 
 .commit-flex {
 	width: 1050px;
