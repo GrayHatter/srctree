@@ -65,7 +65,7 @@ fn namespace(a: Allocator, name: []const u8, itr: *std.mem.SplitIterator(u8, .se
     };
 }
 
-pub fn getConfig(a: Allocator, file: std.fs.File) !Config {
+pub fn init(a: Allocator, file: std.fs.File) !Config {
     var data = try file.readToEndAlloc(a, 1 <<| 18);
     defer a.free(data);
     var itr = std.mem.split(u8, data, "\n");
@@ -88,13 +88,13 @@ pub fn getConfig(a: Allocator, file: std.fs.File) !Config {
 
 var _default: ?Config = null;
 
-pub fn getDefault(a: Allocator) !Config {
+pub fn default(a: Allocator) !Config {
     if (_default) |d| return d;
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./config.ini", .{});
     defer file.close();
 
-    _default = try getConfig(a, file);
+    _default = try init(a, file);
     return _default.?;
 }

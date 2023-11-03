@@ -89,7 +89,7 @@ pub fn main() !void {
 
     var cwd = std.fs.cwd();
     var ini: ?Ini.Config = null;
-    ini = try Ini.getDefault(a);
+    ini = try Ini.default(a);
     if (ini.?.get("owner")) |ns| {
         if (ns.get("email")) |email| {
             if (false) std.log.info("{s}\n", .{email});

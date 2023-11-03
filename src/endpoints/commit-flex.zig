@@ -84,7 +84,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
         reset_hits();
-        if (Ini.getDefault(r.alloc)) |ini| {
+        if (Ini.default(r.alloc)) |ini| {
             if (ini.get("owner")) |ns| {
                 if (ns.get("email")) |email| {
                     owner_email = email;
