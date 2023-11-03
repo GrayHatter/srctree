@@ -74,7 +74,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     const day = [1]HTML.Attribute{HTML.Attribute.class("day")};
     const monthAtt = [1]HTML.Attribute{HTML.Attribute.class("month")};
 
-    var today = DateTime.today();
+    var nowish = DateTime.now();
     var date = DateTime.today();
     date = DateTime.fromEpoch(date.timestamp + 60 * 60 * 24 - 31_536_000) catch unreachable;
     while (date.weekday != 0) {
@@ -91,7 +91,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
                 }
                 if (ns.get("tz")) |ts| {
                     if (DateTime.tzToMinutes(ts) catch @as(?i16, 0)) |tzs| {
-                        today = DateTime.fromEpoch(today.timestamp + tzs * 60) catch unreachable;
+                        nowish = DateTime.fromEpoch(nowish.timestamp + tzs * 60) catch unreachable;
                     }
                 }
             }
@@ -127,7 +127,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
             var rows = try r.alloc.alloc(HTML.Attribute, 2);
             const class = if (hits[date.years - 2022][date.months - 1][date.days - 1] > 0)
                 "day day-commits"
-            else if (date.timestamp > today.timestamp)
+            else if (date.timestamp >= nowish.timestamp)
                 "day-hide"
             else
                 "day";
