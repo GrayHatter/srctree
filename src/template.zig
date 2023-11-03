@@ -108,6 +108,17 @@ pub const Template = struct {
                         continue;
                     }
                     const var_name = self.blob[start + 5 .. start + i];
+                    if (var_name[0] == '_') {
+                        start += i + 4;
+                        for (0..builtin.len) |subtemp_i| {
+                            if (std.mem.eql(u8, builtin[subtemp_i].name, var_name)) {
+                                var subtmp = builtin[subtemp_i];
+                                subtmp.vars = self.vars;
+                                try format(subtmp, "", .{}, out);
+                            }
+                        }
+                        continue;
+                    }
                     for (vars) |v| {
                         if (std.mem.eql(u8, var_name, v.name)) {
                             try out.writeAll(v.blob);
@@ -188,7 +199,7 @@ pub fn raze() void {
 }
 
 pub fn find(comptime name: []const u8) Template {
-    for (builtin) |bi| {
+    inline for (builtin) |bi| {
         if (std.mem.eql(u8, bi.name, name)) {
             return bi;
         }
