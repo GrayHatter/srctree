@@ -49,6 +49,8 @@ pub fn now() DateTime {
 
 pub fn today() DateTime {
     var self = now();
+    const offset = @as(i64, self.hours) * 60 * 60 + @as(i64, self.minutes) * 60 + self.seconds;
+    self.timestamp -|= offset;
     self.hours = 0;
     self.minutes = 0;
     self.seconds = 0;
