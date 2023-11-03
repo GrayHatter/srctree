@@ -138,13 +138,16 @@ repo name a {
 repo desc {
 	display: block;
 	border: 1px gray solid;
-	padding: 20px 0;
 	border-bottom: #7a003f solid 2px;
 	margin-bottom: 20px;
-	height: 50px;
+	min-height: 50px;
 	display: block;
 	border-radius: 0 0 4px 4px;
-	padding: 8px 0;
+	padding: 8px;
+}
+
+repo desc p {
+	margin-top: 0;
 }
 
 repo {

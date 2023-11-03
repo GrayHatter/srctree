@@ -7,6 +7,7 @@ const hexLower = std.fmt.fmtSliceHexLower;
 const DateTime = @import("datetime.zig");
 
 pub const Error = error{
+    ReadError,
     NotAGitRepo,
     RefMissing,
     CommitMissing,
@@ -544,6 +545,14 @@ pub const Repo = struct {
         }
         obj.reset();
         return obj;
+    }
+
+    pub fn description(self: Repo, a: Allocator) ![]u8 {
+        if (self.dir.openFile("description", .{})) |*file| {
+            defer file.close();
+            return try file.readToEndAlloc(a, 0xFFFF);
+        } else |_| {}
+        return error.NoDescription;
     }
 
     pub fn raze(self: *Repo, a: Allocator) void {

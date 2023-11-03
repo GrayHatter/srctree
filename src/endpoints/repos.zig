@@ -12,6 +12,7 @@ const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 
 const git = @import("../git.zig");
+const Ini = @import("../ini.zig");
 
 const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "blob", .match = .{ .call = treeBlob } },
@@ -107,6 +108,21 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
+fn parseGitRemoteUrl(a: Allocator, url: []const u8) ![]u8 {
+    if (std.mem.startsWith(u8, url, "https://")) return try a.dupe(u8, url);
+
+    if (std.mem.startsWith(u8, url, "git@")) {
+        const end = if (std.mem.endsWith(u8, url, ".git")) url.len - 4 else url.len;
+        var p = try a.dupe(u8, url[4..end]);
+        if (std.mem.indexOf(u8, p, ":")) |i| p[i] = '/';
+        const joiner = [_][]const u8{ "https://", p };
+        var http = try std.mem.join(a, "", &joiner);
+        return http;
+    }
+
+    return try a.dupe(u8, url);
+}
+
 fn list(r: *Response, _: *UriIter) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
@@ -124,12 +140,32 @@ fn list(r: *Response, _: *UriIter) Error!void {
 
         for (flist.items) |name| {
             dom = dom.open(HTML.element("repo", null, null));
-            dom = dom.open(HTML.element("name", name, null));
-            dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
-                .{ .key = "href", .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}", .{name}) },
-            }));
+            {
+                dom = dom.open(HTML.element("name", name, null));
+                dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
+                    .{ .key = "href", .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}", .{name}) },
+                }));
+            }
             dom = dom.close();
-            dom.push(HTML.element("desc", null, null));
+            dom = dom.open(HTML.element("desc", null, null));
+            {
+                var repodir = idir.dir.openDir(name, .{}) catch return error.Unknown;
+                var repo = git.Repo.init(repodir) catch return error.Unknown;
+                const desc = repo.description(r.alloc) catch return error.Unknown;
+                if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
+                    dom.push(HTML.p(desc));
+                }
+
+                var conffd = repo.dir.openFile("config", .{}) catch return error.Unknown;
+                const conf = Ini.init(r.alloc, conffd) catch return error.Unknown;
+                if (conf.get("remote \"upstream\"")) |ns| {
+                    if (ns.get("url")) |url| {
+                        var purl = try parseGitRemoteUrl(r.alloc, url);
+                        dom.push(HTML.anch(purl, try HTML.Attribute.alloc(r.alloc, "href", purl)));
+                    }
+                }
+            }
+            dom = dom.close();
             dom.push(HTML.element("last", null, null));
             dom = dom.close();
         }
