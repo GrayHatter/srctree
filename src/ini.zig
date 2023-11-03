@@ -5,6 +5,16 @@ const Allocator = std.mem.Allocator;
 const Setting = struct {
     name: []const u8,
     val: []const u8,
+
+    fn pair(a: Allocator, str: []const u8) !Setting {
+        if (std.mem.indexOf(u8, str, "=")) |i| {
+            return .{
+                .name = try a.dupe(u8, std.mem.trim(u8, str[0..i], " \n\t")),
+                .val = try a.dupe(u8, std.mem.trim(u8, str[i + 1 ..], " \n\t")),
+            };
+        }
+        unreachable;
+    }
 };
 
 pub const Namespace = struct {
@@ -24,9 +34,19 @@ pub const Namespace = struct {
 pub const Config = struct {
     ns: []Namespace,
 
+    pub fn filter(self: Config, prefix: []const u8, index: usize) ?Namespace {
+        var remaining = index;
+        for (self.ns) |ns| {
+            if (std.mem.startsWith(u8, ns.name, prefix)) {
+                if (remaining == 0) return ns;
+                remaining -= 1;
+            }
+        } else return null;
+    }
+
     pub fn get(self: Config, name: []const u8) ?Namespace {
         for (self.ns) |ns| {
-            if (std.mem.eql(u8, name, ns.name)) {
+            if (std.mem.eql(u8, ns.name, name)) {
                 return ns;
             }
         }
@@ -34,28 +54,22 @@ pub const Config = struct {
     }
 };
 
-fn pair(a: Allocator, str: []const u8) !Setting {
-    if (std.mem.indexOf(u8, str, "=")) |i| {
-        return .{
-            .name = try a.dupe(u8, std.mem.trim(u8, str[0..i], " \n\t")),
-            .val = try a.dupe(u8, std.mem.trim(u8, str[i + 1 ..], " \n\t")),
-        };
-    }
-    unreachable;
-}
-
 fn namespace(a: Allocator, name: []const u8, itr: *std.mem.SplitIterator(u8, .sequence)) !Namespace {
     var list = std.ArrayList(Setting).init(a);
 
     while (itr.peek()) |peek| {
-        if (std.mem.count(u8, peek, "=") == 0) {
+        var line = std.mem.trim(u8, peek, " \n\t");
+        if (line.len == 0) {
             _ = itr.next();
             continue;
         }
-        var line = std.mem.trim(u8, peek, " \n\t");
         if (line[0] == '[') break;
+        if (std.mem.count(u8, line, "=") == 0) {
+            _ = itr.next();
+            continue;
+        }
 
-        try list.append(try pair(a, peek));
+        try list.append(try Setting.pair(a, line));
         _ = itr.next();
     }
 
