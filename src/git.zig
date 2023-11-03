@@ -1003,6 +1003,6 @@ test "commit to tree" {
     defer cmt.raze(a);
     const tree = try cmt.mkTree(a);
     defer tree.raze(a);
-    std.debug.print("tree {}\n", .{tree});
-    for (tree.objects) |obj| std.debug.print("    {}\n", .{obj});
+    if (false) std.debug.print("tree {}\n", .{tree});
+    if (false) for (tree.objects) |obj| std.debug.print("    {}\n", .{obj});
 }
