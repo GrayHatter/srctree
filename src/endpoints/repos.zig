@@ -168,7 +168,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
                 if (conf.get("remote \"upstream\"")) |ns| {
                     if (ns.get("url")) |url| {
                         var purl = try parseGitRemoteUrl(r.alloc, url);
-                        dom.push(HTML.anch(purl, try HTML.Attribute.alloc(r.alloc, "href", purl)));
+                        dom.push(HTML.anch(purl, try HTML.Attribute.create(r.alloc, "href", purl)));
                     }
                 }
             }
@@ -251,24 +251,36 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
 
     var d2 = reader.readAllAlloc(r.alloc, 0xffff) catch unreachable;
     const count = std.mem.count(u8, d2, "\n");
-    dom = dom.open(HTML.element("lines", null, null));
-    for (0..count + 1) |i| {
-        var buf: [10]u8 = undefined;
-        const b = std.fmt.bufPrint(&buf, "{}", .{i + 1}) catch unreachable;
-        dom.push(HTML.element("ln", null, try HTML.Attribute.alloc(r.alloc, "num", b)));
-    }
-    dom = dom.close();
     dom = dom.open(HTML.element("code", null, null));
     var litr = std.mem.split(u8, d2, "\n");
 
-    dom.push(HTML.span(litr.next().?));
-    while (litr.next()) |line| {
-        dom.push(HTML.text("\n"));
-        dom.push(HTML.span(line));
+    for (0..count + 1) |i| {
+        var buf: [12]u8 = undefined;
+        const b = std.fmt.bufPrint(&buf, "#L{}", .{i + 1}) catch unreachable;
+        const attrs = try HTML.Attribute.alloc(r.alloc, &[_][]const u8{
+            "num",
+            "id",
+            "href",
+        }, &[_]?[]const u8{
+            b[2..],
+            b[1..],
+            b,
+        });
+        dom.push(HTML.element("ln", litr.next().?, attrs));
     }
+
     dom = dom.close();
+    //dom = dom.open(HTML.element("code", null, null));
+    //var litr = std.mem.split(u8, d2, "\n");
+
+    //dom.push(HTML.span(litr.next().?));
+    //while (litr.next()) |line| {
+    //    dom.push(HTML.text("\n"));
+    //    dom.push(HTML.span(line));
+    //}
+    //dom = dom.close();
     var data = dom.done();
-    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.divAttr(data, &[_]HTML.Attribute{HTML.Attribute.class("code-block")})});
+    const filestr = try std.fmt.allocPrint(r.alloc, "{pretty}", .{HTML.divAttr(data, &[_]HTML.Attribute{HTML.Attribute.class("code-block")})});
     tmpl.addVar("files", filestr) catch return error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 

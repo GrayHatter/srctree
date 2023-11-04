@@ -18,7 +18,6 @@ a:visited {
 
 body {
 	margin: 0 auto;
-	font-family: "Ubunutu Mono", sans-serif;
 }
 
 header {
@@ -76,16 +75,19 @@ lines {
 	width: 50px;
 }
 
-lines > ln {
-	border-right: 2px black solid;
-	display: block;
-	height: 100%;
-	padding-right: 2px;
+code > ln {
 	width: 100%;
+	display: inline-block;
 }
 
-ln::after {
+code > ln:before {
 	content: attr(num);
+	width: 3em;
+	display: inline-block;
+}
+
+code > ln:target {
+	background-color: #222;
 }
 
 .code-block {
@@ -94,16 +96,10 @@ ln::after {
 
 code {
 	display: inline-block;
+	font-family: "Ubuntu Mono", sans-serif;
 	text-align: left;
-	width: 94%;
-}
-
-code {
-	display: inline-block;
-	width: 90%;
 	white-space: pre;
-	font-family: monospace;
-	margin-left: 20px;
+	width: 100%;
 }
 
 repos {

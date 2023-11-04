@@ -26,10 +26,16 @@ pub const Attribute = struct {
         };
     }
 
-    pub fn alloc(a: Allocator, k: []const u8, v: ?[]const u8) ![]Attribute {
-        var all = try a.alloc(Attribute, 1);
-        all[0] = Attribute{ .key = try a.dupe(u8, k), .value = if (v) |va| try a.dupe(u8, va) else v };
+    pub fn alloc(a: Allocator, keys: []const []const u8, vals: []const ?[]const u8) ![]Attribute {
+        var all = try a.alloc(Attribute, @max(keys.len, vals.len));
+        for (all, keys, vals) |*dst, k, v| {
+            dst.* = Attribute{ .key = try a.dupe(u8, k), .value = if (v) |va| try a.dupe(u8, va) else v };
+        }
         return all;
+    }
+
+    pub fn create(a: Allocator, k: []const u8, v: ?[]const u8) ![]Attribute {
+        return alloc(a, &[_][]const u8{k}, &[_]?[]const u8{v});
     }
 
     pub fn format(self: Attribute, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
