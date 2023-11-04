@@ -3,6 +3,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const zlib = std.compress.zlib;
 const hexLower = std.fmt.fmtSliceHexLower;
+const PROT = std.os.PROT;
+const MAP = std.os.MAP;
 
 const DateTime = @import("datetime.zig");
 
@@ -27,43 +29,57 @@ const Types = enum {
 
 const SHA = []const u8; // SUPERBAD, I'm sorry!
 
-const Pack = extern struct {
-    sig: u32 = 0,
-    vnum: u32 = 0,
-    onum: u32 = 0,
-};
+const Pack = struct {
+    pack: []u8,
+    pidx: []u8,
+    pack_file: ?std.fs.File,
+    pidx_file: ?std.fs.File,
 
-/// Packfile v2 support only at this time
-/// marked as extern to enable mmaping the header if useful
-const PackIdxHeader = extern struct {
-    magic: u32,
-    vnum: u32,
-    fanout: [256]u32,
-};
+    const Header = extern struct {
+        sig: u32 = 0,
+        vnum: u32 = 0,
+        onum: u32 = 0,
+    };
 
-const PackIdx = struct {
-    header: PackIdxHeader,
-    objnames: ?[]u8 = null,
-    crc: ?[]u32 = null,
-    offsets: ?[]u32 = null,
-    hugeoffsets: ?[]u64 = null,
-    // not stoked with this API/layout
-    name: []u8,
-};
+    /// Packfile v2 support only at this time
+    /// marked as extern to enable mmaping the header if useful
+    const IdxHeader = extern struct {
+        magic: u32,
+        vnum: u32,
+        fanout: [256]u32,
+    };
 
-const PackObjType = enum(u3) {
-    invalid = 0,
-    commit = 1,
-    tree = 2,
-    blob = 3,
-    tag = 4,
-    ofs_delta = 6,
-    ref_delta = 7,
-};
+    const Idx = struct {
+        header: IdxHeader,
+        objnames: ?[]u8 = null,
+        crc: ?[]u32 = null,
+        offsets: ?[]u32 = null,
+        hugeoffsets: ?[]u64 = null,
+        // not stoked with this API/layout
+        name: []u8,
+    };
 
-const PackObjHeader = struct {
-    kind: PackObjType,
-    size: usize,
+    const ObjType = enum(u3) {
+        invalid = 0,
+        commit = 1,
+        tree = 2,
+        blob = 3,
+        tag = 4,
+        ofs_delta = 6,
+        ref_delta = 7,
+    };
+
+    const ObjHeader = struct {
+        kind: ObjType,
+        size: usize,
+    };
+
+    fn mmap(self: *Pack, f: std.fs.File) ![]u8 {
+        try f.seekFromEnd(0);
+        const length = try f.getPos();
+        const offset = 0;
+        self.pack = std.os.mmap(null, length, PROT.READ, MAP.SHARED, f.handle, offset);
+    }
 };
 
 const Object = struct {
@@ -134,7 +150,7 @@ const FsReader = std.fs.File.Reader;
 
 pub const Repo = struct {
     dir: std.fs.Dir,
-    packs: []PackIdx,
+    packs: []Pack.Idx,
     refs: []Ref,
     current: ?[]u8 = null,
     _head: ?[]u8 = null,
@@ -142,7 +158,7 @@ pub const Repo = struct {
     pub fn init(d: std.fs.Dir) Error!Repo {
         var repo = Repo{
             .dir = d,
-            .packs = &[0]PackIdx{},
+            .packs = &[0]Pack.Idx{},
             .refs = &[0]Ref{},
         };
         if (d.openFile("./HEAD", .{})) |file| {
@@ -343,10 +359,10 @@ pub const Repo = struct {
         return error.ObjectMissing;
     }
 
-    fn packObjHeader(reader: std.fs.File.Reader) !PackObjHeader {
+    fn packObjHeader(reader: std.fs.File.Reader) !Pack.ObjHeader {
         var byte: usize = 0;
         byte = try reader.readByte();
-        var h = PackObjHeader{
+        var h = Pack.ObjHeader{
             .size = byte & 0b1111,
             .kind = @enumFromInt((byte & 0b01110000) >> 4),
         };
@@ -362,7 +378,7 @@ pub const Repo = struct {
     }
 
     fn loadPack(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !void {
-        var vpack = Pack{
+        var vpack = Pack.Header{
             .sig = try reader.readIntBig(u32),
             .vnum = try reader.readIntBig(u32),
             .onum = try reader.readIntBig(u32),
@@ -388,8 +404,8 @@ pub const Repo = struct {
         unreachable;
     }
 
-    fn loadPackIdx(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !PackIdx {
-        var pack: PackIdx = undefined;
+    fn loadPackIdx(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !Pack.Idx {
+        var pack: Pack.Idx = undefined;
         var header = &pack.header;
         header.magic = try reader.readIntBig(u32);
         header.vnum = try reader.readIntBig(u32);
@@ -420,7 +436,7 @@ pub const Repo = struct {
             if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
             i += 1;
         }
-        self.packs = try a.alloc(PackIdx, i);
+        self.packs = try a.alloc(Pack.Idx, i);
         itr.reset();
         i = 0;
         while (try itr.next()) |file| {
