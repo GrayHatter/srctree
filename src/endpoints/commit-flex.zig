@@ -46,10 +46,6 @@ fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
             }
         }
         commit = commit.toParent(a, 0) catch |err| switch (err) {
-            error.FileNotFound => {
-                std.log.info("unable to hit parent file not found \n {}", .{commit});
-                return &hits;
-            },
             error.NoParent => return &hits,
             else => |e| return e,
         };

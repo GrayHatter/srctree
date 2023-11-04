@@ -145,9 +145,132 @@ const Pack = struct {
         return null;
     }
 
-    pub fn data(self: Pack, offset: u32) ![]u8 {
+    pub fn getReaderOffset(self: Pack, offset: u32) !FBSReader {
         if (offset > self.pack.len) return error.WTF;
         return self.pack[offset];
+    }
+
+    fn parseObjHeader(reader: *FBSReader) Pack.ObjHeader {
+        var byte: usize = 0;
+        byte = reader.readByte() catch unreachable;
+        var h = Pack.ObjHeader{
+            .size = byte & 0b1111,
+            .kind = @enumFromInt((byte & 0b01110000) >> 4),
+        };
+        var cont: bool = byte & 0x80 != 0;
+        var shift: u6 = 4;
+        while (cont) {
+            byte = reader.readByte() catch unreachable;
+            h.size |= (byte << shift);
+            shift += 7;
+            cont = byte >= 0x80;
+        }
+        return h;
+    }
+
+    fn loadBlob(a: Allocator, reader: *FBSReader) ![]u8 {
+        var _zlib = try zlib.decompressStream(a, reader.*);
+        defer _zlib.deinit();
+        var zr = _zlib.reader();
+        return try zr.readAllAlloc(a, 0xffffff);
+    }
+
+    fn readVarInt(reader: *FBSReader) !usize {
+        var byte: usize = try reader.readByte();
+        var base: usize = byte & 0x7F;
+        while (byte >= 0x80) {
+            base += 1;
+            byte = try reader.readByte();
+            base = (base << 7) + (byte & 0x7F);
+        }
+        //std.debug.print("varint = {}\n", .{base});
+        return base;
+    }
+
+    fn deltaInst(reader: *FBSReader, writer: anytype, base: []u8) !usize {
+        var readb: usize = try reader.readByte();
+        if (readb == 0) {
+            std.debug.print("INVALID INSTRUCTION 0x00\n", .{});
+            @panic("Invalid state :<");
+        }
+        if (readb >= 0x80) {
+            // std.debug.print("COPY {b:0>3} {b:0>4}\n", .{
+            //     (readb & 0b1110000) >> 4,
+            //     (readb & 0b1111),
+            // });
+            var offs: usize = 0;
+            if (readb & 1 != 0) offs |= @as(usize, try reader.readByte()) << 0;
+            if (readb & 2 != 0) offs |= @as(usize, try reader.readByte()) << 8;
+            if (readb & 4 != 0) offs |= @as(usize, try reader.readByte()) << 16;
+            if (readb & 8 != 0) offs |= @as(usize, try reader.readByte()) << 24;
+            //std.debug.print("    offs: {:12} {b:0>32} \n", .{ offs, offs });
+            var size: usize = 0;
+            if (readb & 16 != 0) size |= @as(usize, try reader.readByte()) << 0;
+            if (readb & 32 != 0) size |= @as(usize, try reader.readByte()) << 8;
+            if (readb & 64 != 0) size |= @as(usize, try reader.readByte()) << 16;
+
+            if (size == 0) size = 0x10000;
+            //std.debug.print("    size: {:12}         {b:0>24} \n", .{ size, size });
+            //std.debug.print("COPY {: >4} {: >4}\n", .{ offs, size });
+            if (size != try writer.write(base[offs..][0..size])) @panic("write didn't not fail");
+            return size;
+        } else {
+            var stage: [128]u8 = undefined;
+            var s = stage[0..readb];
+            _ = try reader.read(s);
+            _ = try writer.write(s);
+            //std.debug.print("INSERT {} \n", .{readb});
+            return readb;
+        }
+    }
+
+    fn loadDelta(self: Pack, a: Allocator, reader: *FBSReader, offset: usize) ![]u8 {
+        // fd pos is offset + 2-ish because of the header read
+        var srclen = try readVarInt(reader);
+
+        var _zlib = try zlib.decompressStream(a, reader.*);
+        defer _zlib.deinit();
+        var zr = _zlib.reader();
+        var inst = try zr.readAllAlloc(a, 0xffffff);
+        defer a.free(inst);
+        var inst_fbs = std.io.fixedBufferStream(inst);
+        var inst_reader = inst_fbs.reader();
+        // We don't actually need these when zlib works :)
+        _ = try readVarInt(&inst_reader);
+        _ = try readVarInt(&inst_reader);
+
+        const baseobj_offset = offset - srclen;
+        var basez = try self.loadObj(a, baseobj_offset);
+        defer a.free(basez);
+
+        var buffer = std.ArrayList(u8).init(a);
+        while (true) {
+            _ = deltaInst(&inst_reader, buffer.writer(), basez) catch {
+                break;
+            };
+        }
+        return try buffer.toOwnedSlice();
+    }
+
+    fn loadObj(self: Pack, a: Allocator, offset: usize) Error![]u8 {
+        var fbs = std.io.fixedBufferStream(self.pack[offset..]);
+        var reader = fbs.reader();
+        var h = parseObjHeader(&reader);
+
+        switch (h.kind) {
+            .commit, .tree, .blob => return loadBlob(a, &reader) catch return error.PackCorrupt,
+            .ofs_delta => return self.loadDelta(a, &reader, offset) catch return error.PackCorrupt,
+            else => {
+                std.debug.print("obj type ({}) not implemened\n", .{h.kind});
+                unreachable; // not implemented
+            },
+        }
+        unreachable;
+    }
+
+    pub fn getObject(self: Pack, a: Allocator, offset: usize) !Object {
+        var data = try self.loadObj(a, offset);
+        return Object.init(data);
     }
 
     pub fn raze(self: Pack, a: Allocator) void {
@@ -223,6 +346,7 @@ const Object = struct {
 };
 
 const Reader = Object.Reader;
+const FBSReader = std.io.FixedBufferStream([]u8).Reader;
 const FsReader = std.fs.File.Reader;
 
 pub const Repo = struct {
@@ -281,109 +405,6 @@ pub const Repo = struct {
         return error.NotImplemnted;
     }
 
-    fn deltaInst(reader: anytype, writer: anytype, base: []u8) !usize {
-        var readb: usize = try reader.readByte();
-        if (readb == 0) {
-            std.debug.print("INVALID INSTRUCTION 0x00\n", .{});
-            @panic("Invalid state :<");
-        }
-        if (readb >= 0x80) {
-            // std.debug.print("COPY {b:0>3} {b:0>4}\n", .{
-            //     (readb & 0b1110000) >> 4,
-            //     (readb & 0b1111),
-            // });
-            var offs: usize = 0;
-            if (readb & 1 != 0) offs |= @as(usize, try reader.readByte()) << 0;
-            if (readb & 2 != 0) offs |= @as(usize, try reader.readByte()) << 8;
-            if (readb & 4 != 0) offs |= @as(usize, try reader.readByte()) << 16;
-            if (readb & 8 != 0) offs |= @as(usize, try reader.readByte()) << 24;
-            //std.debug.print("    offs: {:12} {b:0>32} \n", .{ offs, offs });
-            var size: usize = 0;
-            if (readb & 16 != 0) size |= @as(usize, try reader.readByte()) << 0;
-            if (readb & 32 != 0) size |= @as(usize, try reader.readByte()) << 8;
-            if (readb & 64 != 0) size |= @as(usize, try reader.readByte()) << 16;
-
-            if (size == 0) size = 0x10000;
-            //std.debug.print("    size: {:12}         {b:0>24} \n", .{ size, size });
-            //std.debug.print("COPY {: >4} {: >4}\n", .{ offs, size });
-            if (size != try writer.write(base[offs..][0..size])) @panic("write didn't not fail");
-            return size;
-        } else {
-            var stage: [128]u8 = undefined;
-            var s = stage[0..readb];
-            _ = try reader.read(s);
-            _ = try writer.write(s);
-            //std.debug.print("INSERT {} \n", .{readb});
-            return readb;
-        }
-    }
-
-    fn readVarInt(reader: anytype) !usize {
-        var byte: usize = try reader.readByte();
-        var base: usize = byte & 0x7F;
-        while (byte >= 0x80) {
-            base += 1;
-            byte = try reader.readByte();
-            base = (base << 7) + (byte & 0x7F);
-        }
-        //std.debug.print("varint = {}\n", .{base});
-        return base;
-    }
-
-    fn loadPackDelta(a: Allocator, fd: std.fs.File, offset: usize) ![]u8 {
-        // fd pos is offset + 2-ish because of the header read
-        var reader = fd.reader();
-        var srclen = try readVarInt(reader);
-
-        var _zlib = try zlib.decompressStream(a, reader);
-        defer _zlib.deinit();
-        var zr = _zlib.reader();
-        var inst = try zr.readAllAlloc(a, 0xffffff);
-        defer a.free(inst);
-        var inst_fbs = std.io.fixedBufferStream(inst);
-        var inst_reader = inst_fbs.reader();
-        // We don't actually need these when zlib works :)
-        _ = try readVarInt(inst_reader);
-        _ = try readVarInt(inst_reader);
-
-        const baseobj_offset = offset - srclen;
-        try fd.seekTo(baseobj_offset);
-        var basez = try loadPackObj(a, fd, baseobj_offset);
-        defer a.free(basez);
-
-        var buffer = std.ArrayList(u8).init(a);
-        while (true) {
-            _ = deltaInst(inst_reader, buffer.writer(), basez) catch {
-                break;
-            };
-        }
-        return try buffer.toOwnedSlice();
-    }
-
-    fn loadPackBlob(a: Allocator, reader: FsReader) ![]u8 {
-        var _zlib = try zlib.decompressStream(a, reader);
-        defer _zlib.deinit();
-        var zr = _zlib.reader();
-        return try zr.readAllAlloc(a, 0xffffff);
-    }
-
-    fn loadPackObj(a: Allocator, pk: std.fs.File, offset: usize) Error![]u8 {
-        pk.seekTo(offset) catch return error.PackCorrupt;
-        var freader = pk.reader();
-
-        var h = packObjHeader(freader) catch return error.PackCorrupt;
-
-        switch (h.kind) {
-            .commit, .tree, .blob => return loadPackBlob(a, freader) catch return error.PackCorrupt,
-            .ofs_delta => return loadPackDelta(a, pk, offset) catch return error.PackCorrupt,
-            else => {
-                std.debug.print("obj type ({}) not implemened\n", .{h.kind});
-                unreachable; // not implemented
-            },
-        }
-        unreachable;
-    }
-
     /// TODO binary search lol
     fn findObj(self: Repo, a: Allocator, in_sha: SHA) !Object {
         var shabuf: [20]u8 = undefined;
@@ -399,13 +420,7 @@ pub const Repo = struct {
 
         for (self.packs) |pack| {
             if (pack.contains(sha)) |offset| {
-                var filename: [2048]u8 = undefined;
-                var filenm = try std.fmt.bufPrint(&filename, "objects/pack/{s}.pack", .{pack.name});
-                var fd = try self.dir.openFile(filenm, .{});
-                defer fd.close();
-                try fd.seekTo(offset);
-
-                return Object.init(try loadPackObj(a, fd, offset));
+                return try pack.getObject(a, offset);
             }
         }
         if (self.loadFileObj(sha)) |fd| {
@@ -417,70 +432,6 @@ pub const Repo = struct {
             return Object.init(data);
         } else |_| {}
         return error.ObjectMissing;
-    }
-
-    fn packObjHeader(reader: std.fs.File.Reader) !Pack.ObjHeader {
-        var byte: usize = 0;
-        byte = try reader.readByte();
-        var h = Pack.ObjHeader{
-            .size = byte & 0b1111,
-            .kind = @enumFromInt((byte & 0b01110000) >> 4),
-        };
-        var cont: bool = byte & 0x80 != 0;
-        var shift: u6 = 4;
-        while (cont) {
-            byte = try reader.readByte();
-            h.size |= (byte << shift);
-            shift += 7;
-            cont = byte >= 0x80;
-        }
-        return h;
-    }
-
-    fn loadPack(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !void {
-        var vpack = Pack.Header{
-            .sig = try reader.readIntBig(u32),
-            .vnum = try reader.readIntBig(u32),
-            .onum = try reader.readIntBig(u32),
-        };
-        _ = vpack;
-
-        const header = try packObjHeader(reader);
-
-        var pack1 = try a.alloc(u8, header.size);
-        defer a.free(pack1);
-        _ = try reader.read(pack1);
-
-        switch (header.kind) {
-            .tree => {
-                //var cmt = try Tree.fromPack(a, pack1);
-                //std.debug.print("{}\n", .{cmt});
-                //for (cmt.objects) |obj| {
-                //    std.debug.print("{s} {}\n", .{ obj.name, obj });
-                //}
-            },
-            else => {},
-        }
-        unreachable;
-    }
-
-    fn loadPackIdx(_: *Repo, reader: std.fs.File.Reader) !Pack.Idx {
-        var pack: Pack.Idx = undefined;
-        var header = &pack.header;
-        header.magic = try reader.readIntBig(u32);
-        header.vnum = try reader.readIntBig(u32);
-        header.fanout = undefined;
-        for (&header.fanout) |*fo| {
-            fo.* = try reader.readIntBig(u32);
-        }
-        _ = try reader.read(pack.objnames.?[0 .. 20 * header.fanout[255]]);
-        for (pack.crc.?) |*crc| {
-            crc.* = try reader.readIntNative(u32);
-        }
-        for (pack.offsets.?) |*crc| {
-            crc.* = try reader.readIntBig(u32);
-        }
-        return pack;
     }
 
     pub fn loadPacks(self: *Repo, a: Allocator) !void {
