@@ -106,6 +106,7 @@ fn commits(r: *Response, uri: *UriIter) Error!void {
 
 fn typeSorter(_: void, l: git.Blob, r: git.Blob) bool {
     if (l.isFile() and !r.isFile()) return true;
+    if (l.isFile() and !r.isFile()) return true;
     return sorter({}, l.name, r.name);
 }
 
