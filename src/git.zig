@@ -30,10 +30,18 @@ const Types = enum {
 const SHA = []const u8; // SUPERBAD, I'm sorry!
 
 const Pack = struct {
+    name: SHA,
     pack: []u8,
-    pidx: []u8,
-    pack_file: ?std.fs.File,
-    pidx_file: ?std.fs.File,
+    idx: []u8,
+    pack_fd: std.fs.File,
+    idx_fd: std.fs.File,
+
+    pack_header: *Header = undefined,
+    idx_header: *IdxHeader = undefined,
+    objnames: []u8 = undefined,
+    crc: []u32 = undefined,
+    offsets: []u32 = undefined,
+    hugeoffsets: ?[]u64 = null,
 
     const Header = extern struct {
         sig: u32 = 0,
@@ -47,16 +55,6 @@ const Pack = struct {
         magic: u32,
         vnum: u32,
         fanout: [256]u32,
-    };
-
-    const Idx = struct {
-        header: IdxHeader,
-        objnames: ?[]u8 = null,
-        crc: ?[]u32 = null,
-        offsets: ?[]u32 = null,
-        hugeoffsets: ?[]u64 = null,
-        // not stoked with this API/layout
-        name: []u8,
     };
 
     const ObjType = enum(u3) {
@@ -74,11 +72,90 @@ const Pack = struct {
         size: usize,
     };
 
-    fn mmap(self: *Pack, f: std.fs.File) ![]u8 {
+    /// assumes name ownership
+    pub fn init(dir: std.fs.Dir, name: []u8) !Pack {
+        var filename: [50]u8 = undefined;
+        const ifd = try dir.openFile(try std.fmt.bufPrint(&filename, "{s}.idx", .{name}), .{});
+        const pfd = try dir.openFile(try std.fmt.bufPrint(&filename, "{s}.pack", .{name}), .{});
+        var pack = Pack{
+            .name = name,
+            .pack = try mmap(pfd),
+            .idx = try mmap(ifd),
+            .pack_fd = pfd,
+            .idx_fd = ifd,
+        };
+        try pack.verify();
+        return pack;
+    }
+
+    fn verify(self: *Pack) !void {
+        try self.verifyIdx();
+        try self.verifyPack();
+    }
+
+    fn verifyIdx(self: *Pack) !void {
+        self.idx_header = @alignCast(@ptrCast(self.idx.ptr));
+        const count = @byteSwap(self.idx_header.fanout[255]);
+        self.objnames = self.idx[258 * 4 ..][0 .. 20 * count];
+        self.crc.ptr = @alignCast(@ptrCast(self.idx[258 * 4 + 20 * count ..].ptr));
+        self.crc.len = count;
+        self.offsets.ptr = @alignCast(@ptrCast(self.idx[258 * 4 + 24 * count ..].ptr));
+        self.offsets.len = count;
+
+        self.hugeoffsets = null;
+    }
+
+    fn verifyPack(self: *Pack) !void {
+        self.idx_header = @alignCast(@ptrCast(self.idx.ptr));
+    }
+
+    fn mmap(f: std.fs.File) ![]u8 {
         try f.seekFromEnd(0);
         const length = try f.getPos();
         const offset = 0;
-        self.pack = std.os.mmap(null, length, PROT.READ, MAP.SHARED, f.handle, offset);
+        return std.os.mmap(null, length, PROT.READ, MAP.SHARED, f.handle, offset);
+    }
+
+    pub fn fanOut(self: Pack, i: u8) u32 {
+        return @byteSwap(self.idx_header.fanout[i]);
+    }
+
+    pub fn fanOutCount(self: Pack, i: u8) u32 {
+        if (i == 0) return self.fanOut(i);
+        return self.fanOut(i) - self.fanOut(i - 1);
+    }
+
+    pub fn contains(self: Pack, sha: SHA) ?u32 {
+        var start: usize = 0;
+        var count: usize = 0;
+        if (sha[0] == 0) {
+            if (self.fanOut(0) == 0) return null;
+            count = self.fanOut(0);
+        } else if (self.fanOutCount(sha[0]) > 0) {
+            start = self.fanOut(sha[0] - 1);
+            count = self.fanOutCount(sha[0]);
+        } else return null;
+
+        for (start..start + count) |i| {
+            const objname = self.objnames[i * 20 .. (i + 1) * 20];
+            if (std.mem.eql(u8, sha, objname)) {
+                return @byteSwap(self.offsets[i]);
+            }
+        }
+        return null;
+    }
+
+    pub fn data(self: Pack, offset: u32) ![]u8 {
+        if (offset > self.pack.len) return error.WTF;
+        return self.pack[offset];
+    }
+
+    pub fn raze(self: Pack, a: Allocator) void {
+        self.pack_fd.close();
+        self.idx_fd.close();
+        std.os.munmap(@alignCast(self.pack));
+        std.os.munmap(@alignCast(self.idx));
+        a.free(self.name);
     }
 };
 
@@ -150,7 +227,7 @@ const FsReader = std.fs.File.Reader;
 
 pub const Repo = struct {
     dir: std.fs.Dir,
-    packs: []Pack.Idx,
+    packs: []Pack,
     refs: []Ref,
     current: ?[]u8 = null,
     _head: ?[]u8 = null,
@@ -158,7 +235,7 @@ pub const Repo = struct {
     pub fn init(d: std.fs.Dir) Error!Repo {
         var repo = Repo{
             .dir = d,
-            .packs = &[0]Pack.Idx{},
+            .packs = &[0]Pack{},
             .refs = &[0]Ref{},
         };
         if (d.openFile("./HEAD", .{})) |file| {
@@ -321,31 +398,14 @@ pub const Repo = struct {
         }
 
         for (self.packs) |pack| {
-            const fanout = pack.header.fanout;
-            var start: usize = 0;
-            var count: usize = 0;
-            if (sha[0] == 0) {
-                if (fanout[0] == 0) continue;
-                count = fanout[0];
-            } else if (fanout[sha[0]] - fanout[sha[0] - 1] > 0) {
-                start = fanout[sha[0] - 1];
-                count = fanout[sha[0]] - fanout[sha[0] - 1];
-            } else continue;
+            if (pack.contains(sha)) |offset| {
+                var filename: [2048]u8 = undefined;
+                var filenm = try std.fmt.bufPrint(&filename, "objects/pack/{s}.pack", .{pack.name});
+                var fd = try self.dir.openFile(filenm, .{});
+                defer fd.close();
+                try fd.seekTo(offset);
 
-            for (start..start + count) |i| {
-                const objname = pack.objnames.?[i * 20 .. (i + 1) * 20];
-                if (std.mem.eql(u8, sha, objname)) {
-                    var fnbuf: [2048]u8 = undefined;
-                    var filename = try std.fmt.bufPrint(&fnbuf, "./objects/pack/{s}.pack", .{
-                        pack.name[0 .. pack.name.len - 4],
-                    });
-                    const offset = pack.offsets.?[i];
-                    var fd = try self.dir.openFile(filename, .{});
-                    defer fd.close();
-                    try fd.seekTo(offset);
-
-                    return Object.init(try loadPackObj(a, fd, offset));
-                }
+                return Object.init(try loadPackObj(a, fd, offset));
             }
         }
         if (self.loadFileObj(sha)) |fd| {
@@ -404,7 +464,7 @@ pub const Repo = struct {
         unreachable;
     }
 
-    fn loadPackIdx(_: *Repo, a: Allocator, reader: std.fs.File.Reader) !Pack.Idx {
+    fn loadPackIdx(_: *Repo, reader: std.fs.File.Reader) !Pack.Idx {
         var pack: Pack.Idx = undefined;
         var header = &pack.header;
         header.magic = try reader.readIntBig(u32);
@@ -413,11 +473,6 @@ pub const Repo = struct {
         for (&header.fanout) |*fo| {
             fo.* = try reader.readIntBig(u32);
         }
-        pack.objnames = try a.alloc(u8, 20 * header.fanout[255]);
-        pack.crc = try a.alloc(u32, header.fanout[255]);
-        pack.offsets = try a.alloc(u32, header.fanout[255]);
-        pack.hugeoffsets = null;
-
         _ = try reader.read(pack.objnames.?[0 .. 20 * header.fanout[255]]);
         for (pack.crc.?) |*crc| {
             crc.* = try reader.readIntNative(u32);
@@ -436,17 +491,14 @@ pub const Repo = struct {
             if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
             i += 1;
         }
-        self.packs = try a.alloc(Pack.Idx, i);
+        self.packs = try a.alloc(Pack, i);
         itr.reset();
         i = 0;
         while (try itr.next()) |file| {
             if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
-            var filename = try std.fmt.allocPrint(a, "./objects/pack/{s}", .{file.name});
-            defer a.free(filename);
-            var fd = try self.dir.openFile(filename, .{});
-            defer fd.close();
-            self.packs[i] = try self.loadPackIdx(a, fd.reader());
-            self.packs[i].name = try a.dupe(u8, file.name);
+
+            self.packs[i] = try Pack.init(idir.dir, try a.dupe(u8, file.name[0 .. file.name.len - 4]));
+            //self.loadPackIdx(a, fd.reader());
             i += 1;
         }
     }
@@ -574,11 +626,7 @@ pub const Repo = struct {
     pub fn raze(self: *Repo, a: Allocator) void {
         self.dir.close();
         for (self.packs) |pack| {
-            a.free(pack.objnames.?);
-            a.free(pack.crc.?);
-            a.free(pack.offsets.?);
-            // a.free(pack.hugeoffsets); // not implemented
-            a.free(pack.name);
+            pack.raze(a);
         }
         a.free(self.packs);
         for (self.refs) |r| switch (r) {
@@ -978,12 +1026,12 @@ test "read pack" {
     var lol: []u8 = "";
 
     for (repo.packs, 0..) |pack, pi| {
-        for (0..pack.header.fanout[255]) |oi| {
-            const hexy = pack.objnames.?[oi * 20 .. oi * 20 + 20];
+        for (0..@byteSwap(pack.idx_header.fanout[255])) |oi| {
+            const hexy = pack.objnames[oi * 20 .. oi * 20 + 20];
             if (hexy[0] != 0xd2) continue;
             if (false) std.debug.print("{} {} -> {}\n", .{ pi, oi, hexLower(hexy) });
             if (hexy[1] == 0xb4 and hexy[2] == 0xd1) {
-                if (false) std.debug.print("{s} -> {}\n", .{ pack.name, pack.offsets.?[oi] });
+                if (false) std.debug.print("{s} -> {}\n", .{ pack.name, pack.offsets[oi] });
                 lol = hexy;
             }
         }
