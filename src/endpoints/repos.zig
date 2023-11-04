@@ -104,10 +104,11 @@ fn commits(r: *Response, uri: *UriIter) Error!void {
     r.finish() catch return Error.Unknown;
 }
 
+const dirs_first = true;
 fn typeSorter(_: void, l: git.Blob, r: git.Blob) bool {
-    if (l.isFile() and !r.isFile()) return true;
-    if (l.isFile() and !r.isFile()) return true;
-    return sorter({}, l.name, r.name);
+    if (l.isFile() == r.isFile()) return sorter({}, l.name, r.name);
+    if (l.isFile() and !r.isFile()) return !dirs_first;
+    return dirs_first;
 }
 
 fn sorter(_: void, l: []const u8, r: []const u8) bool {
