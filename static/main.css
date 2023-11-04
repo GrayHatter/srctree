@@ -160,26 +160,53 @@ li {
 	list-style: none;
 }
 
-repos > li::before {
-	content: "📁";
-	padding-right: 8px;
-	color: red;
+
+.treelist {
+	background: #333;
+	color: #FFFFEB;
+	padding: 10px;
+	width: 60%;
+	font-family: 'Ubuntu Mono', sans-serif;
 }
 
+.treelist > tree:first-child,
+.treelist > file:first-child {
+	border-top: 2px solid gray;
+}
+
+.treelist > file > a::before {
+	content: "📄";
+	padding-right: 8px;
+}
+
+.treelist > tree > a::before {
+	content: "📁";
+	padding-right: 8px;
+}
 tree {
-	display: block;
-	text-align: left;
 	border: 2px solid gray;
-	width: 50%;
+	border-top: 0px;
+	display: block;
+	margin: auto;
 	padding: 4px;
+	text-align: left;
+	width: 98%;
 }
 
 file {
-	display: block;
-	text-align: left;
 	border: 2px solid gray;
-	width: 50%;
+	border-top: 0px;
+	display: block;
+	margin: auto;
 	padding: 4px;
+	text-align: left;
+	width: 98%;
+}
+
+file > a,
+tree > a {
+	width: 100%;
+	display: inline-block;
 }
 
 .treecommit commit {
@@ -228,14 +255,6 @@ commit > foot > span {
 	display: inline-block;
 	float: right;
 }
-
-.treelist > div {
-	background: #333;
-	color: #FFFFEB;
-	padding: 10px 0;
-}
-
-
 
 .commit-flex {
 	width: 1050px;
@@ -298,5 +317,5 @@ commit > foot > span {
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 400; src: url(/static/TitilliumWeb-Italic.ttf) format('truetype'); }
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 600; src: url(/static/TitilliumWeb-SemiBoldItalic.ttf) format('truetype'); }
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 700; src: url(/static/TitilliumWeb-BoldItalic.ttf) format('truetype'); }
-@font-face { font-family: 'Ubuntu Mono'; font-style: normal; font-weight: 400; src: url(/static/UbuntuMono_Regular.ttf) format('truetype'); }
+@font-face { font-family: 'Ubuntu Mono'; font-style: normal; font-weight: 400; src: url(/static/UbuntuMono-Regular.ttf) format('truetype'); }
 @font-face { font-family: 'Ubuntu Mono'; font-style: italic; font-weight: 400; src: url(/static/UbuntuMono-Italic.ttf) format('truetype'); }

@@ -104,6 +104,11 @@ fn commits(r: *Response, uri: *UriIter) Error!void {
     r.finish() catch return Error.Unknown;
 }
 
+fn typeSorter(_: void, l: git.Blob, r: git.Blob) bool {
+    if (l.isFile() and !r.isFile()) return true;
+    return sorter({}, l.name, r.name);
+}
+
 fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
@@ -315,6 +320,22 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
     tmpl.addVar("commit", commitstr) catch return error.Unknown;
 
     dom = DOM.new(r.alloc);
+
+    if (file_uri_name.len > 0) {
+        const end = std.mem.lastIndexOf(u8, file_uri_name[0 .. file_uri_name.len - 1], "/") orelse 0;
+        dom = dom.open(HTML.element("tree", null, null));
+        const dd_href = &[_]HTML.Attribute{.{
+            .key = "href",
+            .value = try std.fmt.allocPrint(
+                r.alloc,
+                "/repo/{s}/tree/{s}",
+                .{ repo_name, file_uri_name[0..end] },
+            ),
+        }};
+        dom.dupe(HTML.anch("..", dd_href));
+        dom = dom.close();
+    }
+    std.sort.pdq(git.Blob, files.objects, {}, typeSorter);
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
             .key = "href",
@@ -326,18 +347,18 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
                 if (obj.isFile()) "" else "/",
             }),
         }};
-        dom = dom.open(HTML.anch(null, href));
         if (obj.isFile()) {
-            dom.push(HTML.element("file", obj.name, null));
+            dom = dom.open(HTML.element("file", null, null));
+            dom.dupe(HTML.anch(obj.name, href));
         } else {
-            dom.push(HTML.element("tree", try dupeDir(r.alloc, obj.name), null));
+            dom = dom.open(HTML.element("tree", null, null));
+            dom.dupe(HTML.anch(try dupeDir(r.alloc, obj.name), href));
         }
         //HTML.element("file", link, null);
         dom = dom.close();
     }
     var data = dom.done();
-    const filestr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.div(data)});
-    tmpl.addVar("files", filestr) catch return error.Unknown;
+    _ = tmpl.addElements(r.alloc, "files", data) catch return error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
     r.status = .ok;

@@ -271,7 +271,7 @@ pub const Repo = struct {
         var _zlib = try zlib.decompressStream(a, reader);
         defer _zlib.deinit();
         var zr = _zlib.reader();
-        return try zr.readAllAlloc(a, 0xffff);
+        return try zr.readAllAlloc(a, 0xffffff);
     }
 
     fn loadPackObj(a: Allocator, pk: std.fs.File, offset: usize) Error![]u8 {
