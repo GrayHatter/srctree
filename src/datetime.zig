@@ -107,7 +107,7 @@ pub fn fromEpochTz(sts: i64, tz: ?i16) !DateTime {
     self.timestamp = sts;
     self.tz = tz;
 
-    const ts: u64 = @intCast(sts + (tz orelse 0) * 60);
+    const ts: u64 = @intCast(sts + @as(i64, (tz orelse 0)) * 60);
 
     self.seconds = @truncate(ts % 60);
     self.minutes = @truncate(ts / 60 % 60);
