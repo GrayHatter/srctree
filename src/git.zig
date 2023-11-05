@@ -698,9 +698,12 @@ pub const Commit = struct {
                 continue;
             }
             if (line.len == 0) break;
+            // Seen in GPG headers set by github... thanks github :<
+            if (std.mem.trim(u8, line, " \t").len == 0) continue;
 
             self.header(line) catch |e| {
-                std.debug.print("header failed {} '{s}'\n", .{ e, line });
+                std.debug.print("header failed {} on {} '{s}'\n", .{ e, lines.index.?, line });
+                std.debug.print("full stack '''\n{s}\n'''\n", .{data});
                 return e;
             };
         }
