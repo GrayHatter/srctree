@@ -701,6 +701,7 @@ pub const Commit = struct {
     fn gpgSig(_: *Commit, itr: *std.mem.SplitIterator(u8, .sequence)) !void {
         while (itr.next()) |line| {
             if (std.mem.indexOf(u8, line, "-----END PGP SIGNATURE-----") != null) return;
+            if (std.mem.indexOf(u8, line, "-----END SSH SIGNATURE-----") != null) return;
         }
         return error.InvalidGpgsig;
     }
@@ -713,12 +714,16 @@ pub const Commit = struct {
         self.blob = data;
         while (lines.next()) |line| {
             if (std.mem.startsWith(u8, line, "gpgsig")) {
-                try self.gpgSig(&lines);
+                self.gpgSig(&lines) catch |e| {
+                    std.debug.print("GPG sig failed {}\n", .{e});
+                    std.debug.print("full stack '''\n{s}\n'''\n", .{data});
+                    return e;
+                };
                 continue;
             }
             if (line.len == 0) break;
             // Seen in GPG headers set by github... thanks github :<
-            if (std.mem.trim(u8, line, " \t").len == 0) continue;
+            if (std.mem.trim(u8, line, " \t").len != line.len) continue;
 
             self.header(line) catch |e| {
                 std.debug.print("header failed {} on {} '{s}'\n", .{ e, lines.index.?, line });
@@ -733,10 +738,7 @@ pub const Commit = struct {
 
     pub fn fromReader(a: Allocator, sha: SHA, reader: Reader) !Commit {
         var buf = try reader.readAllAlloc(a, 0xFFFF);
-        var self = try make(sha, buf);
-        self.blob = buf;
-        self.sha = sha;
-        return self;
+        return try make(sha, buf);
     }
 
     pub fn toParent(self: *Commit, a: Allocator, idx: u8) !Commit {
@@ -962,6 +964,26 @@ test "file" {
     //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree);
     try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha);
+}
+
+test "not gpg" {
+    const null_sha = "0000000000000000000000000000000000000000";
+    const blob_invalid_0 =
+        \\tree 0000bb21f5276fd4f3611a890d12312312415434
+        \\parent ffffff8bd96b1abaceaa3298374abo82f4239948
+        \\author Some Dude <some@email.com> 1687200000 -0700
+        \\committer Some Dude <some@email.com> 1687200000 -0700
+        \\gpgsig -----BEGIN SSH SIGNATURE-----
+        \\ U1NIU0lHQNTHOUAAADMAAAALc3NoLWVkMjU1MTkAAAAgRa/hEgY+LtKXmU4UizGarF0jm9
+        \\ 1DXrxXaR8FmaEJOEUNTHADZ2l0AAAA45839473AINGEUTIAAABTAAAAC3NzaC1lZETN&/3
+        \\ BBEAQFzdXKXCV2F5ZXWUo46L5MENOTTEOU98367258dsteuhi876234OEU876+OEU876IO
+        \\ 12238aaOEIUvwap+NcCEOEUu9vwQ=
+        \\ -----END SSH SIGNATURE-----
+        \\
+        \\commit message
+    ;
+    const commit = try Commit.make(null_sha, blob_invalid_0);
+    try std.testing.expect(commit.sha.ptr == null_sha.ptr);
 }
 
 test "toParent" {

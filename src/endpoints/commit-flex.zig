@@ -17,20 +17,22 @@ const Error = Endpoint.Error;
 const HeatMapArray = [2][13][32]u16;
 
 var hits: HeatMapArray = .{.{.{0} ** 32} ** 13} ** 2;
+var seen: ?std.BufSet = null;
 
 var owner_email: ?[]const u8 = null;
 
-fn reset_hits() void {
+fn reset_hits(a: Allocator) void {
     for (&hits) |*y|
         for (y) |*m| {
             for (m) |*d| d.* = 0;
         };
+    seen = std.BufSet.init(a);
 }
 
 fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
     var commit = root_cmt;
     while (true) {
-        const old = commit.blob;
+        if (seen.?.contains(commit.sha)) return &hits;
         const d = commit.author.time;
         if (d.years < 2022) return &hits;
         if (owner_email) |email| {
@@ -41,7 +43,9 @@ fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
         } else hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
         for (commit.parent[1..], 1..) |par, pidx| {
             if (par) |_| {
+                seen.?.insert(par.?) catch return &hits;
                 var parent = try commit.toParent(a, @truncate(pidx));
+                //defer parent.raze(a);
                 _ = try countAll(a, parent);
             }
         }
@@ -49,7 +53,6 @@ fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
             error.NoParent => return &hits,
             else => |e| return e,
         };
-        a.free(old);
     }
 }
 
@@ -79,7 +82,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
 
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
-        reset_hits();
+        reset_hits(r.alloc);
         if (Ini.default(r.alloc)) |ini| {
             if (ini.get("owner")) |ns| {
                 if (ns.get("email")) |email| {
