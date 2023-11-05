@@ -270,17 +270,12 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
     }
 
     dom = dom.close();
-    //dom = dom.open(HTML.element("code", null, null));
-    //var litr = std.mem.split(u8, d2, "\n");
-
-    //dom.push(HTML.span(litr.next().?));
-    //while (litr.next()) |line| {
-    //    dom.push(HTML.text("\n"));
-    //    dom.push(HTML.span(line));
-    //}
-    //dom = dom.close();
     var data = dom.done();
-    const filestr = try std.fmt.allocPrint(r.alloc, "{pretty}", .{HTML.divAttr(data, &[_]HTML.Attribute{HTML.Attribute.class("code-block")})});
+    const filestr = try std.fmt.allocPrint(
+        r.alloc,
+        "{pretty}",
+        .{HTML.divAttr(data, &[_]HTML.Attribute{HTML.Attribute.class("code-block")})},
+    );
     tmpl.addVar("files", filestr) catch return error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
