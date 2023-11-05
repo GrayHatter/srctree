@@ -785,6 +785,19 @@ pub const Commit = struct {
     }
 };
 
+/// Warning only has support for sha currently
+pub fn commitish(shaish: []const u8) bool {
+    if (shaish.len < 3 or shaish.len > 40) return false;
+
+    for (shaish) |c| switch (c) {
+        'a'...'f' => continue,
+        'A'...'F' => continue,
+        '0'...'9' => continue,
+        else => return false,
+    };
+    return true;
+}
+
 pub const Blob = struct {
     mode: [6]u8,
     name: []const u8,
@@ -895,13 +908,23 @@ const Actions = struct {
         std.debug.print("update {s}\n", .{data});
     }
 
+    pub fn show(self: Actions, sha: []const u8) ![]u8 {
+        const stdout = try self.exec(&[_][]const u8{
+            "git",
+            "show",
+            sha,
+        });
+        //std.debug.print("show '''\n{s}\n'''\n", .{stdout});
+        return stdout;
+    }
+
     fn exec(self: Actions, argv: []const []const u8) ![]u8 {
         var child = try std.ChildProcess.exec(.{
             .cwd_dir = self.repo.dir,
             .allocator = self.alloc,
             .argv = argv,
         });
-        std.debug.print("stderr {s}\n", .{child.stderr});
+        if (child.stderr.len > 0) std.debug.print("stderr {s}\n", .{child.stderr});
         self.alloc.free(child.stderr);
         return child.stdout;
     }

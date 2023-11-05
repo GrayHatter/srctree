@@ -125,6 +125,12 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
                 error.Unrouteable,
                 error.InvalidURI,
                 => {},
+                error.Abusive => {
+                    std.debug.print("Abusive {}\n", .{request});
+                    for (request.raw_request.zwsgi.vars) |vars| {
+                        std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
+                    }
+                },
             }
         };
         if (response.phase != .closed) try response.finish();

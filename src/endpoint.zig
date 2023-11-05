@@ -15,6 +15,8 @@ pub const Error = error{
     OutOfMemory,
     Unrouteable,
     InvalidURI,
+
+    Abusive,
 };
 
 pub const router = Router.router;

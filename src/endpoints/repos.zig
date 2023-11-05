@@ -14,19 +14,50 @@ const UriIter = Endpoint.Router.UriIter;
 const git = @import("../git.zig");
 const Ini = @import("../ini.zig");
 
+const Commits = @import("repos/commits.zig");
+const commits = Commits.commits;
+const commit = Commits.commit;
+const htmlCommit = Commits.htmlCommit;
+
 const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "blob", .match = .{ .call = treeBlob } },
     .{ .name = "commits", .match = .{ .call = commits } },
+    .{ .name = "commit", .match = .{ .call = commit } },
     .{ .name = "tree", .match = .{ .call = treeBlob } },
 };
 
-pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
-    const repo_name = uri.next() orelse return list;
-    for (repo_name) |c| if (!std.ascii.isLower(c) and c != '.') return error.Unrouteable;
+pub const RouteData = struct {
+    name: []const u8,
+    verb: ?[]const u8 = null,
+    noun: ?[]const u8 = null,
 
-    if (uri.peek()) |_| {
-        return Endpoint.Router.router(uri, &endpoints);
-    } else {}
+    fn safe(name: ?[]const u8) ?[]const u8 {
+        if (name) |n| {
+            // why 30? who knows
+            if (n.len > 30) return null;
+            for (n) |c| if (!std.ascii.isLower(c) and c != '.') return null;
+            if (std.mem.indexOf(u8, n, "..")) |_| return null;
+            return n;
+        }
+        return null;
+    }
+
+    pub fn make(uri: *UriIter) ?RouteData {
+        const index = uri.index;
+        defer uri.index = index;
+        uri.reset();
+        _ = uri.next() orelse return null;
+        return .{
+            .name = safe(uri.next()) orelse return null,
+            .verb = uri.next(),
+            .noun = uri.next(),
+        };
+    }
+};
+
+pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
+    const rd = RouteData.make(uri) orelse return list;
+    for (rd.name) |c| if (!std.ascii.isLower(c) and c != '.') return error.Unrouteable;
 
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
@@ -34,74 +65,15 @@ pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
 
         while (itr.next() catch return error.Unrouteable) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
-            if (std.mem.eql(u8, file.name, repo_name)) return treeBlob;
+            if (std.mem.eql(u8, file.name, rd.name)) {
+                if (rd.verb) |_| {
+                    _ = uri.next();
+                    return Endpoint.Router.router(uri, &endpoints);
+                } else return treeBlob;
+            }
         }
     } else |_| {}
     return error.Unrouteable;
-}
-
-fn commit(r: *Response, uri: []const u8) Error!void {
-    return commits(r, uri);
-}
-
-fn htmlCommit(a: Allocator, c: git.Commit, comptime top: bool) ![]HTML.E {
-    var dom = DOM.new(a);
-    dom = dom.open(HTML.element("commit", null, null));
-
-    if (!top) {
-        dom.push(HTML.element("data", try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }), null));
-    }
-
-    dom = dom.open(HTML.element(if (top) "top" else "foot", null, null));
-    {
-        const prnt = c.parent[0] orelse "00000000";
-        dom.push(HTML.element("author", try a.dupe(u8, c.author.name), null));
-        dom.push(HTML.span(try std.fmt.allocPrint(a, "parent {s}", .{prnt[0..8]})));
-    }
-    dom = dom.close();
-
-    if (top) {
-        dom.push(HTML.element("data", try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }), null));
-    }
-    dom = dom.close();
-    return dom.done();
-}
-
-fn commits(r: *Response, uri: *UriIter) Error!void {
-    var cwd = std.fs.cwd();
-    uri.reset();
-    _ = uri.next();
-    var name = uri.next() orelse return error.Unrouteable;
-
-    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{name});
-    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadPacks(r.alloc) catch return error.Unknown;
-
-    var lcommits = try r.alloc.alloc(HTML.E, 20);
-    var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
-    for (lcommits, 0..) |*c, i| {
-        c.* = (try htmlCommit(r.alloc, current, false))[0];
-        current = current.toParent(r.alloc, 0) catch {
-            lcommits.len = i;
-            break;
-        };
-    }
-
-    const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{
-        HTML.div(lcommits),
-    });
-
-    var tmpl = Template.find("commits.html");
-    tmpl.init(r.alloc);
-    tmpl.addVar("commits", htmlstr) catch return error.Unknown;
-
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-
-    r.status = .ok;
-    r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
 }
 
 const dirs_first = true;
@@ -200,19 +172,17 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
 }
 
 fn treeBlob(r: *Response, uri: *UriIter) Error!void {
-    uri.reset();
-    _ = uri.next() orelse return error.InvalidURI; // repo
-    const repo_name = uri.next() orelse return error.InvalidURI;
+    const rd = RouteData.make(uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
-    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{repo_name});
+    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadPacks(r.alloc) catch return error.Unknown;
 
     const cmt = repo.commit(r.alloc) catch return error.Unknown;
     var files: git.Tree = cmt.mkTree(r.alloc) catch return error.Unknown;
-    if (uri.next()) |blb| {
+    if (rd.verb) |blb| {
         if (std.mem.eql(u8, blb, "blob")) {
             return blob(r, uri, repo, files);
         } else if (std.mem.eql(u8, blb, "tree")) {
@@ -315,6 +285,11 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
     const repo_name = uri.next() orelse return error.InvalidURI;
     _ = uri.next();
     const file_uri_name = uri.rest();
+
+    //if (std.mem.eql(u8, repo_name, "srctree")) {
+    //var acts = repo.getActions(r.alloc);
+    //acts.update() catch unreachable;
+    //}
 
     var dom = DOM.new(r.alloc);
     var repoo = repo;
