@@ -227,6 +227,15 @@ pub fn anch(c: anytype, attr: ?[]const Attribute) Element {
     return element("a", c, attr);
 }
 
+pub fn aHrefText(a: Allocator, txt: []const u8, href: []const u8) !Element {
+    var attr = try a.alloc(Attribute, 1);
+    attr[0] = Attribute{
+        .key = "href",
+        .value = href,
+    };
+    return anch(txt, attr);
+}
+
 pub fn li(c: anytype, attr: ?[]const Attribute) Element {
     return element("li", c, attr);
 }

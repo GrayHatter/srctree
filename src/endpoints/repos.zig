@@ -280,9 +280,10 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
     var str_refs = try std.mem.join(r.alloc, "\n", a_refs);
     tmpl.addVar("branches", str_refs) catch return error.Unknown;
 
+    const rd = RouteData.make(uri) orelse return error.Unrouteable;
     uri.reset();
     _ = uri.next();
-    const repo_name = uri.next() orelse return error.InvalidURI;
+    _ = uri.next();
     _ = uri.next();
     const file_uri_name = uri.rest();
 
@@ -294,7 +295,7 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
     var dom = DOM.new(r.alloc);
     var repoo = repo;
     var current: git.Commit = repoo.commit(r.alloc) catch return error.Unknown;
-    dom.pushSlice(try htmlCommit(r.alloc, current, true));
+    dom.pushSlice(try htmlCommit(r.alloc, current, rd.name, true));
 
     var commitblob = dom.done();
     const commitstr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.divAttr(
@@ -313,7 +314,7 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
             .value = try std.fmt.allocPrint(
                 r.alloc,
                 "/repo/{s}/tree/{s}",
-                .{ repo_name, file_uri_name[0..end] },
+                .{ rd.name, file_uri_name[0..end] },
             ),
         }};
         dom.dupe(HTML.anch("..", dd_href));
@@ -324,7 +325,7 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
         var href = &[_]HTML.Attribute{.{
             .key = "href",
             .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
-                repo_name,
+                rd.name,
                 if (obj.isFile()) "blob" else "tree",
                 file_uri_name,
                 obj.name,

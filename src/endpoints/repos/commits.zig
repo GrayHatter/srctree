@@ -40,7 +40,7 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
         while (!std.mem.startsWith(u8, current.sha, sha)) {
             current = current.toParent(r.alloc, 0) catch return error.Unknown;
         }
-        lcommits[0] = (try htmlCommit(r.alloc, current, true))[0];
+        lcommits[0] = (try htmlCommit(r.alloc, current, rd.name, true))[0];
 
         var acts = repo.getActions(r.alloc);
         var diff = acts.show(sha) catch return error.Unknown;
@@ -66,7 +66,7 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
     r.finish() catch return Error.Unknown;
 }
 
-pub fn htmlCommit(a: Allocator, c: git.Commit, comptime top: bool) ![]HTML.E {
+pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: bool) ![]HTML.E {
     var dom = DOM.new(a);
     dom = dom.open(HTML.element("commit", null, null));
 
@@ -82,7 +82,14 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, comptime top: bool) ![]HTML.E {
     {
         const prnt = c.parent[0] orelse "00000000";
         dom.push(HTML.element("author", try a.dupe(u8, c.author.name), null));
-        dom.push(HTML.span(try std.fmt.allocPrint(a, "parent {s}", .{prnt[0..8]})));
+        dom = dom.open(HTML.span(null));
+        dom.push(HTML.text("parent "));
+        dom.push(try HTML.aHrefText(
+            a,
+            prnt[0..8],
+            try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, prnt[0..8] }),
+        ));
+        dom = dom.close();
     }
     dom = dom.close();
 
@@ -98,11 +105,9 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, comptime top: bool) ![]HTML.E {
 }
 
 pub fn commits(r: *Response, uri: *UriIter) Error!void {
-    uri.reset();
-    _ = uri.next();
-    var name = uri.next() orelse return error.Unrouteable;
+    const rd = RouteData.make(uri) orelse return error.Unrouteable;
 
-    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{name});
+    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
     var cwd = std.fs.cwd();
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
@@ -111,7 +116,7 @@ pub fn commits(r: *Response, uri: *UriIter) Error!void {
     var lcommits = try r.alloc.alloc(HTML.E, 50);
     var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
     for (lcommits, 0..) |*c, i| {
-        c.* = (try htmlCommit(r.alloc, current, false))[0];
+        c.* = (try htmlCommit(r.alloc, current, rd.name, false))[0];
         current = current.toParent(r.alloc, 0) catch {
             lcommits.len = i;
             break;
