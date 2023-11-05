@@ -501,6 +501,7 @@ pub const Repo = struct {
     pub fn ref(self: Repo, str: []const u8) !SHA {
         for (self.refs) |r| {
             switch (r) {
+                .sha => |s| return s,
                 .tag => unreachable,
                 .branch => |b| {
                     if (std.mem.eql(u8, b.name, str)) {
@@ -528,24 +529,34 @@ pub const Repo = struct {
         var f = try self.dir.openFile("HEAD", .{});
         defer f.close();
         const name = try f.readToEndAlloc(a, 0xFF);
-        if (!std.mem.eql(u8, name[0..5], "ref: ")) {
-            std.debug.print("unexpected HEAD {s}\n", .{name});
-            unreachable;
-        }
-        self._head = name;
 
-        return .{
-            .branch = Branch{
-                .name = name[5 .. name.len - 1],
-                .sha = try self.ref(name[16 .. name.len - 1]),
-                .repo = self,
-            },
-        };
+        if (std.mem.eql(u8, name[0..5], "ref: ")) {
+            self._head = name;
+            return .{
+                .branch = Branch{
+                    .name = name[5 .. name.len - 1],
+                    .sha = try self.ref(name[16 .. name.len - 1]),
+                    .repo = self,
+                },
+            };
+        } else if (name.len == 41 and name[40] == '\n') {
+            self._head = name[0..40];
+            return .{
+                .sha = name[0..40], // We don't want that \n char
+            };
+        }
+
+        std.debug.print("unexpected HEAD {s}\n", .{name});
+        unreachable;
     }
 
     pub fn commit(self: *Repo, a: Allocator) !Commit {
         var head = try self.HEAD(a);
-        var resolv = try self.ref(head.branch.name["refs/heads/".len..]);
+        var resolv = switch (head) {
+            .sha => |s| s,
+            .branch => |b| try self.ref(b.name["refs/heads/".len..]),
+            .tag => unreachable,
+        };
         var obj = try self.findObj(a, resolv);
         defer obj.raze(a);
         var cmt = try Commit.fromReader(a, resolv, obj.reader());
@@ -572,6 +583,13 @@ pub const Repo = struct {
             return try file.readToEndAlloc(a, 0xFFFF);
         } else |_| {}
         return error.NoDescription;
+    }
+
+    pub fn getActions(self: *const Repo, a: Allocator) Actions {
+        return Actions{
+            .alloc = a,
+            .repo = self,
+        };
     }
 
     pub fn raze(self: *Repo, a: Allocator) void {
@@ -608,6 +626,7 @@ pub const Tag = struct {
 pub const Ref = union(enum) {
     tag: Tag,
     branch: Branch,
+    sha: SHA,
 };
 
 const Actor = struct {
@@ -859,6 +878,32 @@ pub const Tree = struct {
         try out.print(
             \\Tree{{ {} Objects, {} files {} directories }}
         , .{ self.objects.len, f, d });
+    }
+};
+
+const Actions = struct {
+    alloc: Allocator,
+    repo: *const Repo,
+
+    pub fn update(self: Actions) !void {
+        const data = try self.exec(&[_][]const u8{
+            "git",
+            "fetch",
+            "--dry-run",
+            "upstream",
+        });
+        std.debug.print("update {s}\n", .{data});
+    }
+
+    fn exec(self: Actions, argv: []const []const u8) ![]u8 {
+        var child = try std.ChildProcess.exec(.{
+            .cwd_dir = self.repo.dir,
+            .allocator = self.alloc,
+            .argv = argv,
+        });
+        std.debug.print("stderr {s}\n", .{child.stderr});
+        self.alloc.free(child.stderr);
+        return child.stdout;
     }
 };
 
