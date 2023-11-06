@@ -5,7 +5,7 @@ const Auth = @import("auth.zig");
 
 pub const Request = @This();
 
-const RawRequests = union {
+pub const RawRequests = union(enum) {
     zwsgi: zWSGIRequest,
     http: std.http.Server.Response,
 };

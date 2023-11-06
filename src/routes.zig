@@ -89,9 +89,12 @@ fn respond(r: *Response, _: *UriIter) Error!void {
 
 fn default(r: *Response, _: *UriIter) Error!void {
     const MSG = Template.find("index.html").blob;
-    sendMsg(r, MSG) catch |e| {
-        std.log.err("Unexpected error while responding [{}]\n", .{e});
-        return Error.AndExit;
+    sendMsg(r, MSG) catch |e| switch (e) {
+        error.NotWriteable => unreachable,
+        else => {
+            std.log.err("Unexpected error while responding [{}]\n", .{e});
+            return Error.AndExit;
+        },
     };
 }
 

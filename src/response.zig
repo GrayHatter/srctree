@@ -20,6 +20,11 @@ const Phase = enum {
     closed,
 };
 
+const Downstream = enum {
+    zwsgi,
+    http,
+};
+
 const Error = error{
     WrongPhase,
     HeadersFinished,
@@ -33,21 +38,25 @@ alloc: Allocator,
 request: *const Request,
 headers: Headers,
 phase: Phase = .created,
-upstream_writer: union(enum) {
+dwnstrm: Downstream = .zwsgi,
+writer_ctx: union(enum) {
     buffer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
     zwsgi: std.net.Stream.Writer,
     http: std.http.Server.Response.Writer,
 },
 status: std.http.Status = .internal_server_error,
 
-pub fn init(a: Allocator, uwriter: anytype, req: *const Request) Response {
+pub fn init(a: Allocator, req: *Request) Response {
     var res = Response{
         .alloc = a,
         .request = req,
         .headers = Headers.init(a),
-        .upstream_writer = uwriter,
+        .writer_ctx = switch (req.raw_request) {
+            .zwsgi => |*z| .{ .zwsgi = z.acpt.stream.writer() },
+            .http => |*h| .{ .http = h.writer() },
+        },
     };
-
+    if (req.raw_request == .http) res.dwnstrm = .http;
     //BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
     res.headersInit() catch @panic("unable to create Response obj");
     return res;
@@ -64,6 +73,12 @@ pub fn headersAdd(res: *Response, comptime name: []const u8, value: []const u8) 
 }
 
 pub fn start(res: *Response) !void {
+    if (res.dwnstrm == .http) {
+        var req = @constCast(res.request);
+        req.raw_request.http.transfer_encoding = .chunked;
+        return req.raw_request.http.do();
+    }
+
     if (res.phase != .created) return Error.WrongPhase;
     if (res.status == .internal_server_error) res.status = .ok;
     try res.sendHeaders();
@@ -86,6 +101,9 @@ fn sendHeaders(res: *Response) !void {
         const b = try std.fmt.bufPrint(&buf, "{s}: {s}\n", .{ header.key_ptr.*, header.value_ptr.str });
         _ = try res.write(b);
     }
+    if (res.dwnstrm == .http) {
+        _ = try res.write("Transfer-Encoding: chunked\r\n");
+    }
     _ = try res.write("\n");
 }
 
@@ -105,7 +123,7 @@ pub fn writer(res: *Response) Writer {
 
 /// Raw writer, use with caution! To use phase checking, use send();
 pub fn write(res: *Response, data: []const u8) !void {
-    _ = switch (res.upstream_writer) {
+    _ = switch (res.writer_ctx) {
         .zwsgi => |*w| try w.write(data),
         .http => |*w| try w.write(data),
         .buffer => |*w| try w.write(data),
@@ -114,7 +132,7 @@ pub fn write(res: *Response, data: []const u8) !void {
 }
 
 fn flush(res: *Response) !void {
-    switch (res.upstream_writer) {
+    switch (res.writer_ctx) {
         .buffer => |*w| try w.flush(),
         else => {},
     }
@@ -122,6 +140,10 @@ fn flush(res: *Response) !void {
 
 pub fn finish(res: *Response) !void {
     res.phase = .closed;
+    if (res.dwnstrm == .http) {
+        var req = @constCast(res.request);
+        return req.raw_request.http.connection.writeAll("0\r\n\n\n");
+    }
     return res.flush() catch |e| {
         std.debug.print("Error on flush :< {}\n", .{e});
     };

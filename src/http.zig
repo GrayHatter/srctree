@@ -11,8 +11,12 @@ const MAX_HEADER_SIZE = 1 <<| 13;
 
 pub fn serve(a: Allocator, srv: *Server) !void {
     connection: while (true) {
+        var arena = std.heap.ArenaAllocator.init(a);
+        defer arena.deinit();
+        var alloc = arena.allocator();
+
         var http_resp = try srv.accept(.{
-            .allocator = a,
+            .allocator = alloc,
             .header_strategy = .{ .dynamic = MAX_HEADER_SIZE },
         });
         defer http_resp.deinit();
@@ -29,7 +33,7 @@ pub fn serve(a: Allocator, srv: *Server) !void {
                 @tagName(http_resp.request.version),
                 http_resp.request.target,
             });
-            const body = try http_resp.reader().readAllAlloc(a, 8192);
+            const body = try http_resp.reader().readAllAlloc(alloc, 8192);
             defer a.free(body);
 
             try http_resp.headers.append("Server", "Source Tree WebServer");
@@ -38,10 +42,9 @@ pub fn serve(a: Allocator, srv: *Server) !void {
                 try http_resp.headers.append("connection", "keep-alive");
             }
 
-            var request = try Request.init(a, http_resp);
-            var response = Response.init(a, .{ .http = http_resp.writer() }, &request);
-            const ep = Router.router(response.request.uri);
-            ep(&response, body) catch |e| switch (e) {
+            var request = try Request.init(alloc, http_resp);
+            var response = Response.init(alloc, &request);
+            Router.baseRouter(&response, response.request.uri) catch |e| switch (e) {
                 error.AndExit => break :connection,
                 else => return e,
             };

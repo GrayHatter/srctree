@@ -29,6 +29,7 @@ const uWSGIVar = struct {
 
 pub const zWSGIRequest = struct {
     header: uProtoHeader,
+    acpt: std.net.StreamServer.Connection,
     vars: []uWSGIVar,
     body: ?[]u8 = null,
 };
@@ -89,7 +90,11 @@ fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Requ
 
     return try Request.init(
         a,
-        zWSGIRequest{ .header = uwsgi_header, .vars = vars },
+        zWSGIRequest{
+            .header = uwsgi_header,
+            .acpt = acpt,
+            .vars = vars,
+        },
     );
 }
 
@@ -103,7 +108,7 @@ fn find(list: []uWSGIVar, search: []const u8) []const u8 {
 pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
     while (true) {
         var acpt = try streamsrv.accept();
-        const request = try readHeader(a, acpt);
+        var request = try readHeader(a, acpt);
 
         std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
             find(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
@@ -114,7 +119,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
 
         var arena = std.heap.ArenaAllocator.init(a);
         var alloc = arena.allocator();
-        var response = Response.init(alloc, .{ .zwsgi = acpt.stream.writer() }, &request);
+        var response = Response.init(alloc, &request);
 
         Router.baseRouter(&response, response.request.uri) catch |err| {
             switch (err) {
