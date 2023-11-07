@@ -29,6 +29,21 @@ const Types = enum {
 
 const SHA = []const u8; // SUPERBAD, I'm sorry!
 
+pub fn shaToHex(sha: []const u8, hex: []u8) void {
+    std.debug.assert(sha.len == 20);
+    std.debug.assert(hex.len == 40);
+    const out = std.fmt.bufPrint(hex, "{}", .{hexLower(sha)}) catch unreachable;
+    std.debug.assert(out.len == 40);
+}
+
+pub fn shaToBin(sha: []const u8, bin: []u8) void {
+    std.debug.assert(sha.len == 40);
+    std.debug.assert(bin.len == 20);
+    for (0..20) |i| {
+        bin[i] = std.fmt.parseInt(u8, sha[i * 2 .. (i + 1) * 2], 16) catch unreachable;
+    }
+}
+
 const Pack = struct {
     name: SHA,
     pack: []u8,
@@ -931,6 +946,24 @@ const Actions = struct {
         return child.stdout;
     }
 };
+
+test "hex tranlations" {
+    var hexbuf: [40]u8 = undefined;
+    var binbuf: [20]u8 = undefined;
+
+    var one = "370303630b3fc631a0cb3942860fb6f77446e9c1";
+    shaToBin(one, &binbuf);
+    shaToHex(&binbuf, &hexbuf);
+    try std.testing.expectEqualStrings(&binbuf, "\x37\x03\x03\x63\x0b\x3f\xc6\x31\xa0\xcb\x39\x42\x86\x0f\xb6\xf7\x74\x46\xe9\xc1");
+    try std.testing.expectEqualStrings(&hexbuf, one);
+
+    var two = "0000000000000000000000000000000000000000";
+    shaToBin(two, &binbuf);
+    shaToHex(&binbuf, &hexbuf);
+
+    try std.testing.expectEqualStrings(&binbuf, "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00");
+    try std.testing.expectEqualStrings(&hexbuf, two);
+}
 
 test "read" {
     var a = std.testing.allocator;
