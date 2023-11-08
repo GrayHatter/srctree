@@ -148,7 +148,15 @@ pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
     return fromEpochTz(epoch, tz);
 }
 
-pub fn format(self: DateTime, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+    if (std.mem.eql(u8, fstr, "dtime")) {
+        return out.print("{s} {:0>2}:{:0>2}:{:0>2}", .{
+            WEEKDAYS[self.weekday],
+            self.hours,
+            self.minutes,
+            self.seconds,
+        });
+    }
     return out.print("{}-{}-{} {s} {:0>2}:{:0>2}:{:0>2}", .{
         self.years,
         self.months,
