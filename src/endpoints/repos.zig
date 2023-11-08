@@ -320,6 +320,7 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
         dom.dupe(HTML.anch("..", dd_href));
         dom = dom.close();
     }
+    const changed = files.changedSet(r.alloc, &repoo) catch return error.Unknown;
     std.sort.pdq(git.Blob, files.objects, {}, typeSorter);
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
@@ -340,6 +341,14 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
             dom.dupe(HTML.anch(try dupeDir(r.alloc, obj.name), href));
         }
         //HTML.element("file", link, null);
+        // I know... I KNOW!!!
+        for (changed) |ch| {
+            if (std.mem.eql(u8, ch.name, obj.name)) {
+                dom.dupe(HTML.span(ch.commit));
+                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{dtime}", .{ch.date})));
+                break;
+            }
+        }
         dom = dom.close();
     }
     var data = dom.done();
