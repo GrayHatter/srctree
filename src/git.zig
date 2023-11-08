@@ -298,10 +298,7 @@ const Pack = struct {
 };
 
 const Object = struct {
-    ctx: union(enum) {
-        fs: std.fs.File,
-        buf: std.io.FixedBufferStream([]u8),
-    },
+    ctx: std.io.FixedBufferStream([]u8),
     kind: ?Kind = null,
 
     pub const Kind = enum {
@@ -320,12 +317,8 @@ const Object = struct {
 
     const FBS = std.io.fixedBufferStream;
 
-    pub fn init(data: anytype) Object {
-        return switch (@TypeOf(data)) {
-            std.fs.File => Object{ .ctx = .{ .fs = data } },
-            []u8 => Object{ .ctx = .{ .buf = FBS(data) } },
-            else => @compileError("This type not implemented in Git Reader"),
-        };
+    pub fn init(data: []u8) Object {
+        return Object{ .ctx = FBS(data) };
     }
 
     pub const ReadError = error{
@@ -335,10 +328,7 @@ const Object = struct {
     pub const Reader = std.io.Reader(*Object, ReadError, read);
 
     fn read(self: *Object, dest: []u8) ReadError!usize {
-        return switch (self.ctx) {
-            .fs => |*fs| fs.read(dest) catch return ReadError.Unknown,
-            .buf => |*b| b.read(dest) catch return ReadError.Unknown,
-        };
+        return self.ctx.read(dest) catch return ReadError.Unknown;
     }
 
     pub fn reader(self: *Object) Object.Reader {
@@ -346,17 +336,11 @@ const Object = struct {
     }
 
     pub fn reset(self: *Object) void {
-        switch (self.ctx) {
-            .buf => |*b| b.pos = 0,
-            else => {},
-        }
+        self.ctx.pos = 0;
     }
 
     pub fn raze(self: Object, a: Allocator) void {
-        switch (self.ctx) {
-            .buf => |b| a.free(b.buffer),
-            .fs => |fs| fs.close(),
-        }
+        a.free(self.ctx.buffer);
     }
 };
 
@@ -540,28 +524,28 @@ pub const Repo = struct {
     /// TODO I don't want this to take an allocator :(
     /// Warning, has side effects!
     pub fn HEAD(self: *Repo, a: Allocator) !Ref {
-        if (self.refs.len == 0) try self.loadRefs(a);
-        var f = try self.dir.openFile("HEAD", .{});
-        defer f.close();
-        const name = try f.readToEndAlloc(a, 0xFF);
+        if (self._head) |_| {} else {
+            if (self.refs.len == 0) try self.loadRefs(a);
+            var f = try self.dir.openFile("HEAD", .{});
+            defer f.close();
+            self._head = try f.readToEndAlloc(a, 0xFF);
+        }
 
-        if (std.mem.eql(u8, name[0..5], "ref: ")) {
-            self._head = name;
+        if (std.mem.eql(u8, self._head.?[0..5], "ref: ")) {
             return .{
                 .branch = Branch{
-                    .name = name[5 .. name.len - 1],
-                    .sha = try self.ref(name[16 .. name.len - 1]),
+                    .name = self._head.?[5 .. self._head.?.len - 1],
+                    .sha = try self.ref(self._head.?[16 .. self._head.?.len - 1]),
                     .repo = self,
                 },
             };
-        } else if (name.len == 41 and name[40] == '\n') {
-            self._head = name[0..40];
+        } else if (self._head.?.len == 41 and self._head.?[40] == '\n') {
             return .{
-                .sha = name[0..40], // We don't want that \n char
+                .sha = self._head.?[0..40], // We don't want that \n char
             };
         }
 
-        std.debug.print("unexpected HEAD {s}\n", .{name});
+        std.debug.print("unexpected HEAD {s}\n", .{self._head.?});
         unreachable;
     }
 
@@ -721,6 +705,7 @@ pub const Commit = struct {
         return error.InvalidGpgsig;
     }
 
+    /// sha must be freeable by the allocator used when calling raze
     pub fn make(sha: SHA, data: []const u8) !Commit {
         var lines = std.mem.split(u8, data, "\n");
         var self: Commit = undefined;
@@ -753,10 +738,11 @@ pub const Commit = struct {
 
     pub fn fromReader(a: Allocator, sha: SHA, reader: Reader) !Commit {
         var buf = try reader.readAllAlloc(a, 0xFFFF);
-        return try make(sha, buf);
+        const dsha = try a.dupe(u8, sha);
+        return try make(dsha, buf);
     }
 
-    pub fn toParent(self: *Commit, a: Allocator, idx: u8) !Commit {
+    pub fn toParent(self: Commit, a: Allocator, idx: u8) !Commit {
         if (idx >= self.parent.len) return error.NoParent;
         if (self.parent[idx]) |parent| {
             if (self.repo) |repo| {
@@ -777,8 +763,36 @@ pub const Commit = struct {
         } else return error.DetachedCommit;
     }
 
+    pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8) !Tree {
+        const path = subpath orelse return self.mkTree(a);
+        if (path.len == 0) return self.mkTree(a);
+
+        var itr = std.mem.split(u8, path, "/");
+        var root = try self.mkTree(a);
+        root.path = try a.dupe(u8, path);
+        iter: while (itr.next()) |p| {
+            for (root.objects) |obj| {
+                if (std.mem.eql(u8, obj.name, p)) {
+                    if (itr.rest().len == 0) {
+                        defer root.raze(a);
+                        var out = try obj.toTree(a, self.repo.?.*);
+                        out.path = try a.dupe(u8, path);
+                        return out;
+                    } else {
+                        const tree = try obj.toTree(a, self.repo.?.*);
+                        defer root = tree;
+                        root.raze(a);
+                        continue :iter;
+                    }
+                }
+            } else return error.PathNotFound;
+        }
+        return root;
+    }
+
     /// Warning; this function is probably unsafe
     pub fn raze(self: Commit, a: Allocator) void {
+        a.free(self.sha);
         a.free(self.blob);
     }
     pub fn format(self: Commit, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
@@ -824,38 +838,65 @@ pub const Blob = struct {
         return self.mode[0] != 48;
     }
 
+    pub fn toObject(self: Blob, a: Allocator, repo: Repo) !Object {
+        if (!self.isFile()) return error.NotAFile;
+        _ = a;
+        _ = repo;
+        return error.NotImplemented;
+    }
+
+    pub fn toTree(self: Blob, a: Allocator, repo: Repo) !Tree {
+        if (self.isFile()) return error.NotATree;
+        var tree = try Tree.fromRepo(a, repo, &self.hash);
+        return tree;
+    }
+
     pub fn format(self: Blob, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        if (self.isFile())
-            try out.print(
-                "Blob{{ File {s} @ {s} }}",
-                .{ self.name, self.hash },
-            )
-        else
-            try out.print(
-                "Blob{{ Tree {s} @ {s} }}",
-                .{ self.name, self.hash },
-            );
+        try out.print("Blob{{ ", .{});
+        try if (self.isFile()) out.print("File", .{}) else out.print("Tree", .{});
+        try out.print(" {s} @ {s} }}", .{ self.name, self.hash });
+    }
+};
+
+pub const ChangeSet = struct {
+    name: []const u8,
+    sha: []const u8,
+    commit: []const u8,
+    date: DateTime,
+
+    pub fn raze(self: ChangeSet, a: Allocator) void {
+        a.free(self.name);
+        a.free(self.sha);
+        a.free(self.commit);
     }
 };
 
 pub const Tree = struct {
+    sha: []const u8,
+    path: ?[]const u8 = null,
     blob: []const u8,
     objects: []Blob,
+
+    pub fn pushPath(self: *Tree, a: Allocator, path: []const u8) !void {
+        var spath = self.path orelse {
+            self.path = try a.dupe(u8, path);
+            return;
+        };
+
+        self.path = try std.mem.join(a, "/", &[_][]const u8{ spath, path });
+        a.free(spath);
+    }
 
     pub fn fromRepo(a: Allocator, r: Repo, sha: SHA) !Tree {
         var blob = try r.findObj(a, sha);
         defer blob.raze(a);
         var b = try blob.reader().readAllAlloc(a, 0xffff);
-        return try Tree.make(a, b);
+        return try Tree.make(a, sha, b);
     }
 
-    pub fn fromReader(a: Allocator, reader: Reader) !Tree {
-        var buf = try reader.readAllAlloc(a, 0xffff);
-        return try Tree.make(a, buf);
-    }
-
-    pub fn make(a: Allocator, blob: []const u8) !Tree {
+    pub fn make(a: Allocator, sha: SHA, blob: []const u8) !Tree {
         var self: Tree = .{
+            .sha = try a.dupe(u8, sha),
             .blob = blob,
             .objects = try a.alloc(Blob, std.mem.count(u8, blob, "\x00")),
         };
@@ -891,7 +932,59 @@ pub const Tree = struct {
         return self;
     }
 
+    pub fn fromReader(a: Allocator, sha: SHA, reader: Reader) !Tree {
+        var buf = try reader.readAllAlloc(a, 0xffff);
+        return try Tree.make(a, sha, buf);
+    }
+
+    pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]ChangeSet {
+        const cmtt = try repo.commit(a);
+        defer cmtt.raze(a);
+        var search_list: []?Blob = try a.alloc(?Blob, self.objects.len);
+        for (self.objects, search_list) |src, *dst| {
+            dst.* = src;
+        }
+        defer a.free(search_list);
+
+        var par = try repo.commit(a);
+        var ptree = try par.mkSubTree(a, self.path);
+
+        var changed = try a.alloc(ChangeSet, self.objects.len);
+        var old = par;
+        var oldtree = ptree;
+        var found: usize = 0;
+        while (found < search_list.len) {
+            old = par;
+            oldtree = ptree;
+            par = try par.toParent(a, 0);
+            ptree = try par.mkSubTree(a, self.path);
+            for (search_list, 0..) |*search_ish, i| {
+                const search = search_ish.* orelse continue;
+                var line = search.name;
+                line.len += 21;
+                line = line[line.len - 20 .. line.len];
+                if (std.mem.indexOf(u8, ptree.blob, line)) |_| {} else {
+                    search_ish.* = null;
+                    found += 1;
+                    changed[i].name = try a.dupe(u8, search.name);
+                    changed[i].sha = try a.dupe(u8, old.sha);
+                    changed[i].commit = try a.dupe(u8, old.message);
+                    changed[i].date = old.committer.time;
+                    continue;
+                }
+            }
+            old.raze(a);
+            oldtree.raze(a);
+        }
+
+        par.raze(a);
+        ptree.raze(a);
+        return changed;
+    }
+
     pub fn raze(self: Tree, a: Allocator) void {
+        a.free(self.sha);
+        if (self.path) |p| a.free(p);
         a.free(self.objects);
         a.free(self.blob);
     }
@@ -993,7 +1086,7 @@ test "file" {
     var buffer = Object.init(dz);
     defer buffer.raze(a);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
-    defer a.free(commit.blob);
+    defer commit.raze(a);
     //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree);
     try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha);
@@ -1031,14 +1124,13 @@ test "toParent" {
     var count: usize = 0;
     while (true) {
         count += 1;
-        const old = commit.blob;
         if (commit.parent[0]) |_| {
-            commit = try commit.toParent(a, 0);
+            var parent = try commit.toParent(a, 0);
+            commit.raze(a);
+            commit = parent;
         } else break;
-
-        a.free(old);
     }
-    a.free(commit.blob);
+    commit.raze(a);
     try std.testing.expect(count >= 31); // LOL SORRY!
 }
 
@@ -1054,7 +1146,7 @@ test "tree" {
     defer a.free(data);
     var buffer = Object.init(data);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
-    defer a.free(commit.blob);
+    defer commit.raze(a);
     //std.debug.print("tree {s}\n", .{commit.sha});
 }
 
@@ -1068,12 +1160,13 @@ test "tree decom" {
     var d = try zlib.decompressStream(a, file.reader());
     defer d.deinit();
     var count = try d.read(&b);
-    var tree = try Tree.make(a, b[0..count]);
-    defer a.free(tree.objects);
-    for (tree.objects) |_| {
-        //std.debug.print("{s} {s} {s}\n", .{ obj.mode, obj.hash, obj.name });
+    var buf = try a.dupe(u8, b[0..count]);
+    var tree = try Tree.make(a, "5edabf724389ef87fa5a5ddb2ebe6dbd888885ae", buf);
+    defer tree.raze(a);
+    for (tree.objects) |obj| {
+        if (false) std.debug.print("{s} {s} {s}\n", .{ obj.mode, obj.hash, obj.name });
     }
-    //std.debug.print("{}\n", .{tree});
+    if (false) std.debug.print("{}\n", .{tree});
 }
 
 test "tree child" {
@@ -1116,7 +1209,7 @@ test "read pack" {
     var obj = try repo.findObj(a, lol);
     defer obj.raze(a);
     const commit = try Commit.fromReader(a, lol, obj.reader());
-    defer a.free(commit.blob);
+    defer commit.raze(a);
     if (false) std.debug.print("{}\n", .{commit});
 }
 
@@ -1130,14 +1223,13 @@ test "hopefully a delta" {
     try repo.loadPacks(a);
 
     var head = try repo.commit(a);
-    defer a.free(head.blob);
+    defer head.raze(a);
     //std.debug.print("{}\n", .{head});
 
     var obj = try repo.findObj(a, head.tree);
     defer obj.raze(a);
-    const tree = try Tree.fromReader(a, obj.reader());
-    defer a.free(tree.blob);
-    defer a.free(tree.objects);
+    const tree = try Tree.fromReader(a, head.tree, obj.reader());
+    tree.raze(a);
     if (false) std.debug.print("{}\n", .{tree});
 }
 
@@ -1155,4 +1247,208 @@ test "commit to tree" {
     defer tree.raze(a);
     if (false) std.debug.print("tree {}\n", .{tree});
     if (false) for (tree.objects) |obj| std.debug.print("    {}\n", .{obj});
+}
+
+test "blob to commit" {
+    var a = std.testing.allocator;
+    var cwd = std.fs.cwd();
+
+    var repo = try Repo.init(cwd);
+    defer repo.raze(a);
+
+    try repo.loadPacks(a);
+
+    const cmtt = try repo.commit(a);
+    defer cmtt.raze(a);
+
+    const tree = try cmtt.mkTree(a);
+    defer tree.raze(a);
+
+    var timer = try std.time.Timer.start();
+    var lap = timer.lap();
+    const found = try tree.changedSet(a, &repo);
+    if (false) std.debug.print("found {any}\n", .{found});
+    for (found) |f| f.raze(a);
+    a.free(found);
+    lap = timer.lap();
+    if (false) std.debug.print("timer {}\n", .{lap});
+}
+
+test "mk sub tree" {
+    var a = std.testing.allocator;
+    var cwd = std.fs.cwd();
+
+    var repo = try Repo.init(cwd);
+    defer repo.raze(a);
+
+    try repo.loadPacks(a);
+
+    const cmtt = try repo.commit(a);
+    defer cmtt.raze(a);
+
+    const tree = try cmtt.mkTree(a);
+    defer tree.raze(a);
+
+    var blob: Blob = blb: for (tree.objects) |obj| {
+        if (std.mem.eql(u8, obj.name, "src")) break :blb obj;
+    } else return error.ExpectedBlobMissing;
+    var subtree = try blob.toTree(a, repo);
+    if (false) std.debug.print("{any}\n", .{subtree});
+    for (subtree.objects) |obj| {
+        if (false) std.debug.print("{any}\n", .{obj});
+    }
+
+    subtree.raze(a);
+}
+
+test "commit mk sub tree" {
+    var a = std.testing.allocator;
+    var cwd = std.fs.cwd();
+
+    var repo = try Repo.init(cwd);
+    defer repo.raze(a);
+
+    try repo.loadPacks(a);
+
+    const cmtt = try repo.commit(a);
+    defer cmtt.raze(a);
+
+    const tree = try cmtt.mkTree(a);
+    defer tree.raze(a);
+
+    var blob: Blob = blb: for (tree.objects) |obj| {
+        if (std.mem.eql(u8, obj.name, "src")) break :blb obj;
+    } else return error.ExpectedBlobMissing;
+    var subtree = try blob.toTree(a, repo);
+    if (false) std.debug.print("{any}\n", .{subtree});
+    for (subtree.objects) |obj| {
+        if (false) std.debug.print("{any}\n", .{obj});
+    }
+    defer subtree.raze(a);
+
+    const csubtree = try cmtt.mkSubTree(a, "src");
+    if (false) std.debug.print("{any}\n", .{csubtree});
+    csubtree.raze(a);
+
+    const csubtree2 = try cmtt.mkSubTree(a, "src/endpoints");
+    if (false) std.debug.print("{any}\n", .{csubtree2});
+    if (false) for (csubtree2.objects) |obj|
+        std.debug.print("{any}\n", .{obj});
+    defer csubtree2.raze(a);
+
+    var changed = try csubtree2.changedSet(a, &repo);
+    for (csubtree2.objects, changed) |o, c| {
+        if (false) std.debug.print("{s} {s}\n", .{ o.name, c.sha });
+        c.raze(a);
+    }
+    a.free(changed);
+}
+test "considering optimizing blob to commit" {
+    //var a = std.testing.allocator;
+    //var cwd = std.fs.cwd();
+
+    //var dir = try cwd.openDir("repos/zig", .{});
+    //var repo = try Repo.init(dir);
+
+    ////var repo = try Repo.init(cwd);
+    //var timer = try std.time.Timer.start();
+    //defer repo.raze(a);
+
+    //try repo.loadPacks(a);
+
+    //const cmtt = try repo.commit(a);
+    //defer cmtt.raze(a);
+
+    //const tree = try cmtt.mkTree(a);
+    //defer tree.raze(a);
+    //var search_list: []?Blob = try a.alloc(?Blob, tree.objects.len);
+    //for (tree.objects, search_list) |src, *dst| {
+    //    dst.* = src;
+    //}
+    //defer a.free(search_list);
+
+    //var par = try repo.commit(a);
+    //var ptree = try par.mkTree(a);
+
+    //var old = par;
+    //var oldtree = ptree;
+    //var found: usize = 0;
+    //var lap = timer.lap();
+    //while (found < search_list.len) {
+    //    old = par;
+    //    oldtree = ptree;
+    //    par = try par.toParent(a, 0);
+    //    ptree = try par.mkTree(a);
+    //    for (search_list) |*search_ish| {
+    //        const search = search_ish.* orelse continue;
+    //        var line = search.name;
+    //        line.len += 21;
+    //        line = line[line.len - 20 .. line.len];
+    //        if (std.mem.indexOf(u8, ptree.blob, line)) |_| {} else {
+    //            search_ish.* = null;
+    //            found += 1;
+    //            if (false) std.debug.print("    commit for {s} is {s} ({} rem)\n", .{
+    //                search.name,
+    //                old.sha,
+    //                search_list.len - found,
+    //            });
+    //            continue;
+    //        }
+    //    }
+    //    old.raze(a);
+    //    oldtree.raze(a);
+    //}
+    //lap = timer.lap();
+    //std.debug.print("timer {}\n", .{lap});
+
+    //par.raze(a);
+    //ptree.raze(a);
+    //par = try repo.commit(a);
+    //ptree = try par.mkTree(a);
+
+    //var set = std.BufSet.init(a);
+    //defer set.deinit();
+
+    //while (set.count() < tree.objects.len) {
+    //    old = par;
+    //    oldtree = ptree;
+    //    par = try par.toParent(a, 0);
+    //    ptree = try par.mkTree(a);
+    //    if (tree.objects.len != ptree.objects.len) {
+    //        objl: for (tree.objects) |obj| {
+    //            if (set.contains(&obj.hash)) continue;
+    //            for (ptree.objects) |pobj| {
+    //                if (std.mem.eql(u8, pobj.name, obj.name)) {
+    //                    if (!std.mem.eql(u8, &pobj.hash, &obj.hash)) {
+    //                        try set.insert(&obj.hash);
+    //                        std.debug.print("    commit for {s} is {s}\n", .{ obj.name, old.sha });
+    //                        continue :objl;
+    //                    }
+    //                }
+    //            } else {
+    //                try set.insert(&obj.hash);
+    //                std.debug.print("    commit added {}\n", .{obj});
+    //                continue :objl;
+    //            }
+    //        }
+    //    } else {
+    //        for (tree.objects, ptree.objects) |obj, pobj| {
+    //            if (set.contains(&obj.hash)) continue;
+    //            if (!std.mem.eql(u8, &pobj.hash, &obj.hash)) {
+    //                if (std.mem.eql(u8, pobj.name, obj.name)) {
+    //                    try set.insert(&obj.hash);
+    //                    std.debug.print("    commit for {s} is {s}\n", .{ obj.name, old.sha });
+    //                    continue;
+    //                } else std.debug.print("    error on commit for {}\n", .{obj});
+    //            }
+    //        }
+    //    }
+    //    old.raze(a);
+    //    oldtree.raze(a);
+    //}
+    //lap = timer.lap();
+    //std.debug.print("timer {}\n", .{lap});
+
+    //par.raze(a);
+    //ptree.raze(a);
 }
