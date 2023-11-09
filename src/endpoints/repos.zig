@@ -178,22 +178,22 @@ fn treeBlob(r: *Response, uri: *UriIter) Error!void {
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadPacks(r.alloc) catch return error.Unknown;
+    repo.loadData(r.alloc) catch return error.Unknown;
 
     const cmt = repo.commit(r.alloc) catch return error.Unknown;
     var files: git.Tree = cmt.mkTree(r.alloc) catch return error.Unknown;
     if (rd.verb) |blb| {
         if (std.mem.eql(u8, blb, "blob")) {
-            return blob(r, uri, repo, files);
+            return blob(r, uri, &repo, files);
         } else if (std.mem.eql(u8, blb, "tree")) {
             files = mkTree(r.alloc, repo, uri, files) catch return error.Unknown;
-            return tree(r, uri, repo, files);
+            return tree(r, uri, &repo, &files);
         } else return error.InvalidURI;
     } else files = cmt.mkTree(r.alloc) catch return error.Unknown;
-    return tree(r, uri, repo, files);
+    return tree(r, uri, &repo, &files);
 }
 
-fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!void {
+fn blob(r: *Response, uri: *UriIter, repo: *git.Repo, pfiles: git.Tree) Error!void {
     var tmpl = Template.find("blob.html");
     tmpl.init(r.alloc);
 
@@ -208,7 +208,7 @@ fn blob(r: *Response, uri: *UriIter, repo: git.Repo, pfiles: git.Tree) Error!voi
                     if (uri.next()) |_| return error.InvalidURI;
                     break :search;
                 }
-                files = git.Tree.fromRepo(r.alloc, repo, &obj.hash) catch return error.Unknown;
+                files = git.Tree.fromRepo(r.alloc, repo.*, &obj.hash) catch return error.Unknown;
                 continue :search;
             }
         } else return error.InvalidURI;
@@ -266,11 +266,15 @@ fn mkTree(a: Allocator, repo: git.Repo, uri: *UriIter, pfiles: git.Tree) !git.Tr
     return files;
 }
 
-fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void {
+fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!void {
     var tmpl = Template.find("repo.html");
     tmpl.init(r.alloc);
 
-    var head = repo._head orelse "unknown";
+    var head = if (repo.head) |h| switch (h) {
+        .sha => |s| s,
+        .branch => |b| b.name,
+        else => "unknown",
+    } else "unknown";
     tmpl.addVar("branch.default", head) catch return error.Unknown;
 
     var a_refs = try r.alloc.alloc([]const u8, repo.refs.len);
@@ -293,8 +297,7 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
     //}
 
     var dom = DOM.new(r.alloc);
-    var repoo = repo;
-    var current: git.Commit = repoo.commit(r.alloc) catch return error.Unknown;
+    var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
     dom.pushSlice(try htmlCommit(r.alloc, current, rd.name, true));
 
     var commitblob = dom.done();
@@ -320,7 +323,8 @@ fn tree(r: *Response, uri: *UriIter, repo: git.Repo, files: git.Tree) Error!void
         dom.dupe(HTML.anch("..", dd_href));
         dom = dom.close();
     }
-    const changed = files.changedSet(r.alloc, &repoo) catch return error.Unknown;
+    try files.pushPath(r.alloc, file_uri_name);
+    const changed = files.changedSet(r.alloc, repo) catch return error.Unknown;
     std.sort.pdq(git.Blob, files.objects, {}, typeSorter);
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{

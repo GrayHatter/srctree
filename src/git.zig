@@ -353,7 +353,7 @@ pub const Repo = struct {
     packs: []Pack,
     refs: []Ref,
     current: ?[]u8 = null,
-    _head: ?[]u8 = null,
+    head: ?Ref = null,
 
     pub fn init(d: std.fs.Dir) Error!Repo {
         var repo = Repo{
@@ -373,6 +373,12 @@ pub const Repo = struct {
         }
 
         return repo;
+    }
+
+    pub fn loadData(self: *Repo, a: Allocator) !void {
+        if (self.packs.len == 0) try self.loadPacks(a);
+        try self.loadRefs(a);
+        _ = try self.HEAD(a);
     }
 
     const empty_sha = [_]u8{0} ** 20;
@@ -524,34 +530,34 @@ pub const Repo = struct {
     /// TODO I don't want this to take an allocator :(
     /// Warning, has side effects!
     pub fn HEAD(self: *Repo, a: Allocator) !Ref {
-        if (self._head) |_| {} else {
-            if (self.refs.len == 0) try self.loadRefs(a);
-            var f = try self.dir.openFile("HEAD", .{});
-            defer f.close();
-            self._head = try f.readToEndAlloc(a, 0xFF);
-        }
+        var f = try self.dir.openFile("HEAD", .{});
+        defer f.close();
+        var buff: [0xFF]u8 = undefined;
 
-        if (std.mem.eql(u8, self._head.?[0..5], "ref: ")) {
-            return .{
+        const size = try f.read(&buff);
+        const head = buff[0..size];
+
+        if (std.mem.eql(u8, head[0..5], "ref: ")) {
+            self.head = Ref{
                 .branch = Branch{
-                    .name = self._head.?[5 .. self._head.?.len - 1],
-                    .sha = try self.ref(self._head.?[16 .. self._head.?.len - 1]),
+                    .name = try a.dupe(u8, head[5 .. head.len - 1]),
+                    .sha = try self.ref(head[16 .. head.len - 1]),
                     .repo = self,
                 },
             };
-        } else if (self._head.?.len == 41 and self._head.?[40] == '\n') {
-            return .{
-                .sha = self._head.?[0..40], // We don't want that \n char
+        } else if (head.len == 41 and head[40] == '\n') {
+            self.head = Ref{
+                .sha = try a.dupe(u8, head[0..40]), // We don't want that \n char
             };
+        } else {
+            std.debug.print("unexpected HEAD {s}\n", .{head});
+            unreachable;
         }
-
-        std.debug.print("unexpected HEAD {s}\n", .{self._head.?});
-        unreachable;
+        return self.head.?;
     }
 
-    pub fn commit(self: *Repo, a: Allocator) !Commit {
-        var head = try self.HEAD(a);
-        var resolv = switch (head) {
+    pub fn commit(self: *const Repo, a: Allocator) !Commit {
+        var resolv = switch (self.head.?) {
             .sha => |s| s,
             .branch => |b| try self.ref(b.name["refs/heads/".len..]),
             .tag => unreachable,
@@ -607,7 +613,10 @@ pub const Repo = struct {
         a.free(self.refs);
 
         if (self.current) |c| a.free(c);
-        if (self._head) |h| a.free(h);
+        if (self.head) |h| switch (h) {
+            .branch => |b| a.free(b.name),
+            else => {}, //a.free(h);
+        };
     }
 };
 
@@ -663,7 +672,7 @@ pub const Commit = struct {
     author: Actor,
     committer: Actor,
     message: []const u8,
-    repo: ?*Repo = null,
+    repo: ?*const Repo = null,
     gpgsig: GPGSig,
 
     ptr_parent: ?*Commit = null, // TOOO multiple parents
@@ -957,7 +966,23 @@ pub const Tree = struct {
             old = par;
             oldtree = ptree;
             par = try par.toParent(a, 0);
-            ptree = try par.mkSubTree(a, self.path);
+            ptree = par.mkSubTree(a, self.path) catch |err| switch (err) {
+                error.PathNotFound => {
+                    for (search_list, 0..) |search_ish, i| {
+                        if (search_ish) |search| {
+                            found += 1;
+                            changed[i].name = try a.dupe(u8, search.name);
+                            changed[i].sha = try a.dupe(u8, old.sha);
+                            changed[i].commit = try a.dupe(u8, old.message);
+                            changed[i].date = old.committer.time;
+                        }
+                    }
+                    old.raze(a);
+                    oldtree.raze(a);
+                    break;
+                },
+                else => |e| return e,
+            };
             for (search_list, 0..) |*search_ish, i| {
                 const search = search_ish.* orelse continue;
                 var line = search.name;
@@ -1119,6 +1144,7 @@ test "toParent" {
 
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
+    try repo.loadData(a);
     var commit = try repo.commit(a);
 
     var count: usize = 0;
@@ -1220,7 +1246,7 @@ test "hopefully a delta" {
     var repo = try Repo.init(dir);
     defer repo.raze(a);
 
-    try repo.loadPacks(a);
+    try repo.loadData(a);
 
     var head = try repo.commit(a);
     defer head.raze(a);
@@ -1239,7 +1265,7 @@ test "commit to tree" {
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
-    //try repo.loadPacks(a);
+    try repo.loadData(a);
 
     const cmt = try repo.commit(a);
     defer cmt.raze(a);
@@ -1256,7 +1282,7 @@ test "blob to commit" {
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
-    try repo.loadPacks(a);
+    try repo.loadData(a);
 
     const cmtt = try repo.commit(a);
     defer cmtt.raze(a);
@@ -1281,7 +1307,7 @@ test "mk sub tree" {
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
-    try repo.loadPacks(a);
+    try repo.loadData(a);
 
     const cmtt = try repo.commit(a);
     defer cmtt.raze(a);
@@ -1308,7 +1334,7 @@ test "commit mk sub tree" {
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
-    try repo.loadPacks(a);
+    try repo.loadData(a);
 
     const cmtt = try repo.commit(a);
     defer cmtt.raze(a);

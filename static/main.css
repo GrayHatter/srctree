@@ -203,7 +203,7 @@ file {
 
 file > a,
 tree > a {
-	width: 40%;
+	min-width: 25%;
 	display: inline-block;
 }
 

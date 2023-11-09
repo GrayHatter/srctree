@@ -59,7 +59,7 @@ fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
 fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
     var repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
-    try repo.loadPacks(a);
+    try repo.loadData(a);
     defer repo.raze(a);
 
     var commit = repo.commit(a) catch return &hits;
