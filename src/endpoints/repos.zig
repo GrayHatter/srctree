@@ -13,6 +13,7 @@ const UriIter = Endpoint.Router.UriIter;
 
 const git = @import("../git.zig");
 const Ini = @import("../ini.zig");
+const Humanize = @import("../humanize.zig");
 
 const Commits = @import("repos/commits.zig");
 const commits = Commits.commits;
@@ -349,7 +350,7 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
         for (changed) |ch| {
             if (std.mem.eql(u8, ch.name, obj.name)) {
                 dom.dupe(HTML.span(ch.commit));
-                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{dtime}", .{ch.date})));
+                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{}", .{Humanize.unix(ch.date.timestamp)})));
                 break;
             }
         }
