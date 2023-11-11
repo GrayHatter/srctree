@@ -14,6 +14,7 @@ const UriIter = Endpoint.Router.UriIter;
 const git = @import("../git.zig");
 const Ini = @import("../ini.zig");
 const Humanize = @import("../humanize.zig");
+const Bleach = @import("../bleach.zig");
 
 const Commits = @import("repos/commits.zig");
 const commits = Commits.commits;
@@ -237,7 +238,10 @@ fn blob(r: *Response, uri: *UriIter, repo: *git.Repo, pfiles: git.Tree) Error!vo
             b[1..],
             b,
         });
-        dom.push(HTML.element("ln", litr.next().?, attrs));
+        const dirty = litr.next().?;
+        var clean = try r.alloc.alloc(u8, dirty.len * 2);
+        clean = Bleach.sanitize(dirty, clean, .{}) catch return error.Unknown;
+        dom.push(HTML.element("ln", clean, attrs));
     }
 
     dom = dom.close();
