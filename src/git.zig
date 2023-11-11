@@ -18,7 +18,9 @@ pub const Error = error{
     ObjectMissing,
     OutOfMemory,
     NotImplemented,
+    EndOfStream,
     PackCorrupt,
+    PackRef,
 };
 
 const Types = enum {
@@ -239,14 +241,42 @@ const Pack = struct {
         }
     }
 
-    fn loadDelta(self: Pack, a: Allocator, reader: *FBSReader, offset: usize) ![]u8 {
+    fn loadRefDelta(_: Pack, a: Allocator, reader: *FBSReader, _: usize, repo: Repo) ![]u8 {
+        var buf: [20]u8 = undefined;
+        var hexy: [40]u8 = undefined;
+
+        _ = try reader.read(&buf);
+        shaToHex(&buf, &hexy);
+        var basez = repo.findBlob(a, &buf) catch return error.BlobMissing;
+        defer a.free(basez);
+
+        var _zlib = zlib.decompressStream(a, reader.*) catch return error.PackCorrupt;
+        defer _zlib.deinit();
+        var zr = _zlib.reader();
+        var inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
+        defer a.free(inst);
+        var inst_fbs = std.io.fixedBufferStream(inst);
+        var inst_reader = inst_fbs.reader();
+        // We don't actually need these when zlib works :)
+        _ = try readVarInt(&inst_reader);
+        _ = try readVarInt(&inst_reader);
+        var buffer = std.ArrayList(u8).init(a);
+        while (true) {
+            _ = deltaInst(&inst_reader, buffer.writer(), basez) catch {
+                break;
+            };
+        }
+        return try buffer.toOwnedSlice();
+    }
+
+    fn loadDelta(self: Pack, a: Allocator, reader: *FBSReader, offset: usize, repo: Repo) ![]u8 {
         // fd pos is offset + 2-ish because of the header read
         var srclen = try readVarInt(reader);
 
-        var _zlib = try zlib.decompressStream(a, reader.*);
+        var _zlib = zlib.decompressStream(a, reader.*) catch return error.PackCorrupt;
         defer _zlib.deinit();
         var zr = _zlib.reader();
-        var inst = try zr.readAllAlloc(a, 0xffffff);
+        var inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
         defer a.free(inst);
         var inst_fbs = std.io.fixedBufferStream(inst);
         var inst_reader = inst_fbs.reader();
@@ -255,7 +285,7 @@ const Pack = struct {
         _ = try readVarInt(&inst_reader);
 
         const baseobj_offset = offset - srclen;
-        var basez = try self.loadObj(a, baseobj_offset);
+        var basez = try self.loadObj(a, baseobj_offset, repo);
         defer a.free(basez);
 
         var buffer = std.ArrayList(u8).init(a);
@@ -267,25 +297,21 @@ const Pack = struct {
         return try buffer.toOwnedSlice();
     }
 
-    fn loadObj(self: Pack, a: Allocator, offset: usize) Error![]u8 {
+    pub fn loadObj(self: Pack, a: Allocator, offset: usize, repo: Repo) Error![]u8 {
         var fbs = std.io.fixedBufferStream(self.pack[offset..]);
         var reader = fbs.reader();
-        var h = parseObjHeader(&reader);
+        const h = parseObjHeader(&reader);
 
         switch (h.kind) {
             .commit, .tree, .blob => return loadBlob(a, &reader) catch return error.PackCorrupt,
-            .ofs_delta => return self.loadDelta(a, &reader, offset) catch return error.PackCorrupt,
+            .ofs_delta => return try self.loadDelta(a, &reader, offset, repo),
+            .ref_delta => return try self.loadRefDelta(a, &reader, offset, repo),
             else => {
                 std.debug.print("obj type ({}) not implemened\n", .{h.kind});
                 unreachable; // not implemented
             },
         }
         unreachable;
-    }
-
-    pub fn getObject(self: Pack, a: Allocator, offset: usize) !Object {
-        var data = try self.loadObj(a, offset);
-        return Object.init(data);
     }
 
     pub fn raze(self: Pack, a: Allocator) void {
@@ -386,7 +412,7 @@ pub const Repo = struct {
     fn loadFileObj(self: Repo, in_sha: SHA) !std.fs.File {
         var sha: [40]u8 = undefined;
         if (in_sha.len == 20) {
-            _ = try std.fmt.bufPrint(&sha, "{}", .{hexLower(in_sha)});
+            shaToHex(in_sha, &sha);
         } else if (in_sha.len > 40) {
             unreachable;
         } else {
@@ -406,12 +432,13 @@ pub const Repo = struct {
         };
     }
 
-    fn loadPackDeltaRef(_: *Repo, _: Allocator) ![]u8 {
-        return error.NotImplemnted;
+    fn findObj(self: Repo, a: Allocator, in_sha: SHA) !Object {
+        var data = try self.findBlob(a, in_sha);
+        return Object.init(data);
     }
 
     /// TODO binary search lol
-    fn findObj(self: Repo, a: Allocator, in_sha: SHA) !Object {
+    fn findBlob(self: Repo, a: Allocator, in_sha: SHA) ![]u8 {
         var shabuf: [20]u8 = undefined;
         var sha: []const u8 = &shabuf;
         if (in_sha.len == 40) {
@@ -425,7 +452,7 @@ pub const Repo = struct {
 
         for (self.packs) |pack| {
             if (pack.contains(sha)) |offset| {
-                return try pack.getObject(a, offset);
+                return try pack.loadObj(a, offset, self);
             }
         }
         if (self.loadFileObj(sha)) |fd| {
@@ -433,8 +460,7 @@ pub const Repo = struct {
             var _zlib = try zlib.decompressStream(a, fd.reader());
             defer _zlib.deinit();
             var reader = _zlib.reader();
-            var data = try reader.readAllAlloc(a, 0xffff);
-            return Object.init(data);
+            return try reader.readAllAlloc(a, 0xffff);
         } else |_| {}
         return error.ObjectMissing;
     }
@@ -1493,4 +1519,30 @@ test "considering optimizing blob to commit" {
 
     //par.raze(a);
     //ptree.raze(a);
+}
+
+test "ref delta" {
+    var a = std.testing.allocator;
+    var cwd = std.fs.cwd();
+    var dir = cwd.openDir("repos/hastur", .{}) catch return error.skip;
+
+    var repo = try Repo.init(dir);
+    defer repo.raze(a);
+
+    try repo.loadData(a);
+
+    const cmtt = try repo.commit(a);
+    defer cmtt.raze(a);
+
+    const tree = try cmtt.mkTree(a);
+    defer tree.raze(a);
+
+    var timer = try std.time.Timer.start();
+    var lap = timer.lap();
+    const found = try tree.changedSet(a, &repo);
+    if (false) std.debug.print("found {any}\n", .{found});
+    for (found) |f| f.raze(a);
+    a.free(found);
+    lap = timer.lap();
+    if (false) std.debug.print("timer {}\n", .{lap});
 }
