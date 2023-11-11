@@ -965,7 +965,23 @@ pub const Tree = struct {
         while (found < search_list.len) {
             old = par;
             oldtree = ptree;
-            par = try par.toParent(a, 0);
+            par = par.toParent(a, 0) catch |err| switch (err) {
+                error.NoParent => {
+                    for (search_list, 0..) |search_ish, i| {
+                        if (search_ish) |search| {
+                            found += 1;
+                            changed[i].name = try a.dupe(u8, search.name);
+                            changed[i].sha = try a.dupe(u8, old.sha);
+                            changed[i].commit = try a.dupe(u8, old.message);
+                            changed[i].date = old.committer.time;
+                        }
+                    }
+                    old.raze(a);
+                    oldtree.raze(a);
+                    break;
+                },
+                else => |e| return e,
+            };
             ptree = par.mkSubTree(a, self.path) catch |err| switch (err) {
                 error.PathNotFound => {
                     for (search_list, 0..) |search_ish, i| {
