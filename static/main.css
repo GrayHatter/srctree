@@ -9,11 +9,10 @@ html {
 a {
 	text-decoration: none;
 	color: #FFFFEB;
-
-}
-a:visited {
-	text-decoration: none;
-	color: #FFFFEB;
+	&:visited {
+		text-decoration: none;
+		color: #FFFFEB;
+	}
 }
 
 body {
@@ -25,40 +24,33 @@ header {
 	justify-content: space-between;
 	margin: auto;
 	width: 1050px;
-}
+	> h1 {
+		display: inline-block;
+		font-family: 'Titillium Web', sans-serif;
+		font-size: 300%;
+		margin: 0 0 16px 0;
+		padding: 0 0 0 40px;
+		text-align: left;
+		width: 25%;
+	}
 
-header > h1 {
-	display: inline-block;
-	font-family: 'Titillium Web', sans-serif;
-	font-size: 300%;
-	margin: 0 0 16px 0;
-	padding: 0 0 0 40px;
-	text-align: left;
-	width: 25%;
-}
+	a {
+		font-size: 108%;
+		padding: 10px 20px 2px;
+		border-bottom: #7a003f solid 2px;
+		border-radius: 0 0 2px 2px;
+	}
 
-header a {
-	text-decoration: none;
-	color: #FFFFEB;
-	font-size: 108%;
-	padding: 10px 20px 2px;
-	background-color: #222222;
-	border-bottom: #7a003f solid 2px;
-	margin-bottom: 20px;
-	text-align: left;
-	border-radius: 0 0  3px 3px;
-}
+	> ul {
+		display: flex;
+		justify-content: space-between;
+		width: 50%;
 
-header > ul {
-	align-items: center;
-	display: flex;
-	justify-content: space-between;
-	width: 50%;
-}
-
-header > ul > li {
-	display: inline-block;
-	padding: 20px;
+		> li {
+			display: inline-block;
+			padding: 20px;
+		}
+	}
 }
 
 content {
@@ -75,24 +67,7 @@ lines {
 	width: 50px;
 }
 
-code > ln {
-	width: 100%;
-	display: inline-block;
-}
-
-code > ln:before {
-	content: attr(num);
-	width: 3em;
-	display: inline-block;
-}
-
-code > ln:target {
-	background-color: #222;
-}
-
-.code-block {
-	background: #333;
-}
+.code-block { background: #333; }
 
 code {
 	display: inline-block;
@@ -100,6 +75,16 @@ code {
 	text-align: left;
 	white-space: pre;
 	width: 100%;
+	> ln {
+		width: 100%;
+		display: inline-block;
+		&:before {
+			content: attr(num);
+			width: 3em;
+			display: inline-block;
+		}
+		&:target { background-color: #222; }
+	}
 }
 
 repos {
@@ -109,46 +94,39 @@ repos {
 	margin: auto;
 	padding: 0 0 0 50px;
 	text-align: left;
-
-}
-
-repo name {
-	font-family: 'Titillium Web', sans-serif;
-	background: #333;
-	height: 30px;
-	display: block;
-	border-radius: 4px 4px 0 0;
-	border: 1px gray solid;
-	border-bottom: 0px ;
-	padding: 4px 0 4px 12px;
-	margin: 0;
-	font-size: 120%;
-}
-
-repo name a {
-	display: block;
-	width: 100%;
-	height: 100%;
-}
-
-repo desc {
-	display: block;
-	border: 1px gray solid;
-	border-bottom: #7a003f solid 2px;
-	margin-bottom: 20px;
-	min-height: 50px;
-	display: block;
-	border-radius: 0 0 4px 4px;
-	padding: 8px;
-}
-
-repo desc p {
-	margin-top: 0;
 }
 
 repo {
 	width: 48%;
 	margin: 0 auto 10px 0.5%;
+	name {
+		font-family: 'Titillium Web', sans-serif;
+		background: #333;
+		height: 30px;
+		display: block;
+		border-radius: 4px 4px 0 0;
+		border: 1px gray solid;
+		border-bottom: 0px;
+		padding: 4px 0 4px 12px;
+		margin: 0;
+		font-size: 120%;
+		a {
+			display: block;
+			width: 100%;
+			height: 100%;
+		}
+	}
+	desc {
+		display: block;
+		border: 1px gray solid;
+		border-bottom: #7a003f solid 2px;
+		margin-bottom: 20px;
+		min-height: 50px;
+		display: block;
+		border-radius: 0 0 4px 4px;
+		padding: 8px;
+		p { margin-top: 0; }
+	}
 }
 
 li {
@@ -156,55 +134,27 @@ li {
 	list-style: none;
 }
 
-
 .treelist {
 	background: #333;
-	color: #FFFFEB;
 	padding: 10px;
-	width: 80%;
 	font-family: 'Ubuntu Mono', sans-serif;
-}
-
-.treelist > tree:first-child,
-.treelist > file:first-child {
-	border-top: 2px solid gray;
-}
-
-.treelist > file > a::before {
-	content: "📄";
-	padding-right: 8px;
-}
-
-.treelist > tree > a::before {
-	content: "📁";
-	padding-right: 8px;
-}
-tree {
-	border: 2px solid gray;
-	border-top: 0px;
-	margin: auto;
-	padding: 4px;
-	text-align: left;
-	width: 98%;
-	display: flex;
-	justify-content: space-between;
-}
-
-file {
-	border: 2px solid gray;
-	border-top: 0px;
-	margin: auto;
-	padding: 4px;
-	text-align: left;
-	width: 98%;
-	display: flex;
-	justify-content: space-between;
-}
-
-file > a,
-tree > a {
-	min-width: 25%;
-	display: inline-block;
+	tree, file {
+		border: 2px solid gray;
+		border-top: 0px;
+		margin: auto;
+		padding: 4px;
+		text-align: left;
+		width: 98%;
+		display: flex;
+		justify-content: space-between;
+		> a {
+			min-width: 25%;
+			display: inline-block;
+		}
+		&:first-child { border-top: 2px solid gray; }
+	}
+	> tree > a::before { content: "📁"; padding-right: 8px;}
+	> file > a::before { content: "📄"; padding-right: 8px;}
 }
 
 commit {
@@ -214,36 +164,30 @@ commit {
 	margin-bottom: 20px;
 	background: #333;
 	border-radius: 3px 3px 0 0;
-}
-
-commit > top {
-	display: block;
-	background-color: #686868;
-	border-radius: 3px 3px 0 0;
-	padding: 8px;
-	border-top: #7a003f solid 2px;
-}
-
-commit > data {
-	display: block;
-	padding: 8px;
-	background: #333;
-	border-radius: 3px 3px 0 0;
-}
-
-commit > foot{
-	display: block;
-	background-color: #686868;
-	border-bottom: #7a003f solid 2px;
-	text-align: left;
-	border-radius: 0 0 3px 3px;
-	padding: 8px;
-}
-
-commit > top > span ,
-commit > foot > span {
-	display: inline-block;
-	float: right;
+	> data {
+		display: block;
+		padding: 8px;
+		background: #333;
+		border-radius: 3px 3px 0 0;
+	}
+	> top, > foot {
+		text-align: left;
+		display: block;
+		background-color: #686868;
+		padding: 8px;
+		> span {
+			display: inline-block;
+			float: right;
+		}
+	}
+	> top {
+		border-radius: 3px 3px 0 0;
+		border-top: #7a003f solid 2px;
+	}
+	> foot {
+		border-bottom: #7a003f solid 2px;
+		border-radius: 0 0 3px 3px;
+	}
 }
 
 diff {
@@ -259,57 +203,51 @@ diff {
 	width: 1050px;
 	margin: auto;
 	line-height: 100%;
-}
-
-.commit-flex > .day-col {
-	margin: 0 2px;
-	display: inline-table;
-	text-align: right;
-}
-
-.day-col > .day {
-	padding: 0 0 1px;
-}
-
-.commit-flex > .col {
-	width: 13px;
-	margin: 0 2px;
-	display: inline-table;
-	text-align: center;
-	padding: 2px 0;
-}
-
-.commit-flex > .col > .month {
-	width: 13px;
-	height: 13px;
-	display: inline-block;
-}
-
-.commit-flex > .col > .day {
-	width: 13px;
-	height: 13px;
-	display: inline-table;
-	border: solid 1px;
-	border-radius: 4px;
-	border-color: gray lightgray lightgray;
-	transition: 0.2s;
-	background-size: 200% auto;
-	background-color: #303030;
-}
-
-.commit-flex > .col > div:first-child {
-	line-height: 103%;
-	padding: 0 0 6px;
+	> .day-col {
+		margin: 0 2px;
+		display: inline-table;
+		text-align: right;
+		> .day {
+			padding: 0 0 1px;
+		}
+	}
+	.col {
+		width: 13px;
+		margin: 0 2px;
+		display: inline-table;
+		text-align: center;
+		padding: 2px 0;
+		.month {
+			width: 13px;
+			height: 13px;
+			display: inline-block;
+		}
+		.day {
+			width: 13px;
+			height: 13px;
+			display: inline-table;
+			border: solid 1px;
+			border-radius: 4px;
+			border-color: gray lightgray lightgray;
+			transition: 0.2s;
+			background-size: 200% auto;
+			background-color: #303030;
+			&:hover {
+				background-position: right center;
+				text-decoration: none;
+			}
+		}
+		> div:first-child {
+			line-height: 103%;
+			padding: 0 0 6px;
+		}
+	}
 }
 
 .day-commits {
 	background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 100%);
 }
 
-.commit-flex > .col > .day:hover {
-	background-position: right center;
-	text-decoration: none;
-}
 
 /* Titillium Licence /static/OFL.txt */
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 300; src: url(/static/TitilliumWeb-LightItalic.ttf) format('truetype'); }
