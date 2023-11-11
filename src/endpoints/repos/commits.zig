@@ -14,6 +14,7 @@ const UriIter = Endpoint.Router.UriIter;
 const RouteData = Repos.RouteData;
 
 const git = @import("../../git.zig");
+const Bleach = @import("../../bleach.zig");
 
 pub fn commit(r: *Response, uri: *UriIter) Error!void {
     const rd = RouteData.make(uri) orelse return error.Unrouteable;
@@ -24,7 +25,7 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadPacks(r.alloc) catch return error.Unknown;
+    repo.loadData(r.alloc) catch return error.Unknown;
 
     var tmpl = Template.find("commit.html");
     tmpl.init(r.alloc);
@@ -47,8 +48,12 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
         if (std.mem.indexOf(u8, diff, "diff")) |i| {
             diff = diff[i..];
         }
+
+        var clean = try r.alloc.alloc(u8, diff.len * 2);
+        clean = Bleach.sanitize(diff, clean, .{}) catch return error.Unknown;
+
         var dom = DOM.new(r.alloc);
-        dom.push(HTML.element("diff", diff, null));
+        dom.push(HTML.element("diff", clean, null));
         const data = dom.done();
         _ = tmpl.addElements(r.alloc, "diff", data) catch return error.Unknown;
         const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{
@@ -111,7 +116,7 @@ pub fn commits(r: *Response, uri: *UriIter) Error!void {
     var cwd = std.fs.cwd();
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadPacks(r.alloc) catch return error.Unknown;
+    repo.loadData(r.alloc) catch return error.Unknown;
 
     var lcommits = try r.alloc.alloc(HTML.E, 50);
     var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;

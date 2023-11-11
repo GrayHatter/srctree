@@ -353,7 +353,10 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
         // I know... I KNOW!!!
         for (changed) |ch| {
             if (std.mem.eql(u8, ch.name, obj.name)) {
-                dom.dupe(HTML.span(ch.commit));
+                dom.dupe(HTML.span(if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
+                    ch.commit[0..i]
+                else
+                    ch.commit));
                 dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{}", .{Humanize.unix(ch.date.timestamp)})));
                 break;
             }
