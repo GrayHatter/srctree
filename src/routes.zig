@@ -30,6 +30,7 @@ const endpoints = [_]MatchRouter{
     .{ .name = "code", .match = .{ .call = endpoint.code } },
     .{ .name = "commits", .match = .{ .call = respond } },
     .{ .name = "hi", .match = .{ .call = respond } },
+    .{ .name = "post", .match = .{ .call = post } },
     .{ .name = "repo", .match = .{ .route = endpoint.repo } },
     .{ .name = "repos", .match = .{ .route = endpoint.repo } },
     .{ .name = "tree", .match = .{ .call = respond } },
@@ -95,6 +96,14 @@ fn default(r: *Response, _: *UriIter) Error!void {
             std.log.err("Unexpected error while responding [{}]\n", .{e});
             return Error.AndExit;
         },
+    };
+}
+
+fn post(r: *Response, _: *UriIter) Error!void {
+    const MSG = Template.find("post.html").blob;
+    sendMsg(r, MSG) catch |e| {
+        std.log.err("Unexpected error while responding [{}]\n", .{e});
+        return Error.AndExit;
     };
 }
 

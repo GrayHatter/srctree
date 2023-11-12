@@ -190,6 +190,11 @@ commit {
 	}
 }
 
+textarea.paste {
+	width: 100%;
+	min-height: 20em;
+}
+
 diff {
 	white-space: pre;
 	text-align: left;

@@ -1,9 +1,12 @@
 const std = @import("std");
+
 const Allocator = std.mem.Allocator;
 const StreamServer = std.net.StreamServer;
+
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
+const HttpPostData = @import("http-post-data.zig");
 
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
@@ -67,7 +70,9 @@ fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
     return try list.toOwnedSlice();
 }
 
-fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Request {
+const dump_vars = false;
+
+fn readHeader(a: Allocator, acpt: std.net.StreamServer.Connection) !Request {
     var uwsgi_header = uProtoHeader{};
     var ptr: [*]u8 = @ptrCast(&uwsgi_header);
     _ = try acpt.stream.read(@alignCast(ptr[0..4]));
@@ -80,12 +85,7 @@ fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Requ
 
     const vars = try readVars(a, buf);
     for (vars) |v| {
-        if (std.mem.eql(u8, v.key, "HTTP_CONTENT_LENGTH")) {
-            const post_size = try std.fmt.parseInt(usize, v.val, 10);
-            var post_buf: []u8 = try a.alloc(u8, post_size);
-            _ = try acpt.stream.read(post_buf);
-            std.log.info("post data \"{s}\" {{{any}}}", .{ post_buf, post_buf });
-        }
+        if (dump_vars) std.log.info("{}", .{v});
     }
 
     return try Request.init(
@@ -98,11 +98,15 @@ fn readHeader(a: std.mem.Allocator, acpt: std.net.StreamServer.Connection) !Requ
     );
 }
 
-fn find(list: []uWSGIVar, search: []const u8) []const u8 {
+fn find(list: []uWSGIVar, search: []const u8) ?[]const u8 {
     for (list) |each| {
         if (std.mem.eql(u8, each.key, search)) return each.val;
     }
-    return "[missing]";
+    return null;
+}
+
+fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
+    return find(list, search) orelse "[missing]";
 }
 
 pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
@@ -111,15 +115,27 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         var request = try readHeader(a, acpt);
 
         std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
-            find(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
-            find(request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
-            find(request.raw_request.zwsgi.vars, "REQUEST_URI"),
-            find(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
+            findOr(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
+            findOr(request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
+            findOr(request.raw_request.zwsgi.vars, "REQUEST_URI"),
+            findOr(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
         });
 
         var arena = std.heap.ArenaAllocator.init(a);
         var alloc = arena.allocator();
         var response = Response.init(alloc, &request);
+
+        if (find(request.raw_request.zwsgi.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
+            const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
+
+            const post_size = try std.fmt.parseInt(usize, h_len, 10);
+            var post_body = try HttpPostData.readBody(a, acpt, post_size, h_type);
+            std.log.info("post data \"{s}\" {{{any}}}", .{ post_body.rawdata, post_body.rawdata });
+
+            for (post_body.items) |itm| {
+                std.log.info("{}", .{itm});
+            }
+        }
 
         Router.baseRouter(&response, response.request.uri) catch |err| {
             switch (err) {
@@ -138,6 +154,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
                 },
             }
         };
+
         if (response.phase != .closed) try response.finish();
         arena.deinit();
         acpt.stream.close();
