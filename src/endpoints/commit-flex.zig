@@ -14,39 +14,42 @@ const Template = Endpoint.Template;
 
 const Error = Endpoint.Error;
 
-const HeatMapArray = [2][13][32]u16;
+/// we might add up to 6 days to align the grid
+const HeatMapArray = [366 + 6]u16;
 
-var hits: HeatMapArray = .{.{.{0} ** 32} ** 13} ** 2;
+var hits: HeatMapArray = .{0} ** (366 + 6);
 var seen: ?std.BufSet = null;
 
 var owner_email: ?[]const u8 = null;
 
 fn reset_hits(a: Allocator) void {
-    for (&hits) |*y|
-        for (y) |*m| {
-            for (m) |*d| d.* = 0;
-        };
+    @memset(&hits, 0);
     seen = std.BufSet.init(a);
 }
 
-fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
+fn countAll(a: Allocator, until: i64, root_cmt: Git.Commit) !*HeatMapArray {
     var commit = root_cmt;
     while (true) {
         if (seen.?.contains(commit.sha)) return &hits;
-        const d = commit.author.time;
-        if (d.years < 2022) return &hits;
+        var commit_time = commit.author.timestamp;
+        if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
+            commit_time += tzs;
+        }
+
+        if (commit_time < until) return &hits;
+        const day_off: usize = std.math.absCast(@divFloor(commit_time - until, DAY));
         if (owner_email) |email| {
             if (std.mem.eql(u8, email, commit.author.email)) {
-                hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
+                hits[day_off] += 1;
                 //std.log.info("BAH! {}", .{commit});
             }
-        } else hits[d.years - 2022][d.months - 1][d.days - 1] += 1;
+        } else hits[day_off] += 1;
         for (commit.parent[1..], 1..) |par, pidx| {
             if (par) |_| {
                 seen.?.insert(par.?) catch return &hits;
                 var parent = try commit.toParent(a, @truncate(pidx));
                 //defer parent.raze(a);
-                _ = try countAll(a, parent);
+                _ = try countAll(a, until, parent);
             }
         }
         commit = commit.toParent(a, 0) catch |err| switch (err) {
@@ -56,15 +59,18 @@ fn countAll(a: Allocator, root_cmt: Git.Commit) !*HeatMapArray {
     }
 }
 
-fn findCommits(a: Allocator, gitdir: []const u8) !*HeatMapArray {
+fn findCommits(a: Allocator, until: i64, gitdir: []const u8) !*HeatMapArray {
     var repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
     try repo.loadData(a);
     defer repo.raze(a);
 
     var commit = repo.commit(a) catch return &hits;
-    return try countAll(a, commit);
+    return try countAll(a, until, commit);
 }
+
+const YEAR = 31_536_000;
+const DAY = 60 * 60 * 24;
 
 pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     HTML.init(r.alloc);
@@ -75,7 +81,8 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
 
     var nowish = DateTime.now();
     var date = DateTime.today();
-    date = DateTime.fromEpoch(date.timestamp + 60 * 60 * 24 - 31_536_000) catch unreachable;
+    const until = date.timestamp + DAY - YEAR;
+    date = DateTime.fromEpoch(until) catch unreachable;
     while (date.weekday != 0) {
         date = DateTime.fromEpoch(date.timestamp - 60 * 60 * 24) catch unreachable;
     }
@@ -89,8 +96,8 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
                     owner_email = email;
                 }
                 if (ns.get("tz")) |ts| {
-                    if (DateTime.tzToMinutes(ts) catch @as(?i16, 0)) |tzs| {
-                        nowish = DateTime.fromEpoch(nowish.timestamp + tzs * 60) catch unreachable;
+                    if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
+                        nowish = DateTime.fromEpoch(nowish.timestamp + tzs) catch unreachable;
                     }
                 }
             }
@@ -103,7 +110,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
             switch (file.kind) {
                 .directory, .sym_link => {
                     var name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                    _ = findCommits(r.alloc, name) catch unreachable;
+                    _ = findCommits(r.alloc, until, name) catch unreachable;
                 },
                 else => {},
             }
@@ -112,6 +119,8 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
 
     var month_i: usize = date.months - 2;
     var stack: [53]HTML.Element = undefined;
+    //var day_off: usize = std.math.absCast(@divFloor(date.timestamp - DateTime.today().timestamp, DAY));
+    var day_off: usize = 0;
     for (&stack) |*st| {
         var month: []HTML.Element = try r.alloc.alloc(HTML.Element, 8);
         if ((month_i % 12) != date.months - 1) {
@@ -122,9 +131,10 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
         }
 
         for (month[1..]) |*m| {
-            defer date = DateTime.fromEpoch(date.timestamp + 60 * 60 * 24) catch unreachable;
+            defer date = DateTime.fromEpoch(date.timestamp + DAY) catch unreachable;
+            defer day_off += 1;
             var rows = try r.alloc.alloc(HTML.Attribute, 2);
-            const class = if (hits[date.years - 2022][date.months - 1][date.days - 1] > 0)
+            const class = if (hits[day_off] > 0)
                 "day day-commits"
             else if (date.timestamp >= nowish.timestamp)
                 "day-hide"

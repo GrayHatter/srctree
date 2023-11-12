@@ -6,8 +6,6 @@ const hexLower = std.fmt.fmtSliceHexLower;
 const PROT = std.os.PROT;
 const MAP = std.os.MAP;
 
-const DateTime = @import("datetime.zig");
-
 pub const Error = error{
     ReadError,
     NotAGitRepo,
@@ -597,14 +595,10 @@ pub const Repo = struct {
 
     pub fn blob(self: Repo, a: Allocator, sha: SHA) !Object {
         var obj = try self.findObj(a, sha);
-        // Yes, I know, but it might be a file :/
-        const r = obj.reader();
-        const blobb = try r.readAllAlloc(a, 0xffff);
 
-        if (std.mem.indexOf(u8, blobb, "\x00")) |i| {
-            return Object.init(blobb[i + 1 ..]);
+        if (std.mem.indexOf(u8, obj.ctx.buffer, "\x00")) |i| {
+            return Object.init(obj.ctx.buffer[i + 1 ..]);
         }
-        obj.reset();
         return obj;
     }
 
@@ -663,34 +657,38 @@ pub const Ref = union(enum) {
     sha: SHA,
 };
 
-const Actor = struct {
-    name: []const u8,
-    email: []const u8,
-    time: DateTime,
-
-    pub fn make(data: []const u8) !Actor {
-        var itr = std.mem.splitBackwards(u8, data, " ");
-        const tzstr = itr.next() orelse return error.ActorParseError;
-        const epoch = itr.next() orelse return error.ActorParseError;
-        const time = try DateTime.fromEpochTzStr(epoch, tzstr);
-        const email = itr.next() orelse return error.ActorParseError;
-        const name = itr.rest();
-
-        return .{
-            .name = name,
-            .email = email,
-            .time = time,
-        };
-    }
-
-    pub fn format(self: Actor, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        try out.print("Actor{{ name {s}, email {s} time {} }}", .{ self.name, self.email, self.time });
-    }
-};
-
-const GPGSig = struct {};
-
 pub const Commit = struct {
+    const Actor = struct {
+        name: []const u8,
+        email: []const u8,
+        timestr: []const u8,
+        tzstr: []const u8,
+        timestamp: i64 = 0,
+
+        pub fn make(data: []const u8) !Actor {
+            var itr = std.mem.splitBackwards(u8, data, " ");
+            const tzstr = itr.next() orelse return error.ActorParse;
+            const epoch = itr.next() orelse return error.ActorParse;
+            const epstart = itr.index orelse return error.ActorParse;
+            const email = itr.next() orelse return error.ActorParse;
+            const name = itr.rest();
+
+            return .{
+                .name = name,
+                .email = email,
+                .timestr = data[epstart..data.len],
+                .tzstr = tzstr,
+                .timestamp = std.fmt.parseInt(i64, epoch, 10) catch return error.ActorParse,
+            };
+        }
+
+        pub fn format(self: Actor, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+            try out.print("Actor{{ name {s}, email {s} time {} }}", .{ self.name, self.email, self.time });
+        }
+    };
+
+    const GPGSig = struct {};
+
     blob: []const u8,
     sha: SHA,
     tree: SHA,
@@ -897,7 +895,7 @@ pub const ChangeSet = struct {
     name: []const u8,
     sha: []const u8,
     commit: []const u8,
-    date: DateTime,
+    timestamp: i64,
 
     pub fn raze(self: ChangeSet, a: Allocator) void {
         a.free(self.name);
@@ -999,7 +997,7 @@ pub const Tree = struct {
                             changed[i].name = try a.dupe(u8, search.name);
                             changed[i].sha = try a.dupe(u8, old.sha);
                             changed[i].commit = try a.dupe(u8, old.message);
-                            changed[i].date = old.committer.time;
+                            changed[i].timestamp = old.committer.timestamp;
                         }
                     }
                     old.raze(a);
@@ -1016,7 +1014,7 @@ pub const Tree = struct {
                             changed[i].name = try a.dupe(u8, search.name);
                             changed[i].sha = try a.dupe(u8, old.sha);
                             changed[i].commit = try a.dupe(u8, old.message);
-                            changed[i].date = old.committer.time;
+                            changed[i].timestamp = old.committer.timestamp;
                         }
                     }
                     old.raze(a);
@@ -1036,7 +1034,7 @@ pub const Tree = struct {
                     changed[i].name = try a.dupe(u8, search.name);
                     changed[i].sha = try a.dupe(u8, old.sha);
                     changed[i].commit = try a.dupe(u8, old.message);
-                    changed[i].date = old.committer.time;
+                    changed[i].timestamp = old.committer.timestamp;
                     continue;
                 }
             }

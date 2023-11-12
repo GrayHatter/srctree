@@ -11,7 +11,10 @@ weekday: u8 = 4,
 hours: u8 = 0,
 minutes: u8 = 0,
 seconds: u8 = 0,
-tz: ?i16 = null, // -1200 -> 1200
+/// Timezone offset in seconds
+/// -1200h -> 1200h
+/// -43200 -> 43200
+tz: ?i32 = null,
 
 /// 1 Indexed (index 0 == 0) because Date formatting months start at 1
 pub const DAYS_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
@@ -100,7 +103,7 @@ fn monthsFrom(year: usize, days: usize) struct { u8, usize } {
     return .{ m, d };
 }
 
-pub fn fromEpochTz(sts: i64, tz: ?i16) !DateTime {
+pub fn fromEpochTz(sts: i64, tz: ?i32) !DateTime {
     if (sts < 0) return error.UnsupportedTimeStamp;
 
     var self: DateTime = undefined;
@@ -135,16 +138,16 @@ pub fn fromEpochStr(str: []const u8) !DateTime {
     return fromEpoch(int);
 }
 
-pub fn tzToMinutes(tzstr: []const u8) !i16 {
+pub fn tzToSec(tzstr: []const u8) !i32 {
     const tzm = try std.fmt.parseInt(i16, tzstr[tzstr.len - 2 .. tzstr.len], 10);
     const tzh = try std.fmt.parseInt(i16, tzstr[0 .. tzstr.len - 2], 10);
-    return tzh * 60 + tzm;
+    return (tzh * 60 + tzm) * 60;
 }
 
 /// Accepts a Unix Epoch int as a string of numbers and timezone in -HHMM format
 pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
     var epoch = try std.fmt.parseInt(i64, str, 10);
-    var tz = try tzToMinutes(tzstr);
+    var tz = try tzToSec(tzstr);
     return fromEpochTz(epoch, tz);
 }
 

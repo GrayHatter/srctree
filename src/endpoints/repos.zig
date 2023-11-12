@@ -221,7 +221,7 @@ fn blob(r: *Response, uri: *UriIter, repo: *git.Repo, pfiles: git.Tree) Error!vo
     var resolve = repo.blob(r.alloc, &blb.hash) catch return error.Unknown;
     var reader = resolve.reader();
 
-    var d2 = reader.readAllAlloc(r.alloc, 0xffff) catch unreachable;
+    var d2 = reader.readAllAlloc(r.alloc, 0xffffff) catch unreachable;
     const count = std.mem.count(u8, d2, "\n");
     dom = dom.open(HTML.element("code", null, null));
     var litr = std.mem.split(u8, d2, "\n");
@@ -357,7 +357,7 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
                     ch.commit[0..i]
                 else
                     ch.commit));
-                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{}", .{Humanize.unix(ch.date.timestamp)})));
+                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{}", .{Humanize.unix(ch.timestamp)})));
                 break;
             }
         }
