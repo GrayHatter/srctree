@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const Request = @import("request.zig");
 const Headers = @import("headers.zig");
+const HttpPost = @import("http-post.zig");
 
 const Response = @This();
 
@@ -45,6 +46,9 @@ writer_ctx: union(enum) {
     http: std.http.Server.Response.Writer,
 },
 status: std.http.Status = .internal_server_error,
+/// The correct way to access post_data is with postData until this API
+/// officially becomes stable
+post_data: ?HttpPost.PostData = null,
 
 pub fn init(a: Allocator, req: *Request) Response {
     var res = Response{
@@ -60,6 +64,10 @@ pub fn init(a: Allocator, req: *Request) Response {
     //BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
     res.headersInit() catch @panic("unable to create Response obj");
     return res;
+}
+
+pub fn postData(res: *Response) ?HttpPost.PostData {
+    return res.post_data;
 }
 
 fn headersInit(res: *Response) !void {

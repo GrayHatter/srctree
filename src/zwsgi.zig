@@ -6,7 +6,7 @@ const StreamServer = std.net.StreamServer;
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
-const HttpPostData = @import("http-post-data.zig");
+const HttpPost = @import("http-post.zig");
 
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
@@ -129,12 +129,13 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
             const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
 
             const post_size = try std.fmt.parseInt(usize, h_len, 10);
-            var post_body = try HttpPostData.readBody(a, acpt, post_size, h_type);
-            std.log.info("post data \"{s}\" {{{any}}}", .{ post_body.rawdata, post_body.rawdata });
+            var post_data = try HttpPost.readBody(a, acpt, post_size, h_type);
+            if (dump_vars) std.log.info("post data \"{s}\" {{{any}}}", .{ post_data.rawdata, post_data.rawdata });
 
-            for (post_body.items) |itm| {
-                std.log.info("{}", .{itm});
+            for (post_data.items) |itm| {
+                if (dump_vars) std.log.info("{}", .{itm});
             }
+            response.post_data = post_data;
         }
 
         Router.baseRouter(&response, response.request.uri) catch |err| {
