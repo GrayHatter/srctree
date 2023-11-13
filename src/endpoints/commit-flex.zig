@@ -81,11 +81,11 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
 
     var nowish = DateTime.now();
     var date = DateTime.today();
-    const until = date.timestamp + DAY - YEAR;
-    date = DateTime.fromEpoch(until) catch unreachable;
+    date = DateTime.fromEpoch(date.timestamp + DAY - YEAR) catch unreachable;
     while (date.weekday != 0) {
-        date = DateTime.fromEpoch(date.timestamp - 60 * 60 * 24) catch unreachable;
+        date = DateTime.fromEpoch(date.timestamp - DAY) catch unreachable;
     }
+    const until = date.timestamp;
 
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
