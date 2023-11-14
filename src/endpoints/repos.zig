@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const Endpoint = @import("../endpoint.zig");
 const Response = Endpoint.Response;
+const Request = Endpoint.Request;
 const HTML = Endpoint.HTML;
 const elm = HTML.element;
 const DOM = Endpoint.DOM;
@@ -57,7 +58,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
+pub fn router(uri: *UriIter, method: Request.Methods) Error!Endpoint.Endpoint {
     const rd = RouteData.make(uri) orelse return list;
     for (rd.name) |c| if (!std.ascii.isLower(c) and c != '.') return error.Unrouteable;
 
@@ -70,7 +71,7 @@ pub fn router(uri: *UriIter) Error!Endpoint.Endpoint {
             if (std.mem.eql(u8, file.name, rd.name)) {
                 if (rd.verb) |_| {
                     _ = uri.next();
-                    return Endpoint.Router.router(uri, &endpoints);
+                    return Endpoint.Router.router(uri, method, &endpoints);
                 } else return treeBlob;
             }
         }

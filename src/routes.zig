@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const Template = @import("template.zig");
 const Response = @import("response.zig");
+const Request = @import("request.zig");
 const endpoint = @import("endpoint.zig");
 const HTML = @import("html.zig");
 
@@ -14,7 +15,18 @@ pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 const div = HTML.div;
 const span = HTML.span;
 
-pub const Router = *const fn (*UriIter) Error!Endpoint;
+pub const Router = *const fn (*UriIter, Request.Methods) Error!Endpoint;
+
+pub const Methods = struct {
+    pub const GET = 1;
+    pub const HEAD = 2;
+    pub const POST = 4;
+    pub const PUT = 8;
+    pub const DELETE = 16;
+    pub const CONNECT = 32;
+    pub const OPTIONS = 64;
+    pub const TRACE = 128;
+};
 
 pub const MatchRouter = struct {
     name: []const u8,
@@ -22,6 +34,7 @@ pub const MatchRouter = struct {
         call: Endpoint,
         route: Router,
     },
+    methods: u8 = Methods.GET,
 };
 
 const endpoints = [_]MatchRouter{
@@ -111,14 +124,14 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-pub fn router(uri: *UriIter, comptime routes: []const MatchRouter) Endpoint {
+pub fn router(uri: *UriIter, method: Request.Methods, comptime routes: []const MatchRouter) Endpoint {
     const search = uri.next() orelse return notfound;
     inline for (routes) |ep| {
-        if (eql(search, ep.name)) {
+        if (@intFromEnum(method) & ep.methods > 0 and eql(search, ep.name)) {
             switch (ep.match) {
                 .call => |call| return call,
                 .route => |route| {
-                    return route(uri) catch |err| switch (err) {
+                    return route(uri, method) catch |err| switch (err) {
                         error.Unrouteable => return notfound,
                         else => unreachable,
                     };
@@ -133,6 +146,6 @@ pub fn baseRouter(r: *Response, uri: []const u8) Error!void {
     std.debug.assert(uri[0] == '/');
     var itr = std.mem.split(u8, uri[1..], "/");
     if (uri.len <= 1) return default(r, &itr);
-    const route: Endpoint = router(&itr, &endpoints);
+    const route: Endpoint = router(&itr, r.request.method, &endpoints);
     return route(r, &itr);
 }

@@ -17,11 +17,32 @@ const Pair = struct {
 
 pub const HeaderList = std.ArrayList(Pair);
 
+pub const Methods = enum(u8) {
+    GET = 1,
+    HEAD = 2,
+    POST = 4,
+    PUT = 8,
+    DELETE = 16,
+    CONNECT = 32,
+    OPTIONS = 64,
+    TRACE = 128,
+
+    pub fn fromStr(s: []const u8) !Methods {
+        inline for (std.meta.fields(Methods)) |field| {
+            if (std.mem.startsWith(u8, s, field.name)) {
+                return @enumFromInt(field.value);
+            }
+        }
+        return error.UnknownMethod;
+    }
+};
+
 /// TODO this is unstable and likely to be removed
 raw_request: RawRequests,
 
 headers: HeaderList,
 uri: []const u8,
+method: Methods,
 auth: Auth,
 
 pub fn init(a: Allocator, raw_req: anytype) !Request {
@@ -31,12 +52,16 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
                 .raw_request = .{ .zwsgi = raw_req },
                 .headers = HeaderList.init(a),
                 .uri = undefined,
+                .method = Methods.GET,
                 .auth = undefined,
             };
             for (raw_req.vars) |v| {
                 try addHeader(&req.headers, v.key, v.val);
                 if (std.mem.eql(u8, v.key, "REQUEST_URI")) {
                     req.uri = v.val;
+                }
+                if (std.mem.eql(u8, v.key, "REQUEST_METHOD")) {
+                    req.method = Methods.fromStr(v.val) catch Methods.GET;
                 }
             }
             req.auth = Auth.init(&req.headers);
@@ -48,6 +73,7 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
                 .headers = HeaderList.init(a),
                 .uri = undefined,
                 .auth = undefined,
+                .method = unreachable,
             };
             req.uri = raw_req.request.target;
             //for (raw_req.request.headers) |v| {
