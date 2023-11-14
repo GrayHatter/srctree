@@ -16,6 +16,31 @@ const RouteData = Repos.RouteData;
 const git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
 
+fn diffLine(a: Allocator, diff: []const u8) *DOM {
+    var dom = DOM.new(a);
+
+    const count = std.mem.count(u8, diff, "\n");
+    dom = dom.open(HTML.element("diff", null, null));
+    var litr = std.mem.split(u8, diff, "\n");
+
+    for (0..count + 1) |_| {
+        const a_add = &[1]HTML.Attr{HTML.Attr.class("add")};
+        const a_del = &[1]HTML.Attr{HTML.Attr.class("del")};
+        const dirty = litr.next().?;
+        var clean = a.alloc(u8, dirty.len * 2) catch unreachable;
+        clean = Bleach.sanitize(dirty, clean, .{}) catch unreachable;
+        const attr: ?[]const HTML.Attr = if (clean.len > 0 and (clean[0] == '-' or clean[0] == '+'))
+            if (clean[0] == '-') a_del else a_add
+        else
+            null;
+        dom.push(HTML.span(clean, attr));
+    }
+
+    dom = dom.close();
+
+    return dom;
+}
+
 pub fn commit(r: *Response, uri: *UriIter) Error!void {
     const rd = RouteData.make(uri) orelse return error.Unrouteable;
     if (rd.verb == null) return commits(r, uri);
@@ -36,12 +61,12 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
             return error.Abusive;
         }
 
-        var lcommits = try r.alloc.alloc(HTML.E, 1);
+        var commit_view = try r.alloc.alloc(HTML.E, 1);
         var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
         while (!std.mem.startsWith(u8, current.sha, sha)) {
             current = current.toParent(r.alloc, 0) catch return error.Unknown;
         }
-        lcommits[0] = (try htmlCommit(r.alloc, current, rd.name, true))[0];
+        commit_view[0] = (try htmlCommit(r.alloc, current, rd.name, true))[0];
 
         var acts = repo.getActions(r.alloc);
         var diff = acts.show(sha) catch return error.Unknown;
@@ -49,15 +74,12 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
             diff = diff[i..];
         }
 
-        var clean = try r.alloc.alloc(u8, diff.len * 2);
-        clean = Bleach.sanitize(diff, clean, .{}) catch return error.Unknown;
+        var diff_lines = diffLine(r.alloc, diff);
 
-        var dom = DOM.new(r.alloc);
-        dom.push(HTML.element("diff", clean, null));
-        const data = dom.done();
-        _ = tmpl.addElements(r.alloc, "diff", data) catch return error.Unknown;
+        const diff_els = diff_lines.done();
+        _ = tmpl.addElementsFmt(r.alloc, "{pretty}", "diff", diff_els) catch return error.Unknown;
         const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{
-            HTML.div(lcommits),
+            HTML.div(commit_view),
         });
 
         tmpl.addVar("commits", htmlstr) catch return error.Unknown;

@@ -127,7 +127,7 @@ repo {
 		padding: 8px;
 		p { margin: 0 0 5px; }
 		a { margin: 0 0 5px; }
-		.updated { 
+		.updated {
 			color: #bbb;
 			display: block;
 			font-family: 'Titillium Web', sans-serif;
@@ -213,6 +213,9 @@ diff {
 	background: #333;
 	padding: 8px;
 	font-family: monospace;
+
+	.del { background: #5b0000 }
+	.add { background: #003e00 }
 }
 
 .commit-flex {
