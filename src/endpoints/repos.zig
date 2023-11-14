@@ -131,7 +131,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
             dom = dom.open(HTML.element("desc", null, null));
             {
                 var repodir = idir.dir.openDir(name, .{}) catch return error.Unknown;
-                defer repodir.close();
+                errdefer repodir.close();
                 var repo = git.Repo.init(repodir) catch return error.Unknown;
                 repo.loadData(r.alloc) catch return error.Unknown;
                 defer repo.raze(r.alloc);
