@@ -40,7 +40,6 @@ pub const MatchRouter = struct {
 const endpoints = [_]MatchRouter{
     .{ .name = "auth", .match = .{ .call = auth } },
     .{ .name = "bye", .match = .{ .call = bye } },
-    .{ .name = "code", .match = .{ .call = endpoint.code } },
     .{ .name = "commits", .match = .{ .call = respond } },
     .{ .name = "hi", .match = .{ .call = respond } },
     .{ .name = "post", .match = .{ .call = post } },
