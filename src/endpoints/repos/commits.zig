@@ -87,7 +87,7 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
     {
         const prnt = c.parent[0] orelse "00000000";
         dom.push(HTML.element("author", try a.dupe(u8, c.author.name), null));
-        dom = dom.open(HTML.span(null));
+        dom = dom.open(HTML.span(null, null));
         dom.push(HTML.text("parent "));
         dom.push(try HTML.aHrefText(
             a,

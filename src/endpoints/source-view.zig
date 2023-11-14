@@ -26,7 +26,7 @@ pub fn code(r: *Response, _: *Endpoint.UriIter) Error!void {
     var itr = std.mem.split(u8, src, "\n");
     var i: usize = 0;
     while (itr.next()) |line| {
-        lines[i] = try std.fmt.allocPrint(r.alloc, "{}\n", .{span(HTML.text(line))});
+        lines[i] = try std.fmt.allocPrint(r.alloc, "{}\n", .{span(HTML.text(line), null)});
         i += 1;
     }
     // TODO better API to avoid join

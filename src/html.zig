@@ -47,6 +47,8 @@ pub const Attribute = struct {
     }
 };
 
+pub const Attr = Attribute;
+
 pub const Element = struct {
     name: []const u8,
     text: ?[]const u8 = null,
@@ -215,8 +217,8 @@ pub fn p(c: anytype) Element {
     return element("p", c, null);
 }
 
-pub fn span(c: anytype) Element {
-    return element("span", c, null);
+pub fn span(c: anytype, a: ?[]const Attribute) Element {
+    return element("span", c, a);
 }
 
 pub fn strong(c: anytype) Element {

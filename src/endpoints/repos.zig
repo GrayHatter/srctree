@@ -131,7 +131,10 @@ fn list(r: *Response, _: *UriIter) Error!void {
             dom = dom.open(HTML.element("desc", null, null));
             {
                 var repodir = idir.dir.openDir(name, .{}) catch return error.Unknown;
+                defer repodir.close();
                 var repo = git.Repo.init(repodir) catch return error.Unknown;
+                repo.loadData(r.alloc) catch return error.Unknown;
+                defer repo.raze(r.alloc);
                 const desc = repo.description(r.alloc) catch return error.Unknown;
                 if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
                     dom.push(HTML.p(desc));
@@ -145,6 +148,12 @@ fn list(r: *Response, _: *UriIter) Error!void {
                         dom.push(HTML.anch(purl, try HTML.Attribute.create(r.alloc, "href", purl)));
                     }
                 }
+
+                const cmt = repo.commit(r.alloc) catch return error.Unknown;
+                defer cmt.raze(r.alloc);
+                const committer = cmt.committer;
+                const updated_str = try std.fmt.allocPrint(r.alloc, "updated about {}", .{Humanize.unix(committer.timestamp)});
+                dom.dupe(HTML.span(updated_str, &[_]HTML.Attr{HTML.Attr.class("updated")}));
             }
             dom = dom.close();
             dom.push(HTML.element("last", null, null));
@@ -356,8 +365,8 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
                 dom.dupe(HTML.span(if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
                     ch.commit[0..i]
                 else
-                    ch.commit));
-                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{}", .{Humanize.unix(ch.timestamp)})));
+                    ch.commit, null));
+                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{}", .{Humanize.unix(ch.timestamp)}), null));
                 break;
             }
         }

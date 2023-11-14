@@ -125,7 +125,18 @@ repo {
 		display: block;
 		border-radius: 0 0 4px 4px;
 		padding: 8px;
-		p { margin-top: 0; }
+		p { margin: 0 0 5px; }
+		a { margin: 0 0 5px; }
+		.updated { 
+			color: #bbb;
+			display: block;
+			font-family: 'Titillium Web', sans-serif;
+			font-size: 80%;
+			margin: 6px 0 0;
+		}
+		.updated:only-child {
+			margin: 0
+		}
 	}
 }
 
