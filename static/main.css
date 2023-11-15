@@ -60,6 +60,16 @@ content {
 	width: 1050px;
 }
 
+button {
+	font-size: 108%;
+	font-weight: 600;
+	background-color: #222;
+	border-bottom-color: #7a003f;
+	border-radius: 3px;
+	font-family: 'Titillium Web', sans-serif;
+	padding: 6px 18px;
+}
+
 lines {
 	display: inline-block;
 	font-family: monospace;

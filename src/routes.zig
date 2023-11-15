@@ -38,6 +38,7 @@ pub const MatchRouter = struct {
 };
 
 const endpoints = [_]MatchRouter{
+    .{ .name = "admin", .match = .{ .route = endpoint.admin } },
     .{ .name = "auth", .match = .{ .call = auth } },
     .{ .name = "bye", .match = .{ .call = bye } },
     .{ .name = "commits", .match = .{ .call = respond } },
@@ -126,9 +127,12 @@ fn eql(a: []const u8, b: []const u8) bool {
 pub fn router(uri: *UriIter, method: Request.Methods, comptime routes: []const MatchRouter) Endpoint {
     const search = uri.next() orelse return notfound;
     inline for (routes) |ep| {
-        if (@intFromEnum(method) & ep.methods > 0 and eql(search, ep.name)) {
+        if (eql(search, ep.name)) {
             switch (ep.match) {
-                .call => |call| return call,
+                .call => |call| {
+                    if (@intFromEnum(method) & ep.methods > 0)
+                        return call;
+                },
                 .route => |route| {
                     return route(uri, method) catch |err| switch (err) {
                         error.Unrouteable => return notfound,

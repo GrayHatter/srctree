@@ -28,3 +28,6 @@ pub const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
 pub const REPO = @import("endpoints/repos.zig");
 pub const repo = REPO.router;
+
+pub const ADMIN = @import("endpoints/admin.zig");
+pub const admin = ADMIN.router;

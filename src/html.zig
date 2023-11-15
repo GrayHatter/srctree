@@ -238,6 +238,10 @@ pub fn aHrefText(a: Allocator, txt: []const u8, href: []const u8) !Element {
     return anch(txt, attr);
 }
 
+pub fn form(c: anytype, attr: ?[]const Attribute) Element {
+    return element("form", c, attr);
+}
+
 pub fn li(c: anytype, attr: ?[]const Attribute) Element {
     return element("li", c, attr);
 }
