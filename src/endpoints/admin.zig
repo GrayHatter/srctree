@@ -41,6 +41,7 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
 }
 
 fn default(r: *Response, _: *UriIter) Error!void {
+    if (!r.request.auth.valid()) return error.Abusive;
     var dom = DOM.new(r.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -108,6 +109,7 @@ fn postNewRepo(r: *Response, _: *UriIter) Error!void {
 }
 
 fn newRepo(r: *Response, _: *UriIter) Error!void {
+    if (!r.request.auth.valid()) return error.Abusive;
     var dom = DOM.new(r.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -133,6 +135,7 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
 }
 
 fn view(r: *Response, uri: *UriIter) Error!void {
+    if (!r.request.auth.valid()) return error.Abusive;
     if (r.post_data) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(r, uri);
