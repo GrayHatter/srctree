@@ -69,7 +69,9 @@ pub const Element = struct {
         if (self.attrs) |attrs| {
             for (attrs) |attr| try out.print("{}", .{attr});
         }
-        try out.print(">", .{});
+        if (self.self_close) {
+            return try out.print(" />", .{});
+        } else try out.print(">", .{});
 
         if (self.children) |children| {
             for (children) |child| {
@@ -215,6 +217,12 @@ pub fn divAttr(c: anytype, attr: ?[]const Attribute) Element {
 
 pub fn p(c: anytype) Element {
     return element("p", c, null);
+}
+
+pub fn br() Element {
+    var _br = element("br", null, null);
+    _br.self_close = true;
+    return _br;
 }
 
 pub fn span(c: anytype, a: ?[]const Attribute) Element {

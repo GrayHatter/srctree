@@ -97,13 +97,19 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
     var dom = DOM.new(a);
     dom = dom.open(HTML.element("commit", null, null));
 
-    if (!top) {
-        dom.push(HTML.element(
-            "data",
-            try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }),
-            null,
-        ));
-    }
+    var cd_dom = DOM.new(a);
+    cd_dom = cd_dom.open(HTML.element("data", null, null));
+    cd_dom.push(try HTML.aHrefText(
+        a,
+        c.sha[0..8],
+        try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
+    ));
+    cd_dom.push(HTML.br());
+    cd_dom.push(HTML.text(c.message));
+    cd_dom = cd_dom.close();
+    const cdata = cd_dom.done();
+
+    if (!top) dom.pushSlice(cdata);
 
     dom = dom.open(HTML.element(if (top) "top" else "foot", null, null));
     {
@@ -120,13 +126,8 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
     }
     dom = dom.close();
 
-    if (top) {
-        dom.push(HTML.element(
-            "data",
-            try std.fmt.allocPrint(a, "{s}<br>{s}", .{ c.sha[0..8], c.message }),
-            null,
-        ));
-    }
+    if (top) dom.pushSlice(cdata);
+
     dom = dom.close();
     return dom.done();
 }
