@@ -14,17 +14,14 @@ const UriIter = Endpoint.Router.UriIter;
 
 const git = @import("../git.zig");
 
+const GET = Endpoint.Router.Methods.GET;
+const POST = Endpoint.Router.Methods.POST;
+
 const endpoints = [_]Endpoint.Router.MatchRouter{
-    .{
-        .name = "",
-        .methods = Endpoint.Router.Methods.GET | Endpoint.Router.Methods.POST,
-        .match = .{ .call = view },
-    },
-    .{
-        .name = "post",
-        .methods = Endpoint.Router.Methods.GET | Endpoint.Router.Methods.POST,
-        .match = .{ .call = view },
-    },
+    .{ .name = "", .methods = GET | POST, .match = .{ .call = view } },
+    .{ .name = "post", .methods = GET | POST, .match = .{ .call = view } },
+    .{ .name = "new-repo", .methods = GET, .match = .{ .call = newRepo } },
+    .{ .name = "new-repo", .methods = POST, .match = .{ .call = postNewRepo } },
 };
 
 pub fn router(uri: *UriIter, method: Request.Methods) Error!Endpoint.Endpoint {
@@ -69,9 +66,27 @@ fn default(r: *Response, _: *UriIter) Error!void {
     r.finish() catch return Error.Unknown;
 }
 
-fn newRepo(r: *Response, _: *UriIter) Error!void {
+fn postNewRepo(r: *Response, _: *UriIter) Error!void {
+    if (!r.request.auth.valid()) return error.Abusive;
+    // TODO ini repo dir
+    var valid = r.post_data.?.validator();
+    var rname = valid.require("repo name") catch return error.Unknown;
+
+    for (rname.value) |c| {
+        if (std.ascii.isAlphanumeric(c)) continue;
+        if (c == '-' or c == '_') continue;
+        return error.Abusive;
+    }
+
+    std.debug.print("creating {s}\n", .{rname.value});
+    var buf: [2048]u8 = undefined;
+    var dir_name = std.fmt.bufPrint(&buf, "repos/{s}", .{rname.value}) catch return error.Unknown;
+    var new_repo = git.Repo.createNew(r.alloc, dir_name) catch return error.Unknown;
+
+    std.debug.print("creating {any}\n", .{new_repo});
+
     var dom = DOM.new(r.alloc);
-    const action = "/admin/post";
+    const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
         HTML.Attr{ .key = "action", .value = action },
@@ -79,6 +94,29 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
     dom.push(HTML.element("input", null, &[_]HTML.Attr{
         HTML.Attr{ .key = "name", .value = "new repo" },
         HTML.Attr{ .key = "value", .value = "repo name" },
+    }));
+    dom = dom.close();
+    var form = dom.done();
+
+    var tmpl = Template.find("admin.html");
+    tmpl.init(r.alloc);
+    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+    r.start() catch return Error.Unknown;
+    r.write(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
+}
+
+fn newRepo(r: *Response, _: *UriIter) Error!void {
+    var dom = DOM.new(r.alloc);
+    const action = "/admin/new-repo";
+    dom = dom.open(HTML.form(null, &[_]HTML.Attr{
+        HTML.Attr{ .key = "method", .value = "POST" },
+        HTML.Attr{ .key = "action", .value = action },
+    }));
+    dom.push(HTML.element("input", null, &[_]HTML.Attr{
+        HTML.Attr{ .key = "name", .value = "repo name" },
+        HTML.Attr{ .key = "value", .value = "new_repo" },
     }));
 
     dom = dom.close();

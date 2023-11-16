@@ -6,12 +6,21 @@ const Allocator = std.mem.Allocator;
 pub const Validator = struct {
     post_data: PostData,
 
-    pub fn require(_: *Validator, _: []const u8) !bool {
-        return error.NotImplemented;
+    pub fn init(pd: PostData) Validator {
+        return Validator{
+            .post_data = pd,
+        };
     }
 
-    pub fn optional(_: *Validator, _: []const u8) !bool {
-        return error.NotImplemented;
+    pub fn require(v: *Validator, name: []const u8) !PostItem {
+        return v.optional(name) orelse error.NotFound;
+    }
+
+    pub fn optional(v: *Validator, name: []const u8) ?PostItem {
+        for (v.post_data.items) |item| {
+            if (std.mem.eql(u8, item.name, name)) return item;
+        }
+        return null;
     }
 
     pub fn files(_: *Validator, _: []const u8) !void {
@@ -36,6 +45,10 @@ pub const PostItem = struct {
 pub const PostData = struct {
     rawdata: []u8,
     items: []PostItem,
+
+    pub fn validator(self: PostData) Validator {
+        return Validator.init(self);
+    }
 };
 
 pub const ContentType = union(enum) {
@@ -76,7 +89,14 @@ pub const ContentType = union(enum) {
     }
 };
 
-fn parseApplication(a: Allocator, ap: ContentType.Application, data: []const u8, htype: []const u8) ![]PostItem {
+fn normilizeUrlEncoded(string: []u8) ![]u8 {
+    for (string) |*c| {
+        if (c.* == '+') c.* = ' ';
+    }
+    return string;
+}
+
+fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype: []const u8) ![]PostItem {
     switch (ap) {
         .@"x-www-form-urlencoded" => {
             std.debug.assert(std.mem.startsWith(u8, htype, "application/x-www-form-urlencoded"));
@@ -85,12 +105,12 @@ fn parseApplication(a: Allocator, ap: ContentType.Application, data: []const u8,
             const count = std.mem.count(u8, data, "&") +| 1;
             var items = try a.alloc(PostItem, count);
             for (items) |*itm| {
-                const idata = itr.next().?;
+                var idata: []u8 = @constCast(itr.next().?);
                 var name = idata;
                 var value = idata;
                 if (std.mem.indexOf(u8, idata, "=")) |i| {
-                    name = idata[0..i];
-                    value = idata[i + 1 ..];
+                    name = try normilizeUrlEncoded(idata[0..i]);
+                    value = try normilizeUrlEncoded(idata[i + 1 ..]);
                 }
                 itm.* = .{
                     .data = idata,

@@ -38,7 +38,7 @@ pub const RouteData = struct {
         if (name) |n| {
             // why 30? who knows
             if (n.len > 30) return null;
-            for (n) |c| if (!std.ascii.isLower(c) and c != '.') return null;
+            for (n) |c| if (!std.ascii.isAlphanumeric(c) and c != '.' and c != '-' and c != '_') return null;
             if (std.mem.indexOf(u8, n, "..")) |_| return null;
             return n;
         }
@@ -60,7 +60,6 @@ pub const RouteData = struct {
 
 pub fn router(uri: *UriIter, method: Request.Methods) Error!Endpoint.Endpoint {
     const rd = RouteData.make(uri) orelse return list;
-    for (rd.name) |c| if (!std.ascii.isLower(c) and c != '.') return error.Unrouteable;
 
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
@@ -150,11 +149,18 @@ fn list(r: *Response, _: *UriIter) Error!void {
                     }
                 }
 
-                const cmt = repo.commit(r.alloc) catch return error.Unknown;
-                defer cmt.raze(r.alloc);
-                const committer = cmt.committer;
-                const updated_str = try std.fmt.allocPrint(r.alloc, "updated about {}", .{Humanize.unix(committer.timestamp)});
-                dom.dupe(HTML.span(updated_str, &[_]HTML.Attr{HTML.Attr.class("updated")}));
+                if (repo.commit(r.alloc)) |cmt| {
+                    defer cmt.raze(r.alloc);
+                    const committer = cmt.committer;
+                    const updated_str = try std.fmt.allocPrint(
+                        r.alloc,
+                        "updated about {}",
+                        .{Humanize.unix(committer.timestamp)},
+                    );
+                    dom.dupe(HTML.span(updated_str, &[_]HTML.Attr{HTML.Attr.class("updated")}));
+                } else |_| {
+                    dom.dupe(HTML.span("new repo", &[_]HTML.Attr{HTML.Attr.class("updated")}));
+                }
             }
             dom = dom.close();
             dom.push(HTML.element("last", null, null));
@@ -183,6 +189,19 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
     return out;
 }
 
+fn newRepo(r: *Response, _: *UriIter) Error!void {
+    var tmpl = Template.find("repo.html");
+    tmpl.init(r.alloc);
+
+    tmpl.addVar("files", "<h3>New Repo!</h3><p>Todo, add content here</p>") catch return error.Unknown;
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+
+    r.status = .ok;
+    r.start() catch return Error.Unknown;
+    r.write(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
+}
+
 fn treeBlob(r: *Response, uri: *UriIter) Error!void {
     const rd = RouteData.make(uri) orelse return error.Unrouteable;
 
@@ -192,7 +211,7 @@ fn treeBlob(r: *Response, uri: *UriIter) Error!void {
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(r.alloc) catch return error.Unknown;
 
-    const cmt = repo.commit(r.alloc) catch return error.Unknown;
+    const cmt = repo.commit(r.alloc) catch return newRepo(r, uri);
     var files: git.Tree = cmt.mkTree(r.alloc) catch return error.Unknown;
     if (rd.verb) |blb| {
         if (std.mem.eql(u8, blb, "blob")) {

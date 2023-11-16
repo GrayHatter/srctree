@@ -380,11 +380,8 @@ pub const Repo = struct {
     head: ?Ref = null,
 
     pub fn init(d: std.fs.Dir) Error!Repo {
-        var repo = Repo{
-            .dir = d,
-            .packs = &[0]Pack{},
-            .refs = &[0]Ref{},
-        };
+        var repo = initDefaults();
+        repo.dir = d;
         if (d.openFile("./HEAD", .{})) |file| {
             file.close();
         } else |_| {
@@ -397,6 +394,27 @@ pub const Repo = struct {
         }
 
         return repo;
+    }
+
+    fn initDefaults() Repo {
+        return Repo{
+            .dir = undefined,
+            .packs = &[0]Pack{},
+            .refs = &[0]Ref{},
+        };
+    }
+
+    /// Dir name must be relative (probably)
+    pub fn createNew(a: Allocator, dir_name: []const u8) !Repo {
+        var acts = Actions{
+            .alloc = a,
+            .cwd_dir = std.fs.cwd(),
+        };
+
+        _ = try acts.initRepo(dir_name, .{});
+        var dir = try std.fs.cwd().openDir(dir_name, .{});
+        errdefer dir.close();
+        return init(dir);
     }
 
     pub fn loadData(self: *Repo, a: Allocator) !void {
@@ -537,6 +555,7 @@ pub const Repo = struct {
                         return b.sha;
                     }
                 },
+                .missing => return error.EmptyRef,
             }
         }
         return error.RefMissing;
@@ -565,7 +584,7 @@ pub const Repo = struct {
             self.head = Ref{
                 .branch = Branch{
                     .name = try a.dupe(u8, head[5 .. head.len - 1]),
-                    .sha = try self.ref(head[16 .. head.len - 1]),
+                    .sha = self.ref(head[16 .. head.len - 1]) catch return Ref{ .missing = {} },
                     .repo = self,
                 },
             };
@@ -584,7 +603,8 @@ pub const Repo = struct {
         var resolv = switch (self.head.?) {
             .sha => |s| s,
             .branch => |b| try self.ref(b.name["refs/heads/".len..]),
-            .tag => unreachable,
+            .tag => return error.CommitMissing,
+            .missing => return error.CommitMissing,
         };
         var obj = try self.findObj(a, resolv);
         defer obj.raze(a);
@@ -655,6 +675,7 @@ pub const Ref = union(enum) {
     tag: Tag,
     branch: Branch,
     sha: SHA,
+    missing: void,
 };
 
 pub const Commit = struct {
@@ -1086,7 +1107,7 @@ const Actions = struct {
         std.debug.print("update {s}\n", .{data});
     }
 
-    pub fn gitInit(self: Actions, dir: []const u8, opt: struct { bare: bool = true }) ![]u8 {
+    pub fn initRepo(self: Actions, dir: []const u8, opt: struct { bare: bool = true }) ![]u8 {
         return try self.exec(&[_][]const u8{
             "git",
             "init",
@@ -1106,7 +1127,7 @@ const Actions = struct {
     fn exec(self: Actions, argv: []const []const u8) ![]u8 {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
         var child = try std.ChildProcess.exec(.{
-            .cwd_dir = self.cwd_dir orelse self.repo.?.dir,
+            //.cwd_dir = self.cwd_dir orelse self.repo.?.dir,
             .allocator = self.alloc,
             .argv = argv,
         });
