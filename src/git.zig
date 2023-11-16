@@ -634,6 +634,7 @@ pub const Repo = struct {
         return Actions{
             .alloc = a,
             .repo = self,
+            .cwd_dir = self.dir,
         };
     }
 
@@ -1127,7 +1128,7 @@ const Actions = struct {
     fn exec(self: Actions, argv: []const []const u8) ![]u8 {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
         var child = try std.ChildProcess.exec(.{
-            //.cwd_dir = self.cwd_dir orelse self.repo.?.dir,
+            .cwd_dir = self.cwd_dir,
             .allocator = self.alloc,
             .argv = argv,
         });
