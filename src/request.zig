@@ -57,14 +57,14 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
             };
             for (raw_req.vars) |v| {
                 try addHeader(&req.headers, v.key, v.val);
-                if (std.mem.eql(u8, v.key, "REQUEST_URI")) {
+                if (std.mem.eql(u8, v.key, "PATH_INFO")) {
                     req.uri = v.val;
                 }
                 if (std.mem.eql(u8, v.key, "REQUEST_METHOD")) {
                     req.method = Methods.fromStr(v.val) catch Methods.GET;
                 }
             }
-            req.auth = Auth.init(&req.headers);
+            req.auth = Auth.init(req.headers);
             return req;
         },
         std.http.Server.Response => {

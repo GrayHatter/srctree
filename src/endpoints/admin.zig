@@ -3,6 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Endpoint = @import("../endpoint.zig");
+const Context = @import("../context.zig");
 const Response = Endpoint.Response;
 const Request = Endpoint.Request;
 const HTML = Endpoint.HTML;
@@ -24,8 +25,8 @@ const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "new-repo", .methods = POST, .match = .{ .call = postNewRepo } },
 };
 
-pub fn router(uri: *UriIter, method: Request.Methods) Error!Endpoint.Endpoint {
-    return Endpoint.Router.router(uri, method, &endpoints);
+pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
+    return Endpoint.Router.router(ctx, &endpoints);
 }
 
 fn createRepo(a: Allocator, reponame: []const u8) !void {

@@ -3,6 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const StreamServer = std.net.StreamServer;
 
+const Context = @import("context.zig");
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
@@ -125,11 +126,12 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         var alloc = arena.allocator();
         var response = Response.init(alloc, &request);
 
+        var post_data: HttpPost.PostData = undefined;
         if (find(request.raw_request.zwsgi.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
             const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
 
             const post_size = try std.fmt.parseInt(usize, h_len, 10);
-            var post_data = try HttpPost.readBody(a, acpt, post_size, h_type);
+            post_data = try HttpPost.readBody(a, acpt, post_size, h_type);
             if (dump_vars) std.log.info("post data \"{s}\" {{{any}}}", .{ post_data.rawdata, post_data.rawdata });
 
             for (post_data.items) |itm| {
@@ -138,7 +140,14 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
             response.post_data = post_data;
         }
 
-        Router.baseRouter(&response, response.request.uri) catch |err| {
+        var ctx = try Context.init(
+            alloc,
+            request,
+            response,
+            post_data,
+        );
+
+        Router.baseRouter(&ctx) catch |err| {
             switch (err) {
                 error.Unknown => return err,
                 error.OutOfMemory,

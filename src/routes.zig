@@ -3,6 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Template = @import("template.zig");
+const Context = @import("context.zig");
 const Response = @import("response.zig");
 const Request = @import("request.zig");
 const endpoint = @import("endpoint.zig");
@@ -15,7 +16,7 @@ pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 const div = HTML.div;
 const span = HTML.span;
 
-pub const Router = *const fn (*UriIter, Request.Methods) Error!Endpoint;
+pub const Router = *const fn (*Context) Error!Endpoint;
 
 pub const Methods = struct {
     pub const GET = 1;
@@ -37,7 +38,7 @@ pub const MatchRouter = struct {
     methods: u8 = Methods.GET,
 };
 
-const endpoints = [_]MatchRouter{
+const root = [_]MatchRouter{
     .{ .name = "admin", .match = .{ .route = endpoint.admin } },
     .{ .name = "auth", .match = .{ .call = auth } },
     .{ .name = "bye", .match = .{ .call = bye } },
@@ -124,17 +125,17 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-pub fn router(uri: *UriIter, method: Request.Methods, comptime routes: []const MatchRouter) Endpoint {
-    const search = uri.next() orelse return notfound;
+pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Endpoint {
+    const search = ctx.uri.next() orelse return notfound;
     inline for (routes) |ep| {
         if (eql(search, ep.name)) {
             switch (ep.match) {
                 .call => |call| {
-                    if (@intFromEnum(method) & ep.methods > 0)
+                    if (@intFromEnum(ctx.request.method) & ep.methods > 0)
                         return call;
                 },
                 .route => |route| {
-                    return route(uri, method) catch |err| switch (err) {
+                    return route(ctx) catch |err| switch (err) {
                         error.Unrouteable => return notfound,
                         else => unreachable,
                     };
@@ -145,10 +146,13 @@ pub fn router(uri: *UriIter, method: Request.Methods, comptime routes: []const M
     return notfound;
 }
 
-pub fn baseRouter(r: *Response, uri: []const u8) Error!void {
-    std.debug.assert(uri[0] == '/');
-    var itr = std.mem.split(u8, uri[1..], "/");
-    if (uri.len <= 1) return default(r, &itr);
-    const route: Endpoint = router(&itr, r.request.method, &endpoints);
-    return route(r, &itr);
+pub fn baseRouter(ctx: *Context) Error!void {
+    std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
+    if (ctx.uri.peek()) |first| {
+        if (first.len > 0) {
+            const route: Endpoint = router(ctx, &root);
+            return route(&ctx.response, &ctx.uri);
+        }
+    }
+    return default(&ctx.response, &ctx.uri);
 }

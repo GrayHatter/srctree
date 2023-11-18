@@ -36,7 +36,7 @@ const Payload = union(Method) {
 method: Method,
 payload: Payload,
 
-pub fn init(h: *HeaderList) Auth {
+pub fn init(h: HeaderList) Auth {
     var status: ?[]const u8 = null;
     var fingerprint: ?[]const u8 = null;
     var cert: ?[]const u8 = null;

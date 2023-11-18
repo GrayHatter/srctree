@@ -3,6 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Endpoint = @import("../endpoint.zig");
+const Context = @import("../context.zig");
 const Response = Endpoint.Response;
 const Request = Endpoint.Request;
 const HTML = Endpoint.HTML;
@@ -56,25 +57,29 @@ pub const RouteData = struct {
             .noun = uri.next(),
         };
     }
+
+    pub fn exists(self: RouteData) bool {
+        var cwd = std.fs.cwd();
+        if (cwd.openIterableDir("./repos", .{})) |idir| {
+            var itr = idir.iterate();
+            while (itr.next() catch return false) |file| {
+                if (file.kind != .directory and file.kind != .sym_link) continue;
+                if (std.mem.eql(u8, file.name, self.name)) return true;
+            }
+        } else |_| {}
+        return false;
+    }
 };
 
-pub fn router(uri: *UriIter, method: Request.Methods) Error!Endpoint.Endpoint {
-    const rd = RouteData.make(uri) orelse return list;
+pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
+    const rd = RouteData.make(&ctx.uri) orelse return list;
 
-    var cwd = std.fs.cwd();
-    if (cwd.openIterableDir("./repos", .{})) |idir| {
-        var itr = idir.iterate();
-
-        while (itr.next() catch return error.Unrouteable) |file| {
-            if (file.kind != .directory and file.kind != .sym_link) continue;
-            if (std.mem.eql(u8, file.name, rd.name)) {
-                if (rd.verb) |_| {
-                    _ = uri.next();
-                    return Endpoint.Router.router(uri, method, &endpoints);
-                } else return treeBlob;
-            }
-        }
-    } else |_| {}
+    if (rd.exists()) {
+        if (rd.verb) |_| {
+            _ = ctx.uri.next();
+            return Endpoint.Router.router(ctx, &endpoints);
+        } else return treeBlob;
+    }
     return error.Unrouteable;
 }
 
