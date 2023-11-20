@@ -23,12 +23,14 @@ const commits = Commits.commits;
 const commit = Commits.commit;
 const htmlCommit = Commits.htmlCommit;
 
+const gitweb = @import("../gitweb.zig");
+
 const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "blob", .match = .{ .call = treeBlob } },
     .{ .name = "commits", .match = .{ .call = commits } },
     .{ .name = "commit", .match = .{ .call = commit } },
     .{ .name = "tree", .match = .{ .call = treeBlob } },
-};
+} ++ gitweb.endpoints;
 
 pub const RouteData = struct {
     name: []const u8,
@@ -76,6 +78,7 @@ pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
 
     if (rd.exists()) {
         if (rd.verb) |_| {
+            _ = ctx.uri.next();
             _ = ctx.uri.next();
             return Endpoint.Router.router(ctx, &endpoints);
         } else return treeBlob;
@@ -209,6 +212,7 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
 
 fn treeBlob(r: *Response, uri: *UriIter) Error!void {
     const rd = RouteData.make(uri) orelse return error.Unrouteable;
+    _ = uri.next();
 
     var cwd = std.fs.cwd();
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});

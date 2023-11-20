@@ -127,7 +127,7 @@ fn eql(a: []const u8, b: []const u8) bool {
 }
 
 pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Endpoint {
-    const search = ctx.uri.next() orelse return notfound;
+    const search = ctx.uri.peek() orelse return notfound;
     inline for (routes) |ep| {
         if (eql(search, ep.name)) {
             switch (ep.match) {
