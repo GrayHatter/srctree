@@ -34,6 +34,7 @@ pub const MatchRouter = struct {
     match: union(enum) {
         call: Endpoint,
         route: Router,
+        simple: []const MatchRouter,
     },
     methods: u8 = Methods.GET,
 };
@@ -139,6 +140,14 @@ pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Endpoint {
                         error.Unrouteable => return notfound,
                         else => unreachable,
                     };
+                },
+                .simple => |simple| {
+                    _ = ctx.uri.next();
+                    if (ctx.uri.peek() == null and
+                        std.mem.eql(u8, simple[0].name, "") and
+                        simple[0].match == .call)
+                        return simple[0].match.call;
+                    return router(ctx, simple);
                 },
             }
         }
