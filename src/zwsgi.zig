@@ -131,13 +131,18 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
             const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
 
             const post_size = try std.fmt.parseInt(usize, h_len, 10);
-            post_data = try HttpPost.readBody(a, acpt, post_size, h_type);
-            if (dump_vars) std.log.info("post data \"{s}\" {{{any}}}", .{ post_data.rawdata, post_data.rawdata });
+            if (post_size > 0) {
+                post_data = try HttpPost.readBody(a, acpt, post_size, h_type);
+                if (dump_vars) std.log.info(
+                    "post data \"{s}\" {{{any}}}",
+                    .{ post_data.rawdata, post_data.rawdata },
+                );
 
-            for (post_data.items) |itm| {
-                if (dump_vars) std.log.info("{}", .{itm});
+                for (post_data.items) |itm| {
+                    if (dump_vars) std.log.info("{}", .{itm});
+                }
+                response.post_data = post_data;
             }
-            response.post_data = post_data;
         }
 
         var ctx = try Context.init(
