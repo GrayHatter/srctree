@@ -180,6 +180,6 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }

@@ -64,7 +64,7 @@ fn default(r: *Response, _: *UriIter) Error!void {
     _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }
 
@@ -105,7 +105,7 @@ fn postNewRepo(r: *Response, _: *UriIter) Error!void {
     _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }
 
@@ -131,7 +131,7 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
     _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }
 

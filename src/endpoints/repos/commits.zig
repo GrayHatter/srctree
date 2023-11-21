@@ -89,7 +89,7 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
 
     r.status = .ok;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }
 
@@ -163,6 +163,6 @@ pub fn commits(r: *Response, uri: *UriIter) Error!void {
 
     r.status = .ok;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }

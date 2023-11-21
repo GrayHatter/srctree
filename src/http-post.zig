@@ -54,6 +54,7 @@ pub const PostData = struct {
 pub const ContentType = union(enum) {
     const Application = enum {
         @"x-www-form-urlencoded",
+        @"x-git-upload-pack-request",
     };
     const MultiPart = enum {
         mixed,
@@ -119,6 +120,10 @@ fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype
                 };
             }
             return items;
+        },
+        .@"x-git-upload-pack-request" => {
+            // Git just uses the raw data instead, no need to preprocess
+            return &[0]PostItem{};
         },
     }
 }

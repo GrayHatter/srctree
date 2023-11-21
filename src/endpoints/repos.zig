@@ -182,7 +182,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
 
         var page = tmpl.buildFor(r.alloc, r) catch unreachable;
         r.start() catch return Error.Unknown;
-        r.write(page) catch return Error.Unknown;
+        r.send(page) catch return Error.Unknown;
         r.finish() catch return Error.Unknown;
     } else |err| {
         std.debug.print("unable to open given dir {}\n", .{err});
@@ -206,7 +206,7 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
 
     r.status = .ok;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }
 
@@ -294,7 +294,7 @@ fn blob(r: *Response, uri: *UriIter, repo: *git.Repo, pfiles: git.Tree) Error!vo
 
     r.status = .ok;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }
 
@@ -407,6 +407,6 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
 
     r.status = .ok;
     r.start() catch return Error.Unknown;
-    r.write(page) catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
     r.finish() catch return Error.Unknown;
 }

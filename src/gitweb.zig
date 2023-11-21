@@ -21,10 +21,10 @@ const Bleach = @import("bleach.zig");
 const POST = Endpoint.Router.Methods.POST;
 
 pub const endpoints = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "objects", .match = .{ .call = objects } },
+    .{ .name = "objects", .match = .{ .call = gitUploadPack } },
     .{ .name = "info", .match = .{ .simple = &[_]Endpoint.Router.MatchRouter{
-        .{ .name = "", .match = .{ .call = info } },
-        .{ .name = "refs", .match = .{ .call = info } },
+        .{ .name = "", .match = .{ .call = gitUploadPack } },
+        .{ .name = "refs", .match = .{ .call = gitUploadPack } },
     } } },
 
     .{ .name = "git-upload-pack", .methods = POST, .match = .{ .call = gitUploadPack } },
@@ -36,20 +36,83 @@ pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
 }
 
 fn gitUploadPack(r: *Response, uri: *UriIter) Error!void {
-    _ = uri;
+    uri.reset();
+    _ = uri.first();
+    const name = uri.next() orelse return error.Unknown;
+    const target = uri.rest();
+    if (!std.mem.eql(u8, target, "info/refs") and !std.mem.eql(u8, target, "git-upload-pack")) {
+        return error.Abusive;
+    }
 
-    std.debug.print("upload-pack", .{});
+    var path_buf: [2048]u8 = undefined;
+    const path_tr = std.fmt.bufPrint(&path_buf, "repos/{s}/{s}", .{ name, target }) catch unreachable;
+    std.debug.print("pathtr {s}\n", .{path_tr});
+
     var map = std.process.EnvMap.init(r.alloc);
+    defer map.deinit();
+
+    //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
+    if (r.post_data == null) {
+        try map.put("PATH_TRANSLATED", path_tr);
+        try map.put("QUERY_STRING", "service=git-upload-pack");
+        try map.put("REQUEST_METHOD", "GET");
+    } else {
+        try map.put("PATH_TRANSLATED", path_tr);
+        try map.put("QUERY_STRING", "");
+        try map.put("REQUEST_METHOD", "POST");
+    }
+    try map.put("REMOTE_USER", "");
+    try map.put("REMOTE_ADDR", "");
+    try map.put("CONTENT_TYPE", "application/x-git-upload-pack-request");
+    try map.put("GIT_PROTOCOL", "version=2");
+    try map.put("GIT_HTTP_EXPORT_ALL", "true");
 
     var child = std.ChildProcess.init(&[_][]const u8{ "git", "http-backend" }, r.alloc);
-    child.stdin_behavior = .Ignore;
+    child.stdin_behavior = .Pipe;
     child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Pipe;
+    child.stderr_behavior = .Ignore;
     child.env_map = &map;
     child.expand_arg0 = .no_expand;
+
+    r.status = .ok;
+    r.phase = .headers;
+
+    child.spawn() catch unreachable;
+
+    const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
+    var poll_fd = [_]std.os.pollfd{
+        .{
+            .fd = child.stdout.?.handle,
+            .events = std.os.POLL.IN,
+            .revents = undefined,
+        },
+    };
+    if (r.post_data) |pd| {
+        _ = std.os.write(child.stdin.?.handle, pd.rawdata) catch unreachable;
+        std.os.close(child.stdin.?.handle);
+        child.stdin = null;
+    }
+    var buf = try r.alloc.alloc(u8, 0xffffff);
+    var headers_required = true;
+    while (true) {
+        const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
+        if (events_len == 0) continue;
+        if (poll_fd[0].revents & std.os.POLL.IN != 0) {
+            const amt = std.os.read(poll_fd[0].fd, buf) catch unreachable;
+            if (amt == 0) break;
+            if (headers_required) {
+                _ = r.write("HTTP/1.1 200 OK\r\n") catch unreachable;
+                headers_required = false;
+            }
+            r.writeAll(buf[0..amt]) catch unreachable;
+        } else if (poll_fd[0].revents & err_mask != 0) {
+            break;
+        }
+    }
+    _ = child.wait() catch unreachable;
 }
 
-fn objects(r: *Response, uri: *UriIter) Error!void {
+fn __objects(r: *Response, uri: *UriIter) Error!void {
     std.debug.print("gitweb objects\n", .{});
 
     const rd = Endpoint.REPO.RouteData.make(uri) orelse return error.Unrouteable;
@@ -83,7 +146,7 @@ fn objects(r: *Response, uri: *UriIter) Error!void {
     r.finish() catch return Error.Unknown;
 }
 
-fn info(r: *Response, uri: *UriIter) Error!void {
+fn __info(r: *Response, uri: *UriIter) Error!void {
     std.debug.print("gitweb info\n", .{});
 
     const rd = Endpoint.REPO.RouteData.make(uri) orelse return error.Unrouteable;

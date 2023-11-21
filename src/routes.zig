@@ -55,7 +55,7 @@ const root = [_]MatchRouter{
 fn sendMsg(r: *Response, msg: []const u8) !void {
     //r.transfer_encoding = .{ .content_length = msg.len };
     try r.start();
-    try r.write(msg);
+    try r.send(msg);
     try r.finish();
 }
 
@@ -156,7 +156,7 @@ pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Endpoint {
 }
 
 pub fn baseRouter(ctx: *Context) Error!void {
-    std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
+    //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
             const route: Endpoint = router(ctx, &root);
