@@ -19,10 +19,12 @@ pub const Attribute = struct {
     value: ?[]const u8,
 
     /// Helper function
-    pub fn class(val: ?[]const u8) Attribute {
-        return .{
-            .key = "class",
-            .value = val,
+    pub fn class(val: ?[]const u8) [1]Attribute {
+        return [_]Attr{
+            .{
+                .key = "class",
+                .value = val,
+            },
         };
     }
 

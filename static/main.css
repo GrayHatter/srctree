@@ -13,11 +13,27 @@ a {
 		text-decoration: none;
 		color: #FFFFEB;
 	}
+	&.btn {
+		display: inline-block;
+		font-size: 108%;
+		font-weight: 600;
+		background-color: #222;
+		border-radius: 3px;
+		font-family: 'Titillium Web', sans-serif;
+		padding: 6px 18px;
+		border: 2px outset gray;
+		border-bottom-color: #7a003f;
+
+	}
 }
 
-body {
-	margin: 0 auto;
+.repo-btns {
+	display: block;
+	margin: 0 16px 16px;
+	text-align: right;
 }
+
+body { margin: 0 auto; }
 
 header {
 	display: flex;
@@ -33,19 +49,16 @@ header {
 		text-align: left;
 		width: 25%;
 	}
-
 	a {
 		font-size: 108%;
 		padding: 10px 20px 2px;
 		border-bottom: #7a003f solid 2px;
 		border-radius: 0 0 2px 2px;
 	}
-
 	> ul {
 		display: flex;
 		justify-content: space-between;
 		width: 50%;
-
 		> li {
 			display: inline-block;
 			padding: 20px;

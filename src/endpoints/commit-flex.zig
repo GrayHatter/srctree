@@ -76,8 +76,8 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     HTML.init(r.alloc);
     defer HTML.raze();
 
-    const day = [1]HTML.Attribute{HTML.Attribute.class("day")};
-    const monthAtt = [1]HTML.Attribute{HTML.Attribute.class("month")};
+    const day = HTML.Attr.class("day");
+    const monthAtt = HTML.Attr.class("month");
 
     var nowish = DateTime.now();
     var date = DateTime.today();
@@ -140,16 +140,16 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
                 "day-hide"
             else
                 "day";
-            @memcpy(rows, &[2]HTML.Attribute{
-                HTML.Attribute.class(class),
-                HTML.Attribute{
+            @memcpy(rows, &[2]HTML.Attr{
+                HTML.Attr.class(class)[0],
+                HTML.Attr{
                     .key = "title",
                     .value = try std.fmt.allocPrint(r.alloc, "{}", .{date}),
                 },
             });
             m.* = HTML.divAttr(null, rows);
         }
-        st.* = HTML.divAttr(month, &[1]HTML.Attribute{HTML.Attribute.class("col")});
+        st.* = HTML.divAttr(month, &HTML.Attr.class("col"));
     }
 
     var days = &[_]HTML.Element{
@@ -162,12 +162,12 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
             HTML.divAttr("Thr", &day),
             HTML.divAttr("Fri", &day),
             HTML.divAttr("Sat", &day),
-        }, &[1]HTML.Attribute{HTML.Attribute.class("day-col")}),
+        }, &HTML.Attr.class("day-col")),
     };
 
     const flex = HTML.divAttr(
         days ++ stack,
-        &[1]HTML.Attribute{HTML.Attribute.class("commit-flex")},
+        &HTML.Attr.class("commit-flex"),
     );
 
     const htm = try std.fmt.allocPrint(r.alloc, "{}", .{flex});

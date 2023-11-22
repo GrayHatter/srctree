@@ -1093,7 +1093,7 @@ pub const Tree = struct {
 
 const DEBUG_GIT_ACTIONS = true;
 
-const Actions = struct {
+pub const Actions = struct {
     alloc: Allocator,
     repo: ?*const Repo = null,
     cwd_dir: ?std.fs.Dir = null,
@@ -1106,6 +1106,18 @@ const Actions = struct {
             "upstream",
         });
         std.debug.print("update {s}\n", .{data});
+    }
+
+    pub fn forkRemote(self: Actions, uri: []const u8, local_dir: []const u8) ![]u8 {
+        return try self.exec(&[_][]const u8{
+            "git",
+            "clone",
+            "--bare",
+            "--origin",
+            "upstream",
+            uri,
+            local_dir,
+        });
     }
 
     pub fn initRepo(self: Actions, dir: []const u8, opt: struct { bare: bool = true }) ![]u8 {
@@ -1585,4 +1597,19 @@ test "ref delta" {
     a.free(found);
     lap = timer.lap();
     if (false) std.debug.print("timer {}\n", .{lap});
+}
+
+test "forkRemote" {
+    var a = std.testing.allocator;
+    var tdir = std.testing.tmpDir(.{});
+    defer tdir.cleanup();
+
+    var act = Actions{
+        .alloc = a,
+        .cwd_dir = tdir.dir,
+    };
+    _ = act;
+    // TODO don't get banned from github
+    //var result = try act.forkRemote("https://github.com/grayhatter/srctree", "srctree_tmp");
+    //std.debug.print("{s}\n", .{result});
 }

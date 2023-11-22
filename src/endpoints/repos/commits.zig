@@ -24,8 +24,8 @@ fn diffLine(a: Allocator, diff: []const u8) *DOM {
     var litr = std.mem.split(u8, diff, "\n");
 
     for (0..count + 1) |_| {
-        const a_add = &[1]HTML.Attr{HTML.Attr.class("add")};
-        const a_del = &[1]HTML.Attr{HTML.Attr.class("del")};
+        const a_add = &HTML.Attr.class("add");
+        const a_del = &HTML.Attr.class("del");
         const dirty = litr.next().?;
         var clean = a.alloc(u8, dirty.len * 2) catch unreachable;
         clean = Bleach.sanitize(dirty, clean, .{}) catch unreachable;

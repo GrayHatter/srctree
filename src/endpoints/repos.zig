@@ -93,6 +93,10 @@ fn typeSorter(_: void, l: git.Blob, r: git.Blob) bool {
     return dirs_first;
 }
 
+fn repoSorter(_: void, l: []const u8, r: []const u8) bool {
+    return sorter({}, l, r);
+}
+
 fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
@@ -122,7 +126,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
             if (file.name[0] == '.') continue;
             try flist.append(try r.alloc.dupe(u8, file.name));
         }
-        std.sort.heap([]u8, flist.items, {}, sorter);
+        std.sort.heap([]u8, flist.items, {}, repoSorter);
 
         var dom = DOM.new(r.alloc);
         dom = dom.open(HTML.element("repos", null, null));
@@ -165,9 +169,9 @@ fn list(r: *Response, _: *UriIter) Error!void {
                         "updated about {}",
                         .{Humanize.unix(committer.timestamp)},
                     );
-                    dom.dupe(HTML.span(updated_str, &[_]HTML.Attr{HTML.Attr.class("updated")}));
+                    dom.dupe(HTML.span(updated_str, &HTML.Attr.class("updated")));
                 } else |_| {
-                    dom.dupe(HTML.span("new repo", &[_]HTML.Attr{HTML.Attr.class("updated")}));
+                    dom.dupe(HTML.span("new repo", &HTML.Attr.class("updated")));
                 }
             }
             dom = dom.close();
@@ -287,7 +291,7 @@ fn blob(r: *Response, uri: *UriIter, repo: *git.Repo, pfiles: git.Tree) Error!vo
     const filestr = try std.fmt.allocPrint(
         r.alloc,
         "{pretty}",
-        .{HTML.divAttr(data, &[_]HTML.Attribute{HTML.Attribute.class("code-block")})},
+        .{HTML.divAttr(data, &HTML.Attr.class("code-block"))},
     );
     tmpl.addVar("files", filestr) catch return error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
@@ -346,7 +350,7 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
     var commitblob = dom.done();
     const commitstr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.divAttr(
         commitblob,
-        &[_]HTML.Attribute{HTML.Attribute.class("treecommit")},
+        &HTML.Attr.class("treecommit"),
     )});
     tmpl.addVar("commit", commitstr) catch return error.Unknown;
 
