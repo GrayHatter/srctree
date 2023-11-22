@@ -295,11 +295,11 @@ diff {
 				text-decoration: none;
 			}
 		}
-		.day-pwr-1 { background-image: linear-gradient(108deg, #00878A 0%, #B100B5 100%); }
-		.day-pwr-2 { background-image: linear-gradient(108deg, #00A6A3 0%, #D000D6 95%); }
+		.day-pwr-1 { background-image: linear-gradient(108deg, #00708A 0%, #B100B5 100%); }
+		.day-pwr-2 { background-image: linear-gradient(108deg, #009DB3 0%, #D000D6 95%); }
 		.day-pwr-3 { background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 100%); }
-		.day-pwr-4 { background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 80%); }
-		.day-pwr-5 { background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 65%); }
+		.day-pwr-4 { background-image: linear-gradient(108deg, #00FCFF 0%, #FC1CFF 80%); }
+		.day-pwr-5 { background-image: linear-gradient(108deg, #4AFDFF 0%, #FD46FF 65%); }
 		.day-pwr-max { background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 0%); }
 		> div:first-child {
 			line-height: 103%;
