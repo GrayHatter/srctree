@@ -144,17 +144,26 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
             defer date = DateTime.fromEpoch(date.timestamp + DAY) catch unreachable;
             defer day_off += 1;
             var rows = try r.alloc.alloc(HTML.Attribute, 2);
-            const class = if (hits[day_off] > 0)
-                "day day-commits"
-            else if (date.timestamp >= nowish.timestamp)
+            const class = if (date.timestamp >= nowish.timestamp)
                 "day-hide"
-            else
-                "day";
+            else switch (16 - @clz(hits[day_off])) {
+                0 => "day",
+                1 => "day day-commits day-pwr-1",
+                2 => "day day-commits day-pwr-2",
+                3 => "day day-commits day-pwr-3",
+                4 => "day day-commits day-pwr-4",
+                5 => "day day-commits day-pwr-5",
+                else => "day day-commits day-pwr-max",
+            };
             @memcpy(rows, &[2]HTML.Attr{
                 HTML.Attr.class(class)[0],
                 HTML.Attr{
                     .key = "title",
-                    .value = try std.fmt.allocPrint(r.alloc, "{} commits on {}", .{ hits[day_off], date }),
+                    .value = try std.fmt.allocPrint(
+                        r.alloc,
+                        "{} commits on {}",
+                        .{ hits[day_off], date },
+                    ),
                 },
             });
             m.* = HTML.divAttr(null, rows);
