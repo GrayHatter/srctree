@@ -116,6 +116,51 @@ fn parseGitRemoteUrl(a: Allocator, url: []const u8) ![]u8 {
     return try a.dupe(u8, url);
 }
 
+fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) !*DOM {
+    var dom = pre_dom.open(HTML.repo());
+    dom = dom.open(HTML.element("name", name, null));
+    dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
+        .{ .key = "href", .value = try std.fmt.allocPrint(a, "/repo/{s}", .{name}) },
+    }));
+    dom = dom.close();
+    dom = dom.open(HTML.element("desc", null, null));
+    {
+        const desc = try repo.description(a);
+        if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
+            dom.push(HTML.p(desc, null));
+        }
+
+        var conffd = try repo.dir.openFile("config", .{});
+        defer conffd.close();
+        const conf = try Ini.init(a, conffd);
+        if (conf.get("remote \"upstream\"")) |ns| {
+            if (ns.get("url")) |url| {
+                var purl = try parseGitRemoteUrl(a, url);
+                dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
+                dom.push(HTML.text("Upstream: "));
+                dom.push(HTML.anch(purl, try HTML.Attr.create(a, "href", purl)));
+                dom = dom.close();
+            }
+        }
+
+        if (repo.commit(a)) |cmt| {
+            defer cmt.raze(a);
+            const committer = cmt.committer;
+            const updated_str = try std.fmt.allocPrint(
+                a,
+                "updated about {}",
+                .{Humanize.unix(committer.timestamp)},
+            );
+            dom.dupe(HTML.span(updated_str, &HTML.Attr.class("updated")));
+        } else |_| {
+            dom.dupe(HTML.span("new repo", &HTML.Attr.class("updated")));
+        }
+    }
+    dom = dom.close();
+    dom.push(HTML.element("last", null, null));
+    return dom.close();
+}
+
 fn list(r: *Response, _: *UriIter) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
@@ -139,54 +184,12 @@ fn list(r: *Response, _: *UriIter) Error!void {
         dom = dom.open(HTML.element("repos", null, null));
 
         for (flist.items) |name| {
-            dom = dom.open(HTML.repo());
-            {
-                dom = dom.open(HTML.element("name", name, null));
-                dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
-                    .{ .key = "href", .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}", .{name}) },
-                }));
-            }
-            dom = dom.close();
-            dom = dom.open(HTML.element("desc", null, null));
-            {
-                var repodir = idir.dir.openDir(name, .{}) catch return error.Unknown;
-                errdefer repodir.close();
-                var repo = git.Repo.init(repodir) catch return error.Unknown;
-                repo.loadData(r.alloc) catch return error.Unknown;
-                defer repo.raze(r.alloc);
-                const desc = repo.description(r.alloc) catch return error.Unknown;
-                if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-                    dom.push(HTML.p(desc, null));
-                }
-
-                var conffd = repo.dir.openFile("config", .{}) catch return error.Unknown;
-                const conf = Ini.init(r.alloc, conffd) catch return error.Unknown;
-                if (conf.get("remote \"upstream\"")) |ns| {
-                    if (ns.get("url")) |url| {
-                        var purl = try parseGitRemoteUrl(r.alloc, url);
-                        dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
-                        dom.push(HTML.text("Upstream: "));
-                        dom.push(HTML.anch(purl, try HTML.Attr.create(r.alloc, "href", purl)));
-                        dom = dom.close();
-                    }
-                }
-
-                if (repo.commit(r.alloc)) |cmt| {
-                    defer cmt.raze(r.alloc);
-                    const committer = cmt.committer;
-                    const updated_str = try std.fmt.allocPrint(
-                        r.alloc,
-                        "updated about {}",
-                        .{Humanize.unix(committer.timestamp)},
-                    );
-                    dom.dupe(HTML.span(updated_str, &HTML.Attr.class("updated")));
-                } else |_| {
-                    dom.dupe(HTML.span("new repo", &HTML.Attr.class("updated")));
-                }
-            }
-            dom = dom.close();
-            dom.push(HTML.element("last", null, null));
-            dom = dom.close();
+            var repodir = idir.dir.openDir(name, .{}) catch return error.Unknown;
+            errdefer repodir.close();
+            var repo = git.Repo.init(repodir) catch return error.Unknown;
+            repo.loadData(r.alloc) catch return error.Unknown;
+            defer repo.raze(r.alloc);
+            dom = htmlRepoBlock(r.alloc, dom, name, repo) catch return error.Unknown;
         }
         dom = dom.close();
         var data = dom.done();
