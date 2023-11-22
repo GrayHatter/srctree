@@ -18,6 +18,7 @@ pub const Error = error{
     InvalidURI,
 
     Abusive,
+    Unauthenticated,
 };
 
 pub const router = Router.router;
@@ -30,4 +31,4 @@ pub const REPO = @import("endpoints/repos.zig");
 pub const repo = REPO.router;
 
 pub const ADMIN = @import("endpoints/admin.zig");
-pub const admin = ADMIN.router;
+pub const admin = &ADMIN.endpoints;

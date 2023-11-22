@@ -129,6 +129,13 @@ fn list(r: *Response, _: *UriIter) Error!void {
         std.sort.heap([]u8, flist.items, {}, repoSorter);
 
         var dom = DOM.new(r.alloc);
+
+        if (r.request.auth.valid()) {
+            dom = dom.open(HTML.element("div", null, &HTML.Attr.class("repo-btns")));
+            dom.dupe(try HTML.btnLinkAlloc(r.alloc, "New Upstream", "/admin/clone-upstream"));
+            dom = dom.close();
+        }
+
         dom = dom.open(HTML.element("repos", null, null));
 
         for (flist.items) |name| {

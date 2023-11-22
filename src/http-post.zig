@@ -90,11 +90,29 @@ pub const ContentType = union(enum) {
     }
 };
 
-fn normilizeUrlEncoded(string: []u8) ![]u8 {
-    for (string) |*c| {
-        if (c.* == '+') c.* = ' ';
+fn normilizeUrlEncoded(in: []const u8, out: []u8) ![]u8 {
+    var len: usize = 0;
+    var i: usize = 0;
+    while (i < in.len) {
+        var c = &in[i];
+        var char: u8 = 0xff;
+        switch (c.*) {
+            '+' => char = ' ',
+            '%' => {
+                if (i + 2 >= in.len) {
+                    char = c.*;
+                    continue;
+                }
+                char = std.fmt.parseInt(u8, in[i + 1 ..][0..2], 16) catch '%';
+                i += 2;
+            },
+            else => |o| char = o,
+        }
+        out[len] = char;
+        len += 1;
+        i += 1;
     }
-    return string;
+    return out[0..len];
 }
 
 fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype: []const u8) ![]PostItem {
@@ -106,15 +124,16 @@ fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype
             const count = std.mem.count(u8, data, "&") +| 1;
             var items = try a.alloc(PostItem, count);
             for (items) |*itm| {
-                var idata: []u8 = @constCast(itr.next().?);
-                var name = idata;
-                var value = idata;
+                const idata = itr.next().?;
+                var odata = try a.dupe(u8, idata);
+                var name = odata;
+                var value = odata;
                 if (std.mem.indexOf(u8, idata, "=")) |i| {
-                    name = try normilizeUrlEncoded(idata[0..i]);
-                    value = try normilizeUrlEncoded(idata[i + 1 ..]);
+                    name = try normilizeUrlEncoded(idata[0..i], odata[0..i]);
+                    value = try normilizeUrlEncoded(idata[i + 1 ..], odata[i + 1 ..]);
                 }
                 itm.* = .{
-                    .data = idata,
+                    .data = odata,
                     .name = name,
                     .value = value,
                 };

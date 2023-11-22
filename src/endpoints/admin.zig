@@ -18,16 +18,14 @@ const git = @import("../git.zig");
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
-const endpoints = [_]Endpoint.Router.MatchRouter{
+pub const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET | POST, .match = .{ .call = view } },
     .{ .name = "post", .methods = GET | POST, .match = .{ .call = view } },
     .{ .name = "new-repo", .methods = GET, .match = .{ .call = newRepo } },
     .{ .name = "new-repo", .methods = POST, .match = .{ .call = postNewRepo } },
+    .{ .name = "clone-upstream", .methods = GET, .match = .{ .call = cloneUpstream } },
+    .{ .name = "clone-upstream", .methods = POST, .match = .{ .call = postCloneUpstream } },
 };
-
-pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
-    return Endpoint.Router.router(ctx, &endpoints);
-}
 
 fn createRepo(a: Allocator, reponame: []const u8) !void {
     var dn_buf: [2048]u8 = undefined;
@@ -42,7 +40,7 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
 }
 
 fn default(r: *Response, _: *UriIter) Error!void {
-    if (!r.request.auth.valid()) return error.Abusive;
+    try r.request.auth.validOnly();
     var dom = DOM.new(r.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -68,8 +66,73 @@ fn default(r: *Response, _: *UriIter) Error!void {
     r.finish() catch return Error.Unknown;
 }
 
+fn cloneUpstream(r: *Response, _: *UriIter) Error!void {
+    try r.request.auth.validOnly();
+    var dom = DOM.new(r.alloc);
+    const action = "/admin/clone-upstream";
+    dom = dom.open(HTML.form(null, &[_]HTML.Attr{
+        HTML.Attr{ .key = "method", .value = "POST" },
+        HTML.Attr{ .key = "action", .value = action },
+    }));
+    dom.push(HTML.element("input", null, &[_]HTML.Attr{
+        HTML.Attr{ .key = "name", .value = "repo uri" },
+        HTML.Attr{ .key = "value", .value = "https://srctree/reponame" },
+    }));
+    dom = dom.close();
+    var form = dom.done();
+
+    var tmpl = Template.find("admin.html");
+    tmpl.init(r.alloc);
+    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+    r.start() catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
+}
+
+fn postCloneUpstream(r: *Response, _: *UriIter) Error!void {
+    try r.request.auth.validOnly();
+
+    var valid = r.post_data.?.validator();
+    const ruri = valid.require("repo uri") catch return error.Unknown;
+    std.debug.print("repo uri {s}\n", .{ruri.value});
+    var nameitr = std.mem.splitBackwards(u8, ruri.value, "/");
+    const name = nameitr.first();
+    std.debug.print("repo uri {s}\n", .{name});
+
+    var dir = std.fs.cwd().openDir("repos", .{}) catch return error.Unknown;
+    var act = git.Actions{
+        .alloc = r.alloc,
+        .cwd_dir = dir,
+    };
+    std.debug.print("fork bare {s}\n", .{
+        act.forkRemote(ruri.value, name) catch return error.Unknown,
+    });
+
+    var dom = DOM.new(r.alloc);
+    const action = "/admin/clone-upstream";
+    dom = dom.open(HTML.form(null, &[_]HTML.Attr{
+        HTML.Attr{ .key = "method", .value = "POST" },
+        HTML.Attr{ .key = "action", .value = action },
+    }));
+    dom.push(HTML.element("input", null, &[_]HTML.Attr{
+        HTML.Attr{ .key = "name", .value = "repo uri" },
+        HTML.Attr{ .key = "value", .value = "https://srctree/reponame" },
+    }));
+    dom = dom.close();
+    var form = dom.done();
+
+    var tmpl = Template.find("admin.html");
+    tmpl.init(r.alloc);
+    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+    r.start() catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
+}
+
 fn postNewRepo(r: *Response, _: *UriIter) Error!void {
-    if (!r.request.auth.valid()) return error.Abusive;
+    try r.request.auth.validOnly();
     // TODO ini repo dir
     var valid = r.post_data.?.validator();
     var rname = valid.require("repo name") catch return error.Unknown;
@@ -110,7 +173,7 @@ fn postNewRepo(r: *Response, _: *UriIter) Error!void {
 }
 
 fn newRepo(r: *Response, _: *UriIter) Error!void {
-    if (!r.request.auth.valid()) return error.Abusive;
+    try r.request.auth.validOnly();
     var dom = DOM.new(r.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -136,7 +199,7 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
 }
 
 fn view(r: *Response, uri: *UriIter) Error!void {
-    if (!r.request.auth.valid()) return error.Abusive;
+    try r.request.auth.validOnly();
     if (r.post_data) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(r, uri);

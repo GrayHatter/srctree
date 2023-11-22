@@ -40,7 +40,7 @@ pub const MatchRouter = struct {
 };
 
 const root = [_]MatchRouter{
-    .{ .name = "admin", .match = .{ .route = endpoint.admin } },
+    .{ .name = "admin", .match = .{ .simple = endpoint.admin } },
     .{ .name = "auth", .match = .{ .call = auth } },
     .{ .name = "bye", .match = .{ .call = bye } },
     .{ .name = "commits", .match = .{ .call = respond } },
