@@ -156,7 +156,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
                 defer repo.raze(r.alloc);
                 const desc = repo.description(r.alloc) catch return error.Unknown;
                 if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-                    dom.push(HTML.p(desc));
+                    dom.push(HTML.p(desc, null));
                 }
 
                 var conffd = repo.dir.openFile("config", .{}) catch return error.Unknown;
@@ -164,7 +164,10 @@ fn list(r: *Response, _: *UriIter) Error!void {
                 if (conf.get("remote \"upstream\"")) |ns| {
                     if (ns.get("url")) |url| {
                         var purl = try parseGitRemoteUrl(r.alloc, url);
-                        dom.push(HTML.anch(purl, try HTML.Attribute.create(r.alloc, "href", purl)));
+                        dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
+                        dom.push(HTML.text("Upstream: "));
+                        dom.push(HTML.anch(purl, try HTML.Attr.create(r.alloc, "href", purl)));
+                        dom = dom.close();
                     }
                 }
 

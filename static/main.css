@@ -171,6 +171,14 @@ repo {
 	}
 }
 
+.upstream {
+	color: #bbb;
+	display: block;
+	font-family: 'Titillium Web', sans-serif;
+	font-size: 90%;
+	margin: 6px 0 0;
+}
+
 li {
 	display: block;
 	list-style: none;

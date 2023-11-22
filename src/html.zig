@@ -188,8 +188,8 @@ pub fn divAttr(c: anytype, attr: ?[]const Attribute) Element {
     return element("div", c, attr);
 }
 
-pub fn p(c: anytype) Element {
-    return element("p", c, null);
+pub fn p(c: anytype, a: ?[]const Attribute) Element {
+    return element("p", c, a);
 }
 
 pub fn br() Element {
@@ -246,10 +246,6 @@ pub fn li(c: anytype, attr: ?[]const Attribute) Element {
     return element("li", c, attr);
 }
 
-pub fn commit(c: anytype, attr: ?[]const Attribute) Element {
-    return element("commit", c, attr);
-}
-
 test "html" {
     var a = std.testing.allocator;
 
@@ -268,7 +264,7 @@ test "nested" {
         html(&[_]E{
             head(null),
             body(
-                &[_]E{div(&[_]E{p(null)})},
+                &[_]E{div(&[_]E{p(null, null)})},
             ),
         }),
     });
@@ -294,11 +290,11 @@ test "text" {
     defer a.free(str);
     try std.testing.expectEqualStrings("this is text", str);
 
-    const pt = try std.fmt.allocPrint(a, "{}", .{p("this is text")});
+    const pt = try std.fmt.allocPrint(a, "{}", .{p("this is text", null)});
     defer a.free(pt);
     try std.testing.expectEqualStrings("<p>this is text</p>", pt);
 
-    const p_txt = try std.fmt.allocPrint(a, "{}", .{p(&[_]E{text("this is text")})});
+    const p_txt = try std.fmt.allocPrint(a, "{}", .{p(&[_]E{text("this is text")}, null)});
     defer a.free(p_txt);
     try std.testing.expectEqualStrings("<p>this is text</p>", p_txt);
 }
@@ -309,7 +305,7 @@ test "attrs" {
         html(&[_]E{
             head(null),
             body(
-                &[_]E{divAttr(&[_]E{p(null)}, &[_]Attribute{
+                &[_]E{divAttr(&[_]E{p(null, null)}, &[_]Attribute{
                     Attribute{ .key = "class", .value = "something" },
                 })},
             ),
