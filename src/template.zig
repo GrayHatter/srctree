@@ -152,12 +152,15 @@ fn tail(path: []const u8) []const u8 {
     return itr.first();
 }
 
-pub var builtin: [bldtmpls.names.len]Template = blk: {
+pub const builtin: [bldtmpls.names.len]Template = blk: {
     var t: [bldtmpls.names.len]Template = undefined;
     inline for (bldtmpls.names, &t) |file, *dst| {
-        dst.*.path = file;
-        dst.*.name = tail(file);
-        dst.*.blob = @embedFile(file);
+        dst.* = Template{
+            .alloc = null,
+            .path = file,
+            .name = tail(file),
+            .blob = @embedFile(file),
+        };
     }
     break :blk t;
 };
