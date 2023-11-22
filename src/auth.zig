@@ -11,8 +11,10 @@ pub const Method = enum {
     mtls,
 
     pub fn valid(m: Method) bool {
-        if (m == .mtls) return true;
-        return false;
+        return switch (m) {
+            .mtls => true,
+            else => false,
+        };
     }
 };
 
@@ -74,6 +76,10 @@ pub fn init(h: HeaderList) Auth {
 
 pub fn valid(auth: Auth) bool {
     return auth.method.valid();
+}
+
+pub fn validOnly(auth: Auth) !void {
+    if (!auth.valid()) return error.Unauthenticated;
 }
 
 pub fn username(auth: Auth) ![]const u8 {
