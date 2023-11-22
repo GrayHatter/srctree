@@ -114,11 +114,24 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
         }
     } else |_| unreachable;
 
+    var dom = DOM.new(r.alloc);
+
+    dom = dom.open(HTML.divAttr(null, &HTML.Attr.class("commit-flex")));
+
+    dom = dom.open(HTML.divAttr(null, &HTML.Attr.class("day-col")));
+    dom.push(HTML.divAttr("&nbsp;", &day));
+    dom.push(HTML.divAttr("Sun", &day));
+    dom.push(HTML.divAttr("Mon", &day));
+    dom.push(HTML.divAttr("Tue", &day));
+    dom.push(HTML.divAttr("Wed", &day));
+    dom.push(HTML.divAttr("Thr", &day));
+    dom.push(HTML.divAttr("Fri", &day));
+    dom.push(HTML.divAttr("Sat", &day));
+    dom = dom.close();
+
     var month_i: usize = date.months - 2;
-    var stack: [53]HTML.Element = undefined;
-    //var day_off: usize = std.math.absCast(@divFloor(date.timestamp - DateTime.today().timestamp, DAY));
     var day_off: usize = 0;
-    for (&stack) |*st| {
+    for (0..53) |_| {
         var month: []HTML.Element = try r.alloc.alloc(HTML.Element, 8);
         if ((month_i % 12) != date.months - 1) {
             month_i += 1;
@@ -141,39 +154,21 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
                 HTML.Attr.class(class)[0],
                 HTML.Attr{
                     .key = "title",
-                    .value = try std.fmt.allocPrint(r.alloc, "{}", .{date}),
+                    .value = try std.fmt.allocPrint(r.alloc, "{} commits on {}", .{ hits[day_off], date }),
                 },
             });
             m.* = HTML.divAttr(null, rows);
         }
-        st.* = HTML.divAttr(month, &HTML.Attr.class("col"));
+        dom.push(HTML.divAttr(month, &HTML.Attr.class("col")));
     }
+    dom = dom.close();
 
-    var days = &[_]HTML.Element{
-        HTML.divAttr(&[_]HTML.Element{
-            HTML.divAttr("&nbsp;", &day),
-            HTML.divAttr("Sun", &day),
-            HTML.divAttr("Mon", &day),
-            HTML.divAttr("Tue", &day),
-            HTML.divAttr("Wed", &day),
-            HTML.divAttr("Thr", &day),
-            HTML.divAttr("Fri", &day),
-            HTML.divAttr("Sat", &day),
-        }, &HTML.Attr.class("day-col")),
-    };
-
-    const flex = HTML.divAttr(
-        days ++ stack,
-        &HTML.Attr.class("commit-flex"),
-    );
-
-    const htm = try std.fmt.allocPrint(r.alloc, "{}", .{flex});
-    defer r.alloc.free(htm);
+    const flex = dom.done();
 
     var tmpl = Template.find("user_commits.html");
     tmpl.init(r.alloc);
 
-    tmpl.addVar("flexes", htm) catch return Error.Unknown;
+    _ = tmpl.addElements(r.alloc, "flexes", flex) catch return Error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
 
     r.start() catch return Error.Unknown;
