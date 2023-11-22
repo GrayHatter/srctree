@@ -139,7 +139,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
         dom = dom.open(HTML.element("repos", null, null));
 
         for (flist.items) |name| {
-            dom = dom.open(HTML.element("repo", null, null));
+            dom = dom.open(HTML.repo());
             {
                 dom = dom.open(HTML.element("name", name, null));
                 dom.dupe(HTML.anch(name, &[_]HTML.Attribute{

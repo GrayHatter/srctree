@@ -1,18 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-var _arena: std.heap.ArenaAllocator = undefined;
-var _alloc: Allocator = undefined;
-// TODO areana allocator with deinit
-
-pub fn init(a: Allocator) void {
-    _arena = std.heap.ArenaAllocator.init(a);
-    _alloc = _arena.allocator();
-}
-
-pub fn raze() void {
-    _arena.deinit();
-}
+pub usingnamespace @import("html/extra.zig");
 
 pub const Attribute = struct {
     key: []const u8,
@@ -21,17 +10,17 @@ pub const Attribute = struct {
     /// Helper function
     pub fn class(val: ?[]const u8) [1]Attribute {
         return [_]Attr{
-            .{
-                .key = "class",
-                .value = val,
-            },
+            .{ .key = "class", .value = val },
         };
     }
 
     pub fn alloc(a: Allocator, keys: []const []const u8, vals: []const ?[]const u8) ![]Attribute {
         var all = try a.alloc(Attribute, @max(keys.len, vals.len));
         for (all, keys, vals) |*dst, k, v| {
-            dst.* = Attribute{ .key = try a.dupe(u8, k), .value = if (v) |va| try a.dupe(u8, va) else v };
+            dst.* = Attribute{
+                .key = try a.dupe(u8, k),
+                .value = if (v) |va| try a.dupe(u8, va) else null,
+            };
         }
         return all;
     }
@@ -148,25 +137,7 @@ pub fn element(comptime name: []const u8, children: anytype, attrs: ?[]const Att
                 @compileLog(ChildrenType);
             },
         },
-        .Struct => |srt| {
-            const fields_info = srt.fields;
-            if (fields_info.len != 0) {
-                if (ChildrenType == Element) {
-                    const el = _alloc.alloc(Element, 1) catch unreachable;
-                    el[0] = children;
-                    return .{
-                        .name = name,
-                        .children = el,
-                        .attrs = attrs,
-                    };
-                }
-                @compileError(".{} is the only child struct type"); // currently TODO plz fix
-            }
-            return .{
-                .name = name,
-                .attrs = attrs,
-            };
-        },
+        .Struct => @compileError("Raw structs aren't allowed, element must be a slice"),
         .Array => |arr| switch (arr.child) {
             // TODO, this is probably a compiler error, prefix with &
             Element => return .{
@@ -281,27 +252,23 @@ pub fn commit(c: anytype, attr: ?[]const Attribute) Element {
 
 test "html" {
     var a = std.testing.allocator;
-    init(a);
-    defer raze();
 
     const str = try std.fmt.allocPrint(a, "{}", .{html(null)});
     defer a.free(str);
     try std.testing.expectEqualStrings("<html></html>", str);
 
-    const str2 = try std.fmt.allocPrint(a, "{pretty}", .{html(body(.{}))});
+    const str2 = try std.fmt.allocPrint(a, "{pretty}", .{html(&[_]E{body(null)})});
     defer a.free(str2);
     try std.testing.expectEqualStrings("<html>\n<body></body>\n</html>", str2);
 }
 
 test "nested" {
     var a = std.testing.allocator;
-    init(a);
-    defer raze();
     const str = try std.fmt.allocPrint(a, "{pretty}", .{
         html(&[_]E{
             head(null),
             body(
-                div(p(null)),
+                &[_]E{div(&[_]E{p(null)})},
             ),
         }),
     });
@@ -322,8 +289,6 @@ test "nested" {
 
 test "text" {
     var a = std.testing.allocator;
-    init(a);
-    defer raze();
 
     const str = try std.fmt.allocPrint(a, "{}", .{text("this is text")});
     defer a.free(str);
@@ -333,22 +298,20 @@ test "text" {
     defer a.free(pt);
     try std.testing.expectEqualStrings("<p>this is text</p>", pt);
 
-    const p_txt = try std.fmt.allocPrint(a, "{}", .{p(text("this is text"))});
+    const p_txt = try std.fmt.allocPrint(a, "{}", .{p(&[_]E{text("this is text")})});
     defer a.free(p_txt);
     try std.testing.expectEqualStrings("<p>this is text</p>", p_txt);
 }
 
 test "attrs" {
     var a = std.testing.allocator;
-    init(a);
-    defer raze();
     const str = try std.fmt.allocPrint(a, "{pretty}", .{
         html(&[_]E{
             head(null),
             body(
-                divAttr(p(null), &[_]Attribute{
+                &[_]E{divAttr(&[_]E{p(null)}, &[_]Attribute{
                     Attribute{ .key = "class", .value = "something" },
-                }),
+                })},
             ),
         }),
     });

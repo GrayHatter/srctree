@@ -73,9 +73,6 @@ const YEAR = 31_536_000;
 const DAY = 60 * 60 * 24;
 
 pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
-    HTML.init(r.alloc);
-    defer HTML.raze();
-
     const day = HTML.Attr.class("day");
     const monthAtt = HTML.Attr.class("month");
 
