@@ -56,7 +56,7 @@ fn sendMsg(r: *Response, msg: []const u8) !void {
 
 fn notfound(r: *Response, _: *UriIter) Error!void {
     r.status = .not_found;
-    const MSG = Template.find("index.html").blob;
+    const MSG = Template.find("4XX.html").blob;
     sendMsg(r, MSG) catch |e| {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
         return Error.AndExit;
