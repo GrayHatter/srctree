@@ -41,14 +41,9 @@ pub const MatchRouter = struct {
 
 const root = [_]MatchRouter{
     .{ .name = "admin", .match = .{ .simple = endpoint.admin } },
-    .{ .name = "auth", .match = .{ .call = auth } },
-    .{ .name = "bye", .match = .{ .call = bye } },
-    .{ .name = "commits", .match = .{ .call = respond } },
-    .{ .name = "hi", .match = .{ .call = respond } },
-    .{ .name = "post", .match = .{ .call = post } },
     .{ .name = "repo", .match = .{ .route = endpoint.repo } },
     .{ .name = "repos", .match = .{ .route = endpoint.repo } },
-    .{ .name = "tree", .match = .{ .call = respond } },
+    .{ .name = "tree", .match = .{ .call = default } },
     .{ .name = "user", .match = .{ .call = endpoint.commitFlex } },
 };
 
@@ -57,31 +52,6 @@ fn sendMsg(r: *Response, msg: []const u8) !void {
     try r.start();
     try r.send(msg);
     try r.finish();
-}
-
-fn bye(r: *Response, _: *UriIter) Error!void {
-    const MSG = "bye!\n";
-    sendMsg(r, MSG) catch |e| {
-        std.log.err("Unexpected error while responding [{}]\n", .{e});
-    };
-    return Error.AndExit;
-}
-
-fn auth(r: *Response, _: *UriIter) Error!void {
-    std.debug.print("auth is {}\n", .{r.request.auth});
-    if (r.request.auth.valid()) {
-        r.status = .ok;
-        sendMsg(r, "Oh hi! Welcome back\n") catch |e| {
-            std.log.err("Auth Failed somehow [{}]\n", .{e});
-            return Error.AndExit;
-        };
-        return;
-    }
-    r.status = .forbidden;
-    sendMsg(r, "Kindly Shoo!\n") catch |e| {
-        std.log.err("Auth Failed somehow [{}]\n", .{e});
-        return Error.AndExit;
-    };
 }
 
 fn notfound(r: *Response, _: *UriIter) Error!void {
@@ -93,7 +63,7 @@ fn notfound(r: *Response, _: *UriIter) Error!void {
     };
 }
 
-fn respond(r: *Response, _: *UriIter) Error!void {
+fn _respond(r: *Response, _: *UriIter) Error!void {
     r.headersAdd("connection", "keep-alive") catch return Error.ReqResInvalid;
     r.headersAdd("content-type", "text/plain") catch return Error.ReqResInvalid;
     const MSG = "Hi, mom!\n";
@@ -104,22 +74,12 @@ fn respond(r: *Response, _: *UriIter) Error!void {
 }
 
 fn default(r: *Response, _: *UriIter) Error!void {
-    const MSG = Template.find("index.html").blob;
-    sendMsg(r, MSG) catch |e| switch (e) {
-        error.NotWriteable => unreachable,
-        else => {
-            std.log.err("Unexpected error while responding [{}]\n", .{e});
-            return Error.AndExit;
-        },
-    };
-}
-
-fn post(r: *Response, _: *UriIter) Error!void {
-    const MSG = Template.find("post.html").blob;
-    sendMsg(r, MSG) catch |e| {
-        std.log.err("Unexpected error while responding [{}]\n", .{e});
-        return Error.AndExit;
-    };
+    var tmpl = Template.find("index.html");
+    tmpl.init(r.alloc);
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+    r.start() catch return Error.Unknown;
+    r.send(page) catch return Error.Unknown;
+    r.finish() catch return Error.Unknown;
 }
 
 fn eql(a: []const u8, b: []const u8) bool {
