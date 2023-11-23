@@ -45,7 +45,6 @@ header {
 		font-family: 'Titillium Web', sans-serif;
 		font-size: 300%;
 		margin: 0 0 16px 0;
-		padding: 0 0 0 40px;
 		text-align: left;
 		width: 25%;
 	}
@@ -123,13 +122,15 @@ repos {
 	flex-wrap: wrap;
 	justify-content: flex-start;
 	margin: auto;
-	padding: 0 0 0 50px;
 	text-align: left;
 }
 
 repo {
+	min-width: 320px;
+	max-width: 480px;
 	width: 48%;
 	margin: 0 auto 10px 0.5%;
+
 	name {
 		font-family: 'Titillium Web', sans-serif;
 		background: #333;
