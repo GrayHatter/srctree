@@ -88,7 +88,7 @@ pub const Template = struct {
     }
 
     pub fn buildFor(self: *Template, a: ?Allocator, r: *const Response) ![]u8 {
-        const loggedin = if (r.request.auth.valid()) "Logged In" else "Public";
+        const loggedin = if (r.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
         try self.addVar("header.auth", loggedin);
         return try self.build(a);
     }

@@ -51,6 +51,7 @@ pub fn init(h: HeaderList) Auth {
             cert = header.val;
         }
     }
+
     if (status) |s| {
         if (fingerprint) |f| {
             if (cert) |c| {

@@ -93,7 +93,7 @@ fn cloneUpstream(r: *Response, _: *UriIter) Error!void {
 fn postCloneUpstream(r: *Response, _: *UriIter) Error!void {
     try r.request.auth.validOnly();
 
-    var valid = r.post_data.?.validator();
+    var valid = r.usr_data.?.post_data.?.validator();
     const ruri = valid.require("repo uri") catch return error.Unknown;
     std.debug.print("repo uri {s}\n", .{ruri.value});
     var nameitr = std.mem.splitBackwards(u8, ruri.value, "/");
@@ -134,7 +134,13 @@ fn postCloneUpstream(r: *Response, _: *UriIter) Error!void {
 fn postNewRepo(r: *Response, _: *UriIter) Error!void {
     try r.request.auth.validOnly();
     // TODO ini repo dir
-    var valid = r.post_data.?.validator();
+    var valid = if (r.usr_data) |usr|
+        if (usr.post_data) |p|
+            p.validator()
+        else
+            return error.Unknown
+    else
+        return error.Unknown;
     var rname = valid.require("repo name") catch return error.Unknown;
 
     for (rname.value) |c| {
@@ -200,9 +206,9 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
 
 fn view(r: *Response, uri: *UriIter) Error!void {
     try r.request.auth.validOnly();
-    if (r.post_data) |pd| {
+    if (r.usr_data) |usr| if (usr.post_data) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(r, uri);
-    }
+    };
     return default(r, uri);
 }

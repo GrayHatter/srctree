@@ -7,7 +7,7 @@ const Context = @import("context.zig");
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
-const HttpPost = @import("http-post.zig");
+const UserData = @import("user-data.zig");
 
 const MAX_HEADER_SIZE = 1 <<| 13;
 
@@ -47,13 +47,11 @@ pub fn serve(a: Allocator, srv: *Server) !void {
             var request = try Request.init(alloc, http_resp);
             var response = Response.init(alloc, &request);
 
-            var post_data: HttpPost.PostData = undefined;
-
             var ctx = try Context.init(
                 alloc,
                 request,
                 response,
-                post_data,
+                undefined, // :<
             );
             Router.baseRouter(&ctx) catch |e| switch (e) {
                 error.AndExit => break :connection,

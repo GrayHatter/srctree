@@ -3,36 +3,44 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 /// This is the preferred api to use... once it actually exists :D
-pub const Validator = struct {
-    post_data: PostData,
+pub fn Validator(comptime T: type) type {
+    return struct {
+        data: T,
 
-    pub fn init(pd: PostData) Validator {
-        return Validator{
-            .post_data = pd,
-        };
-    }
+        const Self = @This();
 
-    pub fn require(v: *Validator, name: []const u8) !PostItem {
-        return v.optional(name) orelse error.NotFound;
-    }
-
-    pub fn optional(v: *Validator, name: []const u8) ?PostItem {
-        for (v.post_data.items) |item| {
-            if (std.mem.eql(u8, item.name, name)) return item;
+        pub fn init(data: T) Self {
+            return Self{
+                .data = data,
+            };
         }
-        return null;
-    }
 
-    pub fn files(_: *Validator, _: []const u8) !void {
-        return error.NotImplemented;
-    }
-};
+        pub fn require(v: *Self, name: []const u8) !DataItem {
+            return v.optional(name) orelse error.NotFound;
+        }
+
+        pub fn optional(v: *Self, name: []const u8) ?DataItem {
+            for (v.data.items) |item| {
+                if (std.mem.eql(u8, item.name, name)) return item;
+            }
+            return null;
+        }
+
+        pub fn files(_: *Self, _: []const u8) !void {
+            return error.NotImplemented;
+        }
+    };
+}
+
+pub fn validator(data: anytype) Validator(@TypeOf(data)) {
+    return Validator(@TypeOf(data)).init(data);
+}
 
 pub const DataKind = enum {
     @"form-data",
 };
 
-pub const PostItem = struct {
+pub const DataItem = struct {
     data: []const u8,
     headers: ?[]const u8 = null,
     body: ?[]const u8 = null,
@@ -43,12 +51,32 @@ pub const PostItem = struct {
 };
 
 pub const PostData = struct {
-    rawdata: []u8,
-    items: []PostItem,
+    rawpost: []u8,
+    items: []DataItem,
 
-    pub fn validator(self: PostData) Validator {
-        return Validator.init(self);
+    pub fn validator(self: PostData) Validator(PostData) {
+        return Validator(PostData).init(self);
     }
+};
+
+pub const QueryData = struct {
+    rawquery: []const u8,
+
+    pub fn init(a: Allocator, query: []const u8) !QueryData {
+        _ = a;
+        return QueryData{
+            .rawquery = query,
+        };
+    }
+
+    pub fn validator(self: QueryData) Validator(QueryData) {
+        return Validator(QueryData).init(self);
+    }
+};
+
+pub const UserData = struct {
+    post_data: ?PostData,
+    query_data: QueryData,
 };
 
 pub const ContentType = union(enum) {
@@ -115,14 +143,14 @@ fn normilizeUrlEncoded(in: []const u8, out: []u8) ![]u8 {
     return out[0..len];
 }
 
-fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype: []const u8) ![]PostItem {
+fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype: []const u8) ![]DataItem {
     switch (ap) {
         .@"x-www-form-urlencoded" => {
             std.debug.assert(std.mem.startsWith(u8, htype, "application/x-www-form-urlencoded"));
 
             var itr = std.mem.split(u8, data, "&");
             const count = std.mem.count(u8, data, "&") +| 1;
-            var items = try a.alloc(PostItem, count);
+            var items = try a.alloc(DataItem, count);
             for (items) |*itm| {
                 const idata = itr.next().?;
                 var odata = try a.dupe(u8, idata);
@@ -142,7 +170,7 @@ fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype
         },
         .@"x-git-upload-pack-request" => {
             // Git just uses the raw data instead, no need to preprocess
-            return &[0]PostItem{};
+            return &[0]DataItem{};
         },
     }
 }
@@ -196,11 +224,11 @@ fn parseMultiData(data: []const u8) !MultiData {
     return mdata;
 }
 
-fn parseMultiFormData(a: Allocator, data: []const u8) !PostItem {
+fn parseMultiFormData(a: Allocator, data: []const u8) !DataItem {
     _ = a;
     std.debug.assert(std.mem.startsWith(u8, data, "\r\n"));
     if (std.mem.indexOf(u8, data, "\r\n\r\n")) |i| {
-        var post_item = PostItem{
+        var post_item = DataItem{
             .data = data,
             .name = undefined,
             .value = data[i + 4 ..],
@@ -220,7 +248,7 @@ fn parseMultiFormData(a: Allocator, data: []const u8) !PostItem {
 }
 
 /// Pretends to follow RFC2046
-fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: []const u8) ![]PostItem {
+fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: []const u8) ![]DataItem {
     var boundry_buffer = [_]u8{'-'} ** 74;
     switch (mp) {
         .mixed => {
@@ -234,7 +262,7 @@ fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: 
 
             const boundry = boundry_buffer[0 .. bound_given.len + 2];
             const count = std.mem.count(u8, data, boundry) -| 1;
-            var items = try a.alloc(PostItem, count);
+            var items = try a.alloc(DataItem, count);
             var itr = std.mem.split(u8, data, boundry);
             _ = itr.first(); // the RFC says I'm supposed to ignore the preamble :<
             for (items) |*itm| {
@@ -257,8 +285,25 @@ pub fn readBody(a: Allocator, acpt: std.net.StreamServer.Connection, size: usize
     };
 
     return .{
-        .rawdata = post_buf,
+        .rawpost = post_buf,
         .items = items,
+    };
+}
+
+pub fn readQuery(a: Allocator, query: []const u8) !QueryData {
+    return QueryData.init(a, query);
+}
+
+pub fn parseUserData(
+    a: Allocator,
+    query: []const u8,
+    acpt: std.net.StreamServer.Connection,
+    size: usize,
+    htype: []const u8,
+) !UserData {
+    return UserData{
+        .post_data = try readBody(a, acpt, size, htype),
+        .query_data = try readQuery(a, query),
     };
 }
 
