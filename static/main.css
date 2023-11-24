@@ -57,19 +57,10 @@ header {
 	> ul {
 		display: flex;
 		justify-content: space-between;
-		width: 50%;
 		> li {
 			display: inline-block;
 			padding: 20px;
 		}
-	}
-	.auth {
-		font-size: 108%;
-		padding: 10px 20px 2px;
-		border-bottom: #7a003f solid 2px;
-		border-radius: 0 0 2px 2px;
-		display: inline-block;
-		margin: auto;
 	}
 }
 
