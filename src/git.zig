@@ -405,14 +405,14 @@ pub const Repo = struct {
     }
 
     /// Dir name must be relative (probably)
-    pub fn createNew(a: Allocator, dir_name: []const u8) !Repo {
+    pub fn createNew(a: Allocator, chdir: std.fs.Dir, dir_name: []const u8) !Repo {
         var acts = Actions{
             .alloc = a,
-            .cwd_dir = std.fs.cwd(),
+            .cwd = chdir,
         };
 
-        _ = try acts.initRepo(dir_name, .{});
-        var dir = try std.fs.cwd().openDir(dir_name, .{});
+        a.free(try acts.initRepo(dir_name, .{}));
+        var dir = try chdir.openDir(dir_name, .{});
         errdefer dir.close();
         return init(dir);
     }
@@ -583,8 +583,8 @@ pub const Repo = struct {
         if (std.mem.eql(u8, head[0..5], "ref: ")) {
             self.head = Ref{
                 .branch = Branch{
-                    .name = try a.dupe(u8, head[5 .. head.len - 1]),
                     .sha = self.ref(head[16 .. head.len - 1]) catch return Ref{ .missing = {} },
+                    .name = try a.dupe(u8, head[5 .. head.len - 1]),
                     .repo = self,
                 },
             };
@@ -634,7 +634,7 @@ pub const Repo = struct {
         return Actions{
             .alloc = a,
             .repo = self,
-            .cwd_dir = self.dir,
+            .cwd = self.dir,
         };
     }
 
@@ -1091,12 +1091,12 @@ pub const Tree = struct {
     }
 };
 
-const DEBUG_GIT_ACTIONS = true;
+const DEBUG_GIT_ACTIONS = false;
 
 pub const Actions = struct {
     alloc: Allocator,
     repo: ?*const Repo = null,
-    cwd_dir: ?std.fs.Dir = null,
+    cwd: ?std.fs.Dir = null,
 
     pub fn update(self: Actions) !void {
         const data = try self.exec(&[_][]const u8{
@@ -1139,8 +1139,9 @@ pub const Actions = struct {
 
     fn exec(self: Actions, argv: []const []const u8) ![]u8 {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
+        var cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
         var child = try std.ChildProcess.exec(.{
-            .cwd_dir = self.cwd_dir,
+            .cwd_dir = cwd,
             .allocator = self.alloc,
             .argv = argv,
         });
@@ -1606,10 +1607,21 @@ test "forkRemote" {
 
     var act = Actions{
         .alloc = a,
-        .cwd_dir = tdir.dir,
+        .cwd = tdir.dir,
     };
     _ = act;
     // TODO don't get banned from github
     //var result = try act.forkRemote("https://github.com/grayhatter/srctree", "srctree_tmp");
     //std.debug.print("{s}\n", .{result});
+}
+
+test "new repo" {
+    var a = std.testing.allocator;
+    var tdir = std.testing.tmpDir(.{});
+    defer tdir.cleanup();
+
+    var new_repo = try Repo.createNew(a, tdir.dir, "new_repo");
+    _ = try tdir.dir.openDir("new_repo", .{});
+    try new_repo.loadData(a);
+    defer new_repo.raze(a);
 }

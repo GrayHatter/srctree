@@ -33,7 +33,7 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
 
     var actions = git.Actions{
         .alloc = a,
-        .cwd_dir = std.fs.cwd(),
+        .cwd = null,
     };
 
     _ = try actions.gitInit(dir, .{});
@@ -103,7 +103,7 @@ fn postCloneUpstream(r: *Response, _: *UriIter) Error!void {
     var dir = std.fs.cwd().openDir("repos", .{}) catch return error.Unknown;
     var act = git.Actions{
         .alloc = r.alloc,
-        .cwd_dir = dir,
+        .cwd = dir,
     };
     std.debug.print("fork bare {s}\n", .{
         act.forkRemote(ruri.value, name) catch return error.Unknown,
@@ -152,7 +152,10 @@ fn postNewRepo(r: *Response, _: *UriIter) Error!void {
     std.debug.print("creating {s}\n", .{rname.value});
     var buf: [2048]u8 = undefined;
     var dir_name = std.fmt.bufPrint(&buf, "repos/{s}", .{rname.value}) catch return error.Unknown;
-    var new_repo = git.Repo.createNew(r.alloc, dir_name) catch return error.Unknown;
+
+    if (std.fs.cwd().openDir(dir_name, .{})) |_| return error.Unknown else |_| {}
+
+    var new_repo = git.Repo.createNew(r.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
 
     std.debug.print("creating {any}\n", .{new_repo});
 
