@@ -163,6 +163,33 @@ repo {
 	}
 }
 
+search {
+	font-family: 'Titillium Web', sans-serif;
+	background: #333;
+	height: 45px;
+	border-radius: 4px 4px 0 0;
+	border: 1px gray solid;
+	border-bottom: 0px;
+	padding: 4px 0 4px 12px;
+}
+
+issues {
+	border: 1px gray solid;
+	border-bottom: #7a003f solid 2px;
+	border-radius: 0 0 4px 4px;
+	display: block;
+	margin-bottom: 20px;
+	min-height: 50px;
+	padding: 14px;
+	issue {
+		border-bottom: #808080 solid 1px;
+		color: rgb(255, 255, 235);
+		display: block;
+		margin-bottom: 15px;
+		text-align: left
+	}
+}
+
 .upstream {
 	color: #bbb;
 	display: block;

@@ -27,6 +27,9 @@ pub const Endpoint = *const fn (*Response, *Router.UriIter) Error!void;
 
 pub const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
+pub const TODO = @import("endpoints/todo.zig");
+pub const todo = &TODO.endpoints;
+
 pub const REPO = @import("endpoints/repos.zig");
 pub const repo = REPO.router;
 

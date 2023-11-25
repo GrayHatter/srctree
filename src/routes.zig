@@ -44,7 +44,7 @@ const root = [_]MatchRouter{
     .{ .name = "network", .match = .{ .simple = endpoint.network } },
     .{ .name = "repo", .match = .{ .route = endpoint.repo } },
     .{ .name = "repos", .match = .{ .route = endpoint.repo } },
-    .{ .name = "todo", .match = .{ .call = default } },
+    .{ .name = "todo", .match = .{ .simple = endpoint.todo } },
     .{ .name = "user", .match = .{ .call = endpoint.commitFlex } },
 };
 
