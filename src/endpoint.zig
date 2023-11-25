@@ -32,3 +32,6 @@ pub const repo = REPO.router;
 
 pub const ADMIN = @import("endpoints/admin.zig");
 pub const admin = &ADMIN.endpoints;
+
+pub const NETWORK = @import("endpoints/network.zig");
+pub const network = &NETWORK.endpoints;

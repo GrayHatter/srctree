@@ -148,8 +148,7 @@ var _alloc: Allocator = undefined;
 
 fn tail(path: []const u8) []const u8 {
     if (std.mem.indexOf(u8, path, "/") == null) return path[0..0];
-    var itr = std.mem.splitBackwards(u8, path, "/");
-    return itr.first();
+    return path[std.mem.lastIndexOf(u8, path, "/").? + 1 ..];
 }
 
 pub const builtin: [bldtmpls.names.len]Template = blk: {

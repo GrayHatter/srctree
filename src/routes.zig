@@ -41,9 +41,10 @@ pub const MatchRouter = struct {
 
 const root = [_]MatchRouter{
     .{ .name = "admin", .match = .{ .simple = endpoint.admin } },
+    .{ .name = "network", .match = .{ .simple = endpoint.network } },
     .{ .name = "repo", .match = .{ .route = endpoint.repo } },
     .{ .name = "repos", .match = .{ .route = endpoint.repo } },
-    .{ .name = "tree", .match = .{ .call = default } },
+    .{ .name = "todo", .match = .{ .call = default } },
     .{ .name = "user", .match = .{ .call = endpoint.commitFlex } },
 };
 
