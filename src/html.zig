@@ -188,6 +188,10 @@ pub fn divAttr(c: anytype, attr: ?[]const Attribute) Element {
     return element("div", c, attr);
 }
 
+pub fn h3(c: anytype, a: ?[]const Attribute) Element {
+    return element("h3", c, a);
+}
+
 pub fn p(c: anytype, a: ?[]const Attribute) Element {
     return element("p", c, a);
 }

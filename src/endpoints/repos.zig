@@ -13,10 +13,11 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 
-const git = @import("../git.zig");
-const Ini = @import("../ini.zig");
-const Humanize = @import("../humanize.zig");
 const Bleach = @import("../bleach.zig");
+const Humanize = @import("../humanize.zig");
+const Ini = @import("../ini.zig");
+const Repos = @import("../repos.zig");
+const git = @import("../git.zig");
 
 const Commits = @import("repos/commits.zig");
 const commits = Commits.commits;
@@ -101,21 +102,6 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn parseGitRemoteUrl(a: Allocator, url: []const u8) ![]u8 {
-    if (std.mem.startsWith(u8, url, "https://")) return try a.dupe(u8, url);
-
-    if (std.mem.startsWith(u8, url, "git@")) {
-        const end = if (std.mem.endsWith(u8, url, ".git")) url.len - 4 else url.len;
-        var p = try a.dupe(u8, url[4..end]);
-        if (std.mem.indexOf(u8, p, ":")) |i| p[i] = '/';
-        const joiner = [_][]const u8{ "https://", p };
-        var http = try std.mem.join(a, "", &joiner);
-        return http;
-    }
-
-    return try a.dupe(u8, url);
-}
-
 fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) !*DOM {
     var dom = pre_dom.open(HTML.repo());
     dom = dom.open(HTML.element("name", name, null));
@@ -135,7 +121,7 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
         const conf = try Ini.init(a, conffd);
         if (conf.get("remote \"upstream\"")) |ns| {
             if (ns.get("url")) |url| {
-                var purl = try parseGitRemoteUrl(a, url);
+                var purl = try Repos.parseGitRemoteUrl(a, url);
                 dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
                 dom.push(HTML.text("Upstream: "));
                 dom.push(HTML.anch(purl, try HTML.Attr.create(a, "href", purl)));
