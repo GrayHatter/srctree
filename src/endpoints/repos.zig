@@ -163,7 +163,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
 
         if (r.request.auth.valid()) {
             dom = dom.open(HTML.element("div", null, &HTML.Attr.class("repo-btns")));
-            dom.dupe(try HTML.btnLinkAlloc(r.alloc, "New Upstream", "/admin/clone-upstream"));
+            dom.dupe(try HTML.linkBtnAlloc(r.alloc, "New Upstream", "/admin/clone-upstream"));
             dom = dom.close();
         }
 

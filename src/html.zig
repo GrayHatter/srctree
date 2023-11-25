@@ -241,7 +241,7 @@ pub fn btn(c: anytype, attr: ?[]const Attribute) Element {
     return element("button", c, attr);
 }
 
-pub fn btnLinkAlloc(a: Allocator, txt: []const u8, href: []const u8) !Element {
+pub fn linkBtnAlloc(a: Allocator, txt: []const u8, href: []const u8) !Element {
     const attr = [2]Attr{
         Attr.class("btn")[0],
         Attr{
