@@ -106,9 +106,11 @@ pub fn element(comptime name: []const u8, children: anytype, attrs: ?[]const Att
                     },
                     else => @compileError("Unknown type given to element"),
                 },
+                .Pointer => @compileError("Pointer to a pointer, (perhaps &[]u8) did you mistakenly add a &?"),
                 else => {
                     @compileLog(ptr);
-                    @compileLog(ptr.size);
+                    @compileLog(ptr.child);
+                    @compileLog(@typeInfo(ptr.child));
                     @compileLog(ChildrenType);
                 },
             },
@@ -186,6 +188,14 @@ pub fn div(c: anytype) Element {
 /// look like yet
 pub fn divAttr(c: anytype, attr: ?[]const Attribute) Element {
     return element("div", c, attr);
+}
+
+pub fn h1(c: anytype, a: ?[]const Attribute) Element {
+    return element("h1", c, a);
+}
+
+pub fn h2(c: anytype, a: ?[]const Attribute) Element {
+    return element("h2", c, a);
 }
 
 pub fn h3(c: anytype, a: ?[]const Attribute) Element {

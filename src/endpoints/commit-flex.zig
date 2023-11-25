@@ -84,6 +84,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     }
     const until = date.timestamp;
 
+    var repo_count: usize = 0;
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
         reset_hits(r.alloc);
@@ -108,6 +109,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
                 .directory, .sym_link => {
                     var name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
                     _ = findCommits(r.alloc, until, name) catch unreachable;
+                    repo_count +|= 1;
                 },
                 else => {},
             }
@@ -115,6 +117,15 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     } else |_| unreachable;
 
     var dom = DOM.new(r.alloc);
+    var tcount: u16 = 0;
+    for (hits) |h| tcount +|= h;
+    var hit_total_buf: [0x40]u8 = undefined;
+    const hit_total_str = std.fmt.bufPrint(
+        &hit_total_buf,
+        "{} commits across {} repos",
+        .{ tcount, repo_count },
+    ) catch unreachable;
+    dom.push(HTML.h3(hit_total_str, null));
 
     dom = dom.open(HTML.divAttr(null, &HTML.Attr.class("commit-flex")));
 
