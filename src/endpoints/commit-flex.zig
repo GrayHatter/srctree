@@ -127,17 +127,17 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     ) catch unreachable;
     dom.push(HTML.h3(hit_total_str, null));
 
-    dom = dom.open(HTML.divAttr(null, &HTML.Attr.class("commit-flex")));
+    dom = dom.open(HTML.div(null, &HTML.Attr.class("commit-flex")));
 
-    dom = dom.open(HTML.divAttr(null, &HTML.Attr.class("day-col")));
-    dom.push(HTML.divAttr("&nbsp;", &day));
-    dom.push(HTML.divAttr("Sun", &day));
-    dom.push(HTML.divAttr("Mon", &day));
-    dom.push(HTML.divAttr("Tue", &day));
-    dom.push(HTML.divAttr("Wed", &day));
-    dom.push(HTML.divAttr("Thr", &day));
-    dom.push(HTML.divAttr("Fri", &day));
-    dom.push(HTML.divAttr("Sat", &day));
+    dom = dom.open(HTML.div(null, &HTML.Attr.class("day-col")));
+    dom.push(HTML.div("&nbsp;", &day));
+    dom.push(HTML.div("Sun", &day));
+    dom.push(HTML.div("Mon", &day));
+    dom.push(HTML.div("Tue", &day));
+    dom.push(HTML.div("Wed", &day));
+    dom.push(HTML.div("Thr", &day));
+    dom.push(HTML.div("Fri", &day));
+    dom.push(HTML.div("Sat", &day));
     dom = dom.close();
 
     var month_i: usize = date.months - 2;
@@ -146,9 +146,9 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
         var month: []HTML.Element = try r.alloc.alloc(HTML.Element, 8);
         if ((month_i % 12) != date.months - 1) {
             month_i += 1;
-            month[0] = HTML.divAttr(DateTime.MONTHS[month_i % 12 + 1][0..3], &monthAtt);
+            month[0] = HTML.div(DateTime.MONTHS[month_i % 12 + 1][0..3], &monthAtt);
         } else {
-            month[0] = HTML.divAttr("&nbsp;", &monthAtt);
+            month[0] = HTML.div("&nbsp;", &monthAtt);
         }
 
         for (month[1..]) |*m| {
@@ -177,9 +177,9 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
                     ),
                 },
             });
-            m.* = HTML.divAttr(null, rows);
+            m.* = HTML.div(null, rows);
         }
-        dom.push(HTML.divAttr(month, &HTML.Attr.class("col")));
+        dom.push(HTML.div(month, &HTML.Attr.class("col")));
     }
     dom = dom.close();
 

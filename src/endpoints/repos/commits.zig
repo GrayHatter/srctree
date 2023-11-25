@@ -79,7 +79,7 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
         const diff_els = diff_lines.done();
         _ = tmpl.addElementsFmt(r.alloc, "{pretty}", "diff", diff_els) catch return error.Unknown;
         const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{
-            HTML.div(commit_view),
+            HTML.div(commit_view, null),
         });
 
         tmpl.addVar("commits", htmlstr) catch return error.Unknown;
@@ -152,7 +152,7 @@ pub fn commits(r: *Response, uri: *UriIter) Error!void {
     }
 
     const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{
-        HTML.div(lcommits),
+        HTML.div(lcommits, null),
     });
 
     var tmpl = Template.find("commits.html");

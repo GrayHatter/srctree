@@ -78,7 +78,7 @@ test "open close" {
     var dom = new(a);
     try std.testing.expect(dom.child == null);
 
-    var new_dom = dom.open(HTML.div(null));
+    var new_dom = dom.open(HTML.div(null, null));
     try std.testing.expect(new_dom.child == null);
     try std.testing.expect(dom.child == new_dom);
     var closed = new_dom.close();

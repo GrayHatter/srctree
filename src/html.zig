@@ -180,14 +180,8 @@ pub fn body(c: anytype) Element {
     return element("body", c, null);
 }
 
-pub fn div(c: anytype) Element {
-    return element("div", c, null);
-}
-
-/// Creating a 2nd type because I'm not sure what I want this API to actually
-/// look like yet
-pub fn divAttr(c: anytype, attr: ?[]const Attribute) Element {
-    return element("div", c, attr);
+pub fn div(c: anytype, a: ?[]const Attribute) Element {
+    return element("div", c, a);
 }
 
 pub fn h1(c: anytype, a: ?[]const Attribute) Element {
@@ -278,7 +272,7 @@ test "nested" {
         html(&[_]E{
             head(null),
             body(
-                &[_]E{div(&[_]E{p(null, null)})},
+                &[_]E{div(&[_]E{p(null, null)}, null)},
             ),
         }),
     });
@@ -319,7 +313,7 @@ test "attrs" {
         html(&[_]E{
             head(null),
             body(
-                &[_]E{divAttr(&[_]E{p(null, null)}, &[_]Attribute{
+                &[_]E{div(&[_]E{p(null, null)}, &[_]Attribute{
                     Attribute{ .key = "class", .value = "something" },
                 })},
             ),

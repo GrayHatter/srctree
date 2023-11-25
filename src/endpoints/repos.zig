@@ -162,7 +162,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
         var dom = DOM.new(r.alloc);
 
         if (r.request.auth.valid()) {
-            dom = dom.open(HTML.element("div", null, &HTML.Attr.class("repo-btns")));
+            dom = dom.open(HTML.div(null, &HTML.Attr.class("repo-btns")));
             dom.dupe(try HTML.linkBtnAlloc(r.alloc, "New Upstream", "/admin/clone-upstream"));
             dom = dom.close();
         }
@@ -290,7 +290,7 @@ fn blob(r: *Response, uri: *UriIter, repo: *git.Repo, pfiles: git.Tree) Error!vo
     const filestr = try std.fmt.allocPrint(
         r.alloc,
         "{pretty}",
-        .{HTML.divAttr(data, &HTML.Attr.class("code-block"))},
+        .{HTML.div(data, &HTML.Attr.class("code-block"))},
     );
     tmpl.addVar("files", filestr) catch return error.Unknown;
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
