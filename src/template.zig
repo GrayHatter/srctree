@@ -46,11 +46,12 @@ pub const Template = struct {
         }
     }
 
+    /// caller owns of the returned slice, freeing the data before the final use is undefined
     pub fn addElements(self: *Template, a: Allocator, name: []const u8, els: []const HTML.Element) ![]const u8 {
         return self.addElementsFmt(a, "{}", name, els);
     }
 
-    // caller is responsable to free the returned slice *AFTER* the final use
+    /// caller owns of the returned slice, freeing the data before the final use is undefined
     pub fn addElementsFmt(self: *Template, a: Allocator, comptime fmt: []const u8, name: []const u8, els: []const HTML.Element) ![]const u8 {
         try self.expandVars();
         var list = try a.alloc([]u8, els.len);

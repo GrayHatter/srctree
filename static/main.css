@@ -27,10 +27,19 @@ a {
 	}
 }
 
+h1,h2,h3 { margin: 0 }
+
 .repo-btns {
 	display: block;
 	margin: 0 16px 16px;
 	text-align: right;
+}
+
+.muted {
+	color: #bbb;
+	font-family: 'Titillium Web', sans-serif;
+	font-size: 80%;
+	margin: 6px 0 0;
 }
 
 body { margin: 0 auto; }
@@ -115,13 +124,36 @@ repos {
 	justify-content: flex-start;
 	margin: auto;
 	text-align: left;
+	repo {
+		min-width: 320px;
+		max-width: 480px;
+		width: 48%;
+		margin: 0 auto 10px 0.5%;
+	}
 }
 
+
 repo {
-	min-width: 320px;
-	max-width: 480px;
-	width: 48%;
-	margin: 0 auto 10px 0.5%;
+	display: block;
+	&.landing {
+		border-radius: 4px 4px 0 0;
+		border: 1px solid #808080;
+		intro {
+
+			span:first-child{
+				font-family: 'Titillium Web', sans-serif;
+				font-size: 120%;
+			}
+			border-radius: 4px 4px 0 0;
+			padding: 10px;
+			background: #333;
+			display: flex;
+			justify-content: space-between;
+			align-items: baseline;
+			text-align: left;
+		}
+
+	}
 
 	name {
 		font-family: 'Titillium Web', sans-serif;
@@ -164,6 +196,49 @@ repo {
 	}
 }
 
+readme {
+	border: 1px solid gray;
+	display: block;
+	margin: 2rem 0 10rem;
+	border-radius: 4px 4px 0 0;
+	intro {
+		border-radius: 4px 4px 0 0;
+		padding: 10px;
+		background: #333;
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		text-align: left;
+	}
+}
+
+.treelist {
+	padding: 0 8px 8px;
+	font-family: 'Ubuntu Mono', sans-serif;
+	tree, file {
+		border-top: 1px solid gray;
+		margin: auto;
+		padding: 4px;
+		text-align: left;
+		display: flex;
+		justify-content: flex-start;
+		> a {
+			min-width: 25%;
+			display: inline-block;
+		}
+		&:first-child { border-top: 0px solid gray; }
+		div {
+			display: flex;
+			justify-content: space-between;
+			flex-grow: 1;
+		}
+	}
+	> tree > a::before { content: "📁"; padding-right: 8px;}
+	> file > a::before { content: "📄"; padding-right: 8px;}
+}
+
+
+
 search {
 	font-family: 'Titillium Web', sans-serif;
 	background: #333;
@@ -203,30 +278,6 @@ li {
 	display: block;
 	list-style: none;
 }
-
-.treelist {
-	background: #333;
-	padding: 10px;
-	font-family: 'Ubuntu Mono', sans-serif;
-	tree, file {
-		border: 2px solid gray;
-		border-top: 0px;
-		margin: auto;
-		padding: 4px;
-		text-align: left;
-		width: 98%;
-		display: flex;
-		justify-content: space-between;
-		> a {
-			min-width: 25%;
-			display: inline-block;
-		}
-		&:first-child { border-top: 2px solid gray; }
-	}
-	> tree > a::before { content: "📁"; padding-right: 8px;}
-	> file > a::before { content: "📄"; padding-right: 8px;}
-}
-
 commit {
 	display: block;
 	text-align: left;

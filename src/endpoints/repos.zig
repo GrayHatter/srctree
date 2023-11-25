@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
+const aPrint = std.fmt.allocPrint;
 
 const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
@@ -106,7 +107,7 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
     var dom = pre_dom.open(HTML.repo());
     dom = dom.open(HTML.element("name", name, null));
     dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
-        .{ .key = "href", .value = try std.fmt.allocPrint(a, "/repo/{s}", .{name}) },
+        .{ .key = "href", .value = try aPrint(a, "/repo/{s}", .{name}) },
     }));
     dom = dom.close();
     dom = dom.open(HTML.element("desc", null, null));
@@ -132,7 +133,7 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
         if (repo.commit(a)) |cmt| {
             defer cmt.raze(a);
             const committer = cmt.committer;
-            const updated_str = try std.fmt.allocPrint(
+            const updated_str = try aPrint(
                 a,
                 "updated about {}",
                 .{Humanize.unix(committer.timestamp)},
@@ -218,7 +219,7 @@ fn treeBlob(r: *Response, uri: *UriIter) Error!void {
     _ = uri.next();
 
     var cwd = std.fs.cwd();
-    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
+    var filename = try aPrint(r.alloc, "./repos/{s}", .{rd.name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(r.alloc) catch return error.Unknown;
@@ -287,7 +288,7 @@ fn blob(r: *Response, uri: *UriIter, repo: *git.Repo, pfiles: git.Tree) Error!vo
 
     dom = dom.close();
     var data = dom.done();
-    const filestr = try std.fmt.allocPrint(
+    const filestr = try aPrint(
         r.alloc,
         "{pretty}",
         .{HTML.div(data, &HTML.Attr.class("code-block"))},
@@ -312,6 +313,30 @@ fn mkTree(a: Allocator, repo: git.Repo, uri: *UriIter, pfiles: git.Tree) !git.Tr
     return files;
 }
 
+fn htmlReadme(a: Allocator, readme: []const u8) ![]HTML.E {
+    var dom = DOM.new(a);
+
+    dom = dom.open(HTML.element("readme", null, null));
+    dom.push(HTML.element("intro", "README.md", null));
+    dom = dom.open(HTML.element("code", null, null));
+    var litr = std.mem.split(u8, readme, "\n");
+    while (litr.next()) |dirty| {
+        var clean = try a.alloc(u8, dirty.len * 2);
+        clean = Bleach.sanitize(dirty, clean, .{}) catch return error.Unknown;
+        dom.push(HTML.element("ln", clean, null));
+    }
+    dom = dom.close();
+    dom = dom.close();
+
+    return dom.done();
+}
+
+fn isReadme(name: []const u8) bool {
+    if (name.len == 0) return false;
+    if (std.mem.eql(u8, name, "README.md")) return true;
+    return false;
+}
+
 fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!void {
     var tmpl = Template.find("repo.html");
     tmpl.init(r.alloc);
@@ -322,13 +347,6 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
         else => "unknown",
     } else "unknown";
     tmpl.addVar("branch.default", head) catch return error.Unknown;
-
-    var a_refs = try r.alloc.alloc([]const u8, repo.refs.len);
-    for (a_refs, repo.refs) |*dst, src| {
-        dst.* = src.branch.name;
-    }
-    var str_refs = try std.mem.join(r.alloc, "\n", a_refs);
-    tmpl.addVar("branches", str_refs) catch return error.Unknown;
 
     const rd = RouteData.make(uri) orelse return error.Unrouteable;
     uri.reset();
@@ -343,24 +361,30 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
     //}
 
     var dom = DOM.new(r.alloc);
-    var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
-    dom.pushSlice(try htmlCommit(r.alloc, current, rd.name, true));
+    dom = dom.open(HTML.element("repo", null, &HTML.Attr.class("landing")));
 
-    var commitblob = dom.done();
-    const commitstr = try std.fmt.allocPrint(r.alloc, "{}", .{HTML.divAttr(
-        commitblob,
-        &HTML.Attr.class("treecommit"),
-    )});
-    tmpl.addVar("commit", commitstr) catch return error.Unknown;
+    dom = dom.open(HTML.element("intro", null, null));
+    dom.push(HTML.h3(rd.name, null));
+    const branches = try aPrint(r.alloc, "{} branches", .{repo.refs.len});
+    dom.push(HTML.span(branches, null));
 
-    dom = DOM.new(r.alloc);
+    const c = repo.commit(r.alloc) catch return error.Unknown;
+    dom.push(HTML.span(c.message[0..@min(c.message.len, 58)], null));
+    const commit_time = try aPrint(r.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
+    dom = dom.open(HTML.span(null, &HTML.Attr.class("muted")));
+    const commit_href = try aPrint(r.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha[0..8] });
+    dom.push(HTML.text(commit_time));
+    dom.push(try HTML.aHrefText(r.alloc, c.sha[0..8], commit_href));
+    dom = dom.close();
+    dom = dom.close();
 
+    dom = dom.open(HTML.div(null, &HTML.Attr.class("treelist")));
     if (file_uri_name.len > 0) {
         const end = std.mem.lastIndexOf(u8, file_uri_name[0 .. file_uri_name.len - 1], "/") orelse 0;
         dom = dom.open(HTML.element("tree", null, null));
         const dd_href = &[_]HTML.Attribute{.{
             .key = "href",
-            .value = try std.fmt.allocPrint(
+            .value = try aPrint(
                 r.alloc,
                 "/repo/{s}/tree/{s}",
                 .{ rd.name, file_uri_name[0..end] },
@@ -375,7 +399,7 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
     for (files.objects) |obj| {
         var href = &[_]HTML.Attribute{.{
             .key = "href",
-            .value = try std.fmt.allocPrint(r.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
+            .value = try aPrint(r.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
                 rd.name,
                 if (obj.isFile()) "blob" else "tree",
                 file_uri_name,
@@ -394,20 +418,36 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
         // I know... I KNOW!!!
         for (changed) |ch| {
             if (std.mem.eql(u8, ch.name, obj.name)) {
+                dom = dom.open(HTML.div(null, null));
                 dom.dupe(HTML.span(if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
                     ch.commit[0..i]
                 else
                     ch.commit, null));
-                dom.dupe(HTML.span(try std.fmt.allocPrint(r.alloc, "{}", .{Humanize.unix(ch.timestamp)}), null));
+                dom.dupe(HTML.span(try aPrint(r.alloc, "{}", .{Humanize.unix(ch.timestamp)}), null));
+                dom = dom.close();
                 break;
             }
         }
         dom = dom.close();
     }
-    var data = dom.done();
-    _ = tmpl.addElements(r.alloc, "files", data) catch return error.Unknown;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
+    dom = dom.close();
 
+    dom = dom.close();
+    const data = dom.done();
+    _ = tmpl.addElements(r.alloc, "repo", data) catch return error.Unknown;
+
+    for (files.objects) |obj| {
+        if (isReadme(obj.name)) {
+            var resolve = repo.blob(r.alloc, &obj.hash) catch return error.Unknown;
+            var reader = resolve.reader();
+            const readme_txt = reader.readAllAlloc(r.alloc, 0xffffff) catch unreachable;
+            const readme = htmlReadme(r.alloc, readme_txt) catch unreachable;
+            _ = tmpl.addElementsFmt(r.alloc, "{pretty}", "readme", readme) catch return error.Unknown;
+            break;
+        }
+    }
+
+    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
     r.status = .ok;
     r.start() catch return Error.Unknown;
     r.send(page) catch return Error.Unknown;
