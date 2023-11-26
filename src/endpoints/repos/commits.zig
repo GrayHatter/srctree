@@ -21,6 +21,7 @@ fn diffLine(a: Allocator, diff: []const u8) *DOM {
 
     const count = std.mem.count(u8, diff, "\n");
     dom = dom.open(HTML.element("diff", null, null));
+    dom = dom.open(HTML.element("patch", null, null));
     var litr = std.mem.split(u8, diff, "\n");
 
     for (0..count + 1) |_| {
@@ -36,6 +37,7 @@ fn diffLine(a: Allocator, diff: []const u8) *DOM {
         dom.push(HTML.span(clean, attr));
     }
 
+    dom = dom.close();
     dom = dom.close();
 
     return dom;

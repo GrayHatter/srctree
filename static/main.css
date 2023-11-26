@@ -29,7 +29,7 @@ a {
 
 h1,h2,h3 { margin: 0 }
 
-.repo-btns {
+.act-btns {
 	display: block;
 	margin: 0 16px 16px;
 	text-align: right;
@@ -47,6 +47,7 @@ body { margin: 0 auto; }
 header {
 	display: flex;
 	justify-content: space-between;
+	align-items: center;
 	margin: auto;
 	width: 1050px;
 	> h1 {
@@ -54,12 +55,11 @@ header {
 		font-family: 'Titillium Web', sans-serif;
 		font-size: 300%;
 		margin: 0 0 16px 0;
-		text-align: left;
 		width: 25%;
 	}
 	a {
 		font-size: 108%;
-		padding: 10px 20px 2px;
+		padding: 0 1em;
 		border-bottom: #7a003f solid 2px;
 		border-radius: 0 0 2px 2px;
 	}
@@ -67,8 +67,7 @@ header {
 		display: flex;
 		justify-content: space-between;
 		> li {
-			display: inline-block;
-			padding: 20px;
+			padding: 0 1em;
 		}
 	}
 }
@@ -317,15 +316,44 @@ textarea.paste {
 }
 
 diff {
-	white-space: pre;
-	text-align: left;
+	border: 1px solid gray;
 	display: block;
-	background: #333;
-	padding: 8px;
-	font-family: monospace;
+	border-radius: 4px 4px 0 0;
+	form {
+		padding: 1em;
+		width: 80%;
+	}
+	input, textarea {
+		display: block;
+		margin: 0 0 1em;
+		width: 100%;
+		background: #333;
+		border: 1px solid gray;
+		border-radius: 2px;
+		font-size: 130%;
+	}
+	textarea { height: 10em }
+	intro {
+		border-radius: 4px 4px 0 0;
+		padding: 10px;
+		background: #333;
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		text-align: left;
+	}
+	patch {
+		/* margin: 2rem 0 10rem; */
+		white-space: pre;
+		text-align: left;
+		display: block;
+		background: #333;
+		padding: 8px;
+		font-family: monospace;
 
-	.del { background: #5b0000 }
-	.add { background: #003e00 }
+		.del { background: #5b0000 }
+		.add { background: #003e00 }
+	}
 }
 
 .commit-flex {

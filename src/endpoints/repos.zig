@@ -21,6 +21,7 @@ const Repos = @import("../repos.zig");
 const git = @import("../git.zig");
 
 const Commits = @import("repos/commits.zig");
+const Diffs = @import("repos/diffs.zig");
 const commits = Commits.commits;
 const commit = Commits.commit;
 const htmlCommit = Commits.htmlCommit;
@@ -32,6 +33,7 @@ const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "commits", .match = .{ .call = commits } },
     .{ .name = "commit", .match = .{ .call = commit } },
     .{ .name = "tree", .match = .{ .call = treeBlob } },
+    .{ .name = "diffs", .match = .{ .route = &Diffs.router } },
 } ++ gitweb.endpoints;
 
 pub const RouteData = struct {
@@ -163,7 +165,7 @@ fn list(r: *Response, _: *UriIter) Error!void {
         var dom = DOM.new(r.alloc);
 
         if (r.request.auth.valid()) {
-            dom = dom.open(HTML.div(null, &HTML.Attr.class("repo-btns")));
+            dom = dom.open(HTML.div(null, &HTML.Attr.class("act-btns")));
             dom.dupe(try HTML.linkBtnAlloc(r.alloc, "New Upstream", "/admin/clone-upstream"));
             dom = dom.close();
         }
@@ -361,6 +363,12 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
     //}
 
     var dom = DOM.new(r.alloc);
+
+    dom = dom.open(HTML.div(null, &HTML.Attr.class("act-btns")));
+    const diff_link = try aPrint(r.alloc, "{s}/diffs/new", .{rd.name});
+    dom.push(try HTML.linkBtnAlloc(r.alloc, "Add Diff", diff_link));
+    dom = dom.close();
+
     dom = dom.open(HTML.element("repo", null, &HTML.Attr.class("landing")));
 
     dom = dom.open(HTML.element("intro", null, null));

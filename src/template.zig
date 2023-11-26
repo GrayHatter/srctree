@@ -42,7 +42,7 @@ pub const Template = struct {
                 self.vars = try a.alloc(Var, 1);
             }
         } else {
-            return error.UnableToAlloc;
+            return error.OutOfMemory;
         }
     }
 

@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const Request = @import("request.zig");
 const Headers = @import("headers.zig");
 const UserData = @import("user-data.zig");
+const Template = @import("template.zig").Template;
 
 const Response = @This();
 
@@ -129,6 +130,13 @@ pub fn send(res: *Response, data: []const u8) !void {
     }
     res.phase = .body;
     try res.writeAll(data);
+}
+
+pub fn sendTemplate(res: *Response, t: *Template) !void {
+    try res.start();
+    const page = try t.buildFor(res.alloc, res);
+    try res.send(page);
+    try res.finish();
 }
 
 pub fn writer(res: *Response) Writer {

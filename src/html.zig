@@ -231,6 +231,29 @@ pub fn form(c: anytype, attr: ?[]const Attribute) Element {
     return element("form", c, attr);
 }
 
+/// Written to work with DOM
+pub fn formAlloc(a: Allocator, action: []const u8, o: struct { method: ?[]const u8 = null }) !Element {
+    var attr = try a.alloc(Attribute, if (o.method == null) 1 else 2);
+    attr[0] = Attribute{
+        .key = "action",
+        .value = action,
+    };
+    if (o.method != null)
+        attr[1] = Attribute{
+            .key = "method",
+            .value = o.method,
+        };
+    return element("form", null, attr);
+}
+
+pub fn textarea(c: anytype, attr: ?[]const Attribute) Element {
+    return element("textarea", c, attr);
+}
+
+pub fn input(c: anytype, attr: ?[]const Attribute) Element {
+    return element("input", c, attr);
+}
+
 pub fn btn(c: anytype, attr: ?[]const Attribute) Element {
     return element("button", c, attr);
 }
