@@ -164,6 +164,12 @@ pub fn element(comptime name: []const u8, children: anytype, attrs: ?[]const Att
     @compileError("Invalid type given for children when calling element");
 }
 
+pub fn elementClosed(comptime name: []const u8, attrs: ?[]const Attribute) Element {
+    var e = element(name, null, attrs);
+    e.self_close = true;
+    return e;
+}
+
 pub fn text(c: []const u8) Element {
     return element("_text", c, null);
 }
@@ -201,9 +207,7 @@ pub fn p(c: anytype, a: ?[]const Attribute) Element {
 }
 
 pub fn br() Element {
-    var _br = element("br", null, null);
-    _br.self_close = true;
-    return _br;
+    return elementClosed("br", null);
 }
 
 pub fn span(c: anytype, a: ?[]const Attribute) Element {
@@ -250,12 +254,54 @@ pub fn textarea(c: anytype, attr: ?[]const Attribute) Element {
     return element("textarea", c, attr);
 }
 
+pub fn textareaAlloc(
+    a: Allocator,
+    name: []const u8,
+    o: struct { placeholder: ?[]const u8 = null },
+) !Element {
+    var attr = try a.alloc(Attribute, if (o.placeholder == null) 1 else 2);
+    attr[0] = Attribute{
+        .key = "name",
+        .value = name,
+    };
+    if (o.placeholder != null)
+        attr[1] = Attribute{
+            .key = "placeholder",
+            .value = o.placeholder,
+        };
+
+    return element("textarea", null, attr);
+}
+
 pub fn input(c: anytype, attr: ?[]const Attribute) Element {
     return element("input", c, attr);
 }
 
+pub fn inputAlloc(
+    a: Allocator,
+    name: []const u8,
+    o: struct { placeholder: ?[]const u8 = null },
+) !Element {
+    var attr = try a.alloc(Attribute, if (o.placeholder == null) 1 else 2);
+    attr[0] = Attribute{
+        .key = "name",
+        .value = name,
+    };
+    if (o.placeholder != null)
+        attr[1] = Attribute{
+            .key = "placeholder",
+            .value = o.placeholder,
+        };
+
+    return elementClosed("input", attr);
+}
+
 pub fn btn(c: anytype, attr: ?[]const Attribute) Element {
     return element("button", c, attr);
+}
+
+pub fn btnDupe(txt: []const u8, name: []const u8) Element {
+    return element("button", txt, &[_]Attr{.{ .key = "name", .value = name }});
 }
 
 pub fn linkBtnAlloc(a: Allocator, txt: []const u8, href: []const u8) !Element {
