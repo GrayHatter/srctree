@@ -44,7 +44,10 @@ pub const Diff = struct {
     }
 
     pub fn raze(self: Diff, a: std.mem.Allocator) void {
-        a.free(self.alloc_data);
+        if (self.alloc_data) {
+            a.free(self.alloc_data);
+        }
+        self.file.close();
     }
 };
 

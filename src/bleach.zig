@@ -9,19 +9,29 @@ pub const Error = error{
 
 pub const Rules = enum {
     html,
+    title,
+    filename,
+
+    pub fn func(r: Rules) RuleFn {
+        return switch (r) {
+            .html => bleachHtml,
+            .title => bleachHtml,
+            .filename => bleachFilename,
+        };
+    }
 };
 
+pub const RuleFn = *const fn (u8, ?[]u8) Error!usize;
+
 pub const Options = struct {
-    target: Rules = .html,
+    rules: Rules = .html,
     skip_chars: ?[]const u8 = null,
     // when true, sanitizer functions will return an error instead of replacing the char.
     error_on_replace: bool = false,
 };
 
 pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8, opts: Options) Error![]u8 {
-    const func = switch (opts.target) {
-        .html => sanitizeHtmlChar,
-    };
+    const func = opts.rules.func();
 
     var out_size: usize = 0;
     for (in) |c| out_size +|= try func(c, null);
@@ -31,9 +41,7 @@ pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8, opts: Options) Error!
 
 // if an error is encountered, state of out is undefined
 pub fn sanitize(in: []const u8, out: []u8, opts: Options) Error![]u8 {
-    const func = switch (opts.target) {
-        .html => sanitizeHtmlChar,
-    };
+    const func = opts.rules.func();
 
     var pos: usize = 0;
     for (in) |src| {
@@ -75,7 +83,22 @@ pub fn sanitizeStream(a: std.mem.Allocator, reader: anytype, opts: Options) !Str
     return StreamSanitizer(@TypeOf(reader)).init(a, reader, opts);
 }
 
-fn sanitizeHtmlChar(in: u8, out: ?[]u8) Error!usize {
+fn bleachFilename(in: u8, out: ?[]u8) Error!usize {
+    var same = [1:0]u8{in};
+    const replace = switch (in) {
+        'a'...'z', 'A'...'Z', '0'...'9', '-', '_' => &same,
+        ' ', '.' => "-",
+        '\n', '\t' => "",
+        else => "",
+    };
+    if (out) |o| {
+        if (replace.len > o.len) return error.NoSpaceLeft;
+        @memcpy(o[0..replace.len], replace);
+    }
+    return replace.len;
+}
+
+fn bleachHtml(in: u8, out: ?[]u8) Error!usize {
     var same = [1:0]u8{in};
     const replace = switch (in) {
         '<' => "&lt;",
@@ -90,4 +113,19 @@ fn sanitizeHtmlChar(in: u8, out: ?[]u8) Error!usize {
         @memcpy(o[0..replace.len], replace);
     }
     return replace.len;
+}
+
+test bleachFilename {
+    var a = std.testing.allocator;
+
+    const allowed = "this-filename-is-allowed";
+    const not_allowed = "this-file\nname is !really! me$$ed up?";
+
+    var output = try sanitizeAlloc(a, allowed, .{ .rules = .filename });
+    try std.testing.expectEqualStrings(allowed, output);
+    a.free(output);
+
+    output = try sanitizeAlloc(a, not_allowed, .{ .rules = .filename });
+    try std.testing.expectEqualStrings("this-filename-is-really-meed-up", output);
+    a.free(output);
 }
