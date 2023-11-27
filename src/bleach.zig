@@ -4,6 +4,7 @@ pub const Bleach = @This();
 
 pub const Error = error{
     NoSpaceLeft,
+    OutOfMemory,
 };
 
 pub const Rules = enum {
@@ -16,6 +17,17 @@ pub const Options = struct {
     // when true, sanitizer functions will return an error instead of replacing the char.
     error_on_replace: bool = false,
 };
+
+pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8, opts: Options) Error![]u8 {
+    const func = switch (opts.target) {
+        .html => sanitizeHtmlChar,
+    };
+
+    var out_size: usize = 0;
+    for (in) |c| out_size +|= try func(c, null);
+    var out = try a.alloc(u8, out_size);
+    return try sanitize(in, out, opts);
+}
 
 // if an error is encountered, state of out is undefined
 pub fn sanitize(in: []const u8, out: []u8, opts: Options) Error![]u8 {
@@ -63,8 +75,7 @@ pub fn sanitizeStream(a: std.mem.Allocator, reader: anytype, opts: Options) !Str
     return StreamSanitizer(@TypeOf(reader)).init(a, reader, opts);
 }
 
-fn sanitizeHtmlChar(in: u8, out: []u8) Error!usize {
-    std.debug.assert(out.len > 0);
+fn sanitizeHtmlChar(in: u8, out: ?[]u8) Error!usize {
     var same = [1:0]u8{in};
     const replace = switch (in) {
         '<' => "&lt;",
@@ -73,7 +84,10 @@ fn sanitizeHtmlChar(in: u8, out: []u8) Error!usize {
         '"' => "&quot;",
         else => &same,
     };
-    if (replace.len > out.len) return error.NoSpaceLeft;
-    @memcpy(out[0..replace.len], replace);
+    if (out) |o| {
+        std.debug.assert(o.len > 0);
+        if (replace.len > o.len) return error.NoSpaceLeft;
+        @memcpy(o[0..replace.len], replace);
+    }
     return replace.len;
 }
