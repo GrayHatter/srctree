@@ -12,9 +12,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.linkSystemLibrary("c");
-    exe.linkSystemLibrary("curl");
-    exe.linkSystemLibraryNeeded("libcurl");
+    exe.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
 
     addSrcTemplates(exe);
     b.installArtifact(exe);
@@ -36,9 +34,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    unit_tests.linkSystemLibrary("c");
-    unit_tests.linkSystemLibrary("curl");
-    unit_tests.linkSystemLibraryNeeded("libcurl");
+    unit_tests.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
 
     addSrcTemplates(unit_tests);
     const run_unit_tests = b.addRunArtifact(unit_tests);
