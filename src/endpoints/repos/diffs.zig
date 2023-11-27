@@ -21,7 +21,7 @@ const Diffs = @import("../../diffs.zig");
 const Bleach = @import("../../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "", .methods = GET, .match = .{ .call = default } },
+    .{ .name = "", .methods = GET, .match = .{ .call = list } },
     .{ .name = "new", .methods = GET, .match = .{ .call = new } },
     .{ .name = "new", .methods = POST, .match = .{ .call = newPost } },
 };
@@ -170,9 +170,38 @@ fn view(r: *Response, uri: *UriIter) Error!void {
     r.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn default(r: *Response, _: *UriIter) Error!void {
+fn diffRow(a: Allocator, diff: Diffs.Diff) ![]HTML.Element {
+    var dom = DOM.new(a);
+
+    dom = dom.open(HTML.element("diff", null, null));
+    const title = try Bleach.sanitizeAlloc(a, diff.title, .{ .rules = .title });
+    const desc = try Bleach.sanitizeAlloc(a, diff.desc, .{});
+    const href = try std.fmt.allocPrint(a, "{x}", .{diff.index});
+
+    dom.push(try HTML.aHrefAlloc(a, title, href));
+    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
+    dom = dom.close();
+
+    return dom.done();
+}
+
+fn list(r: *Response, uri: *UriIter) Error!void {
+    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
+    var dom = DOM.new(r.alloc);
+    dom.push(HTML.element("search", null, null));
+    dom = dom.open(HTML.element("actionable", null, null));
+
+    for (0..Diffs.last() catch return error.Unknown) |i| {
+        var d = Diffs.open(r.alloc, i) catch continue orelse continue;
+        defer d.raze(r.alloc);
+        if (!std.mem.eql(u8, d.repo, rd.name)) continue;
+        dom.pushSlice(diffRow(r.alloc, d) catch continue);
+    }
+    dom = dom.close();
+    const diffs = dom.done();
     var tmpl = Template.find("diffs.html");
     tmpl.init(r.alloc);
+    _ = try tmpl.addElements(r.alloc, "diff", diffs);
     var page = tmpl.buildFor(r.alloc, r) catch unreachable;
     r.start() catch return Error.Unknown;
     r.send(page) catch return Error.Unknown;

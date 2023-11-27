@@ -382,7 +382,7 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
     dom = dom.open(HTML.span(null, &HTML.Attr.class("muted")));
     const commit_href = try aPrint(r.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha[0..8] });
     dom.push(HTML.text(commit_time));
-    dom.push(try HTML.aHrefText(r.alloc, c.sha[0..8], commit_href));
+    dom.push(try HTML.aHrefAlloc(r.alloc, c.sha[0..8], commit_href));
     dom = dom.close();
     dom = dom.close();
 

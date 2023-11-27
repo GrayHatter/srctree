@@ -248,7 +248,7 @@ search {
 	padding: 4px 0 4px 12px;
 }
 
-issues {
+actionable {
 	border: 1px gray solid;
 	border-bottom: #7a003f solid 2px;
 	border-radius: 0 0 4px 4px;
@@ -256,12 +256,17 @@ issues {
 	margin-bottom: 20px;
 	min-height: 50px;
 	padding: 14px;
-	issue {
+	issue, diff {
+		border: none;
 		border-bottom: #808080 solid 1px;
 		color: rgb(255, 255, 235);
 		display: block;
 		margin-bottom: 15px;
-		text-align: left
+		text-align: left;
+		desc {
+			display: block;
+		}
+
 	}
 }
 

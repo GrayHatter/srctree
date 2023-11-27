@@ -101,7 +101,7 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
 
     var cd_dom = DOM.new(a);
     cd_dom = cd_dom.open(HTML.element("data", null, null));
-    cd_dom.push(try HTML.aHrefText(
+    cd_dom.push(try HTML.aHrefAlloc(
         a,
         c.sha[0..8],
         try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
@@ -119,7 +119,7 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
         dom.push(HTML.element("author", try a.dupe(u8, c.author.name), null));
         dom = dom.open(HTML.span(null, null));
         dom.push(HTML.text("parent "));
-        dom.push(try HTML.aHrefText(
+        dom.push(try HTML.aHrefAlloc(
             a,
             prnt[0..8],
             try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, prnt[0..8] }),

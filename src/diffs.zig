@@ -28,6 +28,7 @@ pub const Diff = struct {
     pub fn readFile(a: std.mem.Allocator, i: usize, file: std.fs.File) !Diff {
         const end = try file.getEndPos();
         var data = try a.alloc(u8, end);
+        errdefer a.free(data);
         try file.seekTo(0);
         _ = try file.readAll(data);
         var itr = std.mem.split(u8, data, "\x00");
@@ -44,8 +45,8 @@ pub const Diff = struct {
     }
 
     pub fn raze(self: Diff, a: std.mem.Allocator) void {
-        if (self.alloc_data) {
-            a.free(self.alloc_data);
+        if (self.alloc_data) |data| {
+            a.free(data);
         }
         self.file.close();
     }
@@ -64,6 +65,13 @@ fn currMax(dir: std.fs.Dir) !usize {
     var reader = cnt_file.reader();
     const count: usize = try reader.readIntNative(usize);
     return count;
+}
+
+pub fn last() !usize {
+    var dir = try std.fs.cwd().openDir("data/diffs", .{});
+    defer dir.close();
+
+    return currMax(dir) catch 0;
 }
 
 pub fn new(repo: []const u8, title: []const u8, src: []const u8, desc: []const u8) !Diff {

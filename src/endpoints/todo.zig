@@ -19,7 +19,7 @@ fn default(r: *Response, _: *UriIter) Error!void {
     var dom = DOM.new(r.alloc);
     dom.push(HTML.element("search", null, null));
 
-    dom = dom.open(HTML.element("issues", null, null));
+    dom = dom.open(HTML.element("actionable", null, null));
     for (0..5) |_| {
         dom = dom.open(HTML.element("issue", null, null));
         dom = dom.open(HTML.element("desc", null, null));

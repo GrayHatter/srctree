@@ -164,13 +164,15 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         Router.baseRouter(&ctx) catch |err| {
             switch (err) {
                 error.Unknown,
-                error.OutOfMemory,
                 error.ReqResInvalid,
                 error.AndExit,
                 error.InvalidURI,
                 error.Unrouteable,
                 => return err,
-
+                error.OutOfMemory => {
+                    std.debug.print("Out of memory at '{}'\n", .{arena.queryCapacity()});
+                    return err;
+                },
                 error.Abusive,
                 error.Unauthenticated,
                 error.BadData,
