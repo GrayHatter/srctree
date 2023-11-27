@@ -16,7 +16,7 @@ pub fn Validator(comptime T: type) type {
         }
 
         pub fn require(v: *Self, name: []const u8) !DataItem {
-            return v.optional(name) orelse error.NotFound;
+            return v.optional(name) orelse error.DataMissing;
         }
 
         pub fn optional(v: *Self, name: []const u8) ?DataItem {

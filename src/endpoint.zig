@@ -9,16 +9,22 @@ pub const Router = @import("routes.zig");
 
 pub const UriIter = Router.UriIter;
 
-pub const Error = error{
-    Unknown,
-    ReqResInvalid,
+pub const Error = ServerError || ClientError;
+
+pub const ServerError = error{
     AndExit,
     OutOfMemory,
-    Unrouteable,
-    InvalidURI,
+    ReqResInvalid,
+    Unknown,
+};
 
+pub const ClientError = error{
     Abusive,
+    BadData,
+    DataMissing,
+    InvalidURI,
     Unauthenticated,
+    Unrouteable,
 };
 
 pub const router = Router.router;

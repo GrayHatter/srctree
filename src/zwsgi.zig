@@ -163,14 +163,19 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
 
         Router.baseRouter(&ctx) catch |err| {
             switch (err) {
-                error.Unknown => return err,
+                error.Unknown,
                 error.OutOfMemory,
                 error.ReqResInvalid,
                 error.AndExit,
-                error.Unrouteable,
                 error.InvalidURI,
-                => {},
-                error.Abusive, error.Unauthenticated => {
+                error.Unrouteable,
+                => return err,
+
+                error.Abusive,
+                error.Unauthenticated,
+                error.BadData,
+                error.DataMissing,
+                => {
                     std.debug.print("Abusive {}\n", .{request});
                     for (request.raw_request.zwsgi.vars) |vars| {
                         std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });

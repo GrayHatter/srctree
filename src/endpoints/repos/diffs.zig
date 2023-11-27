@@ -1,5 +1,7 @@
 const std = @import("std");
 
+const Allocator = std.mem.Allocator;
+
 const DOM = Endpoint.DOM;
 const HTML = Endpoint.HTML;
 const Endpoint = @import("../../endpoint.zig");
@@ -9,8 +11,14 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 
+const Repo = @import("../repos.zig");
+
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
+
+const CURL = @import("../../curl.zig");
+const Diffs = @import("../../diffs.zig");
+const Bleach = @import("../../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = default } },
@@ -44,6 +52,7 @@ pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
 }
 
 fn new(r: *Response, _: *UriIter) Error!void {
+    const a = r.alloc;
     var tmpl = Template.find("diffs.html");
     tmpl.init(r.alloc);
 
@@ -57,27 +66,107 @@ fn new(r: *Response, _: *UriIter) Error!void {
     });
     dom = dom.open(HTML.form(null, fattr));
 
-    dom.push(HTML.input(null, null));
-    dom.push(HTML.input(null, null));
-    dom.push(HTML.textarea(null, null));
-
+    dom.push(try HTML.inputAlloc(a, "diff source", .{ .placeholder = "Patch URL" }));
+    dom.push(try HTML.inputAlloc(a, "title", .{ .placeholder = "Diff Title" }));
+    dom.push(try HTML.textareaAlloc(a, "desc", .{ .placeholder = "Additional information about this patch suggestion" }));
+    dom.dupe(HTML.btnDupe("Submit", "submit"));
+    dom.dupe(HTML.btnDupe("Preview", "preview"));
     dom = dom.close();
 
     _ = try tmpl.addElements(r.alloc, "diff", dom.done());
     r.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn newPost(r: *Response, _: *UriIter) Error!void {
+fn inNetwork(str: []const u8) bool {
+    if (!std.mem.startsWith(u8, str, "https://srctree.gr.ht")) return false;
+    for (str) |c| if (c == '@') return false;
+    return true;
+}
+
+fn fetch(a: Allocator, uri: []const u8) ![]const u8 {
+    var client = std.http.Client{
+        .allocator = a,
+    };
+    defer client.deinit();
+
+    var request = client.fetch(a, .{
+        .location = .{ .url = uri },
+    });
+    if (request) |*req| {
+        defer req.deinit();
+        std.debug.print("request code {}\n", .{req.status});
+        if (req.body) |b| {
+            std.debug.print("request body {s}\n", .{b});
+            return a.dupe(u8, b);
+        }
+    } else |err| {
+        std.debug.print("stdlib request failed with error {}\n", .{err});
+    }
+
+    var curl = try CURL.curlRequest(a, uri);
+    if (curl.code != 200) return error.UnexpectedResponseCode;
+
+    if (curl.body) |b| return b;
+    return error.EpmtyReponse;
+}
+
+fn newPost(r: *Response, uri: *UriIter) Error!void {
+    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
+    if (r.usr_data) |usrdata| if (usrdata.post_data) |post| {
+        var valid = post.validator();
+        const src = try valid.require("diff source");
+        const title = try valid.require("title");
+        const desc = try valid.require("desc");
+        const action = valid.optional("submit") orelse valid.optional("preview") orelse return error.BadData;
+        var diff = Diffs.new(rd.name, title.value, src.value, desc.value) catch unreachable;
+        diff.writeOut() catch unreachable;
+        if (inNetwork(src.value)) {
+            std.debug.print("src {s}\ntitle {s}\ndesc {s}\naction {s}\n", .{
+                src.value,
+                title.value,
+                desc.value,
+                action.name,
+            });
+            var data = fetch(r.alloc, src.value) catch unreachable;
+            var filename = std.fmt.allocPrint(
+                r.alloc,
+                "patch/{s}.{}.patch",
+                .{ rd.name, diff.index },
+            ) catch unreachable;
+            var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
+            defer file.close();
+            file.writer().writeAll(data) catch unreachable;
+        }
+    };
+
     var tmpl = Template.find("diffs.html");
     tmpl.init(r.alloc);
     try tmpl.addVar("diff", "new data attempting");
     r.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn view(r: *Response, _: *UriIter) Error!void {
+fn view(r: *Response, uri: *UriIter) Error!void {
+    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
+    const diff_target = uri.next().?;
+    const index = isHex(diff_target) orelse return error.Unrouteable;
+
+    var dom = DOM.new(r.alloc);
+
+    if (Diffs.open(r.alloc, index) catch {
+        return error.Unknown;
+    }) |diff| {
+        dom.push(HTML.text(rd.name));
+        dom.push(HTML.text(diff.repo));
+        dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.title, .{}) catch unreachable));
+        dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.source_uri, .{}) catch unreachable));
+        dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.desc, .{}) catch unreachable));
+    } else {
+        dom.push(HTML.text("diff not found"));
+    }
+
     var tmpl = Template.find("diffs.html");
     tmpl.init(r.alloc);
-    try tmpl.addVar("diff", "View diff number");
+    _ = try tmpl.addElements(r.alloc, "diff", dom.done());
     r.sendTemplate(&tmpl) catch unreachable;
 }
 
