@@ -145,10 +145,41 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
     r.sendTemplate(&tmpl) catch unreachable;
 }
 
+const Comment = struct {
+    author: []const u8,
+    message: []const u8,
+    time: i64 = 0,
+    tz: i32 = 0,
+};
+
+fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
+    var dom = DOM.new(a);
+    dom = dom.open(HTML.element("comment", null, null));
+
+    dom = dom.open(HTML.element("context", null, null));
+    dom.dupe(HTML.element(
+        "author",
+        &[_]HTML.E{HTML.text(Bleach.sanitizeAlloc(a, c.author, .{}) catch unreachable)},
+        null,
+    ));
+    dom.push(HTML.element("date", "now", null));
+    dom = dom.close();
+
+    dom = dom.open(HTML.element("message", null, null));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.message, .{}) catch unreachable));
+    dom = dom.close();
+
+    dom = dom.close();
+    return dom.done();
+}
+
 fn view(r: *Response, uri: *UriIter) Error!void {
     const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
     const diff_target = uri.next().?;
     const index = isHex(diff_target) orelse return error.Unrouteable;
+
+    var tmpl = Template.find("patch.html");
+    tmpl.init(r.alloc);
 
     var dom = DOM.new(r.alloc);
 
@@ -164,9 +195,19 @@ fn view(r: *Response, uri: *UriIter) Error!void {
         dom.push(HTML.text("diff not found"));
     }
 
-    var tmpl = Template.find("diffs.html");
-    tmpl.init(r.alloc);
-    _ = try tmpl.addElements(r.alloc, "diff", dom.done());
+    var comments = DOM.new(r.alloc);
+    for ([_]Comment{ .{
+        .author = "grayhatter",
+        .message = "Wow, srctree's Diff view looks really good!",
+    }, .{
+        .author = "robinli",
+        .message = "I know, it's clearly the best I've even seen. Soon It'll even look good in Hastur!",
+    } }) |cm| {
+        comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
+    }
+    _ = try tmpl.addElements(r.alloc, "comments", comments.done());
+
+    _ = try tmpl.addElements(r.alloc, "patch_header", dom.done());
     r.sendTemplate(&tmpl) catch unreachable;
 }
 

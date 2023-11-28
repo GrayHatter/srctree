@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>srctree</title>
+    <!-- _meta_head.html -->
+  </head>
+  <body>
+    <!-- _body_header.html -->
+    <content class="patch">
+      <patchheader>
+        <!-- patch_header -->
+      </patchheader>
+    </content>
+    <content class="patch">
+      <comments>
+        <!-- comments -->
+        <form>
+          <context></context>
+          <textarea name="comment"></textarea>
+        </form>
+      </comments>
+      <patch>
+        <!-- patch -->
+<span>diff --git a/src/endpoints/repos/diffs.zig b/src/endpoints/repos/diffs.zig</span>
+<span>index 4724f93..cfe10ac 100644</span>
+<span class="del">--- a/src/endpoints/repos/diffs.zig</span>
+<span class="add">+++ b/src/endpoints/repos/diffs.zig</span>
+<span>@@ -145,11 +145,42 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {</span>
+<span>     r.sendTemplate(&amp;tmpl) catch unreachable;</span>
+<span> }</span>
+<span> </span>
+<span class="add">+const Comment = struct {</span>
+<span class="add">+    author: []const u8,</span>
+<span class="add">+    message: []const u8,</span>
+<span class="add">+    time: i64 = 0,</span>
+<span class="add">+    tz: i32 = 0,</span>
+<span class="add">+};</span>
+<span class="add">+</span>
+<span class="add">+fn addComment(a: Allocator, c: Comment) ![]HTML.Element {</span>
+<span class="add">+    var dom = DOM.new(a);</span>
+<span class="add">+    dom = dom.open(HTML.element(&quot;comment&quot;, null, null));</span>
+<span class="add">+</span>
+<span class="add">+    dom = dom.open(HTML.element(&quot;context&quot;, null, null));</span>
+<span class="add">+    dom.dupe(HTML.element(</span>
+<span class="add">+        &quot;author&quot;,</span>
+<span class="add">+        &amp;[_]HTML.E{HTML.text(Bleach.sanitizeAlloc(a, c.author, .{}) catch unreachable)},</span>
+<span class="add">+        null,</span>
+<span class="add">+    ));</span>
+<span class="add">+    dom.push(HTML.element(&quot;date&quot;, &quot;now&quot;, null));</span>
+<span class="add">+    dom = dom.close();</span>
+<span class="add">+</span>
+<span class="add">+    dom = dom.open(HTML.element(&quot;message&quot;, null, null));</span>
+<span class="add">+    dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.message, .{}) catch unreachable));</span>
+<span class="add">+    dom = dom.close();</span>
+<span class="add">+</span>
+<span class="add">+    dom = dom.close();</span>
+<span class="add">+    return dom.done();</span>
+<span class="add">+}</span>
+<span class="add">+</span>
+<span> fn view(r: *Response, uri: *UriIter) Error!void {</span>
+<span>     const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;</span>
+<span>     const diff_target = uri.next().?;</span>
+<span>     const index = isHex(diff_target) orelse return error.Unrouteable;</span>
+<span> </span>
+<span class="add">+    var tmpl = Template.find(&quot;patch.html&quot;);</span>
+<span class="add">+    tmpl.init(r.alloc);</span>
+<span class="add">+</span>
+<span>     var dom = DOM.new(r.alloc);</span>
+<span> </span>
+<span>     if (Diffs.open(r.alloc, index) catch {</span>
+<span>@@ -164,9 +195,19 @@ fn view(r: *Response, uri: *UriIter) Error!void {</span>
+<span>         dom.push(HTML.text(&quot;diff not found&quot;));</span>
+<span>     }</span>
+<span> </span>
+<span class="del">-    var tmpl = Template.find(&quot;diffs.html&quot;);</span>
+<span class="del">-    tmpl.init(r.alloc);</span>
+<span class="del">-    _ = try tmpl.addElements(r.alloc, &quot;diff&quot;, dom.done());</span>
+<span class="add">+    var comments = DOM.new(r.alloc);</span>
+<span class="add">+    for ([_]Comment{ .{</span>
+<span class="add">+        .author = &quot;grayhatter&quot;,</span>
+<span class="add">+        .message = &quot;Wow, srctree's Diff view looks really good!&quot;,</span>
+<span class="add">+    }, .{</span>
+<span class="add">+        .author = &quot;robinli&quot;,</span>
+<span class="add">+        .message = &quot;I know, it's clearly the best I've even seen. Soon It'll even look good in Hastur!&quot;,</span>
+<span class="add">+    } }) |cm| {</span>
+<span class="add">+        comments.pushSlice(addComment(r.alloc, cm) catch unreachable);</span>
+<span class="add">+    }</span>
+<span class="add">+    _ = try tmpl.addElements(r.alloc, &quot;comments&quot;, comments.done());</span>
+<span class="add">+</span>
+<span class="add">+    _ = try tmpl.addElements(r.alloc, &quot;patch_header&quot;, dom.done());</span>
+<span>     r.sendTemplate(&amp;tmpl) catch unreachable;</span>
+<span> }</span>
+<span> </span>
+<span>diff --git a/src/template.zig b/src/template.zig</span>
+<span>index 9143670..568301d 100644</span>
+<span class="del">--- a/src/template.zig</span>
+<span class="add">+++ b/src/template.zig</span>
+<span>@@ -153,6 +153,7 @@ fn tail(path: []const u8) []const u8 {</span>
+<span> }</span>
+<span> </span>
+<span> pub const builtin: [bldtmpls.names.len]Template = blk: {</span>
+<span class="add">+    @setEvalBranchQuota(5000);</span>
+<span>     var t: [bldtmpls.names.len]Template = undefined;</span>
+<span>     inline for (bldtmpls.names, &amp;t) |file, *dst| {</span>
+<span>         dst.* = Template{</span>
+<span>diff --git a/static/main.css b/static/main.css</span>
+<span>index 5ef9aa5..d253052 100644</span>
+<span class="del">--- a/static/main.css</span>
+<span class="add">+++ b/static/main.css</span>
+<span>@@ -73,15 +73,16 @@ header {</span>
+<span> }</span>
+<span> </span>
+<span> content {</span>
+<span class="del">-	display: flex;</span>
+<span class="del">-	justify-content: center;</span>
+<span class="del">-	gap: 1em;</span>
+<span class="add">+	display: block;</span>
+<span> 	margin: auto;</span>
+<span> 	text-align: center;</span>
+<span> 	width: 1050px;</span>
+<span> </span>
+<span> 	h3 { text-align: left; }</span>
+<span> 	&amp;.patch { </span>
+<span class="add">+		display: flex;</span>
+<span class="add">+		justify-content: center;</span>
+<span class="add">+		gap: 1em;</span>
+<span> 		width: unset;</span>
+<span> 	}</span>
+<span> }</span>
+<span>@@ -355,6 +356,12 @@ diff {</span>
+<span> 	}</span>
+<span> }</span>
+<span> </span>
+<span class="add">+patchheader {</span>
+<span class="add">+	display: block;</span>
+<span class="add">+	width: 100%;</span>
+<span class="add">+	margin: auto;</span>
+<span class="add">+}</span>
+<span class="add">+</span>
+<span> patch {</span>
+<span> 	/* margin: 2rem 0 10rem; */</span>
+<span> 	border: 1px solid gray;</span>
+<span>@@ -371,9 +378,31 @@ patch {</span>
+<span> }</span>
+<span> </span>
+<span> comments {</span>
+<span class="add">+	form {</span>
+<span class="add">+		border: 1px solid gray;</span>
+<span class="add">+		display: flex;</span>
+<span class="add">+		flex-direction: column;</span>
+<span class="add">+		padding: 8px;</span>
+<span class="add">+		context {</span>
+<span class="add">+			background: #333;</span>
+<span class="add">+			border-radius: 3px 3px 0 0;</span>
+<span class="add">+			border: 1px gray solid;</span>
+<span class="add">+			border-bottom: 0px;</span>
+<span class="add">+			display: block;</span>
+<span class="add">+			height: 45px;</span>
+<span class="add">+			padding: 4px 0 4px 12px;</span>
+<span class="add">+		}</span>
+<span class="add">+		input, textarea {</span>
+<span class="add">+			display: block;</span>
+<span class="add">+			background: #333;</span>
+<span class="add">+			border: 1px solid gray;</span>
+<span class="add">+			border-radius: 2px;</span>
+<span class="add">+			font-size: 130%;</span>
+<span class="add">+		}</span>
+<span class="add">+		textarea { height: 10em }</span>
+<span class="add">+	}</span>
+<span> </span>
+<span> }</span>
+<span class="del">-</span>
+<span> comment {</span>
+<span> 	text-align: left;</span>
+<span> 	display: block;</span>
+<span>@@ -382,7 +411,7 @@ comment {</span>
+<span> </span>
+<span> 	context {</span>
+<span> 		background: #333;</span>
+<span class="del">-		border-radius: 4px 4px 0 0;</span>
+<span class="add">+		border-radius: 3px 3px 0 0;</span>
+<span> 		border: 1px gray solid;</span>
+<span> 		border-bottom: 0px;</span>
+<span> 		display: block;</span>
+<span>@@ -393,15 +422,23 @@ comment {</span>
+<span> 		border: 1px solid gray;</span>
+<span> 		display: block;</span>
+<span> 		padding: 8px;</span>
+<span class="del">-</span>
+<span> 	}</span>
+<span class="add">+	input, textarea {</span>
+<span class="add">+		display: block;</span>
+<span class="add">+		margin: 0 0 1em;</span>
+<span class="add">+		width: 100%;</span>
+<span class="add">+		background: #333;</span>
+<span class="add">+		border: 1px solid gray;</span>
+<span class="add">+		border-radius: 2px;</span>
+<span class="add">+		font-size: 130%;</span>
+<span class="add">+	}</span>
+<span class="add">+	textarea { height: 10em }</span>
+<span> 	.buttons {</span>
+<span> 		background: #333;</span>
+<span class="del">-		border-radius: 4px 4px 0 0;</span>
+<span> 		border: 1px gray solid;</span>
+<span class="del">-		border-bottom: 0px;</span>
+<span class="add">+		border-top: 0px;</span>
+<span> 		display: block;</span>
+<span class="del">-		height: 45px;</span>
+<span class="add">+		height: 25px;</span>
+<span> 		padding: 4px 0 4px 12px;</span>
+<span> 	}</span>
+<span> }</span>
+<span>diff --git a/templates/patch.html b/templates/patch.html</span>
+<span>new file mode 100644</span>
+<span>index 0000000..d67f6b3</span>
+<span class="del">--- /dev/null</span>
+<span class="add">+++ b/templates/patch.html</span>
+<span>@@ -0,0 +1,27 @@</span>
+<span class="add">+&lt;!DOCTYPE html&gt;</span>
+<span class="add">+&lt;html&gt;</span>
+<span class="add">+  &lt;head&gt;</span>
+<span class="add">+    &lt;title&gt;srctree&lt;/title&gt;</span>
+<span class="add">+    &lt;!-- _meta_head.html --&gt;</span>
+<span class="add">+  &lt;/head&gt;</span>
+<span class="add">+  &lt;body&gt;</span>
+<span class="add">+    &lt;!-- _body_header.html --&gt;</span>
+<span class="add">+    &lt;content class=&quot;patch&quot;&gt;</span>
+<span class="add">+      &lt;patchheader&gt;</span>
+<span class="add">+        &lt;!-- patch_header --&gt;</span>
+<span class="add">+      &lt;/patchheader&gt;</span>
+<span class="add">+    &lt;/content&gt;</span>
+<span class="add">+    &lt;content class=&quot;patch&quot;&gt;</span>
+<span class="add">+      &lt;comments&gt;</span>
+<span class="add">+        &lt;!-- comments --&gt;</span>
+<span class="add">+        &lt;form&gt;</span>
+<span class="add">+          &lt;context&gt;&lt;/context&gt;</span>
+<span class="add">+          &lt;textarea name=&quot;comment&quot;&gt;&lt;/textarea&gt;</span>
+<span class="add">+        &lt;/form&gt;</span>
+<span class="add">+      &lt;/comments&gt;</span>
+<span class="add">+      &lt;patch&gt;</span>
+<span class="add">+        &lt;!-- patch --&gt;</span>
+<span class="add">+      &lt;/patch&gt;</span>
+<span class="add">+    &lt;/content&gt;</span>
+<span class="add">+  &lt;/body&gt;</span>
+<span class="add">+&lt;/html&gt;</span>
+<span></span>
+      </patch>
+    </content>
+  </body>
+</html>

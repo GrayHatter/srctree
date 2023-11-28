@@ -153,6 +153,7 @@ fn tail(path: []const u8) []const u8 {
 }
 
 pub const builtin: [bldtmpls.names.len]Template = blk: {
+    @setEvalBranchQuota(5000);
     var t: [bldtmpls.names.len]Template = undefined;
     inline for (bldtmpls.names, &t) |file, *dst| {
         dst.* = Template{
