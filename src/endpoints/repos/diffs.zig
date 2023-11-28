@@ -17,8 +17,8 @@ const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
 const CURL = @import("../../curl.zig");
-const Diffs = @import("../../diffs.zig");
 const Bleach = @import("../../bleach.zig");
+const Diffs = Endpoint.Types.Diffs;
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = list } },

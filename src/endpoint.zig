@@ -6,6 +6,7 @@ pub const Response = @import("response.zig");
 pub const Request = @import("request.zig");
 pub const Template = @import("template.zig");
 pub const Router = @import("routes.zig");
+pub const Types = @import("types.zig");
 
 pub const UriIter = Router.UriIter;
 
