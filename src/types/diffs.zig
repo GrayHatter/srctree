@@ -1,4 +1,8 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+const Comments = @import("comments.zig");
+const Comment = Comments.Comment;
 
 pub const Diffs = @This();
 
@@ -9,11 +13,13 @@ pub const Diff = struct {
     source_uri: []const u8,
     desc: []const u8,
 
-    comments: void = {},
+    comment_data: []const u8,
+    comments: ?[]Comment = null,
     file: std.fs.File,
     alloc_data: ?[]u8 = null,
 
     pub fn writeOut(self: Diff) !void {
+        try self.file.seekTo(0);
         var writer = self.file.writer();
         try writer.writeAll(self.repo);
         try writer.writeAll("\x00");
@@ -23,9 +29,16 @@ pub const Diff = struct {
         try writer.writeAll("\x00");
         try writer.writeAll(self.desc);
         try writer.writeAll("\x00");
+        if (self.comments) |cmts| {
+            for (cmts) |*c| {
+                try writer.writeAll(c.toHash());
+            }
+        }
+        try writer.writeAll("\x00");
+        try self.file.setEndPos(self.file.getPos() catch unreachable);
     }
 
-    pub fn readFile(a: std.mem.Allocator, i: usize, file: std.fs.File) !Diff {
+    pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Diff {
         const end = try file.getEndPos();
         var data = try a.alloc(u8, end);
         errdefer a.free(data);
@@ -33,20 +46,60 @@ pub const Diff = struct {
         _ = try file.readAll(data);
         var itr = std.mem.split(u8, data, "\x00");
         var d = Diff{
-            .index = i,
+            .index = idx,
             .file = file,
             .alloc_data = data,
             .repo = itr.first(),
             .title = itr.next().?,
             .source_uri = itr.next().?,
-            .desc = itr.rest(),
+            .desc = itr.next().?,
+            .comment_data = itr.rest(),
         };
+        var list = std.ArrayList(Comment).init(a);
+        const count = d.comment_data.len / 32;
+        for (0..count) |i| {
+            try list.append(try Comments.open(a, d.comment_data[i * 32 .. (i + 1) * 32]));
+        }
+        d.comments = try list.toOwnedSlice();
         return d;
+    }
+
+    pub fn getComments(self: *Diff, a: Allocator) ![]Comment {
+        if (self.comments) |_| return self.comments.?;
+
+        if (self.comment_data.len > 1 and self.comment_data.len < 32) {
+            std.debug.print("unexpected number in comment data {}\n", .{self.comment_data.len});
+            return &[0]Comment{};
+        }
+        const count = self.comment_data.len / 32;
+        self.comments = try a.alloc(Comment, count);
+        for (self.comments.?, 0..) |*c, i| {
+            c.* = try Comments.open(a, self.comment_data[i * 32 .. (i + 1) * 32]);
+        }
+        return self.comments.?;
+    }
+
+    pub fn addComment(self: *Diff, a: Allocator, c: Comment) !void {
+        const target = (self.comments orelse &[0]Comment{}).len;
+        if (self.comments) |*comments| {
+            if (a.resize(comments.*, target + 1)) {
+                comments.*.len = target + 1;
+            } else {
+                self.comments = try a.realloc(comments.*, target + 1);
+            }
+        } else {
+            self.comments = try a.alloc(Comment, target + 1);
+        }
+        self.comments.?[target] = c;
+        try self.writeOut();
     }
 
     pub fn raze(self: Diff, a: std.mem.Allocator) void {
         if (self.alloc_data) |data| {
             a.free(data);
+        }
+        if (self.comments) |c| {
+            a.free(c);
         }
         self.file.close();
     }
@@ -89,7 +142,7 @@ pub fn new(repo: []const u8, title: []const u8, src: []const u8, desc: []const u
         .source_uri = src,
         .desc = desc,
         .file = file,
-        .comments = {},
+        .comment_data = "",
     };
 
     try currMaxSet(dir, max + 1);

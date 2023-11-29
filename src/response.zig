@@ -122,6 +122,21 @@ pub fn sendHeaders(res: *Response) !void {
     _ = try res.write("Transfer-Encoding: chunked\r\n");
 }
 
+pub fn redirect(res: *Response, loc: []const u8, see_other: bool) !void {
+    if (res.phase != .created) return error.WrongPhase;
+
+    try res.writeAll("HTTP/1.1 ");
+    if (see_other) {
+        try res.writeAll("303 See Other\r\n");
+    } else {
+        try res.writeAll("302 Found\r\n");
+    }
+
+    try res.writeAll("Location: ");
+    try res.writeAll(loc);
+    try res.writeAll("\r\n\r\n");
+}
+
 pub fn send(res: *Response, data: []const u8) !void {
     switch (res.phase) {
         .created => try res.start(),

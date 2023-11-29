@@ -273,8 +273,8 @@ pub fn textareaAlloc(
     return element("textarea", null, attr);
 }
 
-pub fn input(c: anytype, attr: ?[]const Attribute) Element {
-    return element("input", c, attr);
+pub fn input(attr: ?[]const Attribute) Element {
+    return elementClosed("input", attr);
 }
 
 pub fn inputAlloc(

@@ -168,6 +168,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
                 error.AndExit,
                 error.InvalidURI,
                 error.Unrouteable,
+                error.NoSpaceLeft,
                 => return err,
                 error.OutOfMemory => {
                     std.debug.print("Out of memory at '{}'\n", .{arena.queryCapacity()});

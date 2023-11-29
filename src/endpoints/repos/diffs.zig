@@ -19,11 +19,14 @@ const POST = Endpoint.Router.Methods.POST;
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
 const Diffs = Endpoint.Types.Diffs;
+const Comments = Endpoint.Types.Comments;
+const Comment = Comments.Comment;
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = list } },
     .{ .name = "new", .methods = GET, .match = .{ .call = new } },
     .{ .name = "new", .methods = POST, .match = .{ .call = newPost } },
+    .{ .name = "add-comment", .methods = POST, .match = .{ .call = newComment } },
 };
 
 fn isHex(input: []const u8) ?usize {
@@ -145,12 +148,26 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
     r.sendTemplate(&tmpl) catch unreachable;
 }
 
-const Comment = struct {
-    author: []const u8,
-    message: []const u8,
-    time: i64 = 0,
-    tz: i32 = 0,
-};
+fn newComment(r: *Response, uri: *UriIter) Error!void {
+    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
+    if (r.usr_data) |usrdata| if (usrdata.post_data) |post| {
+        var valid = post.validator();
+        const diff_id = try valid.require("diff-id");
+        const msg = try valid.require("comment");
+        const diff_index = isHex(diff_id.value) orelse return error.Unrouteable;
+
+        var diff = Diffs.open(r.alloc, diff_index) catch unreachable orelse return error.Unrouteable;
+        var c = Comments.new("name", msg.value) catch unreachable;
+
+        diff.addComment(r.alloc, c) catch {};
+        diff.writeOut() catch unreachable;
+        var buf: [2048]u8 = undefined;
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, diff_index });
+        r.redirect(loc, true) catch unreachable;
+        return;
+    };
+    return error.Unknown;
+}
 
 fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
     var dom = DOM.new(a);
@@ -183,17 +200,12 @@ fn view(r: *Response, uri: *UriIter) Error!void {
 
     var dom = DOM.new(r.alloc);
 
-    if (Diffs.open(r.alloc, index) catch {
-        return error.Unknown;
-    }) |diff| {
-        dom.push(HTML.text(rd.name));
-        dom.push(HTML.text(diff.repo));
-        dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.title, .{}) catch unreachable));
-        dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.source_uri, .{}) catch unreachable));
-        dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.desc, .{}) catch unreachable));
-    } else {
-        dom.push(HTML.text("diff not found"));
-    }
+    var diff = (Diffs.open(r.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    dom.push(HTML.text(rd.name));
+    dom.push(HTML.text(diff.repo));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.title, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.source_uri, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.desc, .{}) catch unreachable));
 
     var comments = DOM.new(r.alloc);
     for ([_]Comment{ .{
@@ -205,9 +217,26 @@ fn view(r: *Response, uri: *UriIter) Error!void {
     } }) |cm| {
         comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
     }
+    for (diff.getComments(r.alloc) catch unreachable) |cm| {
+        comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
+    }
+
     _ = try tmpl.addElements(r.alloc, "comments", comments.done());
 
     _ = try tmpl.addElements(r.alloc, "patch_header", dom.done());
+
+    const hidden = [_]HTML.Attr{
+        .{ .key = "type", .value = "hidden" },
+        .{ .key = "name", .value = "diff-id" },
+        .{ .key = "value", .value = diff_target },
+    };
+
+    const form_data = [_]HTML.E{
+        HTML.input(&hidden),
+    };
+
+    _ = try tmpl.addElements(r.alloc, "form-data", &form_data);
+
     r.sendTemplate(&tmpl) catch unreachable;
 }
 

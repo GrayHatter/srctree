@@ -15,6 +15,7 @@ pub const Error = ServerError || ClientError;
 pub const ServerError = error{
     AndExit,
     OutOfMemory,
+    NoSpaceLeft,
     ReqResInvalid,
     Unknown,
 };
