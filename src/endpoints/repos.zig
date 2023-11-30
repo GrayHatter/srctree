@@ -22,6 +22,7 @@ const git = @import("../git.zig");
 
 const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
+const Issues = @import("repos/issues.zig");
 const commits = Commits.commits;
 const commit = Commits.commit;
 const htmlCommit = Commits.htmlCommit;
@@ -34,6 +35,7 @@ const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "commit", .match = .{ .call = commit } },
     .{ .name = "tree", .match = .{ .call = treeBlob } },
     .{ .name = "diffs", .match = .{ .route = &Diffs.router } },
+    .{ .name = "issues", .match = .{ .route = &Issues.router } },
 } ++ gitweb.endpoints;
 
 pub const RouteData = struct {
