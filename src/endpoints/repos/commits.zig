@@ -43,10 +43,62 @@ fn diffLine(a: Allocator, diff: []const u8) *DOM {
     return dom;
 }
 
+fn commitHtml(r: *Response, sha: []const u8, repo_name: []const u8, repo: git.Repo) Error!void {
+    var tmpl = Template.find("commit.html");
+    tmpl.init(r.alloc);
+
+    if (!git.commitish(sha)) {
+        std.debug.print("Abusive ''{s}''\n", .{sha});
+        return error.Abusive;
+    }
+
+    var dom = DOM.new(r.alloc);
+    var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
+    while (!std.mem.startsWith(u8, current.sha, sha)) {
+        current = current.toParent(r.alloc, 0) catch return error.Unknown;
+    }
+    dom.pushSlice(try htmlCommit(r.alloc, current, repo_name, true));
+
+    var acts = repo.getActions(r.alloc);
+    var diff = acts.show(sha) catch return error.Unknown;
+    if (std.mem.indexOf(u8, diff, "diff")) |i| {
+        diff = diff[i..];
+    }
+    _ = tmpl.addElements(r.alloc, "commits", dom.done()) catch return error.Unknown;
+
+    var diff_lines = diffLine(r.alloc, diff);
+    const diff_els = diff_lines.done();
+    _ = tmpl.addElementsFmt(r.alloc, "{pretty}", "diff", diff_els) catch return error.Unknown;
+
+    r.status = .ok;
+    return r.sendTemplate(&tmpl) catch unreachable;
+}
+
+pub fn commitPatch(r: *Response, sha: []const u8, repo: git.Repo) Error!void {
+    var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
+    var acts = repo.getActions(r.alloc);
+    if (std.mem.indexOf(u8, sha, ".patch")) |tail| {
+        while (!std.mem.startsWith(u8, current.sha, sha[0..tail])) {
+            current = current.toParent(r.alloc, 0) catch return error.Unknown;
+        }
+
+        var diff = acts.show(sha[0..tail]) catch return error.Unknown;
+        if (std.mem.indexOf(u8, diff, "diff")) |i| {
+            diff = diff[i..];
+        }
+        r.status = .ok;
+        r.headersAdd("Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
+        r.start() catch return Error.Unknown;
+        r.send(diff) catch return Error.Unknown;
+        r.finish() catch return Error.Unknown;
+    }
+}
+
 pub fn commit(r: *Response, uri: *UriIter) Error!void {
     const rd = RouteData.make(uri) orelse return error.Unrouteable;
     if (rd.verb == null) return commits(r, uri);
 
+    const sha = rd.noun orelse return error.Unrouteable;
     var cwd = std.fs.cwd();
     // FIXME user data flows into system
     var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
@@ -54,45 +106,11 @@ pub fn commit(r: *Response, uri: *UriIter) Error!void {
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(r.alloc) catch return error.Unknown;
 
-    var tmpl = Template.find("commit.html");
-    tmpl.init(r.alloc);
-
-    if (rd.noun) |sha| {
-        if (!git.commitish(sha)) {
-            std.debug.print("Abusive ''{s}''\n", .{sha});
-            return error.Abusive;
-        }
-
-        var commit_view = try r.alloc.alloc(HTML.E, 1);
-        var current: git.Commit = repo.commit(r.alloc) catch return error.Unknown;
-        while (!std.mem.startsWith(u8, current.sha, sha)) {
-            current = current.toParent(r.alloc, 0) catch return error.Unknown;
-        }
-        commit_view[0] = (try htmlCommit(r.alloc, current, rd.name, true))[0];
-
-        var acts = repo.getActions(r.alloc);
-        var diff = acts.show(sha) catch return error.Unknown;
-        if (std.mem.indexOf(u8, diff, "diff")) |i| {
-            diff = diff[i..];
-        }
-
-        var diff_lines = diffLine(r.alloc, diff);
-
-        const diff_els = diff_lines.done();
-        _ = tmpl.addElementsFmt(r.alloc, "{pretty}", "diff", diff_els) catch return error.Unknown;
-        const htmlstr = try std.fmt.allocPrint(r.alloc, "{}", .{
-            HTML.div(commit_view, null),
-        });
-
-        tmpl.addVar("commits", htmlstr) catch return error.Unknown;
-    }
-
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-
-    r.status = .ok;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    if (std.mem.endsWith(u8, sha, ".patch"))
+        return commitPatch(r, sha, repo)
+    else
+        return commitHtml(r, sha, rd.name, repo);
+    return error.Unrouteable;
 }
 
 pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: bool) ![]HTML.E {
