@@ -12,8 +12,9 @@ pub const Comment = struct {
     tz: i32 = 0,
 
     target: union(enum) {
+        nos: void,
         diff: usize,
-    } = .{ .diff = 0 },
+    } = .{ .nos = {} },
 
     alloc_data: ?[]u8 = null,
     hash: [sha256.digest_length]u8 = undefined,
@@ -41,6 +42,7 @@ pub const Comment = struct {
         try w.writeAll(std.mem.asBytes(&self.time));
         try w.writeAll("\x00");
         switch (self.target) {
+            .nos => {},
             .diff => |diff| {
                 try w.writeAll(std.mem.asBytes(&diff));
                 try w.writeAll("\x00");
@@ -98,10 +100,10 @@ test Comment {
     var hash = c.toHash();
     try std.testing.expectEqualSlices(
         u8,
-        &[_]u8{ 
+        &[_]u8{
               20, 139, 139, 116,  88, 163,  88, 180, 232, 197, 141, 210 , 53,  50,  30, 121,
-             245, 206, 171, 202,  74,  18, 138, 175, 207, 242,  56, 240, 200,  15,  31, 135 
-        }, 
+             245, 206, 171, 202,  74,  18, 138, 175, 207, 242,  56, 240, 200,  15,  31, 135
+        },
         hash,
     );
     // zig fmt: on
@@ -123,13 +125,12 @@ test Comment {
     // zig fmt: off
     try std.testing.expectEqualSlices(
         u8,
-        &[_]u8{ 
+        &[_]u8{
             103, 114,  97, 121, 104,  97, 116, 116, 101, 114,
-              0, 116, 101, 115, 116,  32,  99, 111, 109, 109, 
-            101, 110, 116,  44,  32, 112, 108, 101,  97, 115, 
-            101,  32, 105, 103, 110, 111, 114, 101,   0,   0, 
-              0,   0,   0,   0,   0,   0,   0,   0,   0,   0, 
-              0,   0,   0,   0,   0,   0,   0 
+              0, 116, 101, 115, 116,  32,  99, 111, 109, 109,
+            101, 110, 116,  44,  32, 112, 108, 101,  97, 115,
+            101,  32, 105, 103, 110, 111, 114, 101,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
         },
         blob,
     );
