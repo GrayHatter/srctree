@@ -88,13 +88,16 @@ pub fn main() !void {
     }
 
     var cwd = std.fs.cwd();
-    var ini: ?Ini.Config = null;
-    ini = try Ini.default(a);
-    if (ini.?.get("owner")) |ns| {
+    var ini_: ?Ini.Config = null;
+    ini_ = Ini.default(a) catch |e| switch (e) {
+        error.FileNotFound => null,
+        else => return e,
+    };
+    if (ini_) |ini| if (ini.get("owner")) |ns| {
         if (ns.get("email")) |email| {
             if (false) std.log.info("{s}\n", .{email});
         }
-    }
+    };
 
     switch (runmode) {
         .unix => {
