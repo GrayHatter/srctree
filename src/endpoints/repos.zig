@@ -480,9 +480,8 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
         }
     }
 
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.status = .ok;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    const diffurl = try std.fmt.allocPrint(r.alloc, "/repos/{s}/diffs/", .{rd.name});
+    _ = tmpl.addString("diffurl", diffurl) catch return error.Unknown;
+
+    r.sendTemplate(&tmpl) catch return error.Unknown;
 }

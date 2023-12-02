@@ -10,7 +10,11 @@ const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
 
 fn validChar(c: u8) bool {
-    return (c >= 'a' and c <= 'z') or c == '-' or c == '_' or (c >= 'A' and c <= 'Z') or c == '.' or c == ':';
+    return switch (c) {
+        'A'...'Z', 'a'...'z' => true,
+        '-', '_', '.', ':' => true,
+        else => false,
+    };
 }
 
 pub const Template = struct {
@@ -79,7 +83,12 @@ pub const Template = struct {
         return value;
     }
 
+    /// Deprecated, use addString
     pub fn addVar(self: *Template, name: []const u8, value: []const u8) !void {
+        return self.addString(name, value);
+    }
+
+    pub fn addString(self: *Template, name: []const u8, value: []const u8) !void {
         try self.expandVars();
         if (self.vars) |vars| {
             vars[vars.len - 1] = .{
@@ -109,10 +118,23 @@ pub const Template = struct {
         while (width < str.len and validChar(str[width])) {
             width += 1;
         }
-        for (str[width..]) |s| if (s != ' ') return null;
-        return Directive{
-            .str = str,
-        };
+
+        if (std.mem.startsWith(u8, str[width..], " ORELSE ")) {
+            return Directive{
+                .str = str[0..width],
+                .otherwise = .{ .str = str[width + 8 ..] },
+            };
+        } else if (std.mem.eql(u8, str[width..], " ORNULL")) {
+            return Directive{
+                .str = str[0..width],
+                .otherwise = .{ .del = {} },
+            };
+        } else {
+            for (str[width..]) |s| if (s != ' ') return null;
+            return Directive{
+                .str = str,
+            };
+        }
     }
 
     pub fn format(self: Template, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
@@ -148,9 +170,24 @@ pub const Template = struct {
                                 break;
                             }
                         } else {
-                            try out.writeAll(blob[0 .. end + 4]);
-                            blob = blob[end + 4 ..];
+                            switch (dr.otherwise) {
+                                .str => |str| {
+                                    try out.writeAll(str);
+                                    blob = blob[end + 4 ..];
+                                },
+                                .ign => {
+                                    try out.writeAll(blob[0 .. end + 4]);
+                                    blob = blob[end + 4 ..];
+                                },
+                                .del => {
+                                    blob = blob[end + 4 ..];
+                                },
+                                else => unreachable,
+                            }
                         }
+                    } else {
+                        try out.writeAll(blob[0 .. end + 4]);
+                        blob = blob[end + 4 ..];
                     }
                     continue;
                 }
@@ -162,6 +199,12 @@ pub const Template = struct {
 
 pub const Directive = struct {
     str: []const u8,
+    otherwise: union(enum) {
+        ign: void,
+        del: void,
+        str: []const u8,
+        template: []const u8,
+    } = .{ .ign = {} },
 };
 
 var _alloc: Allocator = undefined;
