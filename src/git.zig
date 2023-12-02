@@ -511,10 +511,7 @@ pub const Repo = struct {
         defer idir.close();
         var itr = idir.iterate();
         while (try itr.next()) |file| {
-            if (file.kind != .file) {
-                std.log.info("Not desending {s} ({})", .{ file.name, file.kind });
-                continue;
-            }
+            if (file.kind != .file) continue;
             var filename = [_]u8{0} ** 2048;
             var fname: []u8 = &filename;
             fname = try std.fmt.bufPrint(&filename, "./refs/heads/{s}", .{file.name});
