@@ -94,53 +94,53 @@ pub const Template = struct {
         return try self.build(a);
     }
 
+    fn parseDirective(_: Template) !void {}
+
     pub fn format(self: Template, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        if (self.vars) |vars| {
-            var start: usize = 0;
-            while (start < self.blob.len) {
-                if (std.mem.indexOf(u8, self.blob[start..], "<!-- ")) |offset| {
-                    try out.writeAll(self.blob[start .. start + offset]);
-                    start += offset;
-                    var i: usize = 5;
-                    var c = self.blob[start + i];
-                    while (validChar(c)) {
-                        i += 1;
-                        c = self.blob[start + i];
-                    }
-                    if (!std.mem.eql(u8, " -->", self.blob[start + i .. start + i + 4])) {
-                        try out.writeAll(self.blob[start .. start + i]);
-                        start += i;
-                        continue;
-                    }
-                    const var_name = self.blob[start + 5 .. start + i];
-                    if (var_name[0] == '_') {
-                        start += i + 4;
-                        for (0..builtin.len) |subtemp_i| {
-                            if (std.mem.eql(u8, builtin[subtemp_i].name, var_name)) {
-                                var subtmp = builtin[subtemp_i];
-                                subtmp.vars = self.vars;
-                                try format(subtmp, "", .{}, out);
-                            }
+        var vars = self.vars orelse return try out.writeAll(self.blob);
+
+        var blob = self.blob;
+        while (blob.len > 0) {
+            if (std.mem.indexOf(u8, blob, "<!-- ")) |offset| {
+                try out.writeAll(blob[0..offset]);
+                blob = blob[offset..];
+                var i: usize = 5;
+                var c = blob[i];
+                while (validChar(c)) {
+                    i += 1;
+                    c = blob[i];
+                }
+                if (!std.mem.eql(u8, " -->", blob[i .. i + 4])) {
+                    try out.writeAll(blob[0..i]);
+                    blob = blob[i..];
+                    continue;
+                }
+                const var_name = blob[5..i];
+                if (var_name[0] == '_') {
+                    blob = blob[i + 4 ..];
+                    for (0..builtin.len) |subtemp_i| {
+                        if (std.mem.eql(u8, builtin[subtemp_i].name, var_name)) {
+                            var subtmp = builtin[subtemp_i];
+                            subtmp.vars = self.vars;
+                            try format(subtmp, "", .{}, out);
                         }
-                        continue;
                     }
-                    for (vars) |v| {
-                        if (std.mem.eql(u8, var_name, v.name)) {
-                            try out.writeAll(v.blob);
-                            start += i + 4;
-                            break;
-                        }
-                    } else {
-                        try out.writeAll(self.blob[start .. start + i + 4]);
-                        start += i + 4;
+                    continue;
+                }
+                for (vars) |v| {
+                    if (std.mem.eql(u8, var_name, v.name)) {
+                        try out.writeAll(v.blob);
+                        blob = blob[i + 4 ..];
+                        break;
                     }
                 } else {
-                    try out.writeAll(self.blob[start..]);
-                    break;
+                    try out.writeAll(blob[0 .. i + 4]);
+                    blob = blob[i + 4 ..];
                 }
+            } else {
+                try out.writeAll(blob);
+                break;
             }
-        } else {
-            try out.writeAll(self.blob);
         }
     }
 };
