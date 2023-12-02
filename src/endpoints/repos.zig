@@ -404,41 +404,47 @@ fn tree(r: *Response, uri: *UriIter, repo: *git.Repo, files: *git.Tree) Error!vo
         dom = dom.close();
     }
     try files.pushPath(r.alloc, file_uri_name);
-    const changed = files.changedSet(r.alloc, repo) catch return error.Unknown;
-    std.sort.pdq(git.Blob, files.objects, {}, typeSorter);
-    for (files.objects) |obj| {
-        var href = &[_]HTML.Attribute{.{
-            .key = "href",
-            .value = try aPrint(r.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
-                rd.name,
-                if (obj.isFile()) "blob" else "tree",
-                file_uri_name,
-                obj.name,
-                if (obj.isFile()) "" else "/",
-            }),
-        }};
-        if (obj.isFile()) {
-            dom = dom.open(HTML.element("file", null, null));
-            dom.dupe(HTML.anch(obj.name, href));
-        } else {
-            dom = dom.open(HTML.element("tree", null, null));
-            dom.dupe(HTML.anch(try dupeDir(r.alloc, obj.name), href));
-        }
-        //HTML.element("file", link, null);
-        // I know... I KNOW!!!
-        for (changed) |ch| {
-            if (std.mem.eql(u8, ch.name, obj.name)) {
-                dom = dom.open(HTML.div(null, null));
-                dom.dupe(HTML.span(if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
-                    ch.commit[0..i]
-                else
-                    ch.commit, null));
-                dom.dupe(HTML.span(try aPrint(r.alloc, "{}", .{Humanize.unix(ch.timestamp)}), null));
-                dom = dom.close();
-                break;
+    if (files.changedSet(r.alloc, repo)) |changed| {
+        std.sort.pdq(git.Blob, files.objects, {}, typeSorter);
+        for (files.objects) |obj| {
+            var href = &[_]HTML.Attribute{.{
+                .key = "href",
+                .value = try aPrint(r.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
+                    rd.name,
+                    if (obj.isFile()) "blob" else "tree",
+                    file_uri_name,
+                    obj.name,
+                    if (obj.isFile()) "" else "/",
+                }),
+            }};
+            if (obj.isFile()) {
+                dom = dom.open(HTML.element("file", null, null));
+                dom.dupe(HTML.anch(obj.name, href));
+            } else {
+                dom = dom.open(HTML.element("tree", null, null));
+                dom.dupe(HTML.anch(try dupeDir(r.alloc, obj.name), href));
             }
+            //HTML.element("file", link, null);
+            // I know... I KNOW!!!
+            for (changed) |ch| {
+                if (std.mem.eql(u8, ch.name, obj.name)) {
+                    dom = dom.open(HTML.div(null, null));
+                    dom.dupe(HTML.span(if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
+                        ch.commit[0..i]
+                    else
+                        ch.commit, null));
+                    dom.dupe(HTML.span(try aPrint(r.alloc, "{}", .{Humanize.unix(ch.timestamp)}), null));
+                    dom = dom.close();
+                    break;
+                }
+            }
+            dom = dom.close();
         }
-        dom = dom.close();
+    } else |err| switch (err) {
+        error.PathNotFound => {
+            dom.push(HTML.h3("unable to find this file", null));
+        },
+        else => return error.Unrouteable,
     }
     dom = dom.close();
 
