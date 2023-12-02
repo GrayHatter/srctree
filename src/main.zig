@@ -1,5 +1,6 @@
 const std = @import("std");
 const Server = std.http.Server;
+const Database = @import("database.zig");
 const HTML = @import("html.zig");
 const Template = @import("template.zig");
 const Route = @import("routes.zig");
@@ -95,6 +96,7 @@ pub fn main() !void {
             if (false) std.log.info("{s}\n", .{email});
         }
     }
+    try Database.init(.{});
 
     switch (runmode) {
         .unix => {

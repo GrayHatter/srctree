@@ -105,15 +105,27 @@ pub const Diff = struct {
     }
 };
 
-fn currMaxSet(dir: std.fs.Dir, count: usize) !void {
-    var cnt_file = try dir.createFile("_count", .{});
+var datad: std.fs.Dir = undefined;
+
+pub fn init(dir: []const u8) !void {
+    var buf: [2048]u8 = undefined;
+    const filename = try std.fmt.bufPrint(&buf, "{s}/diffs", .{dir});
+    datad = try std.fs.cwd().openDir(filename, .{});
+}
+
+pub fn raze() void {
+    datad.close();
+}
+
+fn currMaxSet(count: usize) !void {
+    var cnt_file = try datad.createFile("_count", .{});
     defer cnt_file.close();
     var writer = cnt_file.writer();
     _ = try writer.writeIntNative(usize, count);
 }
 
-fn currMax(dir: std.fs.Dir) !usize {
-    var cnt_file = try dir.openFile("_count", .{ .mode = .read_write });
+fn currMax() !usize {
+    var cnt_file = try datad.openFile("_count", .{ .mode = .read_write });
     defer cnt_file.close();
     var reader = cnt_file.reader();
     const count: usize = try reader.readIntNative(usize);
@@ -121,20 +133,14 @@ fn currMax(dir: std.fs.Dir) !usize {
 }
 
 pub fn last() !usize {
-    var dir = try std.fs.cwd().openDir("data/diffs", .{});
-    defer dir.close();
-
-    return currMax(dir) catch 0;
+    return currMax() catch 0;
 }
 
 pub fn new(repo: []const u8, title: []const u8, src: []const u8, desc: []const u8) !Diff {
-    var dir = try std.fs.cwd().openDir("data/diffs", .{});
-    defer dir.close();
-
-    var max: usize = currMax(dir) catch 0;
+    var max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{max + 1});
-    var file = try dir.createFile(filename, .{});
+    var file = try datad.createFile(filename, .{});
     var d = Diff{
         .index = max + 1,
         .repo = repo,
@@ -145,20 +151,17 @@ pub fn new(repo: []const u8, title: []const u8, src: []const u8, desc: []const u
         .comment_data = "",
     };
 
-    try currMaxSet(dir, max + 1);
+    try currMaxSet(max + 1);
 
     return d;
 }
 
 pub fn open(a: std.mem.Allocator, index: usize) !?Diff {
-    var dir = try std.fs.cwd().openDir("data/diffs", .{});
-    defer dir.close();
-
-    const max = currMax(dir) catch 0;
+    const max = currMax() catch 0;
     if (index > max) return null;
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{index});
-    var file = try dir.openFile(filename, .{ .mode = .read_write });
+    var file = try datad.openFile(filename, .{ .mode = .read_write });
     return try Diff.readFile(a, index, file);
 }

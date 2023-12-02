@@ -66,24 +66,32 @@ pub const Comment = struct {
     }
 };
 
+var datad: std.fs.Dir = undefined;
+
+pub fn init(dir: []const u8) !void {
+    var buf: [2048]u8 = undefined;
+    const filename = try std.fmt.bufPrint(&buf, "{s}/messages", .{dir});
+    datad = try std.fs.cwd().openDir(filename, .{});
+}
+
+pub fn raze() void {
+    datad.close();
+}
+
 pub fn open(a: Allocator, hash: []const u8) !Comment {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.comment", .{std.fmt.fmtSliceHexLower(hash)});
-    var dir = try std.fs.cwd().openDir("data/messages", .{});
-    defer dir.close();
-    var file = try dir.openFile(filename, .{});
+    var file = try datad.openFile(filename, .{});
     defer file.close();
     return try Comment.readFile(a, file);
 }
 
 pub fn new(ath: []const u8, msg: []const u8) !Comment {
-    var dir = try std.fs.cwd().openDir("data/messages", .{});
-    defer dir.close();
     var c = Comment{
         .author = ath,
         .message = msg,
     };
-    try c.writeNew(dir);
+    try c.writeNew(datad);
 
     return c;
 }
