@@ -52,7 +52,13 @@ pub const Template = struct {
     }
 
     /// caller owns of the returned slice, freeing the data before the final use is undefined
-    pub fn addElementsFmt(self: *Template, a: Allocator, comptime fmt: []const u8, name: []const u8, els: []const HTML.Element) ![]const u8 {
+    pub fn addElementsFmt(
+        self: *Template,
+        a: Allocator,
+        comptime fmt: []const u8,
+        name: []const u8,
+        els: []const HTML.Element,
+    ) ![]const u8 {
         try self.expandVars();
         var list = try a.alloc([]u8, els.len);
         defer a.free(list);
@@ -94,9 +100,22 @@ pub const Template = struct {
         return try self.build(a);
     }
 
-    fn parseDirective(_: Template) !void {}
+    fn validDirective(str: []const u8) ?Directive {
+        if (str.len == 0) return null;
+        // parse name
+        // parse directive
+        // parse alternate
+        var width: usize = 0;
+        while (width < str.len and validChar(str[width])) {
+            width += 1;
+        }
+        for (str[width..]) |s| if (s != ' ') return null;
+        return Directive{
+            .str = str,
+        };
+    }
 
-    pub fn format(self: Template, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+    pub fn format(self: Template, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         var vars = self.vars orelse return try out.writeAll(self.blob);
 
         var blob = self.blob;
@@ -104,45 +123,45 @@ pub const Template = struct {
             if (std.mem.indexOf(u8, blob, "<!-- ")) |offset| {
                 try out.writeAll(blob[0..offset]);
                 blob = blob[offset..];
-                var i: usize = 5;
-                var c = blob[i];
-                while (validChar(c)) {
-                    i += 1;
-                    c = blob[i];
-                }
-                if (!std.mem.eql(u8, " -->", blob[i .. i + 4])) {
-                    try out.writeAll(blob[0..i]);
-                    blob = blob[i..];
-                    continue;
-                }
-                const var_name = blob[5..i];
-                if (var_name[0] == '_') {
-                    blob = blob[i + 4 ..];
-                    for (0..builtin.len) |subtemp_i| {
-                        if (std.mem.eql(u8, builtin[subtemp_i].name, var_name)) {
-                            var subtmp = builtin[subtemp_i];
-                            subtmp.vars = self.vars;
-                            try format(subtmp, "", .{}, out);
+                //var i: usize = 5;
+                //var c = blob[i];
+                if (std.mem.indexOf(u8, blob, " -->")) |end| {
+                    if (validDirective(blob[5..end])) |dr| {
+                        const var_name = dr.str;
+                        // printing
+                        if (var_name[0] == '_') {
+                            blob = blob[end + 4 ..];
+                            for (0..builtin.len) |subtemp_i| {
+                                if (std.mem.eql(u8, builtin[subtemp_i].name, var_name)) {
+                                    var subtmp = builtin[subtemp_i];
+                                    subtmp.vars = self.vars;
+                                    try subtmp.format(fmts, .{}, out);
+                                    break;
+                                }
+                            }
+                            continue;
+                        }
+                        for (vars) |v| {
+                            if (std.mem.eql(u8, var_name, v.name)) {
+                                try out.writeAll(v.blob);
+                                blob = blob[end + 4 ..];
+                                break;
+                            }
+                        } else {
+                            try out.writeAll(blob[0 .. end + 4]);
+                            blob = blob[end + 4 ..];
                         }
                     }
                     continue;
                 }
-                for (vars) |v| {
-                    if (std.mem.eql(u8, var_name, v.name)) {
-                        try out.writeAll(v.blob);
-                        blob = blob[i + 4 ..];
-                        break;
-                    }
-                } else {
-                    try out.writeAll(blob[0 .. i + 4]);
-                    blob = blob[i + 4 ..];
-                }
-            } else {
-                try out.writeAll(blob);
-                break;
             }
+            return try out.writeAll(blob);
         }
     }
+};
+
+pub const Directive = struct {
+    str: []const u8,
 };
 
 var _alloc: Allocator = undefined;
