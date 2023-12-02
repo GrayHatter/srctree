@@ -379,6 +379,8 @@ pub const Repo = struct {
     current: ?[]u8 = null,
     head: ?Ref = null,
 
+    repo_name: ?[]const u8 = null,
+
     pub fn init(d: std.fs.Dir) Error!Repo {
         var repo = initDefaults();
         repo.dir = d;

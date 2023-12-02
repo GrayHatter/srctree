@@ -99,8 +99,20 @@ fn typeSorter(_: void, l: git.Blob, r: git.Blob) bool {
     return dirs_first;
 }
 
-fn repoSorter(_: void, l: []const u8, r: []const u8) bool {
-    return sorter({}, l, r);
+const repoctx = struct {
+    alloc: Allocator,
+};
+
+fn repoSorterNew(ctx: repoctx, l: git.Repo, r: git.Repo) bool {
+    return !repoSorter(ctx, l, r);
+}
+
+fn repoSorter(ctx: repoctx, l: git.Repo, r: git.Repo) bool {
+    var lc = l.commit(ctx.alloc) catch return true;
+    defer lc.raze(ctx.alloc);
+    var rc = r.commit(ctx.alloc) catch return false;
+    defer rc.raze(ctx.alloc);
+    return sorter({}, lc.committer.timestr, rc.committer.timestr);
 }
 
 fn sorter(_: void, l: []const u8, r: []const u8) bool {
@@ -155,14 +167,18 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
 fn list(r: *Response, _: *UriIter) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
-        var flist = std.ArrayList([]u8).init(r.alloc);
+        var repos = std.ArrayList(git.Repo).init(r.alloc);
         var itr = idir.iterate();
         while (itr.next() catch return Error.Unknown) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
-            try flist.append(try r.alloc.dupe(u8, file.name));
+            var rdir = idir.dir.openDir(file.name, .{}) catch continue;
+            var rpo = git.Repo.init(rdir) catch continue;
+            rpo.loadData(r.alloc) catch return error.Unknown;
+            rpo.repo_name = r.alloc.dupe(u8, file.name) catch null;
+            try repos.append(rpo);
         }
-        std.sort.heap([]u8, flist.items, {}, repoSorter);
+        std.sort.heap(git.Repo, repos.items, repoctx{ .alloc = r.alloc }, repoSorterNew);
 
         var dom = DOM.new(r.alloc);
 
@@ -174,13 +190,14 @@ fn list(r: *Response, _: *UriIter) Error!void {
 
         dom = dom.open(HTML.element("repos", null, null));
 
-        for (flist.items) |name| {
-            var repodir = idir.dir.openDir(name, .{}) catch return error.Unknown;
-            errdefer repodir.close();
-            var repo = git.Repo.init(repodir) catch return error.Unknown;
-            repo.loadData(r.alloc) catch return error.Unknown;
+        for (repos.items) |*repo| {
             defer repo.raze(r.alloc);
-            dom = htmlRepoBlock(r.alloc, dom, name, repo) catch return error.Unknown;
+            dom = htmlRepoBlock(
+                r.alloc,
+                dom,
+                repo.repo_name orelse "unknown",
+                repo.*,
+            ) catch return error.Unknown;
         }
         dom = dom.close();
         var data = dom.done();
