@@ -88,24 +88,25 @@ fn inNetwork(str: []const u8) bool {
 }
 
 fn fetch(a: Allocator, uri: []const u8) ![]const u8 {
-    var client = std.http.Client{
-        .allocator = a,
-    };
-    defer client.deinit();
+    // Disabled until TLS1.2 is supported
+    // var client = std.http.Client{
+    //     .allocator = a,
+    // };
+    // defer client.deinit();
 
-    var request = client.fetch(a, .{
-        .location = .{ .url = uri },
-    });
-    if (request) |*req| {
-        defer req.deinit();
-        std.debug.print("request code {}\n", .{req.status});
-        if (req.body) |b| {
-            std.debug.print("request body {s}\n", .{b});
-            return a.dupe(u8, b);
-        }
-    } else |err| {
-        std.debug.print("stdlib request failed with error {}\n", .{err});
-    }
+    // var request = client.fetch(a, .{
+    //     .location = .{ .url = uri },
+    // });
+    // if (request) |*req| {
+    //     defer req.deinit();
+    //     std.debug.print("request code {}\n", .{req.status});
+    //     if (req.body) |b| {
+    //         std.debug.print("request body {s}\n", .{b});
+    //         return a.dupe(u8, b);
+    //     }
+    // } else |err| {
+    //     std.debug.print("stdlib request failed with error {}\n", .{err});
+    // }
 
     var curl = try CURL.curlRequest(a, uri);
     if (curl.code != 200) return error.UnexpectedResponseCode;
