@@ -9,7 +9,6 @@ const Request = @import("request.zig");
 const endpoint = @import("endpoint.zig");
 const HTML = @import("html.zig");
 
-const Endpoint = endpoint.Endpoint;
 const Error = endpoint.Error;
 pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 
@@ -17,6 +16,7 @@ const div = HTML.div;
 const span = HTML.span;
 
 pub const Router = *const fn (*Context) Error!Endpoint;
+pub const Endpoint = *const fn (*Context) Error!void;
 
 pub const Methods = struct {
     pub const GET = 1;
@@ -48,39 +48,39 @@ const root = [_]MatchRouter{
     .{ .name = "user", .match = .{ .call = endpoint.commitFlex } },
 };
 
-fn sendMsg(r: *Response, msg: []const u8) !void {
-    //r.transfer_encoding = .{ .content_length = msg.len };
-    try r.start();
-    try r.send(msg);
-    try r.finish();
+fn sendMsg(ctx: *Context, msg: []const u8) !void {
+    //ctx.response.transfer_encoding = .{ .content_length = msg.len };
+    try ctx.response.start();
+    try ctx.response.send(msg);
+    try ctx.response.finish();
 }
 
-fn notfound(r: *Response, _: *UriIter) Error!void {
-    r.status = .not_found;
+fn notfound(ctx: *Context) Error!void {
+    ctx.response.status = .not_found;
     const MSG = Template.find("4XX.html").blob;
-    sendMsg(r, MSG) catch |e| {
+    sendMsg(ctx, MSG) catch |e| {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
         return Error.AndExit;
     };
 }
 
-fn _respond(r: *Response, _: *UriIter) Error!void {
-    r.headersAdd("connection", "keep-alive") catch return Error.ReqResInvalid;
-    r.headersAdd("content-type", "text/plain") catch return Error.ReqResInvalid;
+fn _respond(ctx: *Context) Error!void {
+    ctx.response.headersAdd("connection", "keep-alive") catch return Error.ReqResInvalid;
+    ctx.response.headersAdd("content-type", "text/plain") catch return Error.ReqResInvalid;
     const MSG = "Hi, mom!\n";
-    sendMsg(r, MSG) catch |e| {
+    sendMsg(ctx, MSG) catch |e| {
         std.log.err("Unexpected error while responding [{}]\n", .{e});
         return Error.AndExit;
     };
 }
 
-fn default(r: *Response, _: *UriIter) Error!void {
+fn default(ctx: *Context) Error!void {
     var tmpl = Template.find("index.html");
-    tmpl.init(r.alloc);
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
 
 fn eql(a: []const u8, b: []const u8) bool {
@@ -121,8 +121,8 @@ pub fn baseRouter(ctx: *Context) Error!void {
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
             const route: Endpoint = router(ctx, &root);
-            return route(&ctx.response, &ctx.uri);
+            return route(ctx);
         }
     }
-    return default(&ctx.response, &ctx.uri);
+    return default(ctx);
 }

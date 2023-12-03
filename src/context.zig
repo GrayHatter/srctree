@@ -10,6 +10,7 @@ const zWSGIRequest = zWSGI.zWSGIRequest;
 pub const Request = @import("request.zig");
 pub const Response = @import("response.zig");
 pub const UserData = @import("user-data.zig").UserData;
+pub const Template = @import("template.zig").Template;
 pub const UriIter = @import("endpoint.zig").Router.UriIter;
 
 pub const Context = @This();
@@ -32,4 +33,11 @@ pub fn init(a: Allocator, req: Request, res: Response, usr_data: UserData) !Cont
         .uri = std.mem.split(u8, req.uri[1..], "/"),
         .auth = Auth.init(req.headers),
     };
+}
+
+pub fn sendTemplate(ctx: *Context, t: *Template) !void {
+    try ctx.response.start();
+    const page = try t.buildFor(ctx.alloc, ctx);
+    try ctx.response.send(page);
+    try ctx.response.finish();
 }

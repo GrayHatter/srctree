@@ -42,7 +42,7 @@ fn diffValidForRepo(repo: []const u8, diff: usize) bool {
     return diff > 0;
 }
 
-pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
+pub fn router(ctx: *Context) Error!Endpoint.Router.Endpoint {
     std.debug.assert(std.mem.eql(u8, "diffs", ctx.uri.next().?));
     const verb = ctx.uri.peek() orelse return Endpoint.Router.router(ctx, &routes);
 
@@ -55,13 +55,13 @@ pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
     return Endpoint.Router.router(ctx, &routes);
 }
 
-fn new(r: *Response, _: *UriIter) Error!void {
-    const a = r.alloc;
+fn new(ctx: *Context) Error!void {
+    const a = ctx.alloc;
     var tmpl = Template.find("diffs.html");
-    tmpl.init(r.alloc);
+    tmpl.init(ctx.alloc);
 
-    var dom = DOM.new(r.alloc);
-    var fattr = try r.alloc.dupe(HTML.Attr, &[_]HTML.Attr{
+    var dom = DOM.new(ctx.alloc);
+    var fattr = try ctx.alloc.dupe(HTML.Attr, &[_]HTML.Attr{
         .{ .key = "action", .value = "new" },
         .{ .key = "method", .value = "POST" },
     });
@@ -76,8 +76,8 @@ fn new(r: *Response, _: *UriIter) Error!void {
     dom = dom.close();
     dom = dom.close();
 
-    _ = try tmpl.addElements(r.alloc, "diff", dom.done());
-    r.sendTemplate(&tmpl) catch unreachable;
+    _ = try tmpl.addElements(ctx.alloc, "diff", dom.done());
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn inNetwork(str: []const u8) bool {
@@ -86,9 +86,9 @@ fn inNetwork(str: []const u8) bool {
     return true;
 }
 
-fn newPost(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
-    if (r.usr_data) |usrdata| if (usrdata.post_data) |post| {
+fn newPost(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
         var valid = post.validator();
         const src = try valid.require("diff source");
         const title = try valid.require("title");
@@ -103,9 +103,9 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
                 desc.value,
                 action.name,
             });
-            var data = Patch.loadRemote(r.alloc, src.value) catch unreachable;
+            var data = Patch.loadRemote(ctx.alloc, src.value) catch unreachable;
             var filename = std.fmt.allocPrint(
-                r.alloc,
+                ctx.alloc,
                 "data/patch/{s}.{x}.patch",
                 .{ rd.name, diff.index },
             ) catch unreachable;
@@ -116,29 +116,29 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
     };
 
     var tmpl = Template.find("diffs.html");
-    tmpl.init(r.alloc);
+    tmpl.init(ctx.alloc);
     try tmpl.addVar("diff", "new data attempting");
-    r.sendTemplate(&tmpl) catch unreachable;
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn newComment(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
+fn newComment(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (r.usr_data) |usrdata| if (usrdata.post_data) |post| {
+    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
         var valid = post.validator();
         const diff_id = try valid.require("diff-id");
         const diff_index = isHex(diff_id.value) orelse return error.Unrouteable;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, diff_index });
 
         const msg = try valid.require("comment");
-        if (msg.value.len < 2) return r.redirect(loc, true) catch unreachable;
+        if (msg.value.len < 2) return ctx.response.redirect(loc, true) catch unreachable;
 
-        var diff = Diffs.open(r.alloc, diff_index) catch unreachable orelse return error.Unrouteable;
+        var diff = Diffs.open(ctx.alloc, diff_index) catch unreachable orelse return error.Unrouteable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
-        diff.addComment(r.alloc, c) catch {};
+        diff.addComment(ctx.alloc, c) catch {};
         diff.writeOut() catch unreachable;
-        return r.redirect(loc, true) catch unreachable;
+        return ctx.response.redirect(loc, true) catch unreachable;
     };
     return error.Unknown;
 }
@@ -164,30 +164,30 @@ fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
     return dom.done();
 }
 
-fn view(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
-    const diff_target = uri.next().?;
+fn view(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const diff_target = ctx.uri.next().?;
     const index = isHex(diff_target) orelse return error.Unrouteable;
 
     var tmpl = Template.find("diff-review.html");
-    tmpl.init(r.alloc);
+    tmpl.init(ctx.alloc);
 
-    var dom = DOM.new(r.alloc);
+    var dom = DOM.new(ctx.alloc);
 
-    var diff = (Diffs.open(r.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var diff = (Diffs.open(ctx.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     dom = dom.open(HTML.element("context", null, null));
     dom.push(HTML.text(rd.name));
     dom = dom.open(HTML.p(null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.title, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, diff.title, .{}) catch unreachable));
     dom = dom.close();
     dom = dom.open(HTML.p(null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.desc, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, diff.desc, .{}) catch unreachable));
     dom = dom.close();
     dom = dom.close();
 
-    _ = try tmpl.addElements(r.alloc, "patch_header", dom.done());
+    _ = try tmpl.addElements(ctx.alloc, "patch_header", dom.done());
 
-    var comments = DOM.new(r.alloc);
+    var comments = DOM.new(ctx.alloc);
     for ([_]Comment{ .{
         .author = "grayhatter",
         .message = "Wow, srctree's Diff view looks really good!",
@@ -195,13 +195,13 @@ fn view(r: *Response, uri: *UriIter) Error!void {
         .author = "robinli",
         .message = "I know, it's clearly the best I've even seen. Soon it'll even look good in Hastur!",
     } }) |cm| {
-        comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
+        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
-    for (diff.getComments(r.alloc) catch unreachable) |cm| {
-        comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
+    for (diff.getComments(ctx.alloc) catch unreachable) |cm| {
+        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
 
-    _ = try tmpl.addElements(r.alloc, "comments", comments.done());
+    _ = try tmpl.addElements(ctx.alloc, "comments", comments.done());
 
     const hidden = [_]HTML.Attr{
         .{ .key = "type", .value = "hidden" },
@@ -213,18 +213,18 @@ fn view(r: *Response, uri: *UriIter) Error!void {
         HTML.input(&hidden),
     };
 
-    _ = try tmpl.addElements(r.alloc, "form-data", &form_data);
+    _ = try tmpl.addElements(ctx.alloc, "form-data", &form_data);
 
-    const filename = try std.fmt.allocPrint(r.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, diff.index });
+    const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, diff.index });
     var file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
-        const fdata = f.readToEndAlloc(r.alloc, 0xFFFFF) catch return error.Unknown;
-        const patch = try Patch.patchHtml(r.alloc, fdata);
-        _ = try tmpl.addElementsFmt(r.alloc, "{pretty}", "patch", patch);
+        const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
+        const patch = try Patch.patchHtml(ctx.alloc, fdata);
+        _ = try tmpl.addElementsFmt(ctx.alloc, "{pretty}", "patch", patch);
         f.close();
     } else try tmpl.addString("patch", "Patch not found");
 
-    r.sendTemplate(&tmpl) catch unreachable;
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn diffRow(a: Allocator, diff: Diffs.Diff) ![]HTML.Element {
@@ -242,25 +242,25 @@ fn diffRow(a: Allocator, diff: Diffs.Diff) ![]HTML.Element {
     return dom.done();
 }
 
-fn list(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
-    var dom = DOM.new(r.alloc);
+fn list(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    var dom = DOM.new(ctx.alloc);
     dom.push(HTML.element("search", null, null));
     dom = dom.open(HTML.element("actionable", null, null));
 
     for (0..Diffs.last() + 1) |i| {
-        var d = Diffs.open(r.alloc, i) catch continue orelse continue;
-        defer d.raze(r.alloc);
+        var d = Diffs.open(ctx.alloc, i) catch continue orelse continue;
+        defer d.raze(ctx.alloc);
         if (!std.mem.eql(u8, d.repo, rd.name)) continue;
-        dom.pushSlice(diffRow(r.alloc, d) catch continue);
+        dom.pushSlice(diffRow(ctx.alloc, d) catch continue);
     }
     dom = dom.close();
     const diffs = dom.done();
     var tmpl = Template.find("diffs.html");
-    tmpl.init(r.alloc);
-    _ = try tmpl.addElements(r.alloc, "diff", diffs);
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = try tmpl.addElements(ctx.alloc, "diff", diffs);
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }

@@ -6,7 +6,6 @@ const DOM = Endpoint.DOM;
 const HTML = Endpoint.HTML;
 const Endpoint = @import("../../endpoint.zig");
 const Context = @import("../../context.zig");
-const Response = Endpoint.Response;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
@@ -41,7 +40,7 @@ fn issueValidForRepo(repo: []const u8, issue: usize) bool {
     return issue > 0;
 }
 
-pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
+pub fn router(ctx: *Context) Error!Endpoint.Router.Endpoint {
     std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
     const verb = ctx.uri.peek() orelse return Endpoint.Router.router(ctx, &routes);
 
@@ -54,16 +53,16 @@ pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
     return Endpoint.Router.router(ctx, &routes);
 }
 
-fn new(r: *Response, _: *UriIter) Error!void {
-    const a = r.alloc;
+fn new(ctx: *Context) Error!void {
+    const a = ctx.alloc;
     var tmpl = Template.find("issues.html");
-    tmpl.init(r.alloc);
+    tmpl.init(ctx.alloc);
 
-    var dom = DOM.new(r.alloc);
+    var dom = DOM.new(ctx.alloc);
     dom = dom.open(HTML.element("intro", null, null));
     dom.push(HTML.text("New Pull Request"));
     dom = dom.close();
-    var fattr = try r.alloc.dupe(HTML.Attr, &[_]HTML.Attr{
+    var fattr = try ctx.alloc.dupe(HTML.Attr, &[_]HTML.Attr{
         .{ .key = "action", .value = "new" },
         .{ .key = "method", .value = "POST" },
     });
@@ -76,8 +75,8 @@ fn new(r: *Response, _: *UriIter) Error!void {
     dom.dupe(HTML.btnDupe("Preview", "preview"));
     dom = dom.close();
 
-    _ = try tmpl.addElements(r.alloc, "issue", dom.done());
-    r.sendTemplate(&tmpl) catch unreachable;
+    _ = try tmpl.addElements(ctx.alloc, "issue", dom.done());
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn inNetwork(str: []const u8) bool {
@@ -86,36 +85,9 @@ fn inNetwork(str: []const u8) bool {
     return true;
 }
 
-fn fetch(a: Allocator, uri: []const u8) ![]const u8 {
-    var client = std.http.Client{
-        .allocator = a,
-    };
-    defer client.deinit();
-
-    var request = client.fetch(a, .{
-        .location = .{ .url = uri },
-    });
-    if (request) |*req| {
-        defer req.deinit();
-        std.debug.print("request code {}\n", .{req.status});
-        if (req.body) |b| {
-            std.debug.print("request body {s}\n", .{b});
-            return a.dupe(u8, b);
-        }
-    } else |err| {
-        std.debug.print("stdlib request failed with error {}\n", .{err});
-    }
-
-    var curl = try CURL.curlRequest(a, uri);
-    if (curl.code != 200) return error.UnexpectedResponseCode;
-
-    if (curl.body) |b| return b;
-    return error.EpmtyReponse;
-}
-
-fn newPost(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
-    if (r.usr_data) |usrdata| if (usrdata.post_data) |post| {
+fn newPost(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
         var valid = post.validator();
         const title = try valid.require("title");
         const msg = try valid.require("message");
@@ -124,27 +96,27 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
     };
 
     var tmpl = Template.find("issues.html");
-    tmpl.init(r.alloc);
+    tmpl.init(ctx.alloc);
     try tmpl.addVar("issue", "new data attempting");
-    r.sendTemplate(&tmpl) catch unreachable;
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn newComment(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
-    if (r.usr_data) |usrdata| if (usrdata.post_data) |post| {
+fn newComment(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
         var valid = post.validator();
         const issue_id = try valid.require("issue-id");
         const msg = try valid.require("comment");
         const issue_index = isHex(issue_id.value) orelse return error.Unrouteable;
 
-        var issue = Issues.open(r.alloc, issue_index) catch unreachable orelse return error.Unrouteable;
+        var issue = Issues.open(ctx.alloc, issue_index) catch unreachable orelse return error.Unrouteable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
-        issue.addComment(r.alloc, c) catch {};
+        issue.addComment(ctx.alloc, c) catch {};
         issue.writeOut() catch unreachable;
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
-        r.redirect(loc, true) catch unreachable;
+        ctx.response.redirect(loc, true) catch unreachable;
         return;
     };
     return error.Unknown;
@@ -171,23 +143,23 @@ fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
     return dom.done();
 }
 
-fn view(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
-    const issue_target = uri.next().?;
+fn view(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const issue_target = ctx.uri.next().?;
     const index = isHex(issue_target) orelse return error.Unrouteable;
 
     var tmpl = Template.find("patch.html");
-    tmpl.init(r.alloc);
+    tmpl.init(ctx.alloc);
 
-    var dom = DOM.new(r.alloc);
+    var dom = DOM.new(ctx.alloc);
 
-    var issue = (Issues.open(r.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var issue = (Issues.open(ctx.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     dom.push(HTML.text(rd.name));
     dom.push(HTML.text(issue.repo));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, issue.title, .{}) catch unreachable));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, issue.desc, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, issue.title, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, issue.desc, .{}) catch unreachable));
 
-    var comments = DOM.new(r.alloc);
+    var comments = DOM.new(ctx.alloc);
     for ([_]Comment{ .{
         .author = "grayhatter",
         .message = "Wow, srctree's issue view looks really good!",
@@ -195,15 +167,15 @@ fn view(r: *Response, uri: *UriIter) Error!void {
         .author = "robinli",
         .message = "I know, it's clearly the best I've even seen. Soon It'll even look good in Hastur!",
     } }) |cm| {
-        comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
+        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
-    for (issue.getComments(r.alloc) catch unreachable) |cm| {
-        comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
+    for (issue.getComments(ctx.alloc) catch unreachable) |cm| {
+        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
 
-    _ = try tmpl.addElements(r.alloc, "comments", comments.done());
+    _ = try tmpl.addElements(ctx.alloc, "comments", comments.done());
 
-    _ = try tmpl.addElements(r.alloc, "patch_header", dom.done());
+    _ = try tmpl.addElements(ctx.alloc, "patch_header", dom.done());
 
     const hidden = [_]HTML.Attr{
         .{ .key = "type", .value = "hidden" },
@@ -215,9 +187,9 @@ fn view(r: *Response, uri: *UriIter) Error!void {
         HTML.input(&hidden),
     };
 
-    _ = try tmpl.addElements(r.alloc, "form-data", &form_data);
+    _ = try tmpl.addElements(ctx.alloc, "form-data", &form_data);
 
-    r.sendTemplate(&tmpl) catch unreachable;
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn issueRow(a: Allocator, issue: Issues.Issue) ![]HTML.Element {
@@ -235,25 +207,25 @@ fn issueRow(a: Allocator, issue: Issues.Issue) ![]HTML.Element {
     return dom.done();
 }
 
-fn list(r: *Response, uri: *UriIter) Error!void {
-    const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
-    var dom = DOM.new(r.alloc);
+fn list(ctx: *Context) Error!void {
+    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    var dom = DOM.new(ctx.alloc);
     dom.push(HTML.element("search", null, null));
     dom = dom.open(HTML.element("actionable", null, null));
 
     for (0..Issues.last() catch return error.Unknown) |i| {
-        var d = Issues.open(r.alloc, i) catch continue orelse continue;
-        defer d.raze(r.alloc);
+        var d = Issues.open(ctx.alloc, i) catch continue orelse continue;
+        defer d.raze(ctx.alloc);
         if (!std.mem.eql(u8, d.repo, rd.name)) continue;
-        dom.pushSlice(issueRow(r.alloc, d) catch continue);
+        dom.pushSlice(issueRow(ctx.alloc, d) catch continue);
     }
     dom = dom.close();
     const issues = dom.done();
     var tmpl = Template.find("issues.html");
-    tmpl.init(r.alloc);
-    _ = try tmpl.addElements(r.alloc, "issue", issues);
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = try tmpl.addElements(ctx.alloc, "issue", issues);
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }

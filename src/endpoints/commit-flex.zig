@@ -9,7 +9,7 @@ const Ini = @import("../ini.zig");
 
 const DOM = Endpoint.DOM;
 const HTML = Endpoint.HTML;
-const Response = Endpoint.Response;
+const Context = Endpoint.Context;
 const Template = Endpoint.Template;
 
 const Error = Endpoint.Error;
@@ -72,7 +72,7 @@ fn findCommits(a: Allocator, until: i64, gitdir: []const u8) !*HeatMapArray {
 const YEAR = 31_536_000;
 const DAY = 60 * 60 * 24;
 
-pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
+pub fn commitFlex(ctx: *Context) Error!void {
     const day = HTML.Attr.class("day");
     const monthAtt = HTML.Attr.class("month");
 
@@ -87,8 +87,8 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     var repo_count: usize = 0;
     var cwd = std.fs.cwd();
     if (cwd.openIterableDir("./repos", .{})) |idir| {
-        reset_hits(r.alloc);
-        if (Ini.default(r.alloc)) |ini| {
+        reset_hits(ctx.alloc);
+        if (Ini.default(ctx.alloc)) |ini| {
             if (ini.get("owner")) |ns| {
                 if (ns.get("email")) |email| {
                     owner_email = email;
@@ -108,7 +108,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
             switch (file.kind) {
                 .directory, .sym_link => {
                     var name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                    _ = findCommits(r.alloc, until, name) catch unreachable;
+                    _ = findCommits(ctx.alloc, until, name) catch unreachable;
                     repo_count +|= 1;
                 },
                 else => {},
@@ -116,7 +116,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
         }
     } else |_| unreachable;
 
-    var dom = DOM.new(r.alloc);
+    var dom = DOM.new(ctx.alloc);
     var tcount: u16 = 0;
     for (hits) |h| tcount +|= h;
     var hit_total_buf: [0x40]u8 = undefined;
@@ -143,7 +143,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     var month_i: usize = date.months - 2;
     var day_off: usize = 0;
     for (0..53) |_| {
-        var month: []HTML.Element = try r.alloc.alloc(HTML.Element, 8);
+        var month: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
         if ((month_i % 12) != date.months - 1) {
             month_i += 1;
             month[0] = HTML.div(DateTime.MONTHS[month_i % 12 + 1][0..3], &monthAtt);
@@ -154,7 +154,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
         for (month[1..]) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY) catch unreachable;
             defer day_off += 1;
-            var rows = try r.alloc.alloc(HTML.Attribute, 2);
+            var rows = try ctx.alloc.alloc(HTML.Attribute, 2);
             const class = if (date.timestamp >= nowish.timestamp)
                 "day-hide"
             else switch (16 - @clz(hits[day_off])) {
@@ -171,7 +171,7 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
                 HTML.Attr{
                     .key = "title",
                     .value = try std.fmt.allocPrint(
-                        r.alloc,
+                        ctx.alloc,
                         "{} commits on {}",
                         .{ hits[day_off], date },
                     ),
@@ -186,12 +186,8 @@ pub fn commitFlex(r: *Response, _: *Endpoint.Router.UriIter) Error!void {
     const flex = dom.done();
 
     var tmpl = Template.find("user_commits.html");
-    tmpl.init(r.alloc);
+    tmpl.init(ctx.alloc);
 
-    _ = tmpl.addElements(r.alloc, "flexes", flex) catch return Error.Unknown;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    _ = tmpl.addElements(ctx.alloc, "flexes", flex) catch return Error.Unknown;
+    return ctx.sendTemplate(&tmpl) catch unreachable;
 }

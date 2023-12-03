@@ -39,9 +39,9 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
     _ = try actions.gitInit(dir, .{});
 }
 
-fn default(r: *Response, _: *UriIter) Error!void {
-    try r.request.auth.validOnly();
-    var dom = DOM.new(r.alloc);
+fn default(ctx: *Context) Error!void {
+    try ctx.response.request.auth.validOnly();
+    var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
@@ -58,17 +58,17 @@ fn default(r: *Response, _: *UriIter) Error!void {
     var form = dom.done();
 
     var tmpl = Template.find("admin.html");
-    tmpl.init(r.alloc);
-    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
 
-fn cloneUpstream(r: *Response, _: *UriIter) Error!void {
-    try r.request.auth.validOnly();
-    var dom = DOM.new(r.alloc);
+fn cloneUpstream(ctx: *Context) Error!void {
+    try ctx.response.request.auth.validOnly();
+    var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
@@ -82,18 +82,18 @@ fn cloneUpstream(r: *Response, _: *UriIter) Error!void {
     var form = dom.done();
 
     var tmpl = Template.find("admin.html");
-    tmpl.init(r.alloc);
-    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
 
-fn postCloneUpstream(r: *Response, _: *UriIter) Error!void {
-    try r.request.auth.validOnly();
+fn postCloneUpstream(ctx: *Context) Error!void {
+    try ctx.response.request.auth.validOnly();
 
-    var valid = r.usr_data.?.post_data.?.validator();
+    var valid = ctx.response.usr_data.?.post_data.?.validator();
     const ruri = valid.require("repo uri") catch return error.Unknown;
     std.debug.print("repo uri {s}\n", .{ruri.value});
     var nameitr = std.mem.splitBackwards(u8, ruri.value, "/");
@@ -102,14 +102,14 @@ fn postCloneUpstream(r: *Response, _: *UriIter) Error!void {
 
     var dir = std.fs.cwd().openDir("repos", .{}) catch return error.Unknown;
     var act = git.Actions{
-        .alloc = r.alloc,
+        .alloc = ctx.alloc,
         .cwd = dir,
     };
     std.debug.print("fork bare {s}\n", .{
         act.forkRemote(ruri.value, name) catch return error.Unknown,
     });
 
-    var dom = DOM.new(r.alloc);
+    var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
@@ -123,18 +123,18 @@ fn postCloneUpstream(r: *Response, _: *UriIter) Error!void {
     var form = dom.done();
 
     var tmpl = Template.find("admin.html");
-    tmpl.init(r.alloc);
-    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
 
-fn postNewRepo(r: *Response, _: *UriIter) Error!void {
-    try r.request.auth.validOnly();
+fn postNewRepo(ctx: *Context) Error!void {
+    try ctx.request.auth.validOnly();
     // TODO ini repo dir
-    var valid = if (r.usr_data) |usr|
+    var valid = if (ctx.response.usr_data) |usr|
         if (usr.post_data) |p|
             p.validator()
         else
@@ -155,11 +155,11 @@ fn postNewRepo(r: *Response, _: *UriIter) Error!void {
 
     if (std.fs.cwd().openDir(dir_name, .{})) |_| return error.Unknown else |_| {}
 
-    var new_repo = git.Repo.createNew(r.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
+    var new_repo = git.Repo.createNew(ctx.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
 
     std.debug.print("creating {any}\n", .{new_repo});
 
-    var dom = DOM.new(r.alloc);
+    var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
@@ -173,17 +173,17 @@ fn postNewRepo(r: *Response, _: *UriIter) Error!void {
     var form = dom.done();
 
     var tmpl = Template.find("admin.html");
-    tmpl.init(r.alloc);
-    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
 
-fn newRepo(r: *Response, _: *UriIter) Error!void {
-    try r.request.auth.validOnly();
-    var dom = DOM.new(r.alloc);
+fn newRepo(ctx: *Context) Error!void {
+    try ctx.request.auth.validOnly();
+    var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
@@ -199,19 +199,19 @@ fn newRepo(r: *Response, _: *UriIter) Error!void {
     var form = dom.done();
 
     var tmpl = Template.find("admin.html");
-    tmpl.init(r.alloc);
-    _ = tmpl.addElements(r.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
 
-fn view(r: *Response, uri: *UriIter) Error!void {
-    try r.request.auth.validOnly();
-    if (r.usr_data) |usr| if (usr.post_data) |pd| {
+fn view(ctx: *Context) Error!void {
+    try ctx.request.auth.validOnly();
+    if (ctx.response.usr_data) |usr| if (usr.post_data) |pd| {
         std.debug.print("{any}\n", .{pd.items});
-        return newRepo(r, uri);
+        return newRepo(ctx);
     };
-    return default(r, uri);
+    return default(ctx);
 }

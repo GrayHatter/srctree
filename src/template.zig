@@ -4,7 +4,7 @@ const bldtmpls = @import("templates");
 const Allocator = std.mem.Allocator;
 
 const HTML = @import("html.zig");
-const Response = @import("response.zig");
+const Context = @import("context.zig");
 
 const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
@@ -103,8 +103,8 @@ pub const Template = struct {
         return std.fmt.allocPrint(a, "{}", .{self});
     }
 
-    pub fn buildFor(self: *Template, a: ?Allocator, r: *const Response) ![]u8 {
-        const loggedin = if (r.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
+    pub fn buildFor(self: *Template, a: ?Allocator, ctx: *const Context) ![]u8 {
+        const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
         try self.addVar("header.auth", loggedin);
         return try self.build(a);
     }

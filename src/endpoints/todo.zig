@@ -3,7 +3,7 @@ const std = @import("std");
 const DOM = Endpoint.DOM;
 const HTML = Endpoint.HTML;
 const Endpoint = @import("../endpoint.zig");
-const Response = Endpoint.Response;
+const Context = Endpoint.Context;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
@@ -15,8 +15,8 @@ pub const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = default } },
 };
 
-fn default(r: *Response, _: *UriIter) Error!void {
-    var dom = DOM.new(r.alloc);
+fn default(ctx: *Context) Error!void {
+    var dom = DOM.new(ctx.alloc);
     dom.push(HTML.element("search", null, null));
 
     dom = dom.open(HTML.element("actionable", null, null));
@@ -32,10 +32,10 @@ fn default(r: *Response, _: *UriIter) Error!void {
     var data = dom.done();
 
     var tmpl = Template.find("todo.html");
-    tmpl.init(r.alloc);
-    _ = tmpl.addElements(r.alloc, "todos", data) catch unreachable;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "todos", data) catch unreachable;
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }

@@ -31,15 +31,15 @@ pub const endpoints = [_]Endpoint.Router.MatchRouter{
 };
 
 pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
-    std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.uri.peek().?, ctx.uri, ctx.request.method });
+    std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
     return Endpoint.Router.router(ctx, &endpoints);
 }
 
-fn gitUploadPack(r: *Response, uri: *UriIter) Error!void {
-    uri.reset();
-    _ = uri.first();
-    const name = uri.next() orelse return error.Unknown;
-    const target = uri.rest();
+fn gitUploadPack(ctx: *Context) Error!void {
+    ctx.uri.reset();
+    _ = ctx.uri.first();
+    const name = ctx.uri.next() orelse return error.Unknown;
+    const target = ctx.uri.rest();
     if (!std.mem.eql(u8, target, "info/refs") and !std.mem.eql(u8, target, "git-upload-pack")) {
         return error.Abusive;
     }
@@ -48,11 +48,11 @@ fn gitUploadPack(r: *Response, uri: *UriIter) Error!void {
     const path_tr = std.fmt.bufPrint(&path_buf, "repos/{s}/{s}", .{ name, target }) catch unreachable;
     std.debug.print("pathtr {s}\n", .{path_tr});
 
-    var map = std.process.EnvMap.init(r.alloc);
+    var map = std.process.EnvMap.init(ctx.alloc);
     defer map.deinit();
 
     //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
-    if (r.usr_data != null and r.usr_data.?.post_data == null) {
+    if (ctx.response.usr_data != null and ctx.response.usr_data.?.post_data == null) {
         try map.put("PATH_TRANSLATED", path_tr);
         try map.put("QUERY_STRING", "service=git-upload-pack");
         try map.put("REQUEST_METHOD", "GET");
@@ -67,15 +67,15 @@ fn gitUploadPack(r: *Response, uri: *UriIter) Error!void {
     try map.put("GIT_PROTOCOL", "version=2");
     try map.put("GIT_HTTP_EXPORT_ALL", "true");
 
-    var child = std.ChildProcess.init(&[_][]const u8{ "git", "http-backend" }, r.alloc);
+    var child = std.ChildProcess.init(&[_][]const u8{ "git", "http-backend" }, ctx.alloc);
     child.stdin_behavior = .Pipe;
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Ignore;
     child.env_map = &map;
     child.expand_arg0 = .no_expand;
 
-    r.status = .ok;
-    r.phase = .headers;
+    ctx.response.status = .ok;
+    ctx.response.phase = .headers;
 
     child.spawn() catch unreachable;
 
@@ -87,14 +87,14 @@ fn gitUploadPack(r: *Response, uri: *UriIter) Error!void {
             .revents = undefined,
         },
     };
-    if (r.usr_data) |usr| {
+    if (ctx.response.usr_data) |usr| {
         if (usr.post_data) |pd| {
             _ = std.os.write(child.stdin.?.handle, pd.rawpost) catch unreachable;
             std.os.close(child.stdin.?.handle);
             child.stdin = null;
         }
     }
-    var buf = try r.alloc.alloc(u8, 0xffffff);
+    var buf = try ctx.alloc.alloc(u8, 0xffffff);
     var headers_required = true;
     while (true) {
         const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
@@ -103,10 +103,10 @@ fn gitUploadPack(r: *Response, uri: *UriIter) Error!void {
             const amt = std.os.read(poll_fd[0].fd, buf) catch unreachable;
             if (amt == 0) break;
             if (headers_required) {
-                _ = r.write("HTTP/1.1 200 OK\r\n") catch unreachable;
+                _ = ctx.response.write("HTTP/1.1 200 OK\r\n") catch unreachable;
                 headers_required = false;
             }
-            r.writeAll(buf[0..amt]) catch unreachable;
+            ctx.response.writeAll(buf[0..amt]) catch unreachable;
         } else if (poll_fd[0].revents & err_mask != 0) {
             break;
         }
@@ -114,52 +114,52 @@ fn gitUploadPack(r: *Response, uri: *UriIter) Error!void {
     _ = child.wait() catch unreachable;
 }
 
-fn __objects(r: *Response, uri: *UriIter) Error!void {
+fn __objects(ctx: *Context) Error!void {
     std.debug.print("gitweb objects\n", .{});
 
-    const rd = Endpoint.REPO.RouteData.make(uri) orelse return error.Unrouteable;
+    const rd = Endpoint.REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
-    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
+    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(r.alloc) catch return error.Unknown;
+    repo.loadData(ctx.alloc) catch return error.Unknown;
 
-    uri.reset();
-    _ = uri.first();
-    _ = uri.next();
-    _ = uri.next();
-    const o2 = uri.next().?;
-    const o38 = uri.next().?;
+    ctx.uri.reset();
+    _ = ctx.uri.first();
+    _ = ctx.uri.next();
+    _ = ctx.uri.next();
+    const o2 = ctx.uri.next().?;
+    const o38 = ctx.uri.next().?;
 
-    filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}/objects/{s}/{s}", .{ rd.name, o2, o38 });
+    filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}/objects/{s}/{s}", .{ rd.name, o2, o38 });
     var file = cwd.openFile(filename, .{}) catch unreachable;
-    var data = file.readToEndAlloc(r.alloc, 0xffffff) catch unreachable;
+    var data = file.readToEndAlloc(ctx.alloc, 0xffffff) catch unreachable;
 
     //var sha: [40]u8 = undefined;
     //@memcpy(sha[0..2], o2[0..2]);
     //@memcpy(sha[2..40], o38[0..38]);
 
-    //var data = repo.findBlob(r.alloc, &sha) catch unreachable;
+    //var data = repo.findBlob(ctx.alloc, &sha) catch unreachable;
 
-    r.status = .ok;
-    r.start() catch return Error.Unknown;
-    r.write(data) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    ctx.response.status = .ok;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.write(data) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
 
-fn __info(r: *Response, uri: *UriIter) Error!void {
+fn __info(ctx: *Context) Error!void {
     std.debug.print("gitweb info\n", .{});
 
-    const rd = Endpoint.REPO.RouteData.make(uri) orelse return error.Unrouteable;
+    const rd = Endpoint.REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
-    var filename = try std.fmt.allocPrint(r.alloc, "./repos/{s}", .{rd.name});
+    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(r.alloc) catch return error.Unknown;
+    repo.loadData(ctx.alloc) catch return error.Unknown;
 
-    var adata = std.ArrayList(u8).init(r.alloc);
+    var adata = std.ArrayList(u8).init(ctx.alloc);
 
     for (repo.refs) |ref| {
         std.debug.print("{}\n", .{ref});
@@ -178,8 +178,8 @@ fn __info(r: *Response, uri: *UriIter) Error!void {
 
     var data = try adata.toOwnedSlice();
 
-    r.status = .ok;
-    r.start() catch return Error.Unknown;
-    r.write(data) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    ctx.response.status = .ok;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.write(data) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }

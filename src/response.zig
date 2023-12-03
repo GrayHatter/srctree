@@ -44,7 +44,7 @@ const Error = error{
 
 pub const Writer = std.io.Writer(*Response, Error, write);
 
-alloc: Allocator,
+//alloc: Allocator,
 request: *Request,
 headers: Headers,
 phase: Phase = .created,
@@ -61,7 +61,7 @@ usr_data: ?UserData.UserData = null,
 
 pub fn init(a: Allocator, req: *Request) Response {
     var res = Response{
-        .alloc = a,
+        //.alloc = a,
         .request = req,
         .headers = Headers.init(a),
         .downstream = switch (req.raw_request) {
@@ -145,13 +145,6 @@ pub fn send(res: *Response, data: []const u8) !void {
     }
     res.phase = .body;
     try res.writeAll(data);
-}
-
-pub fn sendTemplate(res: *Response, t: *Template) !void {
-    try res.start();
-    const page = try t.buildFor(res.alloc, res);
-    try res.send(page);
-    try res.finish();
 }
 
 pub fn writer(res: *Response) Writer {

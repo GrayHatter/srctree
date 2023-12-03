@@ -18,8 +18,9 @@ pub const Patch = struct {
     }
 
     pub fn filesSlice(self: Patch, a: Allocator) ![][]const u8 {
-        const count = mem.count(u8, self.patch, "\ndiff --git a/") + 1;
-        if (count == 1 and mem.count(u8, self.patch, "diff --git a/") != 1) return error.PatchInvalid;
+        const count = mem.count(u8, self.patch, "\ndiff --git a/") +
+            @as(usize, if (mem.startsWith(u8, self.patch, "diff --git a/")) 1 else 0);
+        if (count == 0) return error.PatchInvalid;
         var files = try a.alloc([]const u8, count);
         errdefer a.free(files);
         var fidx: usize = 0;
@@ -51,7 +52,7 @@ pub const Header = struct {
         const left_s = 7 + (mem.indexOf(u8, d, "\n--- a/") orelse return error.PatchInvalid);
         const left_e = mem.indexOfPos(u8, d, left_s, "\n") orelse return error.PatchInvalid;
         self.filename.left = d[left_s..left_e];
-        const right_s = 7 + (mem.indexOf(u8, d, "\n+++ b/") orelse return error.PatchInvalid);
+        const right_s = 7 + (mem.indexOfPos(u8, d, left_e, "\n+++ b/") orelse return error.PatchInvalid);
         const right_e = mem.indexOfPos(u8, d, right_s, "\n") orelse return error.PatchInvalid;
         self.filename.right = d[right_s..right_e];
         // Block headers

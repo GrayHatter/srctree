@@ -2,7 +2,7 @@ const std = @import("std");
 
 const DOM = Endpoint.DOM;
 const Endpoint = @import("../endpoint.zig");
-const Response = Endpoint.Response;
+const Context = Endpoint.Context;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
@@ -18,10 +18,10 @@ pub const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = default } },
 };
 
-fn default(r: *Response, _: *UriIter) Error!void {
-    var dom = DOM.new(r.alloc);
+fn default(ctx: *Context) Error!void {
+    var dom = DOM.new(ctx.alloc);
 
-    const list = try Repos.allNames(r.alloc);
+    const list = try Repos.allNames(ctx.alloc);
     const cwd = std.fs.cwd();
     for (list) |reponame| {
         var b: [0x800]u8 = undefined;
@@ -30,13 +30,13 @@ fn default(r: *Response, _: *UriIter) Error!void {
         defer rdir.close();
         const cffd = rdir.openFile("config", .{}) catch rdir.openFile(".git/config", .{}) catch continue;
         defer cffd.close();
-        const conf = Ini.init(r.alloc, cffd) catch unreachable;
+        const conf = Ini.init(ctx.alloc, cffd) catch unreachable;
         if (conf.get("remote \"upstream\"")) |ns| {
             if (ns.get("url")) |url| {
-                var purl = try Repos.parseGitRemoteUrl(r.alloc, url);
+                var purl = try Repos.parseGitRemoteUrl(ctx.alloc, url);
                 dom = dom.open(HTML.h3(null, &HTML.Attr.class("upstream")));
                 dom.push(HTML.text("Upstream: "));
-                dom.push(HTML.anch(purl, try HTML.Attr.create(r.alloc, "href", purl)));
+                dom.push(HTML.anch(purl, try HTML.Attr.create(ctx.alloc, "href", purl)));
                 dom = dom.close();
             }
         }
@@ -45,10 +45,10 @@ fn default(r: *Response, _: *UriIter) Error!void {
     var data = dom.done();
 
     var tmpl = Template.find("network.html");
-    tmpl.init(r.alloc);
-    _ = tmpl.addElements(r.alloc, "netlist", data) catch unreachable;
-    var page = tmpl.buildFor(r.alloc, r) catch unreachable;
-    r.start() catch return Error.Unknown;
-    r.send(page) catch return Error.Unknown;
-    r.finish() catch return Error.Unknown;
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "netlist", data) catch unreachable;
+    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    ctx.response.start() catch return Error.Unknown;
+    ctx.response.send(page) catch return Error.Unknown;
+    ctx.response.finish() catch return Error.Unknown;
 }
