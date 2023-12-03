@@ -109,7 +109,7 @@ lines {
 
 code {
 	display: inline-block;
-	font-family: "Ubuntu Mono", sans-serif;
+	font-family: "Ubuntu Mono", monospace, sans-serif;
 	text-align: left;
 	white-space: pre;
 	width: 100%;
@@ -221,7 +221,7 @@ readme {
 
 .treelist {
 	padding: 0 8px 8px;
-	font-family: 'Ubuntu Mono', sans-serif;
+	font-family: "Ubuntu Mono", monospace, sans-serif;
 	tree, file {
 		border-top: 1px solid gray;
 		margin: auto;
@@ -328,7 +328,7 @@ textarea.paste {
 	min-height: 20em;
 }
 
-diff {
+patchrequest {
 	border: 1px solid gray;
 	display: block;
 	border-radius: 4px 4px 0 0;
@@ -357,6 +357,44 @@ diff {
 	}
 }
 
+diff {
+	text-align: left;
+	display: block;
+	margin-bottom: 1em;
+
+	filename {
+		background: #333;
+		border-radius: 3px 3px 0 0;
+		border: 1px gray solid;
+		border-bottom: 0px;
+		display: flex;
+		justify-content: space-between;
+		height: 1.5em;
+		padding: 4px 12px;
+	}
+	changes {
+		font-family: "Ubuntu Mono", monospace, sans-serif;
+		font-size: 0.8em;
+		border: 1px solid gray;
+		display: block;
+		padding: 8px;
+		white-space: pre;
+		text-align: left;
+		background: #333;
+
+		.del { background: #5b0000 }
+		.add { background: #003e00 }
+	}
+	.buttons {
+		background: #333;
+		border: 1px gray solid;
+		border-top: 0px;
+		display: block;
+		height: 25px;
+		padding: 4px 0 4px 12px;
+	}
+}
+
 patchheader {
 	display: block;
 	width: 100%;
@@ -364,7 +402,7 @@ patchheader {
 }
 
 patch {
-	/* margin: 2rem 0 10rem; */
+	/* margin: 2rem 0 10rem; * /
 	border: 1px solid gray;
 	border-radius: 4px 4px 0 0;
 	white-space: pre;
@@ -375,31 +413,44 @@ patch {
 	font-family: monospace;
 
 	.del { background: #5b0000 }
-	.add { background: #003e00 }
+	.add { background: #003e00 } /* */
 }
 
-comments {
-	form {
-		display: flex;
-		flex-direction: column;
-		context {
-			background: #333;
-			border-radius: 3px 3px 0 0;
-			border: 1px gray solid;
-			border-bottom: 0px;
-			display: block;
-			height: 45px;
-			padding: 4px 0 4px 12px;
-		}
-		input, textarea {
-			display: block;
-			background: #333;
-			border: 1px solid gray;
-			border-radius: 2px;
-			font-size: 130%;
-		}
-		textarea { height: 10em }
+form {
+	display: flex;
+	flex-direction: column;
+	gap: 1em;
+	border: 1px solid gray;
+	border-bottom-color: gray;
+	border-bottom: 0;
+	padding-bottom: 1em;
+	context {
+		font-family: 'Titillium Web', sans-serif;
+		background: #333;
+		display: block;
+		height: 35px;
+		padding: 4px 0 4px 12px;
 	}
+	input, textarea {
+		margin: 0 0.5em;
+		display: block;
+		background: #333;
+		border: 1px solid gray;
+		border-radius: 0;
+		font-size: 130%;
+		padding: 4px;
+		border-bottom: 0px solid gray;
+		&:last-of-type {
+			border-bottom: 1px solid gray;
+			margin-bottom: 0.5em;
+		}
+	}
+	button {
+		margin: 0 0.5em;
+	}
+	textarea { height: 10em }
+}
+comments {
 
 }
 comment {

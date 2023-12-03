@@ -12,7 +12,6 @@ const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 
 const Repo = @import("../repos.zig");
-const diffLine = @import("commits.zig").diffLine;
 
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
@@ -22,6 +21,7 @@ const Bleach = @import("../../bleach.zig");
 const Diffs = Endpoint.Types.Diffs;
 const Comments = Endpoint.Types.Comments;
 const Comment = Comments.Comment;
+const Patch = @import("../../patch.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = list } },
@@ -61,20 +61,19 @@ fn new(r: *Response, _: *UriIter) Error!void {
     tmpl.init(r.alloc);
 
     var dom = DOM.new(r.alloc);
-    dom = dom.open(HTML.element("intro", null, null));
-    dom.push(HTML.text("New Pull Request"));
-    dom = dom.close();
     var fattr = try r.alloc.dupe(HTML.Attr, &[_]HTML.Attr{
         .{ .key = "action", .value = "new" },
         .{ .key = "method", .value = "POST" },
     });
     dom = dom.open(HTML.form(null, fattr));
-
+    dom.push(HTML.element("context", "New Pull Request", null));
     dom.push(try HTML.inputAlloc(a, "diff source", .{ .placeholder = "Patch URL" }));
     dom.push(try HTML.inputAlloc(a, "title", .{ .placeholder = "Diff Title" }));
     dom.push(try HTML.textareaAlloc(a, "desc", .{ .placeholder = "Additional information about this patch suggestion" }));
+    dom = dom.open(HTML.element("buttons", null, null));
     dom.dupe(HTML.btnDupe("Submit", "submit"));
     dom.dupe(HTML.btnDupe("Preview", "preview"));
+    dom = dom.close();
     dom = dom.close();
 
     _ = try tmpl.addElements(r.alloc, "diff", dom.done());
@@ -85,34 +84,6 @@ fn inNetwork(str: []const u8) bool {
     if (!std.mem.startsWith(u8, str, "https://srctree.gr.ht")) return false;
     for (str) |c| if (c == '@') return false;
     return true;
-}
-
-fn fetch(a: Allocator, uri: []const u8) ![]const u8 {
-    // Disabled until TLS1.2 is supported
-    // var client = std.http.Client{
-    //     .allocator = a,
-    // };
-    // defer client.deinit();
-
-    // var request = client.fetch(a, .{
-    //     .location = .{ .url = uri },
-    // });
-    // if (request) |*req| {
-    //     defer req.deinit();
-    //     std.debug.print("request code {}\n", .{req.status});
-    //     if (req.body) |b| {
-    //         std.debug.print("request body {s}\n", .{b});
-    //         return a.dupe(u8, b);
-    //     }
-    // } else |err| {
-    //     std.debug.print("stdlib request failed with error {}\n", .{err});
-    // }
-
-    var curl = try CURL.curlRequest(a, uri);
-    if (curl.code != 200) return error.UnexpectedResponseCode;
-
-    if (curl.body) |b| return b;
-    return error.EpmtyReponse;
 }
 
 fn newPost(r: *Response, uri: *UriIter) Error!void {
@@ -132,7 +103,7 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
                 desc.value,
                 action.name,
             });
-            var data = fetch(r.alloc, src.value) catch unreachable;
+            var data = Patch.loadRemote(r.alloc, src.value) catch unreachable;
             var filename = std.fmt.allocPrint(
                 r.alloc,
                 "data/patch/{s}.{x}.patch",
@@ -140,7 +111,7 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
             ) catch unreachable;
             var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
             defer file.close();
-            file.writer().writeAll(data) catch unreachable;
+            file.writer().writeAll(data.patch) catch unreachable;
         }
     };
 
@@ -152,21 +123,22 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
 
 fn newComment(r: *Response, uri: *UriIter) Error!void {
     const rd = Repo.RouteData.make(uri) orelse return error.Unrouteable;
+    var buf: [2048]u8 = undefined;
     if (r.usr_data) |usrdata| if (usrdata.post_data) |post| {
         var valid = post.validator();
         const diff_id = try valid.require("diff-id");
-        const msg = try valid.require("comment");
         const diff_index = isHex(diff_id.value) orelse return error.Unrouteable;
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, diff_index });
+
+        const msg = try valid.require("comment");
+        if (msg.value.len < 2) return r.redirect(loc, true) catch unreachable;
 
         var diff = Diffs.open(r.alloc, diff_index) catch unreachable orelse return error.Unrouteable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
         diff.addComment(r.alloc, c) catch {};
         diff.writeOut() catch unreachable;
-        var buf: [2048]u8 = undefined;
-        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, diff_index });
-        r.redirect(loc, true) catch unreachable;
-        return;
+        return r.redirect(loc, true) catch unreachable;
     };
     return error.Unknown;
 }
@@ -244,15 +216,11 @@ fn view(r: *Response, uri: *UriIter) Error!void {
     _ = try tmpl.addElements(r.alloc, "form-data", &form_data);
 
     const filename = try std.fmt.allocPrint(r.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, diff.index });
-    std.debug.print("{s}\n", .{filename});
     var file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
         const fdata = f.readToEndAlloc(r.alloc, 0xFFFFF) catch return error.Unknown;
-        var patch = DOM.new(r.alloc);
-        patch = patch.open(HTML.element("patch", null, null));
-        patch.pushSlice(diffLine(r.alloc, fdata));
-        patch = patch.close();
-        _ = try tmpl.addElementsFmt(r.alloc, "{pretty}", "patch", patch.done());
+        const patch = try Patch.patchHtml(r.alloc, fdata);
+        _ = try tmpl.addElementsFmt(r.alloc, "{pretty}", "patch", patch);
         f.close();
     } else try tmpl.addString("patch", "Patch not found");
 
