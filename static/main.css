@@ -79,11 +79,12 @@ content {
 	width: 1050px;
 
 	h3 { text-align: left; }
-	&.patch { 
+	&.patch {
 		display: flex;
 		justify-content: center;
 		gap: 1em;
 		width: unset;
+		max-width: 96%;
 	}
 }
 
@@ -379,10 +380,8 @@ patch {
 
 comments {
 	form {
-		border: 1px solid gray;
 		display: flex;
 		flex-direction: column;
-		padding: 8px;
 		context {
 			background: #333;
 			border-radius: 3px 3px 0 0;
@@ -406,7 +405,7 @@ comments {
 comment {
 	text-align: left;
 	display: block;
-	margin-bottom: 2em;
+	margin-bottom: 1em;
 	max-width: 45em;
 
 	context {
@@ -414,9 +413,10 @@ comment {
 		border-radius: 3px 3px 0 0;
 		border: 1px gray solid;
 		border-bottom: 0px;
-		display: block;
-		height: 45px;
-		padding: 4px 0 4px 12px;
+		display: flex;
+		justify-content: space-between;
+		height: 1.5em;
+		padding: 4px 12px;
 	}
 	message {
 		border: 1px solid gray;

@@ -12,6 +12,7 @@ const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 
 const Repo = @import("../repos.zig");
+const diffLine = @import("commits.zig").diffLine;
 
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
@@ -133,7 +134,7 @@ fn newPost(r: *Response, uri: *UriIter) Error!void {
             var data = fetch(r.alloc, src.value) catch unreachable;
             var filename = std.fmt.allocPrint(
                 r.alloc,
-                "patch/{s}.{}.patch",
+                "data/patch/{s}.{x}.patch",
                 .{ rd.name, diff.index },
             ) catch unreachable;
             var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
@@ -195,17 +196,23 @@ fn view(r: *Response, uri: *UriIter) Error!void {
     const diff_target = uri.next().?;
     const index = isHex(diff_target) orelse return error.Unrouteable;
 
-    var tmpl = Template.find("patch.html");
+    var tmpl = Template.find("diff-review.html");
     tmpl.init(r.alloc);
 
     var dom = DOM.new(r.alloc);
 
     var diff = (Diffs.open(r.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    dom = dom.open(HTML.element("context", null, null));
     dom.push(HTML.text(rd.name));
-    dom.push(HTML.text(diff.repo));
+    dom = dom.open(HTML.p(null, null));
     dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.title, .{}) catch unreachable));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.source_uri, .{}) catch unreachable));
+    dom = dom.close();
+    dom = dom.open(HTML.p(null, null));
     dom.push(HTML.text(Bleach.sanitizeAlloc(r.alloc, diff.desc, .{}) catch unreachable));
+    dom = dom.close();
+    dom = dom.close();
+
+    _ = try tmpl.addElements(r.alloc, "patch_header", dom.done());
 
     var comments = DOM.new(r.alloc);
     for ([_]Comment{ .{
@@ -213,7 +220,7 @@ fn view(r: *Response, uri: *UriIter) Error!void {
         .message = "Wow, srctree's Diff view looks really good!",
     }, .{
         .author = "robinli",
-        .message = "I know, it's clearly the best I've even seen. Soon It'll even look good in Hastur!",
+        .message = "I know, it's clearly the best I've even seen. Soon it'll even look good in Hastur!",
     } }) |cm| {
         comments.pushSlice(addComment(r.alloc, cm) catch unreachable);
     }
@@ -222,8 +229,6 @@ fn view(r: *Response, uri: *UriIter) Error!void {
     }
 
     _ = try tmpl.addElements(r.alloc, "comments", comments.done());
-
-    _ = try tmpl.addElements(r.alloc, "patch_header", dom.done());
 
     const hidden = [_]HTML.Attr{
         .{ .key = "type", .value = "hidden" },
@@ -236,6 +241,19 @@ fn view(r: *Response, uri: *UriIter) Error!void {
     };
 
     _ = try tmpl.addElements(r.alloc, "form-data", &form_data);
+
+    const filename = try std.fmt.allocPrint(r.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, diff.index });
+    std.debug.print("{s}\n", .{filename});
+    var file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
+    if (file) |f| {
+        const fdata = f.readToEndAlloc(r.alloc, 0xFFFFF) catch return error.Unknown;
+        var patch = DOM.new(r.alloc);
+        patch = patch.open(HTML.element("patch", null, null));
+        patch.pushSlice(diffLine(r.alloc, fdata));
+        patch = patch.close();
+        _ = try tmpl.addElementsFmt(r.alloc, "{pretty}", "patch", patch.done());
+        f.close();
+    } else try tmpl.addString("patch", "Patch not found");
 
     r.sendTemplate(&tmpl) catch unreachable;
 }
@@ -261,7 +279,7 @@ fn list(r: *Response, uri: *UriIter) Error!void {
     dom.push(HTML.element("search", null, null));
     dom = dom.open(HTML.element("actionable", null, null));
 
-    for (0..Diffs.last() catch return error.Unknown) |i| {
+    for (0..Diffs.last() + 1) |i| {
         var d = Diffs.open(r.alloc, i) catch continue orelse continue;
         defer d.raze(r.alloc);
         if (!std.mem.eql(u8, d.repo, rd.name)) continue;

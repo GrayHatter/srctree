@@ -16,14 +16,11 @@ const RouteData = Repos.RouteData;
 const git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
 
-fn diffLine(a: Allocator, diff: []const u8) *DOM {
+pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
 
     const count = std.mem.count(u8, diff, "\n");
-    dom = dom.open(HTML.element("diff", null, null));
-    dom = dom.open(HTML.element("patch", null, null));
     var litr = std.mem.split(u8, diff, "\n");
-
     for (0..count + 1) |_| {
         const a_add = &HTML.Attr.class("add");
         const a_del = &HTML.Attr.class("del");
@@ -34,13 +31,10 @@ fn diffLine(a: Allocator, diff: []const u8) *DOM {
             if (clean[0] == '-') a_del else a_add
         else
             null;
-        dom.push(HTML.span(clean, attr));
+        dom.dupe(HTML.span(clean, attr));
     }
 
-    dom = dom.close();
-    dom = dom.close();
-
-    return dom;
+    return dom.done();
 }
 
 fn commitHtml(r: *Response, sha: []const u8, repo_name: []const u8, repo: git.Repo) Error!void {
@@ -66,9 +60,13 @@ fn commitHtml(r: *Response, sha: []const u8, repo_name: []const u8, repo: git.Re
     }
     _ = tmpl.addElements(r.alloc, "commits", dom.done()) catch return error.Unknown;
 
-    var diff_lines = diffLine(r.alloc, diff);
-    const diff_els = diff_lines.done();
-    _ = tmpl.addElementsFmt(r.alloc, "{pretty}", "diff", diff_els) catch return error.Unknown;
+    var diff_dom = DOM.new(r.alloc);
+    diff_dom = diff_dom.open(HTML.element("diff", null, null));
+    diff_dom = diff_dom.open(HTML.element("patch", null, null));
+    diff_dom.pushSlice(diffLine(r.alloc, diff));
+    diff_dom = diff_dom.close();
+    diff_dom = diff_dom.close();
+    _ = tmpl.addElementsFmt(r.alloc, "{pretty}", "diff", diff_dom.done()) catch return error.Unknown;
 
     r.status = .ok;
     return r.sendTemplate(&tmpl) catch unreachable;

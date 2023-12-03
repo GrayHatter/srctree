@@ -6,6 +6,28 @@ const Comment = Comments.Comment;
 
 pub const Diffs = @This();
 
+const DIFF_VERSION: usize = 0;
+const DIFF_VERSION_BYTES = @as(*const [8]u8, @ptrCast(&DIFF_VERSION));
+
+fn readVersioned(idx: usize, data: []u8) !Diff {
+    var int: usize = 0;
+    @memcpy(@as(*[8]u8, @ptrCast(&int)), data[0..8]);
+    var itr = std.mem.split(u8, data[8..], "\x00");
+    return switch (int) {
+        0 => return Diff{
+            .index = idx,
+            .file = undefined,
+            .alloc_data = data,
+            .repo = itr.first(),
+            .title = itr.next().?,
+            .source_uri = itr.next().?,
+            .desc = itr.next().?,
+            .comment_data = itr.rest(),
+        },
+        else => error.UnsupportedVersion,
+    };
+}
+
 pub const Diff = struct {
     index: usize,
     repo: []const u8,
@@ -21,6 +43,7 @@ pub const Diff = struct {
     pub fn writeOut(self: Diff) !void {
         try self.file.seekTo(0);
         var writer = self.file.writer();
+        try writer.writeAll(DIFF_VERSION_BYTES);
         try writer.writeAll(self.repo);
         try writer.writeAll("\x00");
         try writer.writeAll(self.title);
@@ -44,17 +67,8 @@ pub const Diff = struct {
         errdefer a.free(data);
         try file.seekTo(0);
         _ = try file.readAll(data);
-        var itr = std.mem.split(u8, data, "\x00");
-        var d = Diff{
-            .index = idx,
-            .file = file,
-            .alloc_data = data,
-            .repo = itr.first(),
-            .title = itr.next().?,
-            .source_uri = itr.next().?,
-            .desc = itr.next().?,
-            .comment_data = itr.rest(),
-        };
+        var d = try readVersioned(idx, data);
+        d.file = file;
         var list = std.ArrayList(Comment).init(a);
         const count = d.comment_data.len / 32;
         for (0..count) |i| {
@@ -132,7 +146,7 @@ fn currMax() !usize {
     return count;
 }
 
-pub fn last() !usize {
+pub fn last() usize {
     return currMax() catch 0;
 }
 
