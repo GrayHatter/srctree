@@ -13,7 +13,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
-    exe.linkLibC();
+    //exe.linkLibC();
 
     addSrcTemplates(exe);
     b.installArtifact(exe);

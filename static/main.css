@@ -264,7 +264,16 @@ actionable {
 	margin-bottom: 20px;
 	min-height: 50px;
 	padding: 14px;
-	issue, diff {
+	row  {
+		> div {
+			display: flex;
+			justify-content: space-between;
+			.muted {
+				margin: 0 3px 0 0 ;
+				display: inline-block;
+				width: 2em;
+			}
+		}
 		border: none;
 		border-bottom: #808080 solid 1px;
 		color: rgb(255, 255, 235);

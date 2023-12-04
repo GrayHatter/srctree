@@ -230,15 +230,27 @@ fn view(ctx: *Context) Error!void {
 fn diffRow(a: Allocator, diff: Diffs.Diff) ![]HTML.Element {
     var dom = DOM.new(a);
 
-    dom = dom.open(HTML.element("diff", null, null));
+    dom = dom.open(HTML.element("row", null, null));
     const title = try Bleach.sanitizeAlloc(a, diff.title, .{ .rules = .title });
     const desc = try Bleach.sanitizeAlloc(a, diff.desc, .{});
     const href = try std.fmt.allocPrint(a, "{x}", .{diff.index});
 
+    dom = dom.open(HTML.div(null, null));
+    dom = dom.open(HTML.div(null, null));
+    dom.dupe(HTML.span(
+        try std.fmt.allocPrint(a, "0x{X}", .{diff.index}),
+        &HTML.Attr.class("muted"),
+    ));
     dom.push(try HTML.aHrefAlloc(a, title, href));
-    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
     dom = dom.close();
+    if (diff.comments) |cmts| {
+        const count = try std.fmt.allocPrint(a, "\xee\xa0\x9c {}", .{cmts.len});
+        dom.dupe(HTML.span(count, &HTML.Attr.class("icon")));
+    }
+    dom = dom.close();
+    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
 
+    dom = dom.close();
     return dom.done();
 }
 
