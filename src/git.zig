@@ -1143,6 +1143,7 @@ pub const Actions = struct {
             .cwd_dir = cwd,
             .allocator = self.alloc,
             .argv = argv,
+            .max_output_bytes = 0x1FFFFF,
         });
         if (child.stderr.len > 0) std.debug.print("stderr {s}\n", .{child.stderr});
         self.alloc.free(child.stderr);
