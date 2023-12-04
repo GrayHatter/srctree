@@ -44,7 +44,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     var diff_dom = DOM.new(ctx.alloc);
     diff_dom = diff_dom.open(HTML.element("diff", null, null));
     diff_dom = diff_dom.open(HTML.element("patch", null, null));
-    diff_dom.pushSlice(Patch.diffLine(ctx.alloc, diff));
+    diff_dom.pushSlice(try Patch.patchHtml(ctx.alloc, diff));
     diff_dom = diff_dom.close();
     diff_dom = diff_dom.close();
     _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "diff", diff_dom.done()) catch return error.Unknown;
