@@ -40,7 +40,7 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
 }
 
 fn default(ctx: *Context) Error!void {
-    try ctx.response.request.auth.validOnly();
+    try ctx.response.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -67,7 +67,7 @@ fn default(ctx: *Context) Error!void {
 }
 
 fn cloneUpstream(ctx: *Context) Error!void {
-    try ctx.response.request.auth.validOnly();
+    try ctx.response.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -91,7 +91,7 @@ fn cloneUpstream(ctx: *Context) Error!void {
 }
 
 fn postCloneUpstream(ctx: *Context) Error!void {
-    try ctx.response.request.auth.validOnly();
+    try ctx.response.request.auth.validOrError();
 
     var valid = ctx.response.usr_data.?.post_data.?.validator();
     const ruri = valid.require("repo uri") catch return error.Unknown;
@@ -132,7 +132,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
 }
 
 fn postNewRepo(ctx: *Context) Error!void {
-    try ctx.request.auth.validOnly();
+    try ctx.request.auth.validOrError();
     // TODO ini repo dir
     var valid = if (ctx.response.usr_data) |usr|
         if (usr.post_data) |p|
@@ -182,7 +182,7 @@ fn postNewRepo(ctx: *Context) Error!void {
 }
 
 fn newRepo(ctx: *Context) Error!void {
-    try ctx.request.auth.validOnly();
+    try ctx.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -208,7 +208,7 @@ fn newRepo(ctx: *Context) Error!void {
 }
 
 fn view(ctx: *Context) Error!void {
-    try ctx.request.auth.validOnly();
+    try ctx.request.auth.validOrError();
     if (ctx.response.usr_data) |usr| if (usr.post_data) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(ctx);

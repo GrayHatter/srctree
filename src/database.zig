@@ -17,3 +17,7 @@ pub fn init(options: Options) !void {
         .filesys => try Types.init("data"),
     }
 }
+
+pub fn raze() void {
+    Types.raze();
+}

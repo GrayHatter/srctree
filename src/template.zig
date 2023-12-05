@@ -103,9 +103,12 @@ pub const Template = struct {
         return std.fmt.allocPrint(a, "{}", .{self});
     }
 
-    pub fn buildFor(self: *Template, a: ?Allocator, ctx: *const Context) ![]u8 {
+    pub fn buildFor(self: *Template, a: Allocator, ctx: *const Context) ![]u8 {
         const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
         try self.addVar("header.auth", loggedin);
+        if (ctx.request.auth.user(a)) |usr| {
+            try self.addVar("current_username", usr.username);
+        } else |_| {}
         return try self.build(a);
     }
 

@@ -1,6 +1,10 @@
 const std = @import("std");
+
+const Allocator = std.mem.Allocator;
+
 const Request = @import("request.zig");
 const HeaderList = Request.HeaderList;
+const Users = @import("types/users.zig");
 
 const Auth = @This();
 
@@ -79,11 +83,15 @@ pub fn valid(auth: Auth) bool {
     return auth.method.valid();
 }
 
-pub fn validOnly(auth: Auth) !void {
+pub fn validOrError(auth: Auth) !void {
     if (!auth.valid()) return error.Unauthenticated;
 }
 
-pub fn username(auth: Auth) ![]const u8 {
-    _ = auth;
-    return error.NotImplemented;
+pub fn user(auth: Auth, a: Allocator) !Users.User {
+    switch (auth.method) {
+        .mtls => {
+            return try Users.findMTLSFingerprint(a, auth.payload.mtls.fingerprint);
+        },
+        else => return error.NotImplemted,
+    }
 }

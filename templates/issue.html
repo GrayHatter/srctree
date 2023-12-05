@@ -6,24 +6,17 @@
   </head>
   <body>
     <!-- _body_header.html -->
-    <content class="patch">
-      <patchheader>
-        <!-- patch_header -->
-      </patchheader>
-    </content>
-    <content class="patch">
+    <content class="issue">
+      <!-- issue -->
       <comments>
         <!-- comments -->
         <form method="POST" action="add-comment">
-          <context></context>
+          <context><!-- current_username ORNULL --></context>
           <textarea name="comment"></textarea>
           <button type="submit" name="comment">Comment</button>
           <!-- form-data -->
         </form>
       </comments>
-      <patch>
-        <!-- patch -->
-      </patch>
     </content>
   </body>
 </html>

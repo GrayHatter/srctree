@@ -101,6 +101,7 @@ pub fn main() !void {
     };
 
     try Database.init(.{});
+    defer Database.raze();
 
     switch (runmode) {
         .unix => {
