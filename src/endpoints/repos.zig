@@ -83,6 +83,8 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Endpoint {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
+        try ctx.addRouteVar("diffcount", "0");
+        try ctx.addRouteVar("issuecount", "0");
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();
