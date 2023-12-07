@@ -17,6 +17,30 @@ const RouteData = Repos.RouteData;
 const git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
 const Patch = @import("../../patch.zig");
+const CmmtMap = @import("../../types/commit-notes.zig");
+const Comments = Endpoint.Types.Comments;
+const Comment = Comments.Comment;
+
+fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
+    var dom = DOM.new(a);
+    dom = dom.open(HTML.element("comment", null, null));
+
+    dom = dom.open(HTML.element("context", null, null));
+    dom.dupe(HTML.element(
+        "author",
+        &[_]HTML.E{HTML.text(Bleach.sanitizeAlloc(a, c.author, .{}) catch unreachable)},
+        null,
+    ));
+    dom.push(HTML.element("date", "now", null));
+    dom = dom.close();
+
+    dom = dom.open(HTML.element("message", null, null));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.message, .{}) catch unreachable));
+    dom = dom.close();
+
+    dom = dom.close();
+    return dom.done();
+}
 
 fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.Repo) Error!void {
     var tmpl = Template.find("commit.html");
@@ -48,6 +72,24 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     diff_dom = diff_dom.close();
     diff_dom = diff_dom.close();
     _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "diff", diff_dom.done()) catch return error.Unknown;
+
+    var comments = DOM.new(ctx.alloc);
+    for ([_]Comment{ .{
+        .author = "robinli",
+        .message = "Woah, I didn't know srctree had the ability to comment on commits!",
+    }, .{
+        .author = "grayhatter",
+        .message = "Hah, yeah, added it the other day... pretty dope huh?",
+    } }) |cm| {
+        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
+    }
+
+    var map = CmmtMap.open(ctx.alloc, sha) catch unreachable;
+    for (map.comments) |cm| {
+        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
+    }
+
+    _ = try tmpl.addElements(ctx.alloc, "comments", comments.done());
 
     ctx.response.status = .ok;
     return ctx.sendTemplate(&tmpl) catch unreachable;
