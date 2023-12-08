@@ -7,15 +7,16 @@ const Comment = Comments.Comment;
 pub const Diffs = @This();
 
 const DIFF_VERSION: usize = 0;
-const DIFF_VERSION_BYTES = @as(*const [8]u8, @ptrCast(&DIFF_VERSION));
 
 fn readVersioned(idx: usize, data: []u8) !Diff {
-    var int: usize = 0;
-    @memcpy(@as(*[8]u8, @ptrCast(&int)), data[0..8]);
-    var itr = std.mem.split(u8, data[8..], "\x00");
+    var int: usize = std.mem.readIntNative(usize, data[0..8]);
+    var itr = std.mem.split(u8, data[24..], "\x00");
+    itr.reset();
     return switch (int) {
         0 => return Diff{
             .index = idx,
+            .created = std.mem.readIntNative(i64, data[8..16]),
+            .updated = std.mem.readIntNative(i64, data[16..24]),
             .file = undefined,
             .alloc_data = data,
             .repo = itr.first(),
@@ -30,6 +31,8 @@ fn readVersioned(idx: usize, data: []u8) !Diff {
 
 pub const Diff = struct {
     index: usize,
+    created: i64 = 0,
+    updated: i64 = 0,
     repo: []const u8,
     title: []const u8,
     source_uri: []const u8,
@@ -43,7 +46,9 @@ pub const Diff = struct {
     pub fn writeOut(self: Diff) !void {
         try self.file.seekTo(0);
         var writer = self.file.writer();
-        try writer.writeAll(DIFF_VERSION_BYTES);
+        try writer.writeIntNative(usize, DIFF_VERSION);
+        try writer.writeIntNative(i64, self.created);
+        try writer.writeIntNative(i64, self.updated);
         try writer.writeAll(self.repo);
         try writer.writeAll("\x00");
         try writer.writeAll(self.title);
@@ -67,15 +72,16 @@ pub const Diff = struct {
         errdefer a.free(data);
         try file.seekTo(0);
         _ = try file.readAll(data);
-        var d = try readVersioned(idx, data);
-        d.file = file;
+        var diff = try readVersioned(idx, data);
+        diff.file = file;
         var list = std.ArrayList(Comment).init(a);
-        const count = d.comment_data.len / 32;
+        const count = diff.comment_data.len / 32;
         for (0..count) |i| {
-            try list.append(try Comments.open(a, d.comment_data[i * 32 .. (i + 1) * 32]));
+            try list.append(Comments.open(a, diff.comment_data[i * 32 .. (i + 1) * 32]) catch continue);
         }
-        d.comments = try list.toOwnedSlice();
-        return d;
+        diff.comments = try list.toOwnedSlice();
+
+        return diff;
     }
 
     pub fn getComments(self: *Diff, a: Allocator) ![]Comment {

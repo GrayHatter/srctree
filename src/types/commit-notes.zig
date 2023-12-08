@@ -8,6 +8,8 @@ const Comment = Comments.Comment;
 
 pub const CommitMap = struct {
     version: u8 = 0,
+    created: i64,
+    updated: i64,
     hash: []const u8,
     comments: []Comment,
 
@@ -26,14 +28,24 @@ pub const CommitMap = struct {
     }
 
     pub fn readFile(a: std.mem.Allocator, hash: []const u8, file: std.fs.File) !CommitMap {
+        var list = std.ArrayList(Comment).init(a);
         const end = try file.getEndPos();
+        if (end == 0) {
+            return CommitMap{
+                .version = 0,
+                .created = 0,
+                .updated = 0,
+                .hash = try a.dupe(u8, hash),
+                .comments = try list.toOwnedSlice(),
+                .file = file,
+            };
+        }
         var data = try a.alloc(u8, end);
         errdefer a.free(data);
         try file.seekTo(0);
-        const rlen = try file.readAll(data);
-        const ver = if (rlen > 0) data[0] else 0;
-        const cdata = if (rlen > 0) data[1..] else &[0]u8{};
-        var list = std.ArrayList(Comment).init(a);
+        _ = try file.readAll(data);
+        const ver = data[0];
+        const cdata = data[1..];
         const count = cdata.len / 32;
         for (0..count) |i| {
             try list.append(try Comments.open(a, cdata[i * 32 .. (i + 1) * 32]));
@@ -43,6 +55,8 @@ pub const CommitMap = struct {
 
         return CommitMap{
             .version = ver,
+            .created = 0,
+            .updated = 0,
             .hash = try a.dupe(u8, hash),
             .comments = try list.toOwnedSlice(),
             .file = file,

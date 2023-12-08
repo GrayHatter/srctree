@@ -5,16 +5,19 @@ const sha256 = std.crypto.hash.sha2.Sha256;
 
 pub const Comments = @This();
 
+pub const SupportedTargets = union(enum) {
+    nos: void,
+    diff: usize,
+};
+
 pub const Comment = struct {
     author: []const u8,
     message: []const u8,
-    time: i64 = 0,
+    created: i64 = 0,
     tz: i32 = 0,
+    updated: i64 = 0,
 
-    target: union(enum) {
-        nos: void,
-        diff: usize,
-    } = .{ .nos = {} },
+    target: SupportedTargets = .{ .nos = {} },
 
     alloc_data: ?[]u8 = null,
     hash: [sha256.digest_length]u8 = undefined,
@@ -23,7 +26,8 @@ pub const Comment = struct {
         var h = sha256.init(.{});
         h.update(self.author);
         h.update(self.message);
-        h.update(std.mem.asBytes(&self.time));
+        h.update(std.mem.asBytes(&self.created));
+        h.update(std.mem.asBytes(&self.updated));
         h.final(&self.hash);
         return &self.hash;
     }
@@ -39,15 +43,10 @@ pub const Comment = struct {
         try w.writeAll("\x00");
         try w.writeAll(self.message);
         try w.writeAll("\x00");
-        try w.writeAll(std.mem.asBytes(&self.time));
+        try w.writeIntNative(i64, self.created);
+        try w.writeIntNative(i64, self.updated);
         try w.writeAll("\x00");
-        switch (self.target) {
-            .nos => {},
-            .diff => |diff| {
-                try w.writeAll(std.mem.asBytes(&diff));
-                try w.writeAll("\x00");
-            },
-        }
+        try w.writeAll(std.mem.asBytes(&self.target));
     }
 
     pub fn readFile(a: std.mem.Allocator, file: std.fs.File) !Comment {
@@ -109,8 +108,8 @@ test Comment {
     try std.testing.expectEqualSlices(
         u8,
         &[_]u8{
-              20, 139, 139, 116,  88, 163,  88, 180, 232, 197, 141, 210 , 53,  50,  30, 121,
-             245, 206, 171, 202,  74,  18, 138, 175, 207, 242,  56, 240, 200,  15,  31, 135
+            0x21, 0x78, 0x05, 0xE5, 0xB5, 0x0C, 0x05, 0xF5, 0x22, 0xAC, 0xFE, 0xBA, 0xEA, 0xA4, 0xAC, 0xC2,
+            0xD6, 0x50, 0xD1, 0xDD, 0x48, 0xFC, 0x34, 0x0E, 0xBB, 0x53, 0x94, 0x60, 0x56, 0x93, 0xC9, 0xC8
         },
         hash,
     );
@@ -124,7 +123,7 @@ test Comment {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.comment", .{std.fmt.fmtSliceHexLower(hash)});
     try std.testing.expectEqualStrings(
-        "148b8b7458a358b4e8c58dd235321e79f5ceabca4a128aafcff238f0c80f1f87.comment",
+        "217805e5b50c05f522acfebaeaa4acc2d650d1dd48fc340ebb5394605693c9c8.comment",
         filename,
     );
     var blob = try dir.dir.readFileAlloc(a, filename, 0xFF);
@@ -138,6 +137,9 @@ test Comment {
               0, 116, 101, 115, 116,  32,  99, 111, 109, 109,
             101, 110, 116,  44,  32, 112, 108, 101,  97, 115,
             101,  32, 105, 103, 110, 111, 114, 101,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
               0,   0,   0,   0,   0,   0,   0,   0,
         },
         blob,

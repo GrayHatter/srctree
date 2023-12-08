@@ -11,6 +11,8 @@ pub const Issue = struct {
     repo: []const u8,
     title: []const u8,
     desc: []const u8,
+    created: i64 = 0,
+    updated: i64 = 0,
 
     comment_data: []const u8,
     comments: ?[]Comment = null,
