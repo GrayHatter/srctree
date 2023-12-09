@@ -48,39 +48,17 @@ const root = [_]MatchRouter{
     .{ .name = "user", .match = .{ .call = endpoint.commitFlex } },
 };
 
-fn sendMsg(ctx: *Context, msg: []const u8) !void {
-    //ctx.response.transfer_encoding = .{ .content_length = msg.len };
-    try ctx.response.start();
-    try ctx.response.send(msg);
-    try ctx.response.finish();
-}
-
 fn notfound(ctx: *Context) Error!void {
     ctx.response.status = .not_found;
-    const MSG = Template.find("4XX.html").blob;
-    sendMsg(ctx, MSG) catch |e| {
-        std.log.err("Unexpected error while responding [{}]\n", .{e});
-        return Error.AndExit;
-    };
-}
-
-fn _respond(ctx: *Context) Error!void {
-    ctx.response.headersAdd("connection", "keep-alive") catch return Error.ReqResInvalid;
-    ctx.response.headersAdd("content-type", "text/plain") catch return Error.ReqResInvalid;
-    const MSG = "Hi, mom!\n";
-    sendMsg(ctx, MSG) catch |e| {
-        std.log.err("Unexpected error while responding [{}]\n", .{e});
-        return Error.AndExit;
-    };
+    var tmpl = Template.find("4XX.html");
+    tmpl.init(ctx.alloc);
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn default(ctx: *Context) Error!void {
     var tmpl = Template.find("index.html");
     tmpl.init(ctx.alloc);
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn eql(a: []const u8, b: []const u8) bool {

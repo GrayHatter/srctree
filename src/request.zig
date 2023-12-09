@@ -73,15 +73,9 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
                 .headers = HeaderList.init(a),
                 .uri = undefined,
                 .auth = undefined,
-                .method = unreachable,
+                .method = Methods.GET,
             };
             req.uri = raw_req.request.target;
-            //for (raw_req.request.headers) |v| {
-            //    try addHeader(&req.headers, v.key, v.val);
-            //    if (std.mem.eql(u8, v.key, "REQUEST_URI")) {
-            //        req.uri = v.val;
-            //    }
-            //}
             //req.auth = Auth.init(&req.headers);
             return req;
         },

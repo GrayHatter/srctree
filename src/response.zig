@@ -93,6 +93,8 @@ pub fn start(res: *Response) !void {
     switch (res.downstream) {
         .http => {
             res.request.raw_request.http.transfer_encoding = .chunked;
+            std.debug.print("{}\n", .{res.request.raw_request.http.state});
+            res.phase = .headers;
             return res.request.raw_request.http.do();
         },
         else => {},

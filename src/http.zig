@@ -35,8 +35,8 @@ pub fn serve(a: Allocator, srv: *Server) !void {
                 @tagName(http_resp.request.version),
                 http_resp.request.target,
             });
-            const body = try http_resp.reader().readAllAlloc(alloc, 8192);
-            defer a.free(body);
+            //const body = try http_resp.reader().readAllAlloc(alloc, 8192);
+            //defer a.free(body);
 
             try http_resp.headers.append("Server", "Source Tree WebServer");
 
