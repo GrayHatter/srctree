@@ -135,17 +135,13 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
             dom.push(HTML.p(desc, null));
         }
 
-        var conffd = try repo.dir.openFile("config", .{});
-        defer conffd.close();
-        const conf = try Ini.init(a, conffd);
-        if (conf.get("remote \"upstream\"")) |ns| {
-            if (ns.get("url")) |url| {
-                var purl = try Repos.parseGitRemoteUrl(a, url);
-                dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
-                dom.push(HTML.text("Upstream: "));
-                dom.push(HTML.anch(purl, try HTML.Attr.create(a, "href", purl)));
-                dom = dom.close();
-            }
+        // upstream
+        if (try Repos.hasUpstream(a, repo)) |url| {
+            var purl = try Repos.parseGitRemoteUrl(a, url);
+            dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
+            dom.push(HTML.text("Upstream: "));
+            dom.push(HTML.anch(purl, try HTML.Attr.create(a, "href", purl)));
+            dom = dom.close();
         }
 
         if (repo.commit(a)) |cmt| {

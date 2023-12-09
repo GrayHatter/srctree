@@ -29,6 +29,15 @@ pub const Namespace = struct {
         }
         return null;
     }
+
+    pub fn raze(self: Namespace, a: Allocator) void {
+        a.free(self.name);
+        for (self.settings) |set| {
+            a.free(set.name);
+            a.free(set.val);
+        }
+        a.free(self.settings);
+    }
 };
 
 pub const Config = struct {
@@ -51,6 +60,13 @@ pub const Config = struct {
             }
         }
         return null;
+    }
+
+    pub fn raze(self: Config, a: Allocator) void {
+        for (self.ns) |ns| {
+            ns.raze(a);
+        }
+        a.free(self.ns);
     }
 };
 

@@ -373,6 +373,7 @@ const FBSReader = std.io.FixedBufferStream([]u8).Reader;
 const FsReader = std.fs.File.Reader;
 
 pub const Repo = struct {
+    bare: bool,
     dir: std.fs.Dir,
     packs: []Pack,
     refs: []Ref,
@@ -381,6 +382,8 @@ pub const Repo = struct {
 
     repo_name: ?[]const u8 = null,
 
+    /// on success d becomes owned by the returned Repo and will be closed on
+    /// a call to raze
     pub fn init(d: std.fs.Dir) Error!Repo {
         var repo = initDefaults();
         repo.dir = d;
@@ -390,6 +393,7 @@ pub const Repo = struct {
             if (d.openDir("./.git", .{})) |full| {
                 if (full.openFile("./HEAD", .{})) |file| {
                     file.close();
+                    repo.dir.close();
                     repo.dir = full;
                 } else |_| return error.NotAGitRepo;
             } else |_| return error.NotAGitRepo;
@@ -400,6 +404,7 @@ pub const Repo = struct {
 
     fn initDefaults() Repo {
         return Repo{
+            .bare = false,
             .dir = undefined,
             .packs = &[0]Pack{},
             .refs = &[0]Ref{},
@@ -582,7 +587,7 @@ pub const Repo = struct {
         if (std.mem.eql(u8, head[0..5], "ref: ")) {
             self.head = Ref{
                 .branch = Branch{
-                    .sha = self.ref(head[16 .. head.len - 1]) catch return Ref{ .missing = {} },
+                    .sha = self.ref(head[16 .. head.len - 1]) catch &[_]u8{0} ** 20,
                     .name = try a.dupe(u8, head[5 .. head.len - 1]),
                     .repo = self,
                 },
@@ -1097,14 +1102,43 @@ pub const Actions = struct {
     repo: ?*const Repo = null,
     cwd: ?std.fs.Dir = null,
 
-    pub fn update(self: Actions) !void {
-        const data = try self.exec(&[_][]const u8{
+    pub fn update(self: Actions, branch: []const u8) !bool {
+        var buf: [512]u8 = undefined;
+        var up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
+
+        const fetch = try self.exec(&[_][]const u8{
             "git",
             "fetch",
-            "--dry-run",
             "upstream",
+            "-q",
         });
-        std.debug.print("update {s}\n", .{data});
+        if (fetch.len > 0) std.debug.print("fetch {s}\n", .{fetch});
+        self.alloc.free(fetch);
+
+        const pull = try self.execCustom(&[_][]const u8{
+            "git",
+            "merge-base",
+            "--is-ancestor",
+            "HEAD",
+            up_branch,
+        });
+        defer self.alloc.free(pull.stdout);
+        defer self.alloc.free(pull.stderr);
+
+        if (pull.term.Exited == 0) {
+            const move = try self.exec(&[_][]const u8{
+                "git",
+                "fetch",
+                "upstream",
+                "*:*",
+                "-q",
+            });
+            self.alloc.free(move);
+            return true;
+        } else {
+            std.debug.print("refusing to move head non-ancestor\n", .{});
+            return false;
+        }
     }
 
     pub fn forkRemote(self: Actions, uri: []const u8, local_dir: []const u8) ![]u8 {
@@ -1136,7 +1170,7 @@ pub const Actions = struct {
         });
     }
 
-    fn exec(self: Actions, argv: []const []const u8) ![]u8 {
+    fn execCustom(self: Actions, argv: []const []const u8) !std.ChildProcess.ExecResult {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
         var cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
         var child = try std.ChildProcess.exec(.{
@@ -1145,7 +1179,12 @@ pub const Actions = struct {
             .argv = argv,
             .max_output_bytes = 0x1FFFFF,
         });
-        if (child.stderr.len > 0) std.debug.print("stderr {s}\n", .{child.stderr});
+        return child;
+    }
+
+    fn exec(self: Actions, argv: []const []const u8) ![]u8 {
+        var child = try self.execCustom(argv);
+        if (child.stderr.len > 0) std.debug.print("git Actions error\nstderr {s}\n", .{child.stderr});
         self.alloc.free(child.stderr);
 
         if (DEBUG_GIT_ACTIONS) std.debug.print(
@@ -1235,8 +1274,7 @@ test "not gpg" {
 test "toParent" {
     var a = std.testing.allocator;
 
-    var cwd = std.fs.cwd();
-
+    var cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
     try repo.loadData(a);
@@ -1356,7 +1394,7 @@ test "hopefully a delta" {
 
 test "commit to tree" {
     var a = std.testing.allocator;
-    var cwd = std.fs.cwd();
+    var cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
@@ -1372,8 +1410,8 @@ test "commit to tree" {
 
 test "blob to commit" {
     var a = std.testing.allocator;
-    var cwd = std.fs.cwd();
 
+    var cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
@@ -1397,8 +1435,8 @@ test "blob to commit" {
 
 test "mk sub tree" {
     var a = std.testing.allocator;
-    var cwd = std.fs.cwd();
 
+    var cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
@@ -1424,8 +1462,8 @@ test "mk sub tree" {
 
 test "commit mk sub tree" {
     var a = std.testing.allocator;
-    var cwd = std.fs.cwd();
 
+    var cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 

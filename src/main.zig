@@ -1,10 +1,15 @@
 const std = @import("std");
+
+const Allocator = std.mem.Allocator;
+const Thread = std.Thread;
 const Server = std.http.Server;
+
 const Database = @import("database.zig");
 const HTML = @import("html.zig");
 const Template = @import("template.zig");
 const Route = @import("routes.zig");
 const Endpoint = @import("endpoint.zig");
+const Repos = @import("repos.zig");
 const EndpointErr = Endpoint.Error;
 const HTTP = @import("http.zig");
 const zWSGI = @import("zwsgi.zig");
@@ -20,7 +25,7 @@ test "main" {
     std.testing.refAllDecls(@import("git.zig"));
 }
 
-var print_mutex = std.Thread.Mutex{};
+var print_mutex = Thread.Mutex{};
 
 pub fn print(comptime format: []const u8, args: anytype) !void {
     print_mutex.lock();
@@ -68,7 +73,7 @@ pub fn main() !void {
     const a = gpa.allocator();
 
     Template.init(a);
-    defer Template.raze();
+    defer Template.raze(a);
 
     var args = std.process.args();
     arg0 = args.next() orelse "tree";
@@ -102,6 +107,9 @@ pub fn main() !void {
 
     try Database.init(.{});
     defer Database.raze();
+
+    const thread = try Thread.spawn(.{}, Repos.updateThread, .{});
+    defer thread.join();
 
     switch (runmode) {
         .unix => {

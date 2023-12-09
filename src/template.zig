@@ -210,8 +210,6 @@ pub const Directive = struct {
     } = .{ .ign = {} },
 };
 
-var _alloc: Allocator = undefined;
-
 fn tail(path: []const u8) []const u8 {
     if (std.mem.indexOf(u8, path, "/") == null) return path[0..0];
     return path[std.mem.lastIndexOf(u8, path, "/").? + 1 ..];
@@ -236,11 +234,13 @@ pub var dynamic: []Template = undefined;
 fn load(a: Allocator) !void {
     var cwd = std.fs.cwd();
     var idir = cwd.openIterableDir(TEMPLATE_PATH, .{}) catch |err| {
-        std.debug.print("template build error {}\n", .{err});
+        std.debug.print("Unable to build dynamic templates ({})\n", .{err});
         return;
     };
+    defer idir.close();
     var itr = idir.iterate();
     var list = std.ArrayList(Template).init(a);
+    errdefer list.clearAndFree();
     while (try itr.next()) |file| {
         if (file.kind != .file) continue;
         const name = try std.mem.join(a, "/", &[2][]const u8{
@@ -259,16 +259,15 @@ fn load(a: Allocator) !void {
 }
 
 pub fn init(a: Allocator) void {
-    _alloc = a;
     load(a) catch unreachable;
 }
 
-pub fn raze() void {
+pub fn raze(a: Allocator) void {
     for (dynamic) |t| {
-        _alloc.free(t.path);
-        _alloc.free(t.blob);
+        a.free(t.path);
+        a.free(t.blob);
     }
-    _alloc.free(dynamic);
+    a.free(dynamic);
 }
 
 pub fn find(comptime name: []const u8) Template {
@@ -299,7 +298,7 @@ test "build.zig included templates" {
 test "load templates" {
     const a = std.testing.allocator;
     init(a);
-    defer raze();
+    defer raze(a);
 
     //try std.testing.expectEqual(3, builtin.len);
     for (builtin) |bi| {
