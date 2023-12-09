@@ -2,42 +2,44 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-
     const optimize = b.standardOptimizeOption(.{});
 
+    var binaries = std.ArrayList(*std.Build.Step.Compile).init(b.allocator);
+    defer binaries.clearAndFree();
+
+    // srctree bin
     const exe = b.addExecutable(.{
         .name = "tree",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
-
-    exe.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
-    //exe.linkLibC();
-
-    addSrcTemplates(exe);
     b.installArtifact(exe);
+    binaries.append(exe) catch unreachable;
 
+    // Run commands
     const run_cmd = b.addRunArtifact(exe);
-
     run_cmd.step.dependOn(b.getInstallStep());
-
     if (b.args) |args| {
         run_cmd.addArgs(args);
     }
-
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
+    // Tests
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
+    binaries.append(unit_tests) catch unreachable;
 
-    unit_tests.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
+    for (binaries.items) |ex| {
+        ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
+        //exe.linkLibC();
+        addSrcTemplates(ex);
+    }
 
-    addSrcTemplates(unit_tests);
     const run_unit_tests = b.addRunArtifact(unit_tests);
 
     const test_step = b.step("test", "Run unit tests");
