@@ -1,4 +1,5 @@
 const std = @import("std");
+const bconfig = @import("config");
 
 const cURL = @cImport({
     @cInclude("curl/curl.h");
@@ -12,7 +13,16 @@ pub const CURLResult = struct {
     body: ?[]u8,
 };
 
-pub fn curlRequest(a: Allocator, uri: []const u8) !CURLResult {
+pub const curlRequest: *const fn (Allocator, []const u8) anyerror!CURLResult = if (bconfig.libcurl)
+    _curlRequest
+else
+    fakeCurl;
+
+fn fakeCurl(_: Allocator, _: []const u8) !CURLResult {
+    return error.CURLNotAvailable;
+}
+
+fn _curlRequest(a: Allocator, uri: []const u8) !CURLResult {
     if (cURL.curl_global_init(cURL.CURL_GLOBAL_ALL) != cURL.CURLE_OK)
         return error.CURLGlobalInitFailed;
     defer cURL.curl_global_cleanup();
@@ -56,4 +66,11 @@ fn curlWriteCB(data: *anyopaque, size: c_uint, nmemb: c_uint, user_data: *anyopa
     var typed_data: [*]u8 = @ptrCast(data);
     buffer.appendSlice(typed_data[0 .. nmemb * size]) catch return 0;
     return nmemb * size;
+}
+
+test "bconfig" {
+    if (!bconfig.libcurl) {
+        const err = curlRequest(std.testing.allocator, "https://gr.ht/");
+        try std.testing.expectError(error.CURLNotAvailable, err);
+    } else {}
 }

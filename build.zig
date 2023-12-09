@@ -4,6 +4,11 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // build options
+    const enable_libcurl = b.option(bool, "libcurl", "enable linking with libcurl") orelse false;
+    const options = b.addOptions();
+    options.addOption(bool, "libcurl", enable_libcurl);
+
     var binaries = std.ArrayList(*std.Build.Step.Compile).init(b.allocator);
     defer binaries.clearAndFree();
 
@@ -35,9 +40,12 @@ pub fn build(b: *std.Build) void {
     binaries.append(unit_tests) catch unreachable;
 
     for (binaries.items) |ex| {
-        ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
-        //exe.linkLibC();
         addSrcTemplates(ex);
+        ex.addOptions("config", options);
+        if (enable_libcurl) {
+            ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
+            ex.linkLibC();
+        }
     }
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
