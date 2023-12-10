@@ -39,10 +39,7 @@ pub fn serve(a: Allocator, srv: *Server) !void {
             //defer a.free(body);
 
             try http_resp.headers.append("Server", "Source Tree WebServer");
-
-            if (http_resp.request.headers.contains("connection")) {
-                try http_resp.headers.append("connection", "keep-alive");
-            }
+            try http_resp.headers.append("connection", "close");
 
             var request = try Request.init(alloc, http_resp);
             var response = Response.init(alloc, &request);
@@ -53,7 +50,7 @@ pub fn serve(a: Allocator, srv: *Server) !void {
                 response,
                 undefined, // :<
             );
-            Router.baseRouter(&ctx) catch |e| switch (e) {
+            Router.baseRouterHtml(&ctx) catch |e| switch (e) {
                 error.AndExit => break :connection,
                 else => return e,
             };

@@ -8,6 +8,7 @@ const Response = @import("response.zig");
 const Request = @import("request.zig");
 const endpoint = @import("endpoint.zig");
 const HTML = @import("html.zig");
+const StaticFile = @import("static-file.zig");
 
 const Error = endpoint.Error;
 pub const UriIter = std.mem.SplitIterator(u8, .sequence);
@@ -99,6 +100,20 @@ pub fn baseRouter(ctx: *Context) Error!void {
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
             const route: Endpoint = router(ctx, &root);
+            return route(ctx);
+        }
+    }
+    return default(ctx);
+}
+
+const root_with_static = root ++
+    [_]MatchRouter{.{ .name = "static", .match = .{ .call = StaticFile.file } }};
+
+pub fn baseRouterHtml(ctx: *Context) Error!void {
+    //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
+    if (ctx.uri.peek()) |first| {
+        if (first.len > 0) {
+            const route: Endpoint = router(ctx, &root_with_static);
             return route(ctx);
         }
     }

@@ -93,7 +93,6 @@ pub fn start(res: *Response) !void {
     switch (res.downstream) {
         .http => {
             res.request.raw_request.http.transfer_encoding = .chunked;
-            std.debug.print("{}\n", .{res.request.raw_request.http.state});
             res.phase = .headers;
             return res.request.raw_request.http.do();
         },
@@ -188,8 +187,7 @@ pub fn finish(res: *Response) !void {
     res.phase = .closed;
     switch (res.downstream) {
         .http => {
-            var req = @constCast(res.request);
-            return req.raw_request.http.connection.writeAll("0\r\n\r\n");
+            try res.request.raw_request.http.finish();
         },
         //.zwsgi => |*w| _ = try w.write("0\r\n\r\n"),
         else => {},
