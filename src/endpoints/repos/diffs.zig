@@ -42,7 +42,7 @@ fn diffValidForRepo(repo: []const u8, diff: usize) bool {
     return diff > 0;
 }
 
-pub fn router(ctx: *Context) Error!Endpoint.Router.Endpoint {
+pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     std.debug.assert(std.mem.eql(u8, "diffs", ctx.uri.next().?));
     const verb = ctx.uri.peek() orelse return Endpoint.Router.router(ctx, &routes);
 

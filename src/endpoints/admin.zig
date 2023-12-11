@@ -4,8 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
-const Response = Endpoint.Response;
-const Request = Endpoint.Request;
+const Route = @import("../routes.zig");
 const HTML = Endpoint.HTML;
 //const elm = HTML.element;
 const DOM = Endpoint.DOM;
@@ -18,13 +17,13 @@ const git = @import("../git.zig");
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
-pub const endpoints = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "", .methods = GET | POST, .match = .{ .call = view } },
-    .{ .name = "post", .methods = GET | POST, .match = .{ .call = view } },
-    .{ .name = "new-repo", .methods = GET, .match = .{ .call = newRepo } },
-    .{ .name = "new-repo", .methods = POST, .match = .{ .call = postNewRepo } },
-    .{ .name = "clone-upstream", .methods = GET, .match = .{ .call = cloneUpstream } },
-    .{ .name = "clone-upstream", .methods = POST, .match = .{ .call = postCloneUpstream } },
+pub const endpoints = [_]Route.MatchRouter{
+    Route.ROUTE("", view),
+    Route.ROUTE("post", view),
+    Route.ROUTE("new-repo", newRepo),
+    Route.post("new-repo", postNewRepo),
+    Route.ROUTE("clone-upstream", cloneUpstream),
+    Route.post("clone-upstream", postCloneUpstream),
 };
 
 fn createRepo(a: Allocator, reponame: []const u8) !void {

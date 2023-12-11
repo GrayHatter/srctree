@@ -79,7 +79,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn router(ctx: *Context) Error!Endpoint.Router.Endpoint {
+pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {

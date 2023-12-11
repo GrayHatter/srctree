@@ -16,9 +16,10 @@ pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 const div = HTML.div;
 const span = HTML.span;
 
-pub const Router = *const fn (*Context) Error!Endpoint;
-pub const Endpoint = *const fn (*Context) Error!void;
+pub const Router = *const fn (*Context) Error!Callable;
+pub const Callable = *const fn (*Context) Error!void;
 
+/// Methods is a struct so bitwise or will work as expected
 pub const Methods = struct {
     pub const GET = 1;
     pub const HEAD = 2;
@@ -30,23 +31,70 @@ pub const Methods = struct {
     pub const TRACE = 128;
 };
 
+pub const _Endpoint = struct {
+    callable: Callable,
+    methods: u8 = Methods.GET,
+};
+
 pub const MatchRouter = struct {
     name: []const u8,
     match: union(enum) {
-        call: Endpoint,
+        call: Callable,
         route: Router,
         simple: []const MatchRouter,
     },
     methods: u8 = Methods.GET,
 };
 
+pub fn ROUTE(comptime name: []const u8, comptime match: anytype) MatchRouter {
+    return MatchRouter{
+        .name = name,
+        .match = switch (@typeInfo(@TypeOf(match))) {
+            .Pointer => |ptr| switch (@typeInfo(ptr.child)) {
+                .Fn => |fnc| switch (fnc.return_type orelse null) {
+                    Error!void => .{ .call = match },
+                    Error!Callable => .{ .route = match },
+                    else => @compileError("unknown function return type"),
+                },
+                else => .{ .simple = match },
+            },
+            .Fn => |fnc| switch (fnc.return_type orelse null) {
+                Error!void => .{ .call = match },
+                Error!Callable => .{ .route = match },
+                else => @compileError("unknown function return type"),
+            },
+            else => @compileError("match type not supported"),
+        },
+
+        .methods = Methods.GET,
+    };
+}
+
+pub fn any(comptime name: []const u8, comptime match: Callable) MatchRouter {
+    var mr = ROUTE(name, match);
+    mr.methods = Methods.GET | Methods.POST;
+    return mr;
+}
+
+pub fn get(comptime name: []const u8, comptime match: Callable) MatchRouter {
+    var mr = ROUTE(name, match);
+    mr.methods = Methods.GET;
+    return mr;
+}
+
+pub fn post(comptime name: []const u8, comptime match: Callable) MatchRouter {
+    var mr = ROUTE(name, match);
+    mr.methods = Methods.POST;
+    return mr;
+}
+
 const root = [_]MatchRouter{
-    .{ .name = "admin", .match = .{ .simple = endpoint.admin } },
-    .{ .name = "network", .match = .{ .simple = endpoint.network } },
-    .{ .name = "repo", .match = .{ .route = endpoint.repo } },
-    .{ .name = "repos", .match = .{ .route = endpoint.repo } },
-    .{ .name = "todo", .match = .{ .simple = endpoint.todo } },
-    .{ .name = "user", .match = .{ .call = endpoint.commitFlex } },
+    ROUTE("admin", endpoint.admin),
+    ROUTE("network", endpoint.network),
+    ROUTE("repo", endpoint.repo),
+    ROUTE("repos", endpoint.repo),
+    ROUTE("todo", endpoint.todo),
+    ROUTE("user", endpoint.commitFlex),
 };
 
 fn notfound(ctx: *Context) Error!void {
@@ -66,7 +114,7 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Endpoint {
+pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Callable {
     const search = ctx.uri.peek() orelse return notfound;
     inline for (routes) |ep| {
         if (eql(search, ep.name)) {
@@ -99,7 +147,7 @@ pub fn baseRouter(ctx: *Context) Error!void {
     //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
-            const route: Endpoint = router(ctx, &root);
+            const route: Callable = router(ctx, &root);
             return route(ctx);
         }
     }
@@ -113,7 +161,7 @@ pub fn baseRouterHtml(ctx: *Context) Error!void {
     //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
-            const route: Endpoint = router(ctx, &root_with_static);
+            const route: Callable = router(ctx, &root_with_static);
             return route(ctx);
         }
     }
