@@ -8,22 +8,22 @@ pub const Diffs = @This();
 
 const DIFF_VERSION: usize = 0;
 
-fn readVersioned(idx: usize, data: []u8) !Diff {
-    var int: usize = std.mem.readIntNative(usize, data[0..8]);
-    var itr = std.mem.split(u8, data[24..], "\x00");
-    itr.reset();
-    return switch (int) {
+fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Diff {
+    var reader = file.reader();
+    var ver: usize = try reader.readIntNative(usize);
+    return switch (ver) {
         0 => return Diff{
             .index = idx,
-            .created = std.mem.readIntNative(i64, data[8..16]),
-            .updated = std.mem.readIntNative(i64, data[16..24]),
-            .file = undefined,
-            .alloc_data = data,
-            .repo = itr.first(),
-            .title = itr.next().?,
-            .source_uri = itr.next().?,
-            .desc = itr.next().?,
-            .comment_data = itr.rest(),
+            .state = try reader.readIntNative(usize),
+            .created = try reader.readIntNative(i64),
+            .updated = try reader.readIntNative(i64),
+            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .source_uri = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+
+            .comment_data = try reader.readAllAlloc(a, 0xFFFF),
+            .file = file,
         },
         else => error.UnsupportedVersion,
     };
@@ -31,6 +31,7 @@ fn readVersioned(idx: usize, data: []u8) !Diff {
 
 pub const Diff = struct {
     index: usize,
+    state: usize,
     created: i64 = 0,
     updated: i64 = 0,
     repo: []const u8,
@@ -38,15 +39,15 @@ pub const Diff = struct {
     source_uri: []const u8,
     desc: []const u8,
 
-    comment_data: []const u8,
+    comment_data: ?[]const u8,
     comments: ?[]Comment = null,
     file: std.fs.File,
-    alloc_data: ?[]u8 = null,
 
     pub fn writeOut(self: Diff) !void {
         try self.file.seekTo(0);
         var writer = self.file.writer();
         try writer.writeIntNative(usize, DIFF_VERSION);
+        try writer.writeIntNative(usize, self.state);
         try writer.writeIntNative(i64, self.created);
         try writer.writeIntNative(i64, self.updated);
         try writer.writeAll(self.repo);
@@ -67,36 +68,25 @@ pub const Diff = struct {
     }
 
     pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Diff {
-        const end = try file.getEndPos();
-        var data = try a.alloc(u8, end);
-        errdefer a.free(data);
-        try file.seekTo(0);
-        _ = try file.readAll(data);
-        var diff = try readVersioned(idx, data);
-        diff.file = file;
+        var diff: Diff = try readVersioned(a, idx, file);
         var list = std.ArrayList(Comment).init(a);
-        const count = diff.comment_data.len / 32;
-        for (0..count) |i| {
-            try list.append(Comments.open(a, diff.comment_data[i * 32 .. (i + 1) * 32]) catch continue);
+        if (diff.comment_data) |cd| {
+            const count = cd.len / 32;
+            for (0..count) |i| {
+                try list.append(Comments.open(a, cd[i * 32 .. (i + 1) * 32]) catch continue);
+            }
+            diff.comments = try list.toOwnedSlice();
         }
-        diff.comments = try list.toOwnedSlice();
-
         return diff;
     }
 
     pub fn getComments(self: *Diff, a: Allocator) ![]Comment {
         if (self.comments) |_| return self.comments.?;
 
-        if (self.comment_data.len > 1 and self.comment_data.len < 32) {
-            std.debug.print("unexpected number in comment data {}\n", .{self.comment_data.len});
-            return &[0]Comment{};
+        if (self.comment_data) |cd| {
+            self.comments = try Comments.loadFromData(a, cd);
         }
-        const count = self.comment_data.len / 32;
-        self.comments = try a.alloc(Comment, count);
-        for (self.comments.?, 0..) |*c, i| {
-            c.* = try Comments.open(a, self.comment_data[i * 32 .. (i + 1) * 32]);
-        }
-        return self.comments.?;
+        return &[0]Comment{};
     }
 
     pub fn addComment(self: *Diff, a: Allocator, c: Comment) !void {
@@ -115,9 +105,9 @@ pub const Diff = struct {
     }
 
     pub fn raze(self: Diff, a: std.mem.Allocator) void {
-        if (self.alloc_data) |data| {
-            a.free(data);
-        }
+        //if (self.alloc_data) |data| {
+        //    a.free(data);
+        //}
         if (self.comments) |c| {
             a.free(c);
         }
@@ -163,12 +153,13 @@ pub fn new(repo: []const u8, title: []const u8, src: []const u8, desc: []const u
     var file = try datad.createFile(filename, .{});
     var d = Diff{
         .index = max + 1,
+        .state = 0,
         .repo = repo,
         .title = title,
         .source_uri = src,
         .desc = desc,
         .file = file,
-        .comment_data = "",
+        .comment_data = null,
     };
 
     try currMaxSet(max + 1);

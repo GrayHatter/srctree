@@ -6,22 +6,48 @@ const Comment = Comments.Comment;
 
 pub const Issues = @This();
 
+const ISSUE_VERSION: usize = 0;
+
+fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Issue {
+    var reader = file.reader();
+    var int: usize = try reader.readIntNative(usize);
+    return switch (int) {
+        0 => Issue{
+            .index = idx,
+            .state = try reader.readIntNative(usize),
+            .created = try reader.readIntNative(i64),
+            .updated = try reader.readIntNative(i64),
+            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+
+            .comment_data = try reader.readAllAlloc(a, 0xFFFF),
+            .file = file,
+        },
+        else => error.UnsupportedVersion,
+    };
+}
+
 pub const Issue = struct {
     index: usize,
+    state: usize,
+    created: i64 = 0,
+    updated: i64 = 0,
     repo: []const u8,
     title: []const u8,
     desc: []const u8,
-    created: i64 = 0,
-    updated: i64 = 0,
 
-    comment_data: []const u8,
+    comment_data: ?[]const u8,
     comments: ?[]Comment = null,
     file: std.fs.File,
-    alloc_data: ?[]u8 = null,
 
     pub fn writeOut(self: Issue) !void {
         try self.file.seekTo(0);
         var writer = self.file.writer();
+        try writer.writeIntNative(usize, ISSUE_VERSION);
+        try writer.writeIntNative(usize, self.state);
+        try writer.writeIntNative(i64, self.created);
+        try writer.writeIntNative(i64, self.updated);
         try writer.writeAll(self.repo);
         try writer.writeAll("\x00");
         try writer.writeAll(self.title);
@@ -38,43 +64,18 @@ pub const Issue = struct {
     }
 
     pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Issue {
-        const end = try file.getEndPos();
-        var data = try a.alloc(u8, end);
-        errdefer a.free(data);
         try file.seekTo(0);
-        _ = try file.readAll(data);
-        var itr = std.mem.split(u8, data, "\x00");
-        var d = Issue{
-            .index = idx,
-            .file = file,
-            .alloc_data = data,
-            .repo = itr.first(),
-            .title = itr.next().?,
-            .desc = itr.next().?,
-            .comment_data = itr.rest(),
-        };
-        var list = std.ArrayList(Comment).init(a);
-        const count = d.comment_data.len / 32;
-        for (0..count) |i| {
-            try list.append(try Comments.open(a, d.comment_data[i * 32 .. (i + 1) * 32]));
-        }
-        d.comments = try list.toOwnedSlice();
-        return d;
+        var issue: Issue = try readVersioned(a, idx, file);
+        return issue;
     }
 
     pub fn getComments(self: *Issue, a: Allocator) ![]Comment {
         if (self.comments) |_| return self.comments.?;
 
-        if (self.comment_data.len > 1 and self.comment_data.len < 32) {
-            std.debug.print("unexpected number in comment data {}\n", .{self.comment_data.len});
-            return &[0]Comment{};
+        if (self.comment_data) |cd| {
+            self.comments = try Comments.loadFromData(a, cd);
         }
-        const count = self.comment_data.len / 32;
-        self.comments = try a.alloc(Comment, count);
-        for (self.comments.?, 0..) |*c, i| {
-            c.* = try Comments.open(a, self.comment_data[i * 32 .. (i + 1) * 32]);
-        }
-        return self.comments.?;
+        return &[0]Comment{};
     }
 
     pub fn addComment(self: *Issue, a: Allocator, c: Comment) !void {
@@ -93,9 +94,9 @@ pub const Issue = struct {
     }
 
     pub fn raze(self: Issue, a: std.mem.Allocator) void {
-        if (self.alloc_data) |data| {
-            a.free(data);
-        }
+        //if (self.alloc_data) |data| {
+        //    a.free(data);
+        //}
         if (self.comments) |c| {
             a.free(c);
         }
@@ -141,11 +142,12 @@ pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Issue {
     var file = try datad.createFile(filename, .{});
     var d = Issue{
         .index = max + 1,
+        .state = 0,
         .repo = repo,
         .title = title,
         .desc = desc,
         .file = file,
-        .comment_data = "",
+        .comment_data = null,
     };
 
     try currMaxSet(max + 1);

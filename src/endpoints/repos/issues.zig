@@ -67,18 +67,20 @@ fn inNetwork(str: []const u8) bool {
 
 fn newPost(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    var buf: [2048]u8 = undefined;
     if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
         var valid = post.validator();
         const title = try valid.require("title");
-        const msg = try valid.require("message");
+        const msg = try valid.require("desc");
         var issue = Issues.new(rd.name, title.value, msg.value) catch unreachable;
         issue.writeOut() catch unreachable;
+
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue.index });
+        return ctx.response.redirect(loc, true) catch unreachable;
     };
 
-    var tmpl = Template.find("issues.html");
-    tmpl.init(ctx.alloc);
-    try tmpl.addVar("issue", "new data attempting");
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
+    return ctx.response.redirect(loc, true) catch unreachable;
 }
 
 fn newComment(ctx: *Context) Error!void {

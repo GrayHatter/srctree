@@ -163,11 +163,16 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
 
         Router.baseRouter(&ctx) catch |err| {
             switch (err) {
+                error.Unrouteable => {
+                    std.debug.print("Unrouteable'\n", .{});
+                    if (@errorReturnTrace()) |trace| {
+                        std.debug.dumpStackTrace(trace.*);
+                    }
+                },
                 error.Unknown,
                 error.ReqResInvalid,
                 error.AndExit,
                 error.InvalidURI,
-                error.Unrouteable,
                 error.NoSpaceLeft,
                 => return err,
                 error.OutOfMemory => {

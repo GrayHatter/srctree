@@ -95,7 +95,21 @@ pub fn new(ath: []const u8, msg: []const u8) !Comment {
     return c;
 }
 
-test Comment {
+pub fn loadFromData(a: Allocator, cd: []const u8) ![]Comment {
+    if (cd.len < 32) {
+        std.debug.print("unexpected number in comment data {}\n", .{cd.len});
+        return &[0]Comment{};
+    }
+    const count = cd.len / 32;
+    if (count == 0) return &[0]Comment{};
+    var comments = try a.alloc(Comment, count);
+    for (comments, 0..) |*c, i| {
+        c.* = try Comments.open(a, cd[i * 32 .. (i + 1) * 32]);
+    }
+    return comments;
+}
+
+test "comment" {
     var a = std.testing.allocator;
 
     var c = Comment{
