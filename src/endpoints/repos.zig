@@ -83,8 +83,13 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
-        try ctx.addRouteVar("diffcount", "0");
+        try ctx.addRouteVar("repo_name", rd.name);
         try ctx.addRouteVar("issuecount", "0");
+        const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
+        try ctx.addRouteVar("issueurl", issueurl);
+        try ctx.addRouteVar("diffcount", "0");
+        const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
+        try ctx.addRouteVar("diffurl", diffurl);
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();
@@ -381,11 +386,6 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    dom = dom.open(HTML.div(null, &HTML.Attr.class("act-btns")));
-    const diff_link = try aPrint(ctx.alloc, "{s}/diffs/new", .{rd.name});
-    dom.push(try HTML.linkBtnAlloc(ctx.alloc, "Add Diff", diff_link));
-    dom = dom.close();
-
     dom = dom.open(HTML.element("repo", null, &HTML.Attr.class("landing")));
 
     dom = dom.open(HTML.element("intro", null, null));
@@ -477,9 +477,6 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
             break;
         }
     }
-
-    const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
-    _ = tmpl.addString("diffurl", diffurl) catch return error.Unknown;
 
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }

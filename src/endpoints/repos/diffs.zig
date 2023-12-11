@@ -56,27 +56,8 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
 }
 
 fn new(ctx: *Context) Error!void {
-    const a = ctx.alloc;
-    var tmpl = Template.find("diffs.html");
+    var tmpl = comptime Template.find("diff-new.html");
     tmpl.init(ctx.alloc);
-
-    var dom = DOM.new(ctx.alloc);
-    var fattr = try ctx.alloc.dupe(HTML.Attr, &[_]HTML.Attr{
-        .{ .key = "action", .value = "new" },
-        .{ .key = "method", .value = "POST" },
-    });
-    dom = dom.open(HTML.form(null, fattr));
-    dom.push(HTML.element("context", "New Pull Request", null));
-    dom.push(try HTML.inputAlloc(a, "diff source", .{ .placeholder = "Patch URL" }));
-    dom.push(try HTML.inputAlloc(a, "title", .{ .placeholder = "Diff Title" }));
-    dom.push(try HTML.textareaAlloc(a, "desc", .{ .placeholder = "Additional information about this patch suggestion" }));
-    dom = dom.open(HTML.element("buttons", null, null));
-    dom.dupe(HTML.btnDupe("Submit", "submit"));
-    dom.dupe(HTML.btnDupe("Preview", "preview"));
-    dom = dom.close();
-    dom = dom.close();
-
-    _ = try tmpl.addElements(ctx.alloc, "diff", dom.done());
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
@@ -257,8 +238,6 @@ fn diffRow(a: Allocator, diff: Diffs.Diff) ![]HTML.Element {
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var dom = DOM.new(ctx.alloc);
-    dom.push(HTML.element("search", null, null));
-    dom = dom.open(HTML.element("actionable", null, null));
 
     for (0..Diffs.last() + 1) |i| {
         var d = Diffs.open(ctx.alloc, i) catch continue orelse continue;
@@ -266,13 +245,9 @@ fn list(ctx: *Context) Error!void {
         if (!std.mem.eql(u8, d.repo, rd.name)) continue;
         dom.pushSlice(diffRow(ctx.alloc, d) catch continue);
     }
-    dom = dom.close();
     const diffs = dom.done();
-    var tmpl = Template.find("diffs.html");
+    var tmpl = Template.find("actionable.html");
     tmpl.init(ctx.alloc);
-    _ = try tmpl.addElements(ctx.alloc, "diff", diffs);
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    _ = try tmpl.addElements(ctx.alloc, "actionable_list", diffs);
+    ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }
