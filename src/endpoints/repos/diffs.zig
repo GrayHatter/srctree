@@ -94,9 +94,12 @@ fn newPost(ctx: *Context) Error!void {
             defer file.close();
             file.writer().writeAll(data.patch) catch unreachable;
         }
+        var buf: [2048]u8 = undefined;
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, diff.index });
+        return ctx.response.redirect(loc, true) catch unreachable;
     };
 
-    var tmpl = Template.find("diffs.html");
+    var tmpl = Template.find("diff-new.html");
     tmpl.init(ctx.alloc);
     try tmpl.addVar("diff", "new data attempting");
     ctx.sendTemplate(&tmpl) catch unreachable;

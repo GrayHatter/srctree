@@ -211,8 +211,10 @@ pub const Directive = struct {
 };
 
 fn tail(path: []const u8) []const u8 {
-    if (std.mem.indexOf(u8, path, "/") == null) return path[0..0];
-    return path[std.mem.lastIndexOf(u8, path, "/").? + 1 ..];
+    if (std.mem.indexOf(u8, path, "/")) |i| {
+        return path[i + 1 ..];
+    }
+    return path[0..0];
 }
 
 pub const builtin: [bldtmpls.names.len]Template = blk: {
@@ -270,13 +272,22 @@ pub fn raze(a: Allocator) void {
     a.free(dynamic);
 }
 
-pub fn find(comptime name: []const u8) Template {
-    inline for (builtin) |bi| {
-        if (std.mem.eql(u8, bi.name, name)) {
-            return bi;
+pub fn findWhenever(name: []const u8) Template {
+    for (dynamic) |d| {
+        if (std.mem.eql(u8, d.name, name)) {
+            return d;
         }
     }
     unreachable;
+}
+
+pub fn find(comptime name: []const u8) Template {
+    inline for (builtin) |bi| {
+        if (comptime std.mem.eql(u8, bi.name, name)) {
+            return bi;
+        }
+    }
+    @compileError("template " ++ name ++ " not found!");
 }
 
 test "build.zig included templates" {
