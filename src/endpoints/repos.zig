@@ -27,6 +27,8 @@ const commits = Commits.commits;
 const commit = Commits.commit;
 const htmlCommit = Commits.htmlCommit;
 
+const Diff = @import("../types/diffs.zig");
+
 const gitweb = @import("../gitweb.zig");
 
 const endpoints = [_]Endpoint.Router.MatchRouter{
@@ -87,7 +89,9 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
         try ctx.addRouteVar("issuecount", "0");
         const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
         try ctx.addRouteVar("issueurl", issueurl);
-        try ctx.addRouteVar("diffcount", "0");
+
+        const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{Diff.forRepoCount(rd.name)});
+        try ctx.addRouteVar("diffcount", diffcnt);
         const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
         try ctx.addRouteVar("diffurl", diffurl);
         if (rd.verb) |_| {

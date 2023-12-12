@@ -142,6 +142,33 @@ fn currMax() !usize {
     return count;
 }
 
+pub fn forRepoCount(repo: []const u8) usize {
+    var dir = datad.openIterableDir(".", .{}) catch {
+        std.debug.print("Unable to open diff dir to get repo count\n", .{});
+        return 0;
+    };
+    defer dir.close();
+
+    var itr = dir.iterate();
+    var count: usize = 0;
+    while (itr.next() catch return count) |f| {
+        if (f.kind != .file) continue;
+        //const index = std.fmt.parseInt(usize, file.name[0..file.name.len - 5], 16) catch continue;
+        var file = datad.openFile(f.name, .{ .mode = .read_write }) catch continue;
+        defer file.close();
+        var reader = file.reader();
+        _ = reader.readIntNative(usize) catch continue; // version
+        var state: usize = reader.readIntNative(usize) catch continue;
+        if (state != 0) continue;
+        _ = reader.readIntNative(usize) catch continue; // created
+        _ = reader.readIntNative(usize) catch continue; // updated
+        var nbuf: [2048]u8 = undefined;
+        var rname = reader.readUntilDelimiter(&nbuf, 0) catch continue;
+        if (std.mem.eql(u8, rname, repo)) count += 1;
+    }
+    return count;
+}
+
 pub fn last() usize {
     return currMax() catch 0;
 }
