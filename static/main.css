@@ -252,7 +252,9 @@ search {
 	border-radius: 4px 4px 0 0;
 	border: 1px gray solid;
 	border-bottom: 0px;
-	padding: 4px 0 4px 12px;
+	padding: 4px ;
+	display: flex;
+	justify-content: space-between;
 }
 
 actionable {
@@ -424,7 +426,7 @@ patch {
 	.add { background: #003e00 } /* */
 }
 
-form {
+form.pretty {
 	display: flex;
 	flex-direction: column;
 	gap: 1em;
@@ -458,9 +460,15 @@ form {
 	}
 	textarea { height: 10em }
 }
-comments {
 
+input {
+	padding: 10px;
+	background: #222;
+	border: 1px solid gray;
+	border-radius: 2px;
+	font-size: 120%;
 }
+
 comment {
 	text-align: left;
 	display: block;
