@@ -59,12 +59,6 @@ fn new(ctx: *Context) Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn inNetwork(str: []const u8) bool {
-    if (!std.mem.startsWith(u8, str, "https://srctree.gr.ht")) return false;
-    for (str) |c| if (c == '@') return false;
-    return true;
-}
-
 fn newPost(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
@@ -175,17 +169,33 @@ fn view(ctx: *Context) Error!void {
 }
 
 fn issueRow(a: Allocator, issue: Issues.Issue) ![]HTML.Element {
-    var dom = DOM.new(a);
-
-    dom = dom.open(HTML.element("issue", null, null));
     const title = try Bleach.sanitizeAlloc(a, issue.title, .{ .rules = .title });
     const desc = try Bleach.sanitizeAlloc(a, issue.desc, .{});
     const href = try std.fmt.allocPrint(a, "{x}", .{issue.index});
 
+    var dom = DOM.new(a);
+    dom = dom.open(HTML.element("row", null, null));
+    dom = dom.open(HTML.div(null, null));
+
+    dom = dom.open(HTML.element("issue", null, null));
+    dom.dupe(HTML.span(
+        try std.fmt.allocPrint(a, "0x{X}", .{issue.index}),
+        &HTML.Attr.class("muted"),
+    ));
     dom.push(try HTML.aHrefAlloc(a, title, href));
-    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
     dom = dom.close();
 
+    if (issue.comments) |cmts| {
+        const count = try std.fmt.allocPrint(a, "\xee\xa0\x9c {}", .{cmts.len});
+        dom.dupe(HTML.span(count, &HTML.Attr.class("icon")));
+    } else {
+        dom.dupe(HTML.span("\xee\xa0\x9c 0", &HTML.Attr.class("icon")));
+    }
+
+    dom = dom.close();
+
+    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
+    dom = dom.close();
     return dom.done();
 }
 
@@ -193,11 +203,11 @@ fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var dom = DOM.new(ctx.alloc);
 
-    for (0..Issues.last() catch return error.Unknown) |i| {
-        var d = Issues.open(ctx.alloc, i) catch continue orelse continue;
-        defer d.raze(ctx.alloc);
-        if (!std.mem.eql(u8, d.repo, rd.name)) continue;
-        dom.pushSlice(issueRow(ctx.alloc, d) catch continue);
+    for (0..Issues.last() + 1) |i| {
+        var iss = Issues.open(ctx.alloc, i) catch continue orelse continue;
+        defer iss.raze(ctx.alloc);
+        if (!std.mem.eql(u8, iss.repo, rd.name)) continue;
+        dom.pushSlice(issueRow(ctx.alloc, iss) catch continue);
     }
     const issues = dom.done();
     var tmpl = comptime Template.find("actionable.html");

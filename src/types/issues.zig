@@ -131,7 +131,7 @@ fn currMax() !usize {
     return count;
 }
 
-pub fn last() !usize {
+pub fn last() usize {
     return currMax() catch 0;
 }
 

@@ -212,13 +212,12 @@ fn view(ctx: *Context) Error!void {
 }
 
 fn diffRow(a: Allocator, diff: Diffs.Diff) ![]HTML.Element {
-    var dom = DOM.new(a);
-
-    dom = dom.open(HTML.element("row", null, null));
     const title = try Bleach.sanitizeAlloc(a, diff.title, .{ .rules = .title });
     const desc = try Bleach.sanitizeAlloc(a, diff.desc, .{});
     const href = try std.fmt.allocPrint(a, "{x}", .{diff.index});
 
+    var dom = DOM.new(a);
+    dom = dom.open(HTML.element("row", null, null));
     dom = dom.open(HTML.div(null, null));
     dom = dom.open(HTML.div(null, null));
     dom.dupe(HTML.span(
