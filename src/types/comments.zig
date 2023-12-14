@@ -5,21 +5,54 @@ const sha256 = std.crypto.hash.sha2.Sha256;
 
 pub const Comments = @This();
 
-pub const SupportedTargets = union(enum) {
+const Writer = std.fs.File.Writer;
+
+const CMMT_VERSION: usize = 0;
+
+fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
+    var reader = file.reader();
+    var ver: usize = try reader.readIntNative(usize);
+    return switch (ver) {
+        0 => return Comment{
+            .state = try reader.readIntNative(usize),
+            .created = try reader.readIntNative(i64),
+            .updated = try reader.readIntNative(i64),
+            .tz = try reader.readIntNative(i32),
+            .target = switch (try reader.readIntNative(u8)) {
+                0 => .{ .diff = try reader.readIntNative(usize) },
+                'D' => .{ .diff = try reader.readIntNative(usize) },
+                'I' => .{ .issue = try reader.readIntNative(usize) },
+                else => return error.CommentCorrupted,
+            },
+            .author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .message = try reader.readAllAlloc(a, 0xFFFF),
+        },
+        else => error.UnsupportedVersion,
+    };
+}
+
+pub const TargetKind = enum(u8) {
+    nos = 0,
+    diff = 'D',
+    issue = 'I',
+};
+
+pub const Targets = union(TargetKind) {
     nos: void,
     diff: usize,
+    issue: usize,
 };
 
 pub const Comment = struct {
-    author: []const u8,
-    message: []const u8,
+    state: usize = 0,
     created: i64 = 0,
     tz: i32 = 0,
     updated: i64 = 0,
+    target: Targets = .{ .nos = {} },
 
-    target: SupportedTargets = .{ .nos = {} },
+    author: []const u8,
+    message: []const u8,
 
-    alloc_data: ?[]u8 = null,
     hash: [sha256.digest_length]u8 = undefined,
 
     pub fn toHash(self: *Comment) *const [sha256.digest_length]u8 {
@@ -39,29 +72,29 @@ pub const Comment = struct {
         var file = try d.createFile(filename, .{});
         defer file.close();
         var w = file.writer();
+        try self.writeStruct(w);
+    }
+
+    fn writeStruct(self: Comment, w: Writer) !void {
+        try w.writeIntNative(usize, CMMT_VERSION);
+        try w.writeIntNative(usize, self.state);
+        try w.writeIntNative(i64, self.created);
+        try w.writeIntNative(i64, self.updated);
+        try w.writeIntNative(i32, self.tz);
+        try w.writeIntNative(u8, @intFromEnum(self.target));
+        try w.writeIntNative(usize, switch (self.target) {
+            .nos => 0,
+            .diff => self.target.diff,
+            .issue => self.target.issue,
+        });
+
         try w.writeAll(self.author);
         try w.writeAll("\x00");
         try w.writeAll(self.message);
-        try w.writeAll("\x00");
-        try w.writeIntNative(i64, self.created);
-        try w.writeIntNative(i64, self.updated);
-        try w.writeAll("\x00");
-        try w.writeAll(std.mem.asBytes(&self.target));
     }
 
     pub fn readFile(a: std.mem.Allocator, file: std.fs.File) !Comment {
-        const end = try file.getEndPos();
-        var data = try a.alloc(u8, end);
-        errdefer a.free(data);
-        try file.seekTo(0);
-        _ = try file.readAll(data);
-        var itr = std.mem.split(u8, data, "\x00");
-        var c = Comment{
-            .author = itr.first(),
-            .message = itr.next().?,
-            .alloc_data = data,
-        };
-        return c;
+        return readVersioned(a, file);
     }
 };
 
@@ -122,8 +155,10 @@ test "comment" {
     try std.testing.expectEqualSlices(
         u8,
         &[_]u8{
-            0x21, 0x78, 0x05, 0xE5, 0xB5, 0x0C, 0x05, 0xF5, 0x22, 0xAC, 0xFE, 0xBA, 0xEA, 0xA4, 0xAC, 0xC2,
-            0xD6, 0x50, 0xD1, 0xDD, 0x48, 0xFC, 0x34, 0x0E, 0xBB, 0x53, 0x94, 0x60, 0x56, 0x93, 0xC9, 0xC8
+            0x21, 0x78, 0x05, 0xE5, 0xB5, 0x0C, 0x05, 0xF5,
+            0x22, 0xAC, 0xFE, 0xBA, 0xEA, 0xA4, 0xAC, 0xC2,
+            0xD6, 0x50, 0xD1, 0xDD, 0x48, 0xFC, 0x34, 0x0E,
+            0xBB, 0x53, 0x94, 0x60, 0x56, 0x93, 0xC9, 0xC8
         },
         hash,
     );
@@ -147,14 +182,16 @@ test "comment" {
     try std.testing.expectEqualSlices(
         u8,
         &[_]u8{
+              0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,   0,   0,   0,
+              0,   0,   0,   0,   0,
             103, 114,  97, 121, 104,  97, 116, 116, 101, 114,
               0, 116, 101, 115, 116,  32,  99, 111, 109, 109,
             101, 110, 116,  44,  32, 112, 108, 101,  97, 115,
-            101,  32, 105, 103, 110, 111, 114, 101,   0,   0,
-              0,   0,   0,   0,   0,   0,   0,   0,
-              0,   0,   0,   0,   0,   0,   0,   0,
-              0,   0,   0,   0,   0,   0,   0,   0,
-              0,   0,   0,   0,   0,   0,   0,   0,
+            101,  32, 105, 103, 110, 111, 114, 101,
         },
         blob,
     );
