@@ -32,8 +32,7 @@ pub const router = Router.router;
 
 pub const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
-pub const TODO = @import("endpoints/todo.zig");
-pub const todo = &TODO.endpoints;
+pub const USERS = @import("endpoints/users.zig");
 
 pub const REPO = @import("endpoints/repos.zig");
 pub const repo = REPO.router;

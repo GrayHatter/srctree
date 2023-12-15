@@ -90,10 +90,11 @@ pub fn post(comptime name: []const u8, comptime match: Callable) MatchRouter {
 
 const root = [_]MatchRouter{
     ROUTE("admin", endpoint.admin),
+    ROUTE("diffs", endpoint.USERS.diffs),
     ROUTE("network", endpoint.network),
     ROUTE("repo", endpoint.repo),
     ROUTE("repos", endpoint.repo),
-    ROUTE("todo", endpoint.todo),
+    ROUTE("todo", endpoint.USERS.todo),
     ROUTE("user", endpoint.commitFlex),
 };
 
