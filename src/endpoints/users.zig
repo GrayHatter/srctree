@@ -27,10 +27,7 @@ pub fn diffs(ctx: *Context) Error!void {
     var tmpl = Template.find("actionable.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "todos", data) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 pub fn todo(ctx: *Context) Error!void {
@@ -52,8 +49,5 @@ pub fn todo(ctx: *Context) Error!void {
     var tmpl = Template.find("actionable.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "todos", data) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    ctx.sendTemplate(&tmpl) catch unreachable;
 }
