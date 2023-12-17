@@ -47,7 +47,7 @@ pub const MatchRouter = struct {
 };
 
 pub fn ROUTE(comptime name: []const u8, comptime match: anytype) MatchRouter {
-    return MatchRouter{
+    return comptime MatchRouter{
         .name = name,
         .match = switch (@typeInfo(@TypeOf(match))) {
             .Pointer => |ptr| switch (@typeInfo(ptr.child)) {
