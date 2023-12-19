@@ -3,7 +3,9 @@ const Allocator = std.mem.Allocator;
 
 pub const Journaling = @This();
 
-pub const EvtComment = struct {};
+pub const EvtComment = struct {
+    inet: [16]u8 = u8{0} ** 16,
+};
 
 pub const EventKind = enum(u8) {
     comment = 0x00,
