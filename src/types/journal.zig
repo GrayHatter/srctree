@@ -3,16 +3,26 @@ const Allocator = std.mem.Allocator;
 
 pub const Journaling = @This();
 
-pub const EvtComment = struct {
+pub const Header = struct {
     inet: [16]u8 = u8{0} ** 16,
+};
+
+pub const EvtComment = struct {
+    header: Header,
+};
+
+pub const EvtRepoCreate = struct {
+    header: Header,
 };
 
 pub const EventKind = enum(u8) {
     comment = 0x00,
+    create_repo = 0x01,
 };
 
 pub const Events = union(EventKind) {
     comment: EvtComment,
+    create_repo: EvtRepoCreate,
 };
 
 pub const Journal = struct {
