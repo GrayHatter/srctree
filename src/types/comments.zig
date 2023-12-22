@@ -9,6 +9,11 @@ const Writer = std.fs.File.Writer;
 
 const CMMT_VERSION: usize = 0;
 
+pub fn charToKind(c: u8) TargetKind {
+    if (c == 0) return .nos;
+    unreachable;
+}
+
 fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
     var reader = file.reader();
     var ver: usize = try reader.readIntNative(usize);
@@ -31,16 +36,33 @@ fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
     };
 }
 
-pub const TargetKind = enum(u8) {
+pub const TargetKind = enum(u7) {
     nos = 0,
+    commit = 'C',
     diff = 'D',
     issue = 'I',
+    line_commit = 'l',
+    line_diff = 'L',
+};
+
+pub const LineCommit = struct {
+    number: usize,
+    meta: usize,
+};
+
+pub const LineDiff = struct {
+    file: usize,
+    number: usize,
+    revision: usize,
 };
 
 pub const Targets = union(TargetKind) {
     nos: void,
+    commit: [20]u8,
     diff: usize,
     issue: usize,
+    line_commit: LineCommit,
+    line_diff: LineDiff,
 };
 
 pub const Comment = struct {
@@ -82,11 +104,14 @@ pub const Comment = struct {
         try w.writeIntNative(i64, self.updated);
         try w.writeIntNative(i32, self.tz);
         try w.writeIntNative(u8, @intFromEnum(self.target));
-        try w.writeIntNative(usize, switch (self.target) {
-            .nos => 0,
-            .diff => self.target.diff,
-            .issue => self.target.issue,
-        });
+        switch (self.target) {
+            .nos => try w.writeIntNative(usize, 0),
+            .commit => |c| try w.writeAll(&c),
+            .diff => try w.writeIntNative(usize, self.target.diff),
+            .issue => try w.writeIntNative(usize, self.target.issue),
+            .line_commit => unreachable,
+            .line_diff => unreachable,
+        }
 
         try w.writeAll(self.author);
         try w.writeAll("\x00");
