@@ -10,8 +10,14 @@ const Writer = std.fs.File.Writer;
 const CMMT_VERSION: usize = 0;
 
 pub fn charToKind(c: u8) TargetKind {
-    if (c == 0) return .nos;
-    unreachable;
+    return switch (c) {
+        'C' => .commit,
+        'D' => .diff,
+        'I' => .issue,
+        'l' => .line_commit,
+        'L' => .line_diff,
+        else => .nos,
+    };
 }
 
 fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
