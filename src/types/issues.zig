@@ -8,6 +8,25 @@ pub const Issues = @This();
 
 const ISSUE_VERSION: usize = 0;
 
+pub const Status = enum(u1) {
+    open = 0,
+    closed = 1,
+};
+
+pub const State = packed struct {
+    status: Status = .open,
+    padding: u63 = 0,
+};
+
+test State {
+    try std.testing.expectEqual(@sizeOf(State), @sizeOf(usize));
+
+    const state = State{};
+    const zero: usize = 0;
+    const ptr: *const usize = @ptrCast(&state);
+    try std.testing.expectEqual(zero, ptr.*);
+}
+
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Issue {
     var reader = file.reader();
     var int: usize = try reader.readIntNative(usize);
