@@ -33,10 +33,11 @@ fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
                 0 => .{ .diff = try reader.readIntNative(usize) },
                 'D' => .{ .diff = try reader.readIntNative(usize) },
                 'I' => .{ .issue = try reader.readIntNative(usize) },
-                'L' => .{ .line_diff = LineDiff{
-                    .number = try reader.readIntNative(usize),
-                    .file = try reader.readIntNative(usize),
-                    .revision = try reader.readIntNative(usize),
+                'r' => .{ .reply = switch (try reader.readIntNative(u8)) {
+                    'c' => Reply{
+                        .to = .{ .comment = try reader.readIntNative(usize) },
+                    },
+                    else => return error.CommentCorrupted,
                 } },
                 else => return error.CommentCorrupted,
             },
@@ -52,16 +53,33 @@ pub const TargetKind = enum(u7) {
     commit = 'C',
     diff = 'D',
     issue = 'I',
-    line_commit = 'l',
-    line_diff = 'L',
+    reply = 'r',
 };
 
-pub const LineCommit = struct {
+/// Comments can be directly attached to a commit, or a diff, but are
+/// replies when referencing a specific line/target within them.
+const ReplyKinds = enum(u7) {
+    nothing = 0,
+    comment = 'c',
+    commit = 'C',
+    diff = 'd',
+};
+
+pub const Reply = struct {
+    to: union(ReplyKinds) {
+        nothing: void,
+        comment: usize,
+        commit: CommitLine,
+        diff: DiffLine,
+    },
+};
+
+pub const CommitLine = struct {
     number: usize,
     meta: usize,
 };
 
-pub const LineDiff = struct {
+pub const DiffLine = struct {
     number: usize,
     file: usize,
     revision: usize, // surely no one will ever need to use more than a u16
@@ -73,8 +91,7 @@ pub const Targets = union(TargetKind) {
     commit: [20]u8,
     diff: usize,
     issue: usize,
-    line_commit: LineCommit,
-    line_diff: LineDiff,
+    reply: Reply,
 };
 
 pub const Comment = struct {
@@ -121,8 +138,7 @@ pub const Comment = struct {
             .commit => |c| try w.writeAll(&c),
             .diff => try w.writeIntNative(usize, self.target.diff),
             .issue => try w.writeIntNative(usize, self.target.issue),
-            .line_commit => unreachable,
-            .line_diff => unreachable,
+            .reply => unreachable,
         }
 
         try w.writeAll(self.author);
