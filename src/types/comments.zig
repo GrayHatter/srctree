@@ -33,6 +33,11 @@ fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
                 0 => .{ .diff = try reader.readIntNative(usize) },
                 'D' => .{ .diff = try reader.readIntNative(usize) },
                 'I' => .{ .issue = try reader.readIntNative(usize) },
+                'L' => .{ .line_diff = LineDiff{
+                    .number = try reader.readIntNative(usize),
+                    .file = try reader.readIntNative(usize),
+                    .revision = try reader.readIntNative(usize),
+                } },
                 else => return error.CommentCorrupted,
             },
             .author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
@@ -57,9 +62,10 @@ pub const LineCommit = struct {
 };
 
 pub const LineDiff = struct {
-    file: usize,
     number: usize,
-    revision: usize,
+    file: usize,
+    revision: usize, // surely no one will ever need to use more than a u16
+    // number of revisions... right? I'll just shrink this... WCGW?!
 };
 
 pub const Targets = union(TargetKind) {
