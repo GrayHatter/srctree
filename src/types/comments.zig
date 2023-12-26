@@ -14,8 +14,7 @@ pub fn charToKind(c: u8) TargetKind {
         'C' => .commit,
         'D' => .diff,
         'I' => .issue,
-        'l' => .line_commit,
-        'L' => .line_diff,
+        'r' => .reply,
         else => .nos,
     };
 }
