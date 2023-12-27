@@ -32,11 +32,20 @@ fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
                 0 => .{ .diff = try reader.readIntNative(usize) },
                 'D' => .{ .diff = try reader.readIntNative(usize) },
                 'I' => .{ .issue = try reader.readIntNative(usize) },
-                'r' => .{ .reply = switch (try reader.readIntNative(u8)) {
-                    'c' => Reply{
-                        .to = .{ .comment = try reader.readIntNative(usize) },
+                'r' => .{ .reply = .{
+                    .to = switch (try reader.readIntNative(u8)) {
+                        'c' => .{ .comment = try reader.readIntNative(usize) },
+                        'C' => .{ .commit = .{
+                            .number = try reader.readIntNative(usize),
+                            .meta = try reader.readIntNative(usize),
+                        } },
+                        'd' => .{ .diff = .{
+                            .number = try reader.readIntNative(usize),
+                            .file = try reader.readIntNative(usize),
+                            .revision = try reader.readIntNative(usize),
+                        } },
+                        else => return error.CommentCorrupted,
                     },
-                    else => return error.CommentCorrupted,
                 } },
                 else => return error.CommentCorrupted,
             },
