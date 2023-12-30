@@ -69,8 +69,9 @@ fn findCommits(a: Allocator, until: i64, gitdir: []const u8) !*HeatMapArray {
     return try countAll(a, until, commit);
 }
 
-const YEAR = 31_536_000;
 const DAY = 60 * 60 * 24;
+const WEEK = DAY * 7;
+const YEAR = 31_536_000;
 
 pub fn commitFlex(ctx: *Context) Error!void {
     const day = HTML.Attr.class("day");
@@ -140,13 +141,18 @@ pub fn commitFlex(ctx: *Context) Error!void {
     dom.push(HTML.div("Sat", &day));
     dom = dom.close();
 
-    var month_i: usize = date.months - 2;
+    var printed_month: usize = date.months - 2;
     var day_off: usize = 0;
     for (0..53) |_| {
         var month: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
-        if ((month_i % 12) != date.months - 1) {
-            month_i += 1;
-            month[0] = HTML.div(DateTime.MONTHS[month_i % 12 + 1][0..3], &monthAtt);
+        if ((printed_month % 12) != date.months - 1) {
+            const next_week = DateTime.fromEpoch(date.timestamp + WEEK) catch unreachable;
+            printed_month += 1;
+            if ((printed_month % 12) != next_week.months - 1) {
+                month[0] = HTML.div("&nbsp;", &monthAtt);
+            } else {
+                month[0] = HTML.div(DateTime.MONTHS[printed_month % 12 + 1][0..3], &monthAtt);
+            }
         } else {
             month[0] = HTML.div("&nbsp;", &monthAtt);
         }
