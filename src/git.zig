@@ -920,8 +920,21 @@ pub const Blob = struct {
 pub const ChangeSet = struct {
     name: []const u8,
     sha: []const u8,
+    // Index into commit slice
+    commit_title: []const u8,
     commit: []const u8,
     timestamp: i64,
+
+    pub fn init(a: Allocator, name: []const u8, sha: []const u8, msg: []const u8, ts: i64) !ChangeSet {
+        const commit = try a.dupe(u8, msg);
+        return ChangeSet{
+            .name = try a.dupe(u8, name),
+            .sha = try a.dupe(u8, sha),
+            .commit = commit,
+            .commit_title = if (std.mem.indexOf(u8, commit, "\n\n")) |i| commit[0..i] else commit,
+            .timestamp = ts,
+        };
+    }
 
     pub fn raze(self: ChangeSet, a: Allocator) void {
         a.free(self.name);
@@ -1020,10 +1033,13 @@ pub const Tree = struct {
                     for (search_list, 0..) |search_ish, i| {
                         if (search_ish) |search| {
                             found += 1;
-                            changed[i].name = try a.dupe(u8, search.name);
-                            changed[i].sha = try a.dupe(u8, old.sha);
-                            changed[i].commit = try a.dupe(u8, old.message);
-                            changed[i].timestamp = old.committer.timestamp;
+                            changed[i] = try ChangeSet.init(
+                                a,
+                                search.name,
+                                old.sha,
+                                old.message,
+                                old.committer.timestamp,
+                            );
                         }
                     }
                     old.raze(a);
@@ -1037,10 +1053,13 @@ pub const Tree = struct {
                     for (search_list, 0..) |search_ish, i| {
                         if (search_ish) |search| {
                             found += 1;
-                            changed[i].name = try a.dupe(u8, search.name);
-                            changed[i].sha = try a.dupe(u8, old.sha);
-                            changed[i].commit = try a.dupe(u8, old.message);
-                            changed[i].timestamp = old.committer.timestamp;
+                            changed[i] = try ChangeSet.init(
+                                a,
+                                search.name,
+                                old.sha,
+                                old.message,
+                                old.committer.timestamp,
+                            );
                         }
                     }
                     old.raze(a);
@@ -1057,10 +1076,13 @@ pub const Tree = struct {
                 if (std.mem.indexOf(u8, ptree.blob, line)) |_| {} else {
                     search_ish.* = null;
                     found += 1;
-                    changed[i].name = try a.dupe(u8, search.name);
-                    changed[i].sha = try a.dupe(u8, old.sha);
-                    changed[i].commit = try a.dupe(u8, old.message);
-                    changed[i].timestamp = old.committer.timestamp;
+                    changed[i] = try ChangeSet.init(
+                        a,
+                        search.name,
+                        old.sha,
+                        old.message,
+                        old.committer.timestamp,
+                    );
                     continue;
                 }
             }

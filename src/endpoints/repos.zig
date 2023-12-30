@@ -383,13 +383,8 @@ fn drawFileLine(
 
     // I know... I KNOW!!!
     dom = dom.open(HTML.div(null, null));
-    dom.dupe(HTML.span(
-        if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
-            ch.commit[0..i]
-        else
-            ch.commit,
-        null,
-    ));
+    const commit_href = try aPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha[0..8] });
+    dom.push(try HTML.aHrefAlloc(a, ch.commit_title, commit_href));
     dom.dupe(HTML.span(try aPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
     dom = dom.close();
     return dom.close();
@@ -437,11 +432,6 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     _ = ctx.uri.next();
     _ = ctx.uri.next();
     const uri_base = ctx.uri.rest();
-
-    //if (std.mem.eql(u8, repo_name, "srctree")) {
-    //var acts = repo.getActions(ctx.alloc);
-    //acts.update() catch unreachable;
-    //}
 
     var dom = DOM.new(ctx.alloc);
 
