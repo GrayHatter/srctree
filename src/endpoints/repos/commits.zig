@@ -192,18 +192,10 @@ pub fn commits(ctx: *Context) Error!void {
         };
     }
 
-    const htmlstr = try std.fmt.allocPrint(ctx.alloc, "{}", .{
-        HTML.div(lcommits, null),
-    });
-
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
-    tmpl.addVar("commits", htmlstr) catch return error.Unknown;
-
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
+    _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(lcommits, null)}) catch return error.Unknown;
 
     ctx.response.status = .ok;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }

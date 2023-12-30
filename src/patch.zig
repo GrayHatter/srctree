@@ -48,25 +48,38 @@ pub const Header = struct {
 
     pub fn parse(self: *Header) !void {
         var d = self.data orelse return error.NoData;
-        // Filename
-        const left_s = 7 + (mem.indexOf(u8, d, "\n--- a/") orelse return error.PatchInvalid);
-        const left_e = mem.indexOfPos(u8, d, left_s, "\n") orelse return error.PatchInvalid;
-        self.filename.left = d[left_s..left_e];
-        const right_s = 7 + (mem.indexOfPos(u8, d, left_e, "\n+++ b/") orelse return error.PatchInvalid);
-        const right_e = mem.indexOfPos(u8, d, right_s, "\n") orelse return error.PatchInvalid;
-        self.filename.right = d[right_s..right_e];
+        var pos: usize = 0;
+        if (mem.indexOfPos(u8, d, pos, "\n--- a/")) |i| {
+            if (mem.indexOfPos(u8, d, i + 7, "\n")) |end| {
+                self.filename.left = d[i + 7 .. end];
+                pos = end;
+            } else return error.UnableToParsePatchHeader;
+        } else if (mem.indexOfPos(u8, d, pos, "\n--- /dev/null")) |i| {
+            if (mem.indexOfPos(u8, d, i + 5, "\n")) |end| {
+                self.filename.left = d[i + 5 .. end];
+                pos = end;
+            } else return error.UnableToParsePatchHeader;
+        } else {
+            return error.UnableToParsePatchHeader;
+        }
+
+        if (mem.indexOfPos(u8, d, pos, "\n+++ b/")) |i| {
+            if (mem.indexOfPos(u8, d, i + 7, "\n")) |end| {
+                self.filename.right = d[i + 7 .. end];
+                pos = end;
+            } else return error.UnableToParsePatchHeader;
+        } else {
+            return error.UnableToParsePatchHeader;
+        }
+
         // Block headers
-        const block_s = mem.indexOf(u8, d, "\n@@ ") orelse return error.BlockHeaderMissing;
-        const block_e = mem.indexOf(u8, d, " @@") orelse return error.BlockHeaderMissing;
-        const block = d[block_s + 4 .. block_e];
-        var bi = mem.indexOf(u8, block, " ") orelse return error.BlockInvalid;
-        const left = block[0..bi];
-        const right = block[bi + 1 ..];
-        _ = left;
-        _ = right;
-        // Changes
-        const block_nl = mem.indexOfPos(u8, d, block_e, "\n") orelse return error.BlockHeaderInvalid;
-        if (d.len > block_nl) self.changes = d[block_nl + 1 ..];
+        if (mem.indexOfPos(u8, d, pos, "\n@@ ")) |i| {
+            if (mem.indexOfPos(u8, d, i, " @@")) |end| {
+                if (mem.indexOfPos(u8, d, end, "\n")) |change_start| {
+                    if (d.len > change_start) self.changes = d[change_start + 1 ..];
+                } else return error.BlockHeaderInvalid;
+            } else return error.BlockHeaderMissing;
+        } else return error.BlockHeaderMissing;
     }
 };
 
@@ -104,6 +117,7 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .patch = try fetch(a, uri) };
 }
 
+// TODO move this function, I tried it, and now I hate it!
 pub fn patchHtml(a: Allocator, patch: []const u8) ![]HTML.Element {
     var p = Patch{ .patch = patch };
     var diffs = p.filesSlice(a) catch return &[0]HTML.Element{};
@@ -114,11 +128,15 @@ pub fn patchHtml(a: Allocator, patch: []const u8) ![]HTML.Element {
     dom = dom.open(HTML.patch());
     for (diffs) |diff| {
         var h = Header{ .data = diff };
-        h.parse() catch continue;
+        h.parse() catch |e| {
+            std.debug.print("error {}\n", .{e});
+            std.debug.print("patch {s}\n", .{diff});
+            continue;
+        };
         const body = h.changes orelse continue;
 
         dom = dom.open(HTML.diff());
-        dom.push(HTML.element("filename", h.filename.left orelse "File name empty", null));
+        dom.push(HTML.element("filename", h.filename.right orelse "File Deleted", null));
         dom = dom.open(HTML.element("changes", null, null));
         dom.pushSlice(diffLine(a, body));
         dom = dom.close();
