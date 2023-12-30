@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 const aPrint = std.fmt.allocPrint;
+const bPrint = std.fmt.bufPrint;
 
 const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
@@ -365,6 +366,60 @@ fn isReadme(name: []const u8) bool {
     return false;
 }
 
+fn drawFileLine(
+    a: Allocator,
+    ddom: *DOM,
+    rname: []const u8,
+    base: []const u8,
+    obj: git.Blob,
+    ch: git.ChangeSet,
+) !*DOM {
+    var dom = ddom;
+    if (obj.isFile()) {
+        dom = try drawBlob(a, dom, rname, base, obj);
+    } else {
+        dom = try drawTree(a, dom, rname, base, obj);
+    }
+
+    // I know... I KNOW!!!
+    dom = dom.open(HTML.div(null, null));
+    dom.dupe(HTML.span(
+        if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
+            ch.commit[0..i]
+        else
+            ch.commit,
+        null,
+    ));
+    dom.dupe(HTML.span(try aPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
+    dom = dom.close();
+    return dom.close();
+}
+
+fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: git.Blob) !*DOM {
+    var dom = ddom.open(HTML.element("file", null, null));
+    const file_link = try aPrint(a, "/repo/{s}/blob/{s}{s}", .{ rname, base, obj.name });
+
+    const href = &[_]HTML.Attribute{.{
+        .key = "href",
+        .value = file_link,
+    }};
+    dom.dupe(HTML.anch(obj.name, href));
+
+    return dom;
+}
+
+fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: git.Blob) !*DOM {
+    var dom = ddom.open(HTML.element("tree", null, null));
+    const file_link = try aPrint(a, "/repo/{s}/tree/{s}{s}/", .{ rname, base, obj.name });
+
+    const href = &[_]HTML.Attribute{.{
+        .key = "href",
+        .value = file_link,
+    }};
+    dom.dupe(HTML.anch(try dupeDir(a, obj.name), href));
+    return dom;
+}
+
 fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     var tmpl = Template.find("repo.html");
     tmpl.init(ctx.alloc);
@@ -381,7 +436,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     _ = ctx.uri.next();
     _ = ctx.uri.next();
     _ = ctx.uri.next();
-    const file_uri_name = ctx.uri.rest();
+    const uri_base = ctx.uri.rest();
 
     //if (std.mem.eql(u8, repo_name, "srctree")) {
     //var acts = repo.getActions(ctx.alloc);
@@ -408,56 +463,30 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     dom = dom.close();
 
     dom = dom.open(HTML.div(null, &HTML.Attr.class("treelist")));
-    if (file_uri_name.len > 0) {
-        const end = std.mem.lastIndexOf(u8, file_uri_name[0 .. file_uri_name.len - 1], "/") orelse 0;
+    if (uri_base.len > 0) {
+        const end = std.mem.lastIndexOf(u8, uri_base[0 .. uri_base.len - 1], "/") orelse 0;
         dom = dom.open(HTML.element("tree", null, null));
         const dd_href = &[_]HTML.Attribute{.{
             .key = "href",
             .value = try aPrint(
                 ctx.alloc,
                 "/repo/{s}/tree/{s}",
-                .{ rd.name, file_uri_name[0..end] },
+                .{ rd.name, uri_base[0..end] },
             ),
         }};
         dom.dupe(HTML.anch("..", dd_href));
         dom = dom.close();
     }
-    try files.pushPath(ctx.alloc, file_uri_name);
+    try files.pushPath(ctx.alloc, uri_base);
     if (files.changedSet(ctx.alloc, repo)) |changed| {
         std.sort.pdq(git.Blob, files.objects, {}, typeSorter);
         for (files.objects) |obj| {
-            var href = &[_]HTML.Attribute{.{
-                .key = "href",
-                .value = try aPrint(ctx.alloc, "/repo/{s}/{s}/{s}{s}{s}", .{
-                    rd.name,
-                    if (obj.isFile()) "blob" else "tree",
-                    file_uri_name,
-                    obj.name,
-                    if (obj.isFile()) "" else "/",
-                }),
-            }};
-            if (obj.isFile()) {
-                dom = dom.open(HTML.element("file", null, null));
-                dom.dupe(HTML.anch(obj.name, href));
-            } else {
-                dom = dom.open(HTML.element("tree", null, null));
-                dom.dupe(HTML.anch(try dupeDir(ctx.alloc, obj.name), href));
-            }
-            //HTML.element("file", link, null);
-            // I know... I KNOW!!!
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
-                    dom = dom.open(HTML.div(null, null));
-                    dom.dupe(HTML.span(if (std.mem.indexOf(u8, ch.commit, "\n\n")) |i|
-                        ch.commit[0..i]
-                    else
-                        ch.commit, null));
-                    dom.dupe(HTML.span(try aPrint(ctx.alloc, "{}", .{Humanize.unix(ch.timestamp)}), null));
-                    dom = dom.close();
+                    dom = try drawFileLine(ctx.alloc, dom, rd.name, uri_base, obj, ch);
                     break;
                 }
             }
-            dom = dom.close();
         }
     } else |err| switch (err) {
         error.PathNotFound => {
@@ -484,3 +513,4 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
 
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }
+// this is the end
