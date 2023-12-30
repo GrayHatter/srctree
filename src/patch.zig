@@ -137,8 +137,11 @@ pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
         const a_add = &HTML.Attr.class("add");
         const a_del = &HTML.Attr.class("del");
         const dirty = litr.next().?;
-        var clean = a.alloc(u8, dirty.len * 2) catch unreachable;
-        clean = Bleach.sanitize(dirty, clean, .{}) catch unreachable;
+        var clean = a.alloc(u8, @max(64, dirty.len * 2)) catch unreachable;
+        clean = Bleach.sanitize(dirty, clean, .{}) catch bigger: {
+            var big = a.realloc(clean, clean.len * 2) catch unreachable;
+            break :bigger Bleach.sanitize(dirty, big, .{}) catch unreachable;
+        };
         const attr: ?[]const HTML.Attr = if (clean.len > 0 and (clean[0] == '-' or clean[0] == '+'))
             if (clean[0] == '-') a_del else a_add
         else
