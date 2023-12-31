@@ -141,7 +141,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
     dom.push(HTML.div("Sat", &day));
     dom = dom.close();
 
-    var printed_month: usize = date.months - 2;
+    var printed_month: usize = (date.months + 10) % 12;
     var day_off: usize = 0;
     for (0..53) |_| {
         var month: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
