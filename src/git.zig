@@ -1124,7 +1124,7 @@ pub const Actions = struct {
     repo: ?*const Repo = null,
     cwd: ?std.fs.Dir = null,
 
-    pub fn update(self: Actions, branch: []const u8) !bool {
+    pub fn updateUpstream(self: Actions, branch: []const u8) !bool {
         var buf: [512]u8 = undefined;
         var up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
 
@@ -1161,6 +1161,19 @@ pub const Actions = struct {
             std.debug.print("refusing to move head non-ancestor\n", .{});
             return false;
         }
+    }
+
+    pub fn updateDownstream(self: Actions) !bool {
+        const push = try self.exec(&[_][]const u8{
+            "git",
+            "push",
+            "downstream",
+            "*:*",
+            "--porcelain",
+        });
+        std.debug.print("pushing downstream ->\n{s}\n", .{push});
+        self.alloc.free(push);
+        return true;
     }
 
     pub fn forkRemote(self: Actions, uri: []const u8, local_dir: []const u8) ![]u8 {

@@ -54,6 +54,19 @@ pub fn hasUpstream(a: Allocator, r: Git.Repo) !?[]u8 {
     return null;
 }
 
+pub fn hasDownstream(a: Allocator, r: Git.Repo) !?[]u8 {
+    var conffd = try r.dir.openFile("config", .{});
+    defer conffd.close();
+    const conf = try Ini.init(a, conffd);
+    defer conf.raze(a);
+    if (conf.get("remote \"downstream\"")) |ns| {
+        if (ns.get("url")) |url| {
+            return try a.dupe(u8, url);
+        }
+    }
+    return null;
+}
+
 pub fn updateThread() void {
     std.debug.print("Spawning update thread\n", .{});
     const a = std.heap.page_allocator;
@@ -81,18 +94,29 @@ pub fn updateThread() void {
             };
 
             defer repo.raze(a);
-            if (hasUpstream(a, repo) catch continue) |up| {
-                const update = std.fmt.bufPrint(
-                    &update_buffer,
-                    "update {}\n",
-                    .{std.time.timestamp()},
-                ) catch unreachable;
+            const update = std.fmt.bufPrint(
+                &update_buffer,
+                "update {}\n",
+                .{std.time.timestamp()},
+            ) catch unreachable;
 
+            if (hasUpstream(a, repo) catch continue) |up| {
                 repo.dir.writeFile("srctree_last_update", update) catch {};
                 a.free(up);
                 var acts = repo.getActions(a);
-                const updated = acts.update(head) catch er: {
+                const updated = acts.updateUpstream(head) catch er: {
                     std.debug.print("Warning, unable to update repo {s}\n", .{rname});
+                    break :er false;
+                };
+                if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
+            }
+
+            if (hasDownstream(a, repo) catch continue) |down| {
+                repo.dir.writeFile("srctree_last_downdate", update) catch {};
+                a.free(down);
+                var acts = repo.getActions(a);
+                const updated = acts.updateDownstream() catch er: {
+                    std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});
                     break :er false;
                 };
                 if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
