@@ -213,10 +213,7 @@ fn list(ctx: *Context) Error!void {
         tmpl.init(ctx.alloc);
         _ = tmpl.addElements(ctx.alloc, "repos", data) catch return Error.Unknown;
 
-        var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-        ctx.response.start() catch return Error.Unknown;
-        ctx.response.send(page) catch return Error.Unknown;
-        ctx.response.finish() catch return Error.Unknown;
+        try ctx.sendTemplate(&tmpl);
     } else |err| {
         std.debug.print("unable to open given dir {}\n", .{err});
         return;
@@ -235,12 +232,9 @@ fn newRepo(ctx: *Context) Error!void {
     tmpl.init(ctx.alloc);
 
     tmpl.addVar("files", "<h3>New Repo!</h3><p>Todo, add content here</p>") catch return error.Unknown;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-
     ctx.response.status = .ok;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn treeBlob(ctx: *Context) Error!void {
@@ -323,12 +317,9 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
         .{HTML.div(data, &HTML.Attr.class("code-block"))},
     );
     tmpl.addVar("files", filestr) catch return error.Unknown;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-
     ctx.response.status = .ok;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn mkTree(a: Allocator, repo: git.Repo, uri: *UriIter, pfiles: git.Tree) !git.Tree {

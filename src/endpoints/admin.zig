@@ -59,10 +59,7 @@ fn default(ctx: *Context) Error!void {
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn cloneUpstream(ctx: *Context) Error!void {
@@ -83,10 +80,7 @@ fn cloneUpstream(ctx: *Context) Error!void {
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn postCloneUpstream(ctx: *Context) Error!void {
@@ -124,10 +118,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn postNewRepo(ctx: *Context) Error!void {
@@ -174,10 +165,7 @@ fn postNewRepo(ctx: *Context) Error!void {
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn newRepo(ctx: *Context) Error!void {
@@ -200,10 +188,7 @@ fn newRepo(ctx: *Context) Error!void {
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn view(ctx: *Context) Error!void {

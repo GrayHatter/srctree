@@ -10,7 +10,7 @@ const zWSGIRequest = zWSGI.zWSGIRequest;
 pub const Request = @import("request.zig");
 pub const Response = @import("response.zig");
 pub const UserData = @import("user-data.zig").UserData;
-pub const Template = @import("template.zig").Template;
+pub const Template = @import("template.zig");
 pub const UriIter = @import("endpoint.zig").Router.UriIter;
 
 pub const Context = @This();
@@ -22,7 +22,7 @@ usr_data: UserData,
 uri: UriIter,
 auth: Auth,
 // TODO fix this API
-parent_vars: std.ArrayList(VarPair),
+template_ctx: Template.Context,
 
 const VarPair = struct {
     []const u8,
@@ -39,21 +39,27 @@ pub fn init(a: Allocator, req: Request, res: Response, usr_data: UserData) !Cont
         .usr_data = usr_data,
         .uri = std.mem.split(u8, req.uri[1..], "/"),
         .auth = Auth.init(req.headers),
-        .parent_vars = std.ArrayList(VarPair).init(a),
+        .template_ctx = Template.Context.init(a),
     };
 }
 
+/// TODO rename plz
 pub fn addRouteVar(ctx: *Context, name: []const u8, val: []const u8) !void {
-    try ctx.parent_vars.append(.{ name, val });
+    try ctx.template_ctx.put(name, val);
 }
 
-pub fn sendTemplate(ctx: *Context, t: *Template) !void {
-    try ctx.response.start();
-    for (ctx.parent_vars.items) |itm| {
-        try t.addVar(itm[0], itm[1]);
-    }
-    const page = try t.buildFor(ctx.alloc, ctx);
+/// TODO fix these unreachable, currently debugging
+pub fn sendTemplate(ctx: *Context, t: *Template.Template) !void {
+    ctx.response.start() catch unreachable;
+    //
+    const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
+    try t.addVar("header.auth", loggedin);
+    if (ctx.request.auth.user(ctx.alloc)) |usr| {
+        try t.addVar("current_username", usr.username);
+    } else |_| {}
+    //
+    const page = try t.buildFor(ctx.alloc, ctx.template_ctx);
     defer ctx.alloc.free(page);
-    try ctx.response.send(page);
-    try ctx.response.finish();
+    ctx.response.send(page) catch unreachable;
+    ctx.response.finish() catch unreachable;
 }

@@ -4,7 +4,6 @@ const bldtmpls = @import("templates");
 const Allocator = std.mem.Allocator;
 
 const HTML = @import("html.zig");
-const Context = @import("context.zig");
 
 const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
@@ -17,41 +16,50 @@ fn validChar(c: u8) bool {
     };
 }
 
+pub const Context = struct {
+    pub const HashMap = std.StringHashMap([]const u8);
+    ctx: HashMap,
+
+    pub fn init(a: Allocator) Context {
+        return Context{
+            .ctx = HashMap.init(a),
+        };
+    }
+
+    pub fn raze(_: Context) void {
+        @panic("not implemented");
+    }
+
+    pub fn put(self: *Context, name: []const u8, value: []const u8) !void {
+        try self.ctx.put(name, value);
+    }
+
+    pub fn get(self: Context, name: []const u8) ?[]const u8 {
+        return self.ctx.get(name);
+    }
+};
+
 pub const Template = struct {
     alloc: ?Allocator = null,
+    ctx: ?Context = null,
     path: []const u8,
     /// expected to be a pointer to path.
     name: []const u8,
     blob: []const u8,
     parent: ?*const Template = null,
-    vars: ?[]Var = null,
-    const Var = struct {
-        name: []const u8,
-        blob: []const u8,
-    };
 
+    /// This init takes a 'self' to support creation at comptime
     pub fn init(self: *Template, a: Allocator) void {
         self.alloc = a;
+        self.ctx = Context.init(a);
     }
 
-    fn expandVars(self: *Template) !void {
-        if (self.alloc) |a| {
-            if (self.vars) |vars| {
-                if (!a.resize(vars, vars.len + 1)) {
-                    self.vars = try a.realloc(vars, vars.len + 1);
-                } else {
-                    self.vars.?.len += 1;
-                }
-            } else {
-                self.vars = try a.alloc(Var, 1);
-            }
-        } else {
-            return error.OutOfMemory;
-        }
+    pub fn raze(self: *Template) void {
+        self.ctx.raze();
     }
 
     /// caller owns of the returned slice, freeing the data before the final use is undefined
-    pub fn addElements(self: *Template, a: Allocator, name: []const u8, els: []const HTML.Element) ![]const u8 {
+    pub fn addElements(self: *Template, a: Allocator, name: []const u8, els: []const HTML.Element) !void {
         return self.addElementsFmt(a, "{}", name, els);
     }
 
@@ -62,8 +70,7 @@ pub const Template = struct {
         comptime fmt: []const u8,
         name: []const u8,
         els: []const HTML.Element,
-    ) ![]const u8 {
-        try self.expandVars();
+    ) !void {
         var list = try a.alloc([]u8, els.len);
         defer a.free(list);
         for (list, els) |*l, e| {
@@ -74,13 +81,7 @@ pub const Template = struct {
         }
         var value = try std.mem.join(a, "", list);
 
-        if (self.vars) |vars| {
-            vars[vars.len - 1] = .{
-                .name = name,
-                .blob = value,
-            };
-        }
-        return value;
+        try self.ctx.?.put(name, value);
     }
 
     /// Deprecated, use addString
@@ -89,27 +90,25 @@ pub const Template = struct {
     }
 
     pub fn addString(self: *Template, name: []const u8, value: []const u8) !void {
-        try self.expandVars();
-        if (self.vars) |vars| {
-            vars[vars.len - 1] = .{
-                .name = name,
-                .blob = value,
-            };
-        }
+        try self.ctx.?.put(name, value);
     }
 
     pub fn build(self: *Template, ext_a: ?Allocator) ![]u8 {
-        var a = ext_a orelse self.alloc orelse return error.AllocatorInvalid;
+        var a = ext_a orelse self.alloc orelse unreachable; // return error.AllocatorInvalid;
         return std.fmt.allocPrint(a, "{}", .{self});
     }
 
-    pub fn buildFor(self: *Template, a: Allocator, ctx: *const Context) ![]u8 {
-        const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
-        try self.addVar("header.auth", loggedin);
-        if (ctx.request.auth.user(a)) |usr| {
-            try self.addVar("current_username", usr.username);
-        } else |_| {}
-        return try self.build(a);
+    pub fn buildFor(self: *Template, a: Allocator, ctx: Context) ![]u8 {
+        var template = self.*;
+        if (template.ctx) |_| {
+            var itr = ctx.ctx.iterator();
+            while (itr.next()) |n| {
+                try template.ctx.?.put(n.key_ptr.*, n.value_ptr.*);
+            }
+        } else {
+            template.ctx = ctx;
+        }
+        return try template.build(a);
     }
 
     fn validDirective(str: []const u8) ?Directive {
@@ -122,27 +121,39 @@ pub const Template = struct {
             width += 1;
         }
 
-        if (std.mem.startsWith(u8, str[width..], " ORELSE ")) {
+        const vari = str[0..width];
+        const directive = str[width..];
+
+        if (vari[0] == '_') {
+            for (0..builtin.len) |subtemp_i| {
+                if (std.mem.eql(u8, builtin[subtemp_i].name, vari)) {
+                    return Directive{
+                        .vari = vari,
+                        .otherwise = .{ .template = builtin[subtemp_i] },
+                    };
+                }
+            }
+            return Directive{ .vari = vari };
+        } else if (std.mem.startsWith(u8, directive, " ORELSE ")) {
             return Directive{
-                .str = str[0..width],
+                .vari = str[0..width],
                 .otherwise = .{ .str = str[width + 8 ..] },
             };
-        } else if (std.mem.eql(u8, str[width..], " ORNULL")) {
+        } else if (std.mem.eql(u8, directive, " ORNULL")) {
             return Directive{
-                .str = str[0..width],
+                .vari = str[0..width],
                 .otherwise = .{ .del = {} },
             };
         } else {
             for (str[width..]) |s| if (s != ' ') return null;
             return Directive{
-                .str = str,
+                .vari = str,
             };
         }
     }
 
     pub fn format(self: Template, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        var vars = self.vars orelse return try out.writeAll(self.blob);
-
+        var ctx = self.ctx orelse unreachable; // return error.TemplateContextMissing;
         var blob = self.blob;
         while (blob.len > 0) {
             if (std.mem.indexOf(u8, blob, "<!-- ")) |offset| {
@@ -152,26 +163,11 @@ pub const Template = struct {
                 //var c = blob[i];
                 if (std.mem.indexOf(u8, blob, " -->")) |end| {
                     if (validDirective(blob[5..end])) |dr| {
-                        const var_name = dr.str;
+                        const var_name = dr.vari;
                         // printing
-                        if (var_name[0] == '_') {
+                        if (ctx.get(var_name)) |v_blob| {
+                            try out.writeAll(v_blob);
                             blob = blob[end + 4 ..];
-                            for (0..builtin.len) |subtemp_i| {
-                                if (std.mem.eql(u8, builtin[subtemp_i].name, var_name)) {
-                                    var subtmp = builtin[subtemp_i];
-                                    subtmp.vars = self.vars;
-                                    try subtmp.format(fmts, .{}, out);
-                                    break;
-                                }
-                            }
-                            continue;
-                        }
-                        for (vars) |v| {
-                            if (std.mem.eql(u8, var_name, v.name)) {
-                                try out.writeAll(v.blob);
-                                blob = blob[end + 4 ..];
-                                break;
-                            }
                         } else {
                             switch (dr.otherwise) {
                                 .str => |str| {
@@ -185,7 +181,12 @@ pub const Template = struct {
                                 .del => {
                                     blob = blob[end + 4 ..];
                                 },
-                                else => unreachable,
+                                .template => |subt| {
+                                    blob = blob[end + 4 ..];
+                                    var subtmpl = subt;
+                                    subtmpl.ctx = self.ctx;
+                                    try subtmpl.format(fmts, .{}, out);
+                                },
                             }
                         }
                     } else {
@@ -201,12 +202,12 @@ pub const Template = struct {
 };
 
 pub const Directive = struct {
-    str: []const u8,
+    vari: []const u8,
     otherwise: union(enum) {
         ign: void,
         del: void,
         str: []const u8,
-        template: []const u8,
+        template: Template,
     } = .{ .ign = {} },
 };
 
@@ -328,4 +329,44 @@ test "init" {
 
     var tmpl = find("user_commits.html");
     tmpl.init(a);
+}
+
+test "directive ORELSE" {
+    var a = std.testing.allocator;
+    var t = Template{
+        .alloc = null,
+        .path = "/dev/null",
+        .name = "test",
+        .blob = "<!-- this ORELSE string until end -->",
+    };
+
+    const page = try t.buildFor(a, Context.init(a));
+    defer a.free(page);
+    try std.testing.expectEqualStrings("string until end", page);
+}
+
+test "directive ORNULL" {
+    var a = std.testing.allocator;
+    var t = Template{
+        .alloc = null,
+        .path = "/dev/null",
+        .name = "test",
+        // Invalid because 'string until end' is known to be unreachable
+        .blob = "<!-- this ORNULL string until end -->",
+    };
+
+    const page = try t.buildFor(a, Context.init(a));
+    defer a.free(page);
+    try std.testing.expectEqualStrings("<!-- this ORNULL string until end -->", page);
+
+    t = Template{
+        .alloc = null,
+        .path = "/dev/null",
+        .name = "test",
+        .blob = "<!-- this ORNULL -->",
+    };
+
+    const nullpage = try t.buildFor(a, Context.init(a));
+    defer a.free(nullpage);
+    try std.testing.expectEqualStrings("", nullpage);
 }

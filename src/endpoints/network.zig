@@ -47,8 +47,5 @@ fn default(ctx: *Context) Error!void {
     var tmpl = Template.find("network.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "netlist", data) catch unreachable;
-    var page = tmpl.buildFor(ctx.alloc, ctx) catch unreachable;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.send(page) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }
