@@ -528,6 +528,7 @@ pub const Repo = struct {
             try list.append(Ref{ .branch = .{
                 .name = try a.dupe(u8, file.name),
                 .sha = try a.dupe(u8, &buf),
+                .repo = self,
             } });
         }
         if (self.dir.openFile("packed-refs", .{})) |file| {
@@ -541,6 +542,7 @@ pub const Repo = struct {
                     try list.append(Ref{ .branch = .{
                         .name = try a.dupe(u8, line[52..]),
                         .sha = try a.dupe(u8, line[0..40]),
+                        .repo = self,
                     } });
                 }
             }
@@ -669,6 +671,15 @@ pub const Branch = struct {
     name: []const u8,
     sha: SHA,
     repo: ?*const Repo = null,
+
+    pub fn toCommit(self: Branch, a: Allocator) !Commit {
+        const repo = self.repo orelse return error.NoConnectedRepo;
+        var obj = try repo.findObj(a, self.sha);
+        defer obj.raze(a);
+        var cmt = try Commit.fromReader(a, self.sha, obj.reader());
+        cmt.repo = repo;
+        return cmt;
+    }
 };
 
 pub const Tag = struct {
@@ -709,7 +720,7 @@ pub const Commit = struct {
         }
 
         pub fn format(self: Actor, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-            try out.print("Actor{{ name {s}, email {s} time {} }}", .{ self.name, self.email, self.time });
+            try out.print("Actor{{ name {s}, email {s} time {} }}", .{ self.name, self.email, self.timestamp });
         }
     };
 
@@ -1697,4 +1708,26 @@ test "new repo" {
     _ = try tdir.dir.openDir("new_repo", .{});
     try new_repo.loadData(a);
     defer new_repo.raze(a);
+}
+
+test "updated at" {
+    var a = std.testing.allocator;
+
+    var cwd = try std.fs.cwd().openDir(".", .{});
+    var repo = try Repo.init(cwd);
+    defer repo.raze(a);
+
+    try repo.loadData(a);
+    var oldest: i64 = 0;
+    for (repo.refs) |ref| {
+        switch (ref) {
+            .branch => |br| {
+                const cmt = try br.toCommit(a);
+                defer cmt.raze(a);
+                if (cmt.committer.timestamp > oldest) oldest = cmt.committer.timestamp;
+            },
+            else => unreachable, // not implemented... sorry :/
+        }
+    }
+    //std.debug.print("{}\n", .{oldest});
 }
