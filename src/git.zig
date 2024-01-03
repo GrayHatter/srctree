@@ -636,14 +636,6 @@ pub const Repo = struct {
         return error.NoDescription;
     }
 
-    pub fn getActions(self: *const Repo, a: Allocator) Actions {
-        return Actions{
-            .alloc = a,
-            .repo = self,
-            .cwd = self.dir,
-        };
-    }
-
     pub fn raze(self: *Repo, a: Allocator) void {
         self.dir.close();
         for (self.packs) |pack| {
@@ -663,6 +655,31 @@ pub const Repo = struct {
         if (self.head) |h| switch (h) {
             .branch => |b| a.free(b.name),
             else => {}, //a.free(h);
+        };
+    }
+
+    // functions that might move or be removed...
+
+    pub fn updatedAt(self: *Repo, a: Allocator) !i64 {
+        var oldest: i64 = 0;
+        for (self.refs) |r| {
+            switch (r) {
+                .branch => |br| {
+                    const cmt = try br.toCommit(a);
+                    defer cmt.raze(a);
+                    if (cmt.committer.timestamp > oldest) oldest = cmt.committer.timestamp;
+                },
+                else => unreachable, // not implemented... sorry :/
+            }
+        }
+        return oldest;
+    }
+
+    pub fn getActions(self: *const Repo, a: Allocator) Actions {
+        return Actions{
+            .alloc = a,
+            .repo = self,
+            .cwd = self.dir,
         };
     }
 };
@@ -1718,16 +1735,7 @@ test "updated at" {
     defer repo.raze(a);
 
     try repo.loadData(a);
-    var oldest: i64 = 0;
-    for (repo.refs) |ref| {
-        switch (ref) {
-            .branch => |br| {
-                const cmt = try br.toCommit(a);
-                defer cmt.raze(a);
-                if (cmt.committer.timestamp > oldest) oldest = cmt.committer.timestamp;
-            },
-            else => unreachable, // not implemented... sorry :/
-        }
-    }
+    const oldest = try repo.updatedAt(a);
+    _ = oldest;
     //std.debug.print("{}\n", .{oldest});
 }

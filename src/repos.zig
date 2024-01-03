@@ -110,16 +110,26 @@ pub fn updateThread() void {
                 };
                 if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
             }
-
-            if (hasDownstream(a, repo) catch continue) |down| {
-                repo.dir.writeFile("srctree_last_downdate", update) catch {};
-                a.free(down);
-                var acts = repo.getActions(a);
-                const updated = acts.updateDownstream() catch er: {
-                    std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});
-                    break :er false;
-                };
-                if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
+            var rbuf: [0xff]u8 = undefined;
+            const last_push_str = repo.dir.readFile("srctree_last_downdate", &rbuf) catch continue;
+            const last_push = std.fmt.parseInt(i64, last_push_str[7 .. last_push_str.len - 1], 10) catch |err| {
+                std.debug.print("unable to parse int {} '{s}'\n", .{ err, last_push_str });
+                continue;
+            };
+            const repo_update = repo.updatedAt(a) catch continue;
+            if (repo_update > last_push) {
+                if (hasDownstream(a, repo) catch continue) |down| {
+                    repo.dir.writeFile("srctree_last_downdate", update) catch {};
+                    a.free(down);
+                    var acts = repo.getActions(a);
+                    const updated = acts.updateDownstream() catch er: {
+                        std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});
+                        break :er false;
+                    };
+                    if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
+                }
+            } else {
+                std.debug.print("Skipping for {s} no new branches", .{rname});
             }
         }
         std.time.sleep(sleep_for);
