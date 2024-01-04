@@ -86,6 +86,10 @@ pub fn updateThread() void {
             const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
             var dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
             var repo = Git.Repo.init(dir) catch continue;
+            repo.loadData(a) catch {
+                std.debug.print("Warning, unable to load data for repo {s}\n", .{rname});
+            };
+
             const rhead = repo.HEAD(a) catch continue;
             var head: []const u8 = switch (rhead) {
                 .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
@@ -111,12 +115,20 @@ pub fn updateThread() void {
                 if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
             }
             var rbuf: [0xff]u8 = undefined;
-            const last_push_str = repo.dir.readFile("srctree_last_downdate", &rbuf) catch continue;
+            const last_push_str = repo.dir.readFile("srctree_last_downdate", &rbuf) catch |err| switch (err) {
+                error.FileNotFound => for (rbuf[0..9], "update 0\n") |*dst, src| {
+                    dst.* = src;
+                } else rbuf[0..9],
+                else => {
+                    std.debug.print("unable to read downstream update {}  '{s}'\n", .{ err, rname });
+                    continue;
+                },
+            };
             const last_push = std.fmt.parseInt(i64, last_push_str[7 .. last_push_str.len - 1], 10) catch |err| {
                 std.debug.print("unable to parse int {} '{s}'\n", .{ err, last_push_str });
                 continue;
             };
-            const repo_update = repo.updatedAt(a) catch continue;
+            const repo_update = repo.updatedAt(a) catch 0;
             if (repo_update > last_push) {
                 if (hasDownstream(a, repo) catch continue) |down| {
                     repo.dir.writeFile("srctree_last_downdate", update) catch {};
@@ -129,7 +141,7 @@ pub fn updateThread() void {
                     if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
                 }
             } else {
-                std.debug.print("Skipping for {s} no new branches", .{rname});
+                std.debug.print("Skipping for {s} no new branches {} {}\n", .{ rname, repo_update, last_push });
             }
         }
         std.time.sleep(sleep_for);
