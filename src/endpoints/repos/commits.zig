@@ -173,6 +173,33 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
     return dom.done();
 }
 
+fn commitsList(a: Allocator, repo: git.Repo, name: []const u8, buffer: []HTML.E, after: ?[]const u8) ![]HTML.E {
+    var current: git.Commit = repo.commit(a) catch return error.Unknown;
+    if (after) |aft| {
+        std.debug.assert(aft.len <= 40);
+        var min = @min(aft.len, current.sha.len);
+        while (!std.mem.eql(u8, aft, current.sha[0..min])) {
+            current = current.toParent(a, 0) catch {
+                std.debug.print("unable to build commit history\n", .{});
+                return buffer[0..0];
+            };
+        }
+        current = current.toParent(a, 0) catch {
+            std.debug.print("unable to build commit history\n", .{});
+            return buffer[0..0];
+        };
+    }
+    var count: usize = 0;
+    for (buffer, 0..) |*c, i| {
+        c.* = (try htmlCommit(a, current, name, false))[0];
+        current = current.toParent(a, 0) catch {
+            break;
+        };
+        count = i;
+    }
+    return buffer[0..count];
+}
+
 pub fn commits(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
@@ -182,19 +209,13 @@ pub fn commits(ctx: *Context) Error!void {
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
-    var lcommits = try ctx.alloc.alloc(HTML.E, 50);
-    var current: git.Commit = repo.commit(ctx.alloc) catch return error.Unknown;
-    for (lcommits, 0..) |*c, i| {
-        c.* = (try htmlCommit(ctx.alloc, current, rd.name, false))[0];
-        current = current.toParent(ctx.alloc, 0) catch {
-            lcommits.len = i;
-            break;
-        };
-    }
+    const after = null;
+    var commits_b = try ctx.alloc.alloc(HTML.E, 50);
+    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, commits_b, after);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(lcommits, null)}) catch return error.Unknown;
+    _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(cmts_list, null)}) catch return error.Unknown;
 
     ctx.response.status = .ok;
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
