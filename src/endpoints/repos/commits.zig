@@ -21,6 +21,14 @@ const CmmtMap = @import("../../types/commit-notes.zig");
 const Comments = Endpoint.Types.Comments;
 const Comment = Comments.Comment;
 
+const GET = Endpoint.Router.Methods.GET;
+const POST = Endpoint.Router.Methods.POST;
+
+pub const routes = [_]Endpoint.Router.MatchRouter{
+    .{ .name = "", .methods = GET, .match = .{ .call = commits } },
+    .{ .name = "after", .methods = GET, .match = .{ .call = commitsAfter } },
+};
+
 fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
     var dom = DOM.new(a);
     dom = dom.open(HTML.element("comment", null, null));
@@ -173,7 +181,14 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
     return dom.done();
 }
 
-fn commitsList(a: Allocator, repo: git.Repo, name: []const u8, buffer: []HTML.E, after: ?[]const u8) ![]HTML.E {
+fn commitsList(
+    a: Allocator,
+    repo: git.Repo,
+    name: []const u8,
+    after: ?[]const u8,
+    elms: []HTML.E,
+    sha: []u8,
+) ![]HTML.E {
     var current: git.Commit = repo.commit(a) catch return error.Unknown;
     if (after) |aft| {
         std.debug.assert(aft.len <= 40);
@@ -181,23 +196,24 @@ fn commitsList(a: Allocator, repo: git.Repo, name: []const u8, buffer: []HTML.E,
         while (!std.mem.eql(u8, aft, current.sha[0..min])) {
             current = current.toParent(a, 0) catch {
                 std.debug.print("unable to build commit history\n", .{});
-                return buffer[0..0];
+                return elms[0..0];
             };
         }
         current = current.toParent(a, 0) catch {
             std.debug.print("unable to build commit history\n", .{});
-            return buffer[0..0];
+            return elms[0..0];
         };
     }
     var count: usize = 0;
-    for (buffer, 0..) |*c, i| {
+    for (elms, 1..) |*c, i| {
+        count = i;
+        @memcpy(sha, current.sha[0..8]);
         c.* = (try htmlCommit(a, current, name, false))[0];
         current = current.toParent(a, 0) catch {
             break;
         };
-        count = i;
     }
-    return buffer[0..count];
+    return elms[0..count];
 }
 
 pub fn commits(ctx: *Context) Error!void {
@@ -211,11 +227,41 @@ pub fn commits(ctx: *Context) Error!void {
 
     const after = null;
     var commits_b = try ctx.alloc.alloc(HTML.E, 50);
-    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, commits_b, after);
+    var sha: [8]u8 = undefined;
+    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(cmts_list, null)}) catch return error.Unknown;
+
+    ctx.response.status = .ok;
+    ctx.sendTemplate(&tmpl) catch return error.Unknown;
+}
+
+pub fn commitsAfter(ctx: *Context) Error!void {
+    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+
+    std.debug.assert(std.mem.eql(u8, "after", ctx.uri.next().?));
+
+    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    var cwd = std.fs.cwd();
+    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    var repo = git.Repo.init(dir) catch return error.Unknown;
+    repo.loadData(ctx.alloc) catch return error.Unknown;
+
+    const after = ctx.uri.next();
+    var commits_b = try ctx.alloc.alloc(HTML.E, 50);
+    var last_sha: [8]u8 = undefined;
+    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
+
+    var tmpl = Template.find("commits.html");
+    tmpl.init(ctx.alloc);
+    _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(cmts_list, null)}) catch return error.Unknown;
+
+    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/after/{s}", .{ rd.name, last_sha });
+    _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
+        try HTML.linkBtnAlloc(ctx.alloc, "More", target),
+    }) catch return error.Unknown;
 
     ctx.response.status = .ok;
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
