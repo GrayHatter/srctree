@@ -227,12 +227,17 @@ pub fn commits(ctx: *Context) Error!void {
 
     const after = null;
     var commits_b = try ctx.alloc.alloc(HTML.E, 50);
-    var sha: [8]u8 = undefined;
-    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &sha);
+    var last_sha: [8]u8 = undefined;
+    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
     _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(cmts_list, null)}) catch return error.Unknown;
+
+    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/after/{s}", .{ rd.name, last_sha });
+    _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
+        try HTML.linkBtnAlloc(ctx.alloc, "More", target),
+    }) catch return error.Unknown;
 
     ctx.response.status = .ok;
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
