@@ -32,6 +32,7 @@ const Diff = @import("../types/diffs.zig");
 const gitweb = @import("../gitweb.zig");
 
 const endpoints = [_]Endpoint.Router.MatchRouter{
+    .{ .name = "", .match = .{ .call = treeBlob } },
     .{ .name = "blob", .match = .{ .call = treeBlob } },
     .{ .name = "commits", .match = .{ .simple = &Commits.routes } },
     .{ .name = "commit", .match = .{ .call = commit } },
@@ -254,6 +255,8 @@ fn treeBlob(ctx: *Context) Error!void {
         } else if (std.mem.eql(u8, blb, "tree")) {
             files = mkTree(ctx.alloc, repo, &ctx.uri, files) catch return error.Unknown;
             return tree(ctx, &repo, &files);
+        } else if (std.mem.eql(u8, blb, "")) { // There's a better way to do this
+            files = cmt.mkTree(ctx.alloc) catch return error.Unknown;
         } else return error.InvalidURI;
     } else files = cmt.mkTree(ctx.alloc) catch return error.Unknown;
     return tree(ctx, &repo, &files);
