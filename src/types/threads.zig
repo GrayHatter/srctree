@@ -13,9 +13,18 @@ pub const Status = enum(u1) {
     closed = 1,
 };
 
+/// while Zig specifies that the logical order of fields is little endian, I'm
+/// not sure that's the layout I want to go use. So don't depend on that yet.
 pub const State = packed struct {
     status: Status = .open,
     padding: u63 = 0,
+};
+
+pub const Source = enum(u8) {
+    issue = 0,
+    diff = 1,
+    remote = 2, // indeterminate if remote sources can be supported within a
+    // thread but for now they can be similar to an issue
 };
 
 test State {
@@ -39,6 +48,11 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
             .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .source = switch (try reader.readIntNative(u8)) {
+                0 => .issue,
+                1 => .diff,
+                else => return error.InvalidThreadData,
+            },
 
             .comment_data = try reader.readAllAlloc(a, 0xFFFF),
             .file = file,
@@ -55,6 +69,8 @@ pub const Thread = struct {
     repo: []const u8,
     title: []const u8,
     desc: []const u8,
+    source: Source = .issue,
+    source_hash: [32]u8,
 
     comment_data: ?[]const u8,
     comments: ?[]Comment = null,
