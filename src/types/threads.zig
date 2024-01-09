@@ -45,14 +45,14 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
             .state = try reader.readIntNative(usize),
             .created = try reader.readIntNative(i64),
             .updated = try reader.readIntNative(i64),
-            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .source = switch (try reader.readIntNative(u8)) {
                 0 => .issue,
                 1 => .diff,
                 else => return error.InvalidThreadData,
             },
+            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
 
             .comment_data = try reader.readAllAlloc(a, 0xFFFF),
             .file = file,
@@ -83,6 +83,7 @@ pub const Thread = struct {
         try writer.writeIntNative(usize, self.state);
         try writer.writeIntNative(i64, self.created);
         try writer.writeIntNative(i64, self.updated);
+        try writer.writeIntNative(u8, @intFromEnum(self.source));
         try writer.writeAll(self.repo);
         try writer.writeAll("\x00");
         try writer.writeAll(self.title);
