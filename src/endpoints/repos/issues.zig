@@ -17,7 +17,8 @@ const POST = Endpoint.Router.Methods.POST;
 
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
-const Issues = Endpoint.Types.Issues;
+//const Issues = Endpoint.Types.Issues;
+const Threads = Endpoint.Types.Threads;
 const Comments = Endpoint.Types.Comments;
 const Comment = Comments.Comment;
 
@@ -66,7 +67,7 @@ fn newPost(ctx: *Context) Error!void {
         var valid = post.validator();
         const title = try valid.require("title");
         const msg = try valid.require("desc");
-        var issue = Issues.new(rd.name, title.value, msg.value) catch unreachable;
+        var issue = Threads.new(rd.name, title.value, msg.value, .issue) catch unreachable;
         issue.writeOut() catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue.index });
@@ -85,7 +86,11 @@ fn newComment(ctx: *Context) Error!void {
         const msg = try valid.require("comment");
         const issue_index = isHex(issue_id.value) orelse return error.Unrouteable;
 
-        var issue = Issues.open(ctx.alloc, issue_index) catch unreachable orelse return error.Unrouteable;
+        var issue = Threads.open(
+            ctx.alloc,
+            rd.name,
+            issue_index,
+        ) catch unreachable orelse return error.Unrouteable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
         issue.addComment(ctx.alloc, c) catch {};
@@ -129,7 +134,7 @@ fn view(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    var issue = (Issues.open(ctx.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var issue = (Threads.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     dom.push(HTML.text(rd.name));
     dom.push(HTML.text(issue.repo));
     dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, issue.title, .{}) catch unreachable));
@@ -168,7 +173,7 @@ fn view(ctx: *Context) Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn issueRow(a: Allocator, issue: Issues.Issue) ![]HTML.Element {
+fn issueRow(a: Allocator, issue: Threads.Thread) ![]HTML.Element {
     const title = try Bleach.sanitizeAlloc(a, issue.title, .{ .rules = .title });
     const desc = try Bleach.sanitizeAlloc(a, issue.desc, .{});
     const href = try std.fmt.allocPrint(a, "{x}", .{issue.index});
@@ -203,10 +208,12 @@ fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var dom = DOM.new(ctx.alloc);
 
-    for (0..Issues.last() + 1) |i| {
-        var iss = Issues.open(ctx.alloc, i) catch continue orelse continue;
+    for (0..Threads.last(rd.name) + 1) |i| {
+        var iss = Threads.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         defer iss.raze(ctx.alloc);
+        // remove once threads api makes this promise
         if (!std.mem.eql(u8, iss.repo, rd.name)) continue;
+        if (iss.source != .issue) continue;
         dom.pushSlice(issueRow(ctx.alloc, iss) catch continue);
     }
     const issues = dom.done();

@@ -50,6 +50,7 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
                 1 => .diff,
                 else => return error.InvalidThreadData,
             },
+            .source_hash = try reader.readBytesNoEof(32),
             .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
@@ -145,7 +146,10 @@ var datad: std.fs.Dir = undefined;
 pub fn init(dir: []const u8) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}/threads", .{dir});
-    datad = try std.fs.cwd().openDir(filename, .{});
+    datad = std.fs.cwd().openDir(filename, .{}) catch |err| switch (err) {
+        error.FileNotFound => try std.fs.cwd().makeOpenPath(filename, .{}),
+        else => return err,
+    };
 }
 
 pub fn raze() void {
@@ -171,12 +175,12 @@ fn currMax(repo: []const u8) !usize {
     return count;
 }
 
-pub fn last() usize {
-    return currMax() catch 0;
+pub fn last(repo: []const u8) usize {
+    return currMax(repo) catch 0;
 }
 
-pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Thread {
-    var max: usize = currMax() catch 0;
+pub fn new(repo: []const u8, title: []const u8, desc: []const u8, comptime src: Source) !Thread {
+    var max: usize = currMax(repo) catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.thread", .{ repo, max + 1 });
     var file = try datad.createFile(filename, .{});
@@ -187,10 +191,12 @@ pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Thread {
         .title = title,
         .desc = desc,
         .file = file,
+        .source = src,
+        .source_hash = undefined,
         .comment_data = null,
     };
 
-    try currMaxSet(max + 1);
+    try currMaxSet(repo, max + 1);
 
     return d;
 }
