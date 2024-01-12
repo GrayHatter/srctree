@@ -18,7 +18,7 @@ const POST = Endpoint.Router.Methods.POST;
 
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
-const Diffs = Endpoint.Types.Diffs;
+const Threads = Endpoint.Types.Threads;
 const Comments = Endpoint.Types.Comments;
 const Comment = Comments.Comment;
 const Patch = @import("../../patch.zig");
@@ -75,7 +75,7 @@ fn newPost(ctx: *Context) Error!void {
         const title = try valid.require("title");
         const desc = try valid.require("desc");
         const action = valid.optional("submit") orelse valid.optional("preview") orelse return error.BadData;
-        var diff = Diffs.new(rd.name, title.value, src.value, desc.value) catch unreachable;
+        var diff = Threads.new(rd.name, title.value, desc.value, .diff) catch unreachable;
         diff.writeOut() catch unreachable;
         if (inNetwork(src.value)) {
             std.debug.print("src {s}\ntitle {s}\ndesc {s}\naction {s}\n", .{
@@ -117,7 +117,7 @@ fn newComment(ctx: *Context) Error!void {
         const msg = try valid.require("comment");
         if (msg.value.len < 2) return ctx.response.redirect(loc, true) catch unreachable;
 
-        var diff = Diffs.open(ctx.alloc, diff_index) catch unreachable orelse return error.Unrouteable;
+        var diff = Threads.open(ctx.alloc, rd.name, diff_index) catch unreachable orelse return error.Unrouteable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
         diff.addComment(ctx.alloc, c) catch {};
@@ -158,7 +158,7 @@ fn view(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    var diff = (Diffs.open(ctx.alloc, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var diff = (Threads.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     dom = dom.open(HTML.element("context", null, null));
     dom.push(HTML.text(rd.name));
     dom = dom.open(HTML.p(null, null));
@@ -211,7 +211,7 @@ fn view(ctx: *Context) Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn diffRow(a: Allocator, diff: Diffs.Diff) ![]HTML.Element {
+fn diffRow(a: Allocator, diff: Threads.Thread) ![]HTML.Element {
     const title = try Bleach.sanitizeAlloc(a, diff.title, .{ .rules = .title });
     const desc = try Bleach.sanitizeAlloc(a, diff.desc, .{});
     const href = try std.fmt.allocPrint(a, "{x}", .{diff.index});
@@ -241,8 +241,8 @@ fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var dom = DOM.new(ctx.alloc);
 
-    for (0..Diffs.last() + 1) |i| {
-        var d = Diffs.open(ctx.alloc, i) catch continue orelse continue;
+    for (0..Threads.last(rd.name) + 1) |i| {
+        var d = Threads.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         defer d.raze(ctx.alloc);
         if (!std.mem.eql(u8, d.repo, rd.name)) continue;
         dom.pushSlice(diffRow(ctx.alloc, d) catch continue);

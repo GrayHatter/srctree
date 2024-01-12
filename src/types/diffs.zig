@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 
 const Comments = @import("comments.zig");
 const Comment = Comments.Comment;
+const Threads = @import("threads.zig");
+const Thread = Threads.Thread;
 
 pub const Diffs = @This();
 
