@@ -175,6 +175,25 @@ fn currMax(repo: []const u8) !usize {
     return count;
 }
 
+pub const Iterator = struct {
+    index: usize = 0,
+
+    pub fn init() Iterator {
+        return .{};
+    }
+
+    pub fn next(self: *Iterator) !?Thread {
+        self.index += 1;
+        return error.NotImplemented;
+    }
+
+    pub fn raze(_: Iterator) void {}
+};
+
+pub fn iterator() Iterator {
+    return Iterator.init();
+}
+
 pub fn last(repo: []const u8) usize {
     return currMax(repo) catch 0;
 }

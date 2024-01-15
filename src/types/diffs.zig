@@ -145,15 +145,26 @@ fn currMax() !usize {
 }
 
 pub fn forRepoCount(repo: []const u8) usize {
+    var itr = Threads.iterator();
+
+    while (itr.next()) |next| {
+        if (next) |nxt| {
+            if (nxt.source != .diff) continue;
+        }
+    } else |err| {
+        std.debug.print("diff thread itr error {}\n", .{err});
+        unreachable;
+    }
+
     var dir = datad.openIterableDir(".", .{}) catch {
         std.debug.print("Unable to open diff dir to get repo count\n", .{});
         return 0;
     };
     defer dir.close();
 
-    var itr = dir.iterate();
+    var diritr = dir.iterate();
     var count: usize = 0;
-    while (itr.next() catch return count) |f| {
+    while (diritr.next() catch return count) |f| {
         if (f.kind != .file) continue;
         //const index = std.fmt.parseInt(usize, file.name[0..file.name.len - 5], 16) catch continue;
         var file = datad.openFile(f.name, .{ .mode = .read_write }) catch continue;
