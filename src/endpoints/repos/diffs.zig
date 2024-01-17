@@ -151,7 +151,24 @@ fn view(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    var diff = (Threads.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var thread = Threads.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
+        error.InvalidTarget => return error.Unrouteable,
+        error.InputOutput => unreachable,
+        error.Other => unreachable,
+    };
+
+    var diff = thread orelse return error.Unrouteable;
+
+    switch (diff.source) {
+        .diff => {},
+        .remote => @panic("Unimplemented thread source"),
+        .issue => {
+            var buf: [2048]u8 = undefined;
+            const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, index });
+            return ctx.response.redirect(loc, true) catch unreachable;
+        },
+    }
+
     dom = dom.open(HTML.element("context", null, null));
     dom.push(HTML.text(rd.name));
     dom = dom.open(HTML.p(null, null));

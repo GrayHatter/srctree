@@ -101,9 +101,10 @@ pub const Thread = struct {
     }
 
     pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Thread {
-        try file.seekTo(0);
-        var issue: Thread = try readVersioned(a, idx, file);
-        return issue;
+        // TODO I hate this, but I'm prototyping, plz rewrite
+        file.seekTo(0) catch return error.InputOutput;
+        var thread: Thread = readVersioned(a, idx, file) catch return error.InputOutput;
+        return thread;
     }
 
     pub fn getComments(self: *Thread, a: Allocator) ![]Comment {
@@ -225,7 +226,7 @@ pub fn open(a: std.mem.Allocator, repo: []const u8, index: usize) !?Thread {
     if (index > max) return null;
 
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.thread", .{ repo, index });
-    var file = try datad.openFile(filename, .{ .mode = .read_write });
+    const filename = std.fmt.bufPrint(&buf, "{s}.{x}.thread", .{ repo, index }) catch return error.InvalidTarget;
+    var file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
     return try Thread.readFile(a, index, file);
 }
