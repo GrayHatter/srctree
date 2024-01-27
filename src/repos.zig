@@ -86,6 +86,7 @@ pub fn updateThread() void {
             const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
             var dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
             var repo = Git.Repo.init(dir) catch continue;
+            defer repo.raze(a);
             repo.loadData(a) catch {
                 std.debug.print("Warning, unable to load data for repo {s}\n", .{rname});
             };
@@ -97,7 +98,6 @@ pub fn updateThread() void {
                 else => "main",
             };
 
-            defer repo.raze(a);
             const update = std.fmt.bufPrint(
                 &update_buffer,
                 "update {}\n",
