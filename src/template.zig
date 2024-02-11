@@ -18,11 +18,14 @@ fn validChar(c: u8) bool {
 
 pub const Context = struct {
     pub const HashMap = std.StringHashMap([]const u8);
+    pub const HashMapSlice = std.StringHashMap([]const []const u8);
     ctx: HashMap,
+    ctx_slice: HashMapSlice,
 
     pub fn init(a: Allocator) Context {
         return Context{
             .ctx = HashMap.init(a),
+            .ctx_slice = HashMapSlice.init(a),
         };
     }
 
@@ -36,6 +39,14 @@ pub const Context = struct {
 
     pub fn get(self: Context, name: []const u8) ?[]const u8 {
         return self.ctx.get(name);
+    }
+
+    pub fn putSlice(self: *Context, name: []const u8, value: []const []const u8) !void {
+        try self.ctx_slice.put(name, value);
+    }
+
+    pub fn getSlice(self: Context, name: []const u8) ?[]const []const u8 {
+        return self.ctx_slice.get(name);
     }
 };
 
@@ -115,6 +126,15 @@ pub const Template = struct {
         return false;
     }
 
+    fn directiveVerb(noun: []const u8, verb: []const u8) ?Directive.Kind {
+        if (std.mem.eql(u8, noun, "FOREACH")) {
+            return .{ .verb = .{
+                .vari = verb[0 .. verb.len - 7],
+            } };
+        }
+        return null;
+    }
+
     fn validDirective(str: []const u8) ?Directive {
         if (str.len == 0) return null;
         // parse name
@@ -134,30 +154,50 @@ pub const Template = struct {
             for (0..builtin.len) |subtemp_i| {
                 if (std.mem.eql(u8, builtin[subtemp_i].name, vari)) {
                     return Directive{
-                        .vari = vari,
                         .end = end,
-                        .otherwise = .{ .template = builtin[subtemp_i] },
+                        .kind = .{ .noun = .{
+                            .vari = vari,
+                            .otherwise = .{ .template = builtin[subtemp_i] },
+                        } },
                     };
                 }
             }
-            return Directive{ .vari = vari, .end = end };
+            return Directive{
+                .end = end,
+                .kind = .{ .noun = .{
+                    .vari = vari,
+                } },
+            };
+        } else if (directiveVerb(vari, verb[1..end])) |kind| {
+            return Directive{
+                .end = std.mem.indexOf(u8, str, "!-->") orelse return null,
+                .kind = kind,
+            };
         } else if (std.mem.startsWith(u8, verb, " ORELSE ")) {
             return Directive{
-                .vari = str[0..width],
                 .end = end,
-                .otherwise = .{ .str = str[width + 8 .. str.len - 4] },
+                .kind = .{
+                    .noun = .{
+                        .vari = str[0..width],
+                        .otherwise = .{ .str = str[width + 8 .. str.len - 4] },
+                    },
+                },
             };
         } else if (std.mem.eql(u8, verb, " ORNULL -->")) {
             return Directive{
-                .vari = str[0..width],
                 .end = end,
-                .otherwise = .{ .del = {} },
+                .kind = .{ .noun = .{
+                    .vari = str[0..width],
+                    .otherwise = .{ .del = {} },
+                } },
             };
         } else {
             for (str[width..]) |s| if (s != ' ') return null;
             return Directive{
-                .vari = str,
                 .end = end,
+                .kind = .{ .noun = .{
+                    .vari = str,
+                } },
             };
         }
     }
@@ -172,32 +212,46 @@ pub const Template = struct {
                 //var i: usize = 5;
                 //var c = blob[i];
                 if (validDirective(blob[5..])) |drct| {
-                    const var_name = drct.vari;
                     const end = drct.end + 5;
-                    // printing
-                    if (ctx.get(var_name)) |v_blob| {
-                        try out.writeAll(v_blob);
-                        blob = blob[end + 4 ..];
-                    } else {
-                        switch (drct.otherwise) {
-                            .str => |str| {
-                                try out.writeAll(str);
+                    switch (drct.kind) {
+                        .noun => |noun| {
+                            const var_name = noun.vari;
+                            // printing
+                            if (ctx.get(var_name)) |v_blob| {
+                                try out.writeAll(v_blob);
                                 blob = blob[end + 4 ..];
-                            },
-                            .ign => {
-                                try out.writeAll(blob[0 .. end + 4]);
-                                blob = blob[end + 4 ..];
-                            },
-                            .del => {
-                                blob = blob[end + 4 ..];
-                            },
-                            .template => |subt| {
-                                blob = blob[end + 4 ..];
-                                var subtmpl = subt;
-                                subtmpl.ctx = self.ctx;
-                                try subtmpl.format(fmts, .{}, out);
-                            },
-                        }
+                            } else {
+                                switch (noun.otherwise) {
+                                    .str => |str| {
+                                        try out.writeAll(str);
+                                        blob = blob[end + 4 ..];
+                                    },
+                                    .ign => {
+                                        try out.writeAll(blob[0 .. end + 4]);
+                                        blob = blob[end + 4 ..];
+                                    },
+                                    .del => {
+                                        blob = blob[end + 4 ..];
+                                    },
+                                    .template => |subt| {
+                                        blob = blob[end + 4 ..];
+                                        var subtmpl = subt;
+                                        subtmpl.ctx = self.ctx;
+                                        try subtmpl.format(fmts, .{}, out);
+                                    },
+                                }
+                            }
+                        },
+                        .verb => |verb| {
+                            if (ctx.getSlice(verb.vari)) |slc| {
+                                for (slc) |s| {
+                                    try verb.loop(s, out);
+                                }
+                            } else {
+                                unreachable; // not implemented
+                            }
+                            blob = blob[end + 4 ..];
+                        },
                     }
                 } else {
                     return try out.writeAll(blob);
@@ -211,14 +265,31 @@ pub const Template = struct {
 };
 
 pub const Directive = struct {
-    vari: []const u8,
+    pub const Kind = union(enum) {
+        pub const Noun = struct {
+            vari: []const u8,
+            otherwise: union(enum) {
+                ign: void,
+                del: void,
+                str: []const u8,
+                template: Template,
+            } = .{ .ign = {} },
+        };
+
+        pub const Verb = struct {
+            vari: []const u8,
+
+            pub fn loop(_: Verb, each: []const u8, out: anytype) !void {
+                try out.writeAll(each);
+            }
+        };
+
+        noun: Noun,
+        verb: Verb,
+    };
+
+    kind: Kind,
     end: usize,
-    otherwise: union(enum) {
-        ign: void,
-        del: void,
-        str: []const u8,
-        template: Template,
-    } = .{ .ign = {} },
 };
 
 fn tail(path: []const u8) []const u8 {
@@ -392,6 +463,14 @@ test "directive FOREACH" {
         \\<!-- END !-->
     ;
 
+    const expected: []const u8 =
+        \\<div>not this</div>
+    ;
+
+    const dbl_expected: []const u8 =
+        \\<div>not this</div><div>not this</div>
+    ;
+
     var t = Template{
         .alloc = null,
         .path = "/dev/null",
@@ -399,7 +478,22 @@ test "directive FOREACH" {
         .blob = blob,
     };
 
-    const page = try t.buildFor(a, Context.init(a));
+    var ctx = Context.init(a);
+    try ctx.putSlice("name", &[_][]const u8{
+        expected,
+    });
+    defer ctx.ctx_slice.deinit();
+
+    const page = try t.buildFor(a, ctx);
     defer a.free(page);
-    try std.testing.expectEqualStrings(blob, page);
+    try std.testing.expectEqualStrings(expected, page);
+
+    try ctx.putSlice("name", &[_][]const u8{
+        expected,
+        expected,
+    });
+
+    const dbl_page = try t.buildFor(a, ctx);
+    defer a.free(dbl_page);
+    try std.testing.expectEqualStrings(dbl_expected, dbl_page);
 }
