@@ -18,7 +18,7 @@ fn validChar(c: u8) bool {
 
 pub const Context = struct {
     pub const HashMap = std.StringHashMap([]const u8);
-    pub const HashMapSlice = std.StringHashMap([]const []const u8);
+    pub const HashMapSlice = std.StringHashMap([]const Context);
     ctx: HashMap,
     ctx_slice: HashMapSlice,
 
@@ -29,8 +29,9 @@ pub const Context = struct {
         };
     }
 
-    pub fn raze(_: Context) void {
-        @panic("not implemented");
+    pub fn raze(self: *Context) void {
+        self.ctx.deinit();
+        self.ctx_slice.deinit();
     }
 
     pub fn put(self: *Context, name: []const u8, value: []const u8) !void {
@@ -41,11 +42,13 @@ pub const Context = struct {
         return self.ctx.get(name);
     }
 
-    pub fn putSlice(self: *Context, name: []const u8, value: []const []const u8) !void {
-        try self.ctx_slice.put(name, value);
+    /// Memory of block is managed by the caller. Calling raze will not free the
+    /// memory from within.
+    pub fn putBlock(self: *Context, name: []const u8, block: []const Context) !void {
+        try self.ctx_slice.put(name, block);
     }
 
-    pub fn getSlice(self: Context, name: []const u8) ?[]const []const u8 {
+    pub fn getBlock(self: Context, name: []const u8) ?[]const Context {
         return self.ctx_slice.get(name);
     }
 };
@@ -126,10 +129,17 @@ pub const Template = struct {
         return false;
     }
 
-    fn directiveVerb(noun: []const u8, verb: []const u8) ?Directive.Kind {
+    fn directiveVerb(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive.Kind {
         if (std.mem.eql(u8, noun, "FOREACH")) {
+            const start = 3 + (std.mem.indexOf(u8, blob, "-->") orelse return null);
+            const end = std.mem.indexOf(u8, blob, "<!-- END !-->") orelse return null;
+            var width: usize = 1;
+            while (width < verb.len and validChar(verb[width])) {
+                width += 1;
+            }
             return .{ .verb = .{
-                .vari = verb[0 .. verb.len - 7],
+                .vari = verb[1..width],
+                .blob = blob[start..end],
             } };
         }
         return null;
@@ -137,9 +147,6 @@ pub const Template = struct {
 
     fn validDirective(str: []const u8) ?Directive {
         if (str.len == 0) return null;
-        // parse name
-        // parse directive
-        // parse alternate
         const end = std.mem.indexOf(u8, str, " -->") orelse return null;
 
         var width: usize = 0;
@@ -168,7 +175,7 @@ pub const Template = struct {
                     .vari = vari,
                 } },
             };
-        } else if (directiveVerb(vari, verb[1..end])) |kind| {
+        } else if (directiveVerb(vari, verb, str)) |kind| {
             return Directive{
                 .end = std.mem.indexOf(u8, str, "!-->") orelse return null,
                 .kind = kind,
@@ -192,11 +199,10 @@ pub const Template = struct {
                 } },
             };
         } else {
-            for (str[width..]) |s| if (s != ' ') return null;
             return Directive{
                 .end = end,
                 .kind = .{ .noun = .{
-                    .vari = str,
+                    .vari = vari,
                 } },
             };
         }
@@ -243,11 +249,12 @@ pub const Template = struct {
                             }
                         },
                         .verb => |verb| {
-                            if (ctx.getSlice(verb.vari)) |slc| {
-                                for (slc) |s| {
-                                    try verb.loop(s, out);
+                            if (ctx.getBlock(verb.vari)) |block| {
+                                for (block) |s| {
+                                    verb.loop(&s, out) catch unreachable;
                                 }
                             } else {
+                                std.debug.print("block missing [{s}]\n", .{verb.vari});
                                 unreachable; // not implemented
                             }
                             blob = blob[end + 4 ..];
@@ -278,9 +285,17 @@ pub const Directive = struct {
 
         pub const Verb = struct {
             vari: []const u8,
+            blob: []const u8,
 
-            pub fn loop(_: Verb, each: []const u8, out: anytype) !void {
-                try out.writeAll(each);
+            pub fn loop(self: Verb, block: *const Context, out: anytype) anyerror!void {
+                var t = Template{
+                    .name = self.vari,
+                    .path = "/dev/null",
+                    // would be nice not to have to do a mov here
+                    .ctx = block.*,
+                    .blob = self.blob,
+                };
+                try t.format("", .{}, out);
             }
         };
 
@@ -412,6 +427,20 @@ test "init" {
     tmpl.init(a);
 }
 
+test "directive nothing" {
+    var a = std.testing.allocator;
+    var t = Template{
+        .alloc = null,
+        .path = "/dev/null",
+        .name = "test",
+        .blob = "<!-- nothing -->",
+    };
+
+    const page = try t.buildFor(a, Context.init(a));
+    defer a.free(page);
+    try std.testing.expectEqualStrings("<!-- nothing -->", page);
+}
+
 test "directive ORELSE" {
     var a = std.testing.allocator;
     var t = Template{
@@ -459,16 +488,22 @@ test "directive FOREACH" {
 
     const blob =
         \\<!-- FOREACH name -->
-        \\<div><!-- this --></div>
+        \\<div><!-- loop --></div>
         \\<!-- END !-->
     ;
 
     const expected: []const u8 =
-        \\<div>not this</div>
+        \\
+        \\<div>not that</div>
+        \\
     ;
 
     const dbl_expected: []const u8 =
-        \\<div>not this</div><div>not this</div>
+        \\
+        \\<div>first</div>
+        \\
+        \\<div>second</div>
+        \\
     ;
 
     var t = Template{
@@ -479,21 +514,34 @@ test "directive FOREACH" {
     };
 
     var ctx = Context.init(a);
-    try ctx.putSlice("name", &[_][]const u8{
-        expected,
-    });
+    var blocks: [1]Context = [1]Context{
+        Context.init(a),
+    };
+    try blocks[0].put("loop", "not that");
+    try ctx.putBlock("name", &blocks);
     defer ctx.ctx_slice.deinit();
 
     const page = try t.buildFor(a, ctx);
     defer a.free(page);
     try std.testing.expectEqualStrings(expected, page);
+    blocks[0].raze();
 
-    try ctx.putSlice("name", &[_][]const u8{
-        expected,
-        expected,
-    });
+    // many
+    var many_blocks: [2]Context = [_]Context{
+        Context.init(a),
+        Context.init(a),
+    };
+    // what... 2 is many
+
+    try many_blocks[0].put("loop", "first");
+    try many_blocks[1].put("loop", "second");
+
+    try ctx.putBlock("name", &many_blocks);
 
     const dbl_page = try t.buildFor(a, ctx);
     defer a.free(dbl_page);
     try std.testing.expectEqualStrings(dbl_expected, dbl_page);
+
+    many_blocks[0].raze();
+    many_blocks[1].raze();
 }
