@@ -111,43 +111,53 @@ pub const Template = struct {
         return try template.build(a);
     }
 
+    fn templateSearch() bool {
+        return false;
+    }
+
     fn validDirective(str: []const u8) ?Directive {
         if (str.len == 0) return null;
         // parse name
         // parse directive
         // parse alternate
+        const end = std.mem.indexOf(u8, str, " -->") orelse return null;
+
         var width: usize = 0;
         while (width < str.len and validChar(str[width])) {
             width += 1;
         }
 
         const vari = str[0..width];
-        const directive = str[width..];
+        const verb = str[width..];
 
         if (vari[0] == '_') {
             for (0..builtin.len) |subtemp_i| {
                 if (std.mem.eql(u8, builtin[subtemp_i].name, vari)) {
                     return Directive{
                         .vari = vari,
+                        .end = end,
                         .otherwise = .{ .template = builtin[subtemp_i] },
                     };
                 }
             }
-            return Directive{ .vari = vari };
-        } else if (std.mem.startsWith(u8, directive, " ORELSE ")) {
+            return Directive{ .vari = vari, .end = end };
+        } else if (std.mem.startsWith(u8, verb, " ORELSE ")) {
             return Directive{
                 .vari = str[0..width],
-                .otherwise = .{ .str = str[width + 8 ..] },
+                .end = end,
+                .otherwise = .{ .str = str[width + 8 .. str.len - 4] },
             };
-        } else if (std.mem.eql(u8, directive, " ORNULL")) {
+        } else if (std.mem.eql(u8, verb, " ORNULL -->")) {
             return Directive{
                 .vari = str[0..width],
+                .end = end,
                 .otherwise = .{ .del = {} },
             };
         } else {
             for (str[width..]) |s| if (s != ' ') return null;
             return Directive{
                 .vari = str,
+                .end = end,
             };
         }
     }
@@ -161,40 +171,39 @@ pub const Template = struct {
                 blob = blob[offset..];
                 //var i: usize = 5;
                 //var c = blob[i];
-                if (std.mem.indexOf(u8, blob, " -->")) |end| {
-                    if (validDirective(blob[5..end])) |dr| {
-                        const var_name = dr.vari;
-                        // printing
-                        if (ctx.get(var_name)) |v_blob| {
-                            try out.writeAll(v_blob);
-                            blob = blob[end + 4 ..];
-                        } else {
-                            switch (dr.otherwise) {
-                                .str => |str| {
-                                    try out.writeAll(str);
-                                    blob = blob[end + 4 ..];
-                                },
-                                .ign => {
-                                    try out.writeAll(blob[0 .. end + 4]);
-                                    blob = blob[end + 4 ..];
-                                },
-                                .del => {
-                                    blob = blob[end + 4 ..];
-                                },
-                                .template => |subt| {
-                                    blob = blob[end + 4 ..];
-                                    var subtmpl = subt;
-                                    subtmpl.ctx = self.ctx;
-                                    try subtmpl.format(fmts, .{}, out);
-                                },
-                            }
-                        }
-                    } else {
-                        try out.writeAll(blob[0 .. end + 4]);
+                if (validDirective(blob[5..])) |drct| {
+                    const var_name = drct.vari;
+                    const end = drct.end + 5;
+                    // printing
+                    if (ctx.get(var_name)) |v_blob| {
+                        try out.writeAll(v_blob);
                         blob = blob[end + 4 ..];
+                    } else {
+                        switch (drct.otherwise) {
+                            .str => |str| {
+                                try out.writeAll(str);
+                                blob = blob[end + 4 ..];
+                            },
+                            .ign => {
+                                try out.writeAll(blob[0 .. end + 4]);
+                                blob = blob[end + 4 ..];
+                            },
+                            .del => {
+                                blob = blob[end + 4 ..];
+                            },
+                            .template => |subt| {
+                                blob = blob[end + 4 ..];
+                                var subtmpl = subt;
+                                subtmpl.ctx = self.ctx;
+                                try subtmpl.format(fmts, .{}, out);
+                            },
+                        }
                     }
-                    continue;
+                } else {
+                    return try out.writeAll(blob);
                 }
+
+                continue;
             }
             return try out.writeAll(blob);
         }
@@ -203,6 +212,7 @@ pub const Template = struct {
 
 pub const Directive = struct {
     vari: []const u8,
+    end: usize,
     otherwise: union(enum) {
         ign: void,
         del: void,
@@ -369,4 +379,27 @@ test "directive ORNULL" {
     const nullpage = try t.buildFor(a, Context.init(a));
     defer a.free(nullpage);
     try std.testing.expectEqualStrings("", nullpage);
+}
+
+test "directive FOR" {}
+
+test "directive FOREACH" {
+    var a = std.testing.allocator;
+
+    const blob =
+        \\<!-- FOREACH name -->
+        \\<div><!-- this --></div>
+        \\<!-- END !-->
+    ;
+
+    var t = Template{
+        .alloc = null,
+        .path = "/dev/null",
+        .name = "test",
+        .blob = blob,
+    };
+
+    const page = try t.buildFor(a, Context.init(a));
+    defer a.free(page);
+    try std.testing.expectEqualStrings(blob, page);
 }
