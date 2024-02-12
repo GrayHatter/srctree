@@ -255,7 +255,7 @@ pub const Template = struct {
                                 }
                             } else {
                                 std.debug.print("block missing [{s}]\n", .{verb.vari});
-                                unreachable; // not implemented
+                                try out.writeAll(blob[0 .. end + 4]);
                             }
                             blob = blob[end + 4 ..];
                         },

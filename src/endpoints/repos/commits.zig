@@ -181,14 +181,29 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
     return dom.done();
 }
 
+fn commitContext(a: Allocator, c: git.Commit, repo: []const u8, comptime _: bool) !Template.Context {
+    var ctx = Template.Context.init(a);
+
+    try ctx.put("sha", c.sha[0..8]);
+    try ctx.put("uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
+    try ctx.put("msg", c.message);
+
+    //if (top) "top" else "foot", null, null));
+    const parent = c.parent[0] orelse "00000000";
+    try ctx.put("author", c.author.name);
+    try ctx.put("parent", parent[0..8]);
+    try ctx.put("parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, parent[0..8] }));
+    return ctx;
+}
+
 fn commitsList(
     a: Allocator,
     repo: git.Repo,
     name: []const u8,
     after: ?[]const u8,
-    elms: []HTML.E,
+    elms: []Template.Context,
     sha: []u8,
-) ![]HTML.E {
+) ![]Template.Context {
     var current: git.Commit = repo.commit(a) catch return error.Unknown;
     if (after) |aft| {
         std.debug.assert(aft.len <= 40);
@@ -208,7 +223,7 @@ fn commitsList(
     for (elms, 1..) |*c, i| {
         count = i;
         @memcpy(sha, current.sha[0..8]);
-        c.* = (try htmlCommit(a, current, name, false))[0];
+        c.* = try commitContext(a, current, name, false);
         current = current.toParent(a, 0) catch {
             break;
         };
@@ -226,13 +241,14 @@ pub fn commits(ctx: *Context) Error!void {
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
     const after = null;
-    var commits_b = try ctx.alloc.alloc(HTML.E, 50);
+    var commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
     const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(cmts_list, null)}) catch return error.Unknown;
+
+    try tmpl.ctx.?.putBlock("commits", cmts_list);
 
     const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/after/{s}", .{ rd.name, last_sha });
     _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
@@ -255,13 +271,14 @@ pub fn commitsAfter(ctx: *Context) Error!void {
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
     const after = ctx.uri.next();
-    var commits_b = try ctx.alloc.alloc(HTML.E, 50);
+    var commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
     const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "commits", &[_]HTML.E{HTML.div(cmts_list, null)}) catch return error.Unknown;
+
+    try tmpl.ctx.?.putBlock("commits", cmts_list);
 
     const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/after/{s}", .{ rd.name, last_sha });
     _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
