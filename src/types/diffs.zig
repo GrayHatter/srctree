@@ -145,16 +145,16 @@ fn currMax() !usize {
 }
 
 pub fn forRepoCount(repo: []const u8) usize {
-    var itr = Threads.iterator();
+    //var itr = Threads.iterator(a, repo);
 
-    while (itr.next()) |next| {
-        if (next) |nxt| {
-            if (nxt.source != .diff) continue;
-        }
-    } else |err| {
-        std.debug.print("diff thread itr error {}\n", .{err});
-        unreachable;
-    }
+    //while (itr.next()) |next| {
+    //    if (next) |nxt| {
+    //        if (nxt.source != .diff) continue;
+    //    }
+    //} else |err| {
+    //    std.debug.print("diff thread itr error {}\n", .{err});
+    //    unreachable;
+    //}
 
     var dir = datad.openIterableDir(".", .{}) catch {
         std.debug.print("Unable to open diff dir to get repo count\n", .{});

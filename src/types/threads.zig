@@ -100,6 +100,7 @@ pub const Thread = struct {
         try self.file.setEndPos(self.file.getPos() catch unreachable);
     }
 
+    // TODO mmap
     pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Thread {
         // TODO I hate this, but I'm prototyping, plz rewrite
         file.seekTo(0) catch return error.InputOutput;
@@ -178,14 +179,19 @@ fn currMax(repo: []const u8) !usize {
 
 pub const Iterator = struct {
     index: usize = 0,
+    alloc: Allocator,
+    repo_name: []const u8,
 
-    pub fn init() Iterator {
-        return .{};
+    pub fn init(a: Allocator, name: []const u8) Iterator {
+        return .{
+            .alloc = a,
+            .repo_name = name,
+        };
     }
 
     pub fn next(self: *Iterator) !?Thread {
-        self.index += 1;
-        return error.NotImplemented;
+        defer self.index += 1;
+        return open(self.alloc, self.repo_name, self.index);
     }
 
     pub fn raze(_: Iterator) void {}
