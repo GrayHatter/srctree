@@ -190,7 +190,7 @@ pub const Template = struct {
                     },
                 },
             };
-        } else if (std.mem.eql(u8, verb, " ORNULL -->")) {
+        } else if (std.mem.startsWith(u8, verb, " ORNULL -->")) {
             return Directive{
                 .end = end,
                 .kind = .{ .noun = .{

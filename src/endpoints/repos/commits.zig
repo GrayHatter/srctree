@@ -186,7 +186,12 @@ fn commitContext(a: Allocator, c: git.Commit, repo: []const u8, comptime _: bool
 
     try ctx.put("sha", c.sha[0..8]);
     try ctx.put("uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
-    try ctx.put("msg", c.message);
+    if (std.mem.indexOf(u8, c.message, "\n\n")) |i| {
+        try ctx.put("msg_title", c.message[0..i]);
+        try ctx.put("msg", c.message[i + 2 ..]);
+    } else {
+        try ctx.put("msg", c.message);
+    }
 
     //if (top) "top" else "foot", null, null));
     const parent = c.parent[0] orelse "00000000";
