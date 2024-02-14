@@ -186,7 +186,7 @@ pub const Template = struct {
                 .kind = .{
                     .noun = .{
                         .vari = str[0..width],
-                        .otherwise = .{ .str = str[width + 8 .. str.len - 4] },
+                        .otherwise = .{ .str = str[width + 8 .. end] },
                     },
                 },
             };
