@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const Comments = @import("comments.zig");
 const Comment = Comments.Comment;
+const Deltas = @import("deltas.zig");
 const Threads = @import("threads.zig");
 const Thread = Threads.Thread;
 
@@ -20,9 +21,7 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Diff {
             .created = try reader.readIntNative(i64),
             .updated = try reader.readIntNative(i64),
             .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .source_uri = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
 
             .comment_data = try reader.readAllAlloc(a, 0xFFFF),
             .file = file,
@@ -37,12 +36,9 @@ pub const Diff = struct {
     created: i64 = 0,
     updated: i64 = 0,
     repo: []const u8,
-    title: []const u8,
-    source_uri: []const u8,
-    desc: []const u8,
+    delta_hash: [32]u8,
+    source_uri: ?[]const u8,
 
-    comment_data: ?[]const u8,
-    comments: ?[]Comment = null,
     file: std.fs.File,
 
     pub fn writeOut(self: Diff) !void {
@@ -54,17 +50,7 @@ pub const Diff = struct {
         try writer.writeIntNative(i64, self.updated);
         try writer.writeAll(self.repo);
         try writer.writeAll("\x00");
-        try writer.writeAll(self.title);
-        try writer.writeAll("\x00");
         try writer.writeAll(self.source_uri);
-        try writer.writeAll("\x00");
-        try writer.writeAll(self.desc);
-        try writer.writeAll("\x00");
-        if (self.comments) |cmts| {
-            for (cmts) |*c| {
-                try writer.writeAll(c.toHash());
-            }
-        }
         try writer.writeAll("\x00");
         try self.file.setEndPos(self.file.getPos() catch unreachable);
     }
@@ -186,7 +172,7 @@ pub fn last() usize {
     return currMax() catch 0;
 }
 
-pub fn new(repo: []const u8, title: []const u8, src: []const u8, desc: []const u8) !Diff {
+pub fn new(repo: []const u8, delta: Deltas.Delta) !Diff {
     var max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{max + 1});
@@ -195,11 +181,9 @@ pub fn new(repo: []const u8, title: []const u8, src: []const u8, desc: []const u
         .index = max + 1,
         .state = 0,
         .repo = repo,
-        .title = title,
-        .source_uri = src,
-        .desc = desc,
+        .delta_hash = delta.hash,
+        .source_uri = null,
         .file = file,
-        .comment_data = null,
     };
 
     try currMaxSet(max + 1);

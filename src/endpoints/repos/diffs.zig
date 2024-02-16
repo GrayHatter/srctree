@@ -19,6 +19,7 @@ const POST = Endpoint.Router.Methods.POST;
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
 const Threads = Endpoint.Types.Threads;
+const Deltas = Endpoint.Types.Deltas;
 const Comments = Endpoint.Types.Comments;
 const Comment = Comments.Comment;
 const Patch = @import("../../patch.zig");
@@ -68,8 +69,12 @@ fn newPost(ctx: *Context) Error!void {
         const title = try valid.require("title");
         const desc = try valid.require("desc");
         const action = valid.optional("submit") orelse valid.optional("preview") orelse return error.BadData;
-        var diff = Threads.new(rd.name, title.value, desc.value, .diff) catch unreachable;
-        diff.writeOut() catch unreachable;
+        var delta = Deltas.new(rd.name) catch unreachable;
+        //delta.src = src;
+        delta.title = title.value;
+        delta.desc = desc.value;
+
+        delta.writeOut() catch unreachable;
         if (inNetwork(src.value)) {
             std.debug.print("src {s}\ntitle {s}\ndesc {s}\naction {s}\n", .{
                 src.value,
@@ -81,14 +86,14 @@ fn newPost(ctx: *Context) Error!void {
             var filename = std.fmt.allocPrint(
                 ctx.alloc,
                 "data/patch/{s}.{x}.patch",
-                .{ rd.name, diff.index },
+                .{ rd.name, delta.index },
             ) catch unreachable;
             var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
             defer file.close();
             file.writer().writeAll(data.patch) catch unreachable;
         }
         var buf: [2048]u8 = undefined;
-        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, diff.index });
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
         return ctx.response.redirect(loc, true) catch unreachable;
     };
 
@@ -110,7 +115,7 @@ fn newComment(ctx: *Context) Error!void {
         const msg = try valid.require("comment");
         if (msg.value.len < 2) return ctx.response.redirect(loc, true) catch unreachable;
 
-        var diff = Threads.open(ctx.alloc, rd.name, diff_index) catch unreachable orelse return error.Unrouteable;
+        var diff = Deltas.open(ctx.alloc, rd.name, diff_index) catch unreachable orelse return error.Unrouteable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
         diff.addComment(ctx.alloc, c) catch {};
@@ -151,31 +156,32 @@ fn view(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    var thread = Threads.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
+    var delta = Deltas.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
         error.InvalidTarget => return error.Unrouteable,
         error.InputOutput => unreachable,
         error.Other => unreachable,
-    };
+        else => unreachable,
+    } orelse return error.Unrouteable;
 
-    var diff = thread orelse return error.Unrouteable;
+    //var thread = delta.loadThread(ctx.alloc);
 
-    switch (diff.source) {
-        .diff => {},
-        .remote => @panic("Unimplemented thread source"),
-        .issue => {
-            var buf: [2048]u8 = undefined;
-            const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, index });
-            return ctx.response.redirect(loc, true) catch unreachable;
-        },
-    }
+    //switch (diff.source) {
+    //    .diff => {},
+    //    .remote => @panic("Unimplemented thread source"),
+    //    .issue => {
+    //        var buf: [2048]u8 = undefined;
+    //        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, index });
+    //        return ctx.response.redirect(loc, true) catch unreachable;
+    //    },
+    //}
 
     dom = dom.open(HTML.element("context", null, null));
     dom.push(HTML.text(rd.name));
     dom = dom.open(HTML.p(null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, diff.title, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable));
     dom = dom.close();
     dom = dom.open(HTML.p(null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, diff.desc, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.desc, .{}) catch unreachable));
     dom = dom.close();
     dom = dom.close();
 
@@ -191,7 +197,9 @@ fn view(ctx: *Context) Error!void {
     } }) |cm| {
         comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
-    for (diff.getComments(ctx.alloc) catch unreachable) |cm| {
+
+    _ = delta.loadThread(ctx.alloc) catch unreachable;
+    for (delta.getComments(ctx.alloc) catch unreachable) |cm| {
         comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
 
@@ -209,7 +217,7 @@ fn view(ctx: *Context) Error!void {
 
     _ = try tmpl.addElements(ctx.alloc, "form-data", &form_data);
 
-    const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, diff.index });
+    const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     var file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
@@ -221,41 +229,42 @@ fn view(ctx: *Context) Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn diffRow(a: Allocator, diff: Threads.Thread) ![]HTML.Element {
-    const title = try Bleach.sanitizeAlloc(a, diff.title, .{ .rules = .title });
-    const desc = try Bleach.sanitizeAlloc(a, diff.desc, .{});
-    const href = try std.fmt.allocPrint(a, "{x}", .{diff.index});
-
-    var dom = DOM.new(a);
-    dom = dom.open(HTML.element("row", null, null));
-    dom = dom.open(HTML.div(null, null));
-    dom = dom.open(HTML.div(null, null));
-    dom.dupe(HTML.span(
-        try std.fmt.allocPrint(a, "0x{X}", .{diff.index}),
-        &HTML.Attr.class("muted"),
-    ));
-    dom.push(try HTML.aHrefAlloc(a, title, href));
-    dom = dom.close();
-    if (diff.comments) |cmts| {
-        const count = try std.fmt.allocPrint(a, "\xee\xa0\x9c {}", .{cmts.len});
-        dom.dupe(HTML.span(count, &HTML.Attr.class("icon")));
-    }
-    dom = dom.close();
-    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
-
-    dom = dom.close();
-    return dom.done();
-}
+//fn diffRow(a: Allocator, diff: Threads.Thread) ![]HTML.Element {
+//    const title = try Bleach.sanitizeAlloc(a, diff.title, .{ .rules = .title });
+//    const desc = try Bleach.sanitizeAlloc(a, diff.desc, .{});
+//    const href = try std.fmt.allocPrint(a, "{x}", .{diff.index});
+//
+//    var dom = DOM.new(a);
+//    dom = dom.open(HTML.element("row", null, null));
+//    dom = dom.open(HTML.div(null, null));
+//    dom = dom.open(HTML.div(null, null));
+//    dom.dupe(HTML.span(
+//        try std.fmt.allocPrint(a, "0x{X}", .{diff.index}),
+//        &HTML.Attr.class("muted"),
+//    ));
+//    dom.push(try HTML.aHrefAlloc(a, title, href));
+//    dom = dom.close();
+//    if (diff.comments) |cmts| {
+//        const count = try std.fmt.allocPrint(a, "\xee\xa0\x9c {}", .{cmts.len});
+//        dom.dupe(HTML.span(count, &HTML.Attr.class("icon")));
+//    }
+//    dom = dom.close();
+//    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
+//
+//    dom = dom.close();
+//    return dom.done();
+//}
 
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var dom = DOM.new(ctx.alloc);
 
-    for (0..Threads.last(rd.name) + 1) |i| {
-        var d = Threads.open(ctx.alloc, rd.name, i) catch continue orelse continue;
+    for (0..Deltas.last(rd.name) + 1) |i| {
+        var d = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         defer d.raze(ctx.alloc);
         if (!std.mem.eql(u8, d.repo, rd.name)) continue;
-        dom.pushSlice(diffRow(ctx.alloc, d) catch continue);
+        continue;
+        //dom.pushSlice(diffRow(ctx.alloc, d) catch continue);
     }
     const diffs = dom.done();
     var tmpl = Template.find("actionable.html");

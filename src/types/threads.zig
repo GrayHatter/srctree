@@ -3,10 +3,11 @@ const Allocator = std.mem.Allocator;
 
 const Comments = @import("comments.zig");
 const Comment = Comments.Comment;
+const Deltas = @import("deltas.zig");
 
 pub const Threads = @This();
 
-const FILE_VERSION: usize = 0;
+const THREADS_VERSION: usize = 0;
 
 pub const Status = enum(u1) {
     open = 0,
@@ -40,24 +41,19 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
     var reader = file.reader();
     var int: usize = try reader.readIntNative(usize);
     return switch (int) {
-        0 => Thread{
-            .index = idx,
-            .state = try reader.readIntNative(usize),
-            .created = try reader.readIntNative(i64),
-            .updated = try reader.readIntNative(i64),
-            .source = switch (try reader.readIntNative(u8)) {
-                0 => .issue,
-                1 => .diff,
-                else => return error.InvalidThreadData,
-            },
-            .source_hash = try reader.readBytesNoEof(32),
-            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-
-            .comment_data = try reader.readAllAlloc(a, 0xFFFF),
-            .file = file,
+        0 => {
+            var t = Thread{
+                .index = idx,
+                .state = try reader.readIntNative(usize),
+                .created = try reader.readIntNative(i64),
+                .updated = try reader.readIntNative(i64),
+                .file = file,
+            };
+            _ = try reader.read(&t.delta_hash);
+            t.comment_data = try reader.readAllAlloc(a, 0xFFFF);
+            return t;
         },
+
         else => error.UnsupportedVersion,
     };
 }
@@ -67,30 +63,22 @@ pub const Thread = struct {
     state: usize,
     created: i64 = 0,
     updated: i64 = 0,
-    repo: []const u8,
-    title: []const u8,
-    desc: []const u8,
-    source: Source = .issue,
-    source_hash: [32]u8,
+    delta_hash: [32]u8 = [_]u8{0} ** 32,
+    hash: [32]u8 = [_]u8{0} ** 32,
 
-    comment_data: ?[]const u8,
+    comment_data: ?[]const u8 = null,
     comments: ?[]Comment = null,
     file: std.fs.File,
 
     pub fn writeOut(self: Thread) !void {
         try self.file.seekTo(0);
         var writer = self.file.writer();
-        try writer.writeIntNative(usize, FILE_VERSION);
+        try writer.writeIntNative(usize, THREADS_VERSION);
         try writer.writeIntNative(usize, self.state);
         try writer.writeIntNative(i64, self.created);
         try writer.writeIntNative(i64, self.updated);
-        try writer.writeIntNative(u8, @intFromEnum(self.source));
-        try writer.writeAll(self.repo);
-        try writer.writeAll("\x00");
-        try writer.writeAll(self.title);
-        try writer.writeAll("\x00");
-        try writer.writeAll(self.desc);
-        try writer.writeAll("\x00");
+        try writer.writeAll(&self.delta_hash);
+
         if (self.comments) |cmts| {
             for (cmts) |*c| {
                 try writer.writeAll(c.toHash());
@@ -158,18 +146,18 @@ pub fn raze() void {
     datad.close();
 }
 
-fn currMaxSet(repo: []const u8, count: usize) !void {
+fn currMaxSet(count: usize) !void {
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "_{s}_count", .{repo});
+    const filename = try std.fmt.bufPrint(&buf, "_count", .{});
     var cnt_file = try datad.createFile(filename, .{});
     defer cnt_file.close();
     var writer = cnt_file.writer();
     _ = try writer.writeIntNative(usize, count);
 }
 
-fn currMax(repo: []const u8) !usize {
+fn currMax() !usize {
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "_{s}_count", .{repo});
+    const filename = try std.fmt.bufPrint(&buf, "_count", .{});
     var cnt_file = try datad.openFile(filename, .{ .mode = .read_write });
     defer cnt_file.close();
     var reader = cnt_file.reader();
@@ -201,38 +189,32 @@ pub fn iterator() Iterator {
     return Iterator.init();
 }
 
-pub fn last(repo: []const u8) usize {
-    return currMax(repo) catch 0;
+pub fn last() usize {
+    return currMax() catch 0;
 }
 
-pub fn new(repo: []const u8, title: []const u8, desc: []const u8, comptime src: Source) !Thread {
-    var max: usize = currMax(repo) catch 0;
+pub fn new(delta: Deltas.Delta) !Thread {
+    var max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.thread", .{ repo, max + 1 });
+    const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{max + 1});
     var file = try datad.createFile(filename, .{});
-    var d = Thread{
+    try currMaxSet(max + 1);
+    var thread = Thread{
         .index = max + 1,
         .state = 0,
-        .repo = repo,
-        .title = title,
-        .desc = desc,
         .file = file,
-        .source = src,
-        .source_hash = undefined,
-        .comment_data = null,
+        .delta_hash = delta.hash,
     };
 
-    try currMaxSet(repo, max + 1);
-
-    return d;
+    return thread;
 }
 
-pub fn open(a: std.mem.Allocator, repo: []const u8, index: usize) !?Thread {
-    const max = currMax(repo) catch 0;
+pub fn open(a: std.mem.Allocator, index: usize) !?Thread {
+    const max = currMax() catch 0;
     if (index > max) return null;
 
     var buf: [2048]u8 = undefined;
-    const filename = std.fmt.bufPrint(&buf, "{s}.{x}.thread", .{ repo, index }) catch return error.InvalidTarget;
+    const filename = std.fmt.bufPrint(&buf, "{x}.thread", .{index}) catch return error.InvalidTarget;
     var file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
     return try Thread.readFile(a, index, file);
 }

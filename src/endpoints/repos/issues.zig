@@ -17,10 +17,9 @@ const POST = Endpoint.Router.Methods.POST;
 
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
-//const Issues = Endpoint.Types.Issues;
-const Threads = Endpoint.Types.Threads;
 const Comments = Endpoint.Types.Comments;
 const Comment = Comments.Comment;
+const Deltas = Endpoint.Types.Deltas;
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = list } },
@@ -60,10 +59,12 @@ fn newPost(ctx: *Context) Error!void {
         var valid = post.validator();
         const title = try valid.require("title");
         const msg = try valid.require("desc");
-        var issue = Threads.new(rd.name, title.value, msg.value, .issue) catch unreachable;
-        issue.writeOut() catch unreachable;
+        var delta = Deltas.new(rd.name) catch unreachable;
+        delta.title = title.value;
+        delta.desc = msg.value;
+        delta.writeOut() catch unreachable;
 
-        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue.index });
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
         return ctx.response.redirect(loc, true) catch unreachable;
     };
 
@@ -79,15 +80,15 @@ fn newComment(ctx: *Context) Error!void {
         const msg = try valid.require("comment");
         const issue_index = isHex(issue_id.value) orelse return error.Unrouteable;
 
-        var issue = Threads.open(
+        var delta = Deltas.open(
             ctx.alloc,
             rd.name,
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
-        issue.addComment(ctx.alloc, c) catch {};
-        issue.writeOut() catch unreachable;
+        delta.addComment(ctx.alloc, c) catch {};
+        delta.writeOut() catch unreachable;
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
         ctx.response.redirect(loc, true) catch unreachable;
@@ -127,7 +128,7 @@ fn view(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    var issue = (Threads.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var issue = (Deltas.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     dom.push(HTML.text(rd.name));
     dom.push(HTML.text(issue.repo));
     dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, issue.title, .{}) catch unreachable));
@@ -166,48 +167,48 @@ fn view(ctx: *Context) Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn issueRow(a: Allocator, issue: Threads.Thread) ![]HTML.Element {
-    const title = try Bleach.sanitizeAlloc(a, issue.title, .{ .rules = .title });
-    const desc = try Bleach.sanitizeAlloc(a, issue.desc, .{});
-    const href = try std.fmt.allocPrint(a, "{x}", .{issue.index});
-
-    var dom = DOM.new(a);
-    dom = dom.open(HTML.element("row", null, null));
-    dom = dom.open(HTML.div(null, null));
-
-    dom = dom.open(HTML.element("issue", null, null));
-    dom.dupe(HTML.span(
-        try std.fmt.allocPrint(a, "0x{X}", .{issue.index}),
-        &HTML.Attr.class("muted"),
-    ));
-    dom.push(try HTML.aHrefAlloc(a, title, href));
-    dom = dom.close();
-
-    if (issue.comments) |cmts| {
-        const count = try std.fmt.allocPrint(a, "\xee\xa0\x9c {}", .{cmts.len});
-        dom.dupe(HTML.span(count, &HTML.Attr.class("icon")));
-    } else {
-        dom.dupe(HTML.span("\xee\xa0\x9c 0", &HTML.Attr.class("icon")));
-    }
-
-    dom = dom.close();
-
-    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
-    dom = dom.close();
-    return dom.done();
-}
+//fn issueRow(a: Allocator, delta: Deltas.Delta) ![]HTML.Element {
+//    const title = try Bleach.sanitizeAlloc(a, issue.title, .{ .rules = .title });
+//    const desc = try Bleach.sanitizeAlloc(a, issue.desc, .{});
+//    const href = try std.fmt.allocPrint(a, "{x}", .{issue.index});
+//
+//    var dom = DOM.new(a);
+//    dom = dom.open(HTML.element("row", null, null));
+//    dom = dom.open(HTML.div(null, null));
+//
+//    dom = dom.open(HTML.element("issue", null, null));
+//    dom.dupe(HTML.span(
+//        try std.fmt.allocPrint(a, "0x{X}", .{issue.index}),
+//        &HTML.Attr.class("muted"),
+//    ));
+//    dom.push(try HTML.aHrefAlloc(a, title, href));
+//    dom = dom.close();
+//
+//    if (issue.comments) |cmts| {
+//        const count = try std.fmt.allocPrint(a, "\xee\xa0\x9c {}", .{cmts.len});
+//        dom.dupe(HTML.span(count, &HTML.Attr.class("icon")));
+//    } else {
+//        dom.dupe(HTML.span("\xee\xa0\x9c 0", &HTML.Attr.class("icon")));
+//    }
+//
+//    dom = dom.close();
+//
+//    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
+//    dom = dom.close();
+//    return dom.done();
+//}
 
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var dom = DOM.new(ctx.alloc);
 
-    for (0..Threads.last(rd.name) + 1) |i| {
-        var iss = Threads.open(ctx.alloc, rd.name, i) catch continue orelse continue;
+    for (0..Deltas.last(rd.name) + 1) |i| {
+        var iss = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         defer iss.raze(ctx.alloc);
         // remove once threads api makes this promise
         if (!std.mem.eql(u8, iss.repo, rd.name)) continue;
-        if (iss.source != .issue) continue;
-        dom.pushSlice(issueRow(ctx.alloc, iss) catch continue);
+        //if (iss.source != .issue) continue;
+        //dom.pushSlice(issueRow(ctx.alloc, iss) catch continue);
     }
     const issues = dom.done();
     var tmpl = comptime Template.find("actionable.html");
