@@ -43,6 +43,12 @@ pub const Namespace = struct {
 pub const Config = struct {
     ns: []Namespace,
 
+    pub fn empty() Config {
+        return .{
+            .ns = &[0]Namespace{},
+        };
+    }
+
     pub fn filter(self: Config, prefix: []const u8, index: usize) ?Namespace {
         var remaining = index;
         for (self.ns) |ns| {

@@ -94,16 +94,18 @@ pub fn main() !void {
     }
 
     var cwd = std.fs.cwd();
-    var ini_: ?Ini.Config = null;
-    ini_ = Ini.default(a) catch |e| switch (e) {
-        error.FileNotFound => null,
+    var ini: Ini.Config = Ini.default(a) catch |e| switch (e) {
+        error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
-    if (ini_) |ini| if (ini.get("owner")) |ns| {
+
+    defer ini.raze(a);
+
+    if (ini.get("owner")) |ns| {
         if (ns.get("email")) |email| {
             if (false) std.log.info("{s}\n", .{email});
         }
-    };
+    }
 
     try Database.init(.{});
     defer Database.raze();
