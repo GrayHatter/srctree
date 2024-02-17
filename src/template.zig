@@ -22,6 +22,33 @@ pub const Context = struct {
     ctx: HashMap,
     ctx_slice: HashMapSlice,
 
+    pub fn Builder(comptime T: type) type {
+        return struct {
+            from: T,
+
+            pub const Self = @This();
+
+            pub fn init(from: T) Self {
+                return .{
+                    .from = from,
+                };
+            }
+
+            pub fn build(self: Self, ctx: *Context) !void {
+                // v0.12 only :(
+                // if (std.meta.hasMethod(T, "contextBuilder")) {
+                //     return self.from.contextBuilder(ctx);
+                // }
+
+                inline for (std.meta.fields(T)) |field| {
+                    if (field.type == []const u8) {
+                        try ctx.put(field.name, @field(self.from, field.name));
+                    }
+                }
+            }
+        };
+    }
+
     pub fn init(a: Allocator) Context {
         return Context{
             .ctx = HashMap.init(a),
@@ -222,7 +249,6 @@ pub const Template = struct {
                     switch (drct.kind) {
                         .noun => |noun| {
                             const var_name = noun.vari;
-                            // printing
                             if (ctx.get(var_name)) |v_blob| {
                                 try out.writeAll(v_blob);
                                 blob = blob[end + 4 ..];

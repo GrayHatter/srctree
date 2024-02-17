@@ -5,6 +5,7 @@ const Comments = @import("comments.zig");
 const Comment = Comments.Comment;
 const Threads = @import("threads.zig");
 const Thread = Threads.Thread;
+const Template = @import("../template.zig");
 
 pub const Deltas = @This();
 
@@ -96,6 +97,10 @@ pub const Delta = struct {
         if (self.thread) |thread| {
             return thread.addComment(a, c);
         }
+    }
+
+    pub fn builder(self: Delta) Template.Context.Builder(Delta) {
+        return Template.Context.Builder(Delta).init(self);
     }
 
     pub fn raze(self: Delta, _: std.mem.Allocator) void {

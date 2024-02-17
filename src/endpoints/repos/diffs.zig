@@ -257,18 +257,30 @@ fn view(ctx: *Context) Error!void {
 
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    var dom = DOM.new(ctx.alloc);
 
-    for (0..Deltas.last(rd.name) + 1) |i| {
+    const last = Deltas.last(rd.name) + 1;
+    var end: usize = 0;
+
+    var tmpl_ctx = try ctx.alloc.alloc(Template.Context, last);
+
+    for (0..last) |i| {
         var d = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
-        defer d.raze(ctx.alloc);
-        if (!std.mem.eql(u8, d.repo, rd.name)) continue;
+        if (!std.mem.eql(u8, d.repo, rd.name)) {
+            d.raze(ctx.alloc);
+            continue;
+        }
+
+        const delta_ctx = &tmpl_ctx[end];
+        delta_ctx.* = Template.Context.init(ctx.alloc);
+        const builder = d.builder();
+        try builder.build(delta_ctx);
+        end += 1;
         continue;
         //dom.pushSlice(diffRow(ctx.alloc, d) catch continue);
     }
-    const diffs = dom.done();
-    var tmpl = Template.find("actionable.html");
+    var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
-    _ = try tmpl.addElements(ctx.alloc, "actionable_list", diffs);
+    //_ = try tmpl.addElements(ctx.alloc, "list", tmpl_ctx[0..end]);
+    try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }
