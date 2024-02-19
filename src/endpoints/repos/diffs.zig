@@ -275,6 +275,7 @@ fn list(ctx: *Context) Error!void {
         const builder = d.builder();
         try builder.build(delta_ctx);
         try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{X}", .{d.index}));
+        try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{X}", .{d.index}));
         if (d.getComments(ctx.alloc)) |cmts| {
             try delta_ctx.put(
                 "comments_icon",
