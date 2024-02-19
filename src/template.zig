@@ -36,9 +36,11 @@ pub const Context = struct {
 
             pub fn build(self: Self, ctx: *Context) !void {
                 // v0.12 only :(
-                // if (std.meta.hasMethod(T, "contextBuilder")) {
-                //     return self.from.contextBuilder(ctx);
-                // }
+                comptime if (@import("builtin").zig_version.minor > 12) {
+                    if (std.meta.hasMethod(T, "contextBuilder")) {
+                        return self.from.contextBuilder(ctx);
+                    }
+                };
 
                 inline for (std.meta.fields(T)) |field| {
                     if (field.type == []const u8) {
