@@ -274,6 +274,13 @@ fn list(ctx: *Context) Error!void {
         delta_ctx.* = Template.Context.init(ctx.alloc);
         const builder = d.builder();
         try builder.build(delta_ctx);
+        try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{X}", .{d.index}));
+        if (d.getComments(ctx.alloc)) |cmts| {
+            try delta_ctx.put(
+                "comments_icon",
+                try std.fmt.allocPrint(ctx.alloc, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{cmts.len}),
+            );
+        } else |_| unreachable;
         end += 1;
         continue;
         //dom.pushSlice(diffRow(ctx.alloc, d) catch continue);
