@@ -1,7 +1,8 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
 const sha256 = std.crypto.hash.sha2.Sha256;
+
+const Template = @import("../template.zig");
 
 pub const Comments = @This();
 
@@ -156,6 +157,9 @@ pub const Comment = struct {
 
     pub fn readFile(a: std.mem.Allocator, file: std.fs.File) !Comment {
         return readVersioned(a, file);
+    }
+    pub fn builder(self: Comment) Template.Context.Builder(Comment) {
+        return Template.Context.Builder(Comment).init(self);
     }
 };
 

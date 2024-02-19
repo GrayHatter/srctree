@@ -101,7 +101,9 @@ pub const Thread = struct {
 
         if (self.comment_data) |cd| {
             self.comments = try Comments.loadFromData(a, cd);
+            return self.comments.?;
         }
+        std.debug.print("WARN: no comment data found\n", .{});
         return &[0]Comment{};
     }
 

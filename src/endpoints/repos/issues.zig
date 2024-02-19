@@ -123,7 +123,7 @@ fn view(ctx: *Context) Error!void {
     const issue_target = ctx.uri.next().?;
     const index = isHex(issue_target) orelse return error.Unrouteable;
 
-    var tmpl = Template.find("issue.html");
+    var tmpl = Template.find("delta-issue.html");
     tmpl.init(ctx.alloc);
 
     var dom = DOM.new(ctx.alloc);

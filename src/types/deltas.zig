@@ -71,6 +71,8 @@ pub const Delta = struct {
 
         try writer.writeAll("\x00");
         try self.file.setEndPos(self.file.getPos() catch unreachable);
+
+        if (self.thread) |t| try t.writeOut();
     }
 
     pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Delta {
@@ -97,6 +99,7 @@ pub const Delta = struct {
         if (self.thread) |thread| {
             return thread.addComment(a, c);
         }
+        return error.ThreadNotLoaded;
     }
 
     pub fn builder(self: Delta) Template.Context.Builder(Delta) {
