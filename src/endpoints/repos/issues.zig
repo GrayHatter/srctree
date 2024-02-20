@@ -63,6 +63,7 @@ fn newPost(ctx: *Context) Error!void {
         var delta = Deltas.new(rd.name) catch unreachable;
         delta.title = title.value;
         delta.desc = msg.value;
+        delta.attach = .{ .issue = 0 };
         delta.writeOut() catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
@@ -152,19 +153,35 @@ fn view(ctx: *Context) Error!void {
 
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    var dom = DOM.new(ctx.alloc);
 
-    for (0..Deltas.last(rd.name) + 1) |i| {
-        var iss = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
-        defer iss.raze(ctx.alloc);
-        // remove once threads api makes this promise
-        if (!std.mem.eql(u8, iss.repo, rd.name)) continue;
-        //if (iss.source != .issue) continue;
-        //dom.pushSlice(issueRow(ctx.alloc, iss) catch continue);
+    const last = Deltas.last(rd.name) + 1;
+    var end: usize = 0;
+
+    var tmpl_ctx = try ctx.alloc.alloc(Template.Context, last);
+    for (0..last) |i| {
+        var d = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
+        if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
+            d.raze(ctx.alloc);
+            continue;
+        }
+
+        const delta_ctx = &tmpl_ctx[end];
+        delta_ctx.* = Template.Context.init(ctx.alloc);
+        const builder = d.builder();
+        try builder.build(delta_ctx);
+        try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{X}", .{d.index}));
+        try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{X}", .{d.index}));
+        if (d.getComments(ctx.alloc)) |cmts| {
+            try delta_ctx.put(
+                "comments_icon",
+                try std.fmt.allocPrint(ctx.alloc, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{cmts.len}),
+            );
+        } else |_| unreachable;
+        end += 1;
+        continue;
     }
-    const issues = dom.done();
-    var tmpl = comptime Template.find("actionable.html");
+    var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
-    _ = try tmpl.addElements(ctx.alloc, "actionable_list", issues);
+    try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }

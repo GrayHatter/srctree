@@ -1,9 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Comments = @import("comments.zig");
+const Types = @import("../types.zig");
+const Comments = Types.Comments;
 const Comment = Comments.Comment;
-const Threads = @import("threads.zig");
+const Threads = Types.Threads;
 const Thread = Threads.Thread;
 const Template = @import("../template.zig");
 
@@ -14,40 +15,64 @@ const DELTA_VERSION: usize = 0;
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
     var reader = file.reader();
     var ver: usize = try reader.readIntNative(usize);
-    return switch (ver) {
-        0 => return Delta{
-            .index = idx,
-            .state = try reader.readIntNative(usize),
-            .created = try reader.readIntNative(i64),
-            .updated = try reader.readIntNative(i64),
-            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .thread_id = try reader.readIntNative(usize),
-
-            .file = file,
-        },
-        else => error.UnsupportedVersion,
+    var d: Delta = .{
+        .index = idx,
+        .repo = undefined,
+        .title = undefined,
+        .desc = undefined,
+        .file = file,
     };
+    switch (ver) {
+        0 => {
+            d.state = try reader.readIntNative(usize);
+            d.created = try reader.readIntNative(i64);
+            d.updated = try reader.readIntNative(i64);
+            d.repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
+            d.title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
+            d.desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
+            d.thread_id = try reader.readIntNative(usize);
+            d.attach = switch (Attach.fromInt(try reader.readIntNative(u8))) {
+                .nos => .{ .nos = try reader.readIntNative(usize) },
+                .diff => .{ .diff = try reader.readIntNative(usize) },
+                .issue => .{ .issue = try reader.readIntNative(usize) },
+            };
+        },
+        else => return error.UnsupportedVersion,
+    }
+    return d;
 }
 
-pub const Source = enum {
-    nos,
+pub const Attach = enum(u8) {
+    nos = 0,
+    diff = 1,
+    issue = 2,
+
+    pub fn fromInt(int: u8) Attach {
+        return switch (int) {
+            1 => .diff,
+            2 => .issue,
+            else => .nos,
+        };
+    }
 };
 
 pub const Delta = struct {
     index: usize,
-    state: usize,
+    state: usize = 0,
     created: i64 = 0,
     updated: i64 = 0,
     repo: []const u8,
     title: []const u8,
     desc: []const u8,
-    hash: [32]u8 = [_]u8{0} ** 32,
-
     thread_id: usize = 0,
-    thread: ?*Thread = null,
 
+    attach: union(Attach) {
+        nos: usize,
+        diff: usize,
+        issue: usize,
+    } = .{ .nos = 0 },
+    hash: [32]u8 = [_]u8{0} ** 32,
+    thread: ?*Thread = null,
     file: std.fs.File,
 
     pub fn writeOut(self: Delta) !void {
@@ -64,6 +89,13 @@ pub const Delta = struct {
         try writer.writeAll(self.desc);
         try writer.writeAll("\x00");
         try writer.writeIntNative(usize, self.thread_id);
+
+        try writer.writeIntNative(u8, @intFromEnum(self.attach));
+        switch (self.attach) {
+            .nos => |att| try writer.writeIntNative(usize, att),
+            .diff => |att| try writer.writeIntNative(usize, att),
+            .issue => |att| try writer.writeIntNative(usize, att),
+        }
         // FIXME write 32 not a maybe
         if (self.thread) |thread| {
             try writer.writeAll(&thread.hash);

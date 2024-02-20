@@ -74,8 +74,9 @@ fn newPost(ctx: *Context) Error!void {
         //delta.src = src;
         delta.title = title.value;
         delta.desc = desc.value;
-
+        delta.attach = .{ .diff = 0 };
         delta.writeOut() catch unreachable;
+
         if (inNetwork(src.value)) {
             std.debug.print("src {s}\ntitle {s}\ndesc {s}\naction {s}\n", .{
                 src.value,
@@ -219,7 +220,7 @@ fn list(ctx: *Context) Error!void {
     var tmpl_ctx = try ctx.alloc.alloc(Template.Context, last);
     for (0..last) |i| {
         var d = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
-        if (!std.mem.eql(u8, d.repo, rd.name)) {
+        if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .diff) {
             d.raze(ctx.alloc);
             continue;
         }
