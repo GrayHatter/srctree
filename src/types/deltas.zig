@@ -177,31 +177,30 @@ fn currMax(repo: []const u8) !usize {
     return count;
 }
 
-pub fn forRepoCount(repo: []const u8) usize {
-    var dir = datad.openIterableDir(".", .{}) catch {
-        std.debug.print("Unable to open delta dir to get repo count\n", .{});
-        return 0;
-    };
-    defer dir.close();
+pub const Iterator = struct {
+    alloc: Allocator,
+    index: usize = 0,
+    last: usize = 0,
+    repo: []const u8,
 
-    var diritr = dir.iterate();
-    var count: usize = 0;
-    while (diritr.next() catch return count) |f| {
-        if (f.kind != .file) continue;
-        //const index = std.fmt.parseInt(usize, file.name[0..file.name.len - 5], 16) catch continue;
-        var file = datad.openFile(f.name, .{ .mode = .read_write }) catch continue;
-        defer file.close();
-        var reader = file.reader();
-        _ = reader.readIntNative(usize) catch continue; // version
-        var state: usize = reader.readIntNative(usize) catch continue;
-        if (state != 0) continue;
-        _ = reader.readIntNative(usize) catch continue; // created
-        _ = reader.readIntNative(usize) catch continue; // updated
-        var nbuf: [2048]u8 = undefined;
-        var rname = reader.readUntilDelimiter(&nbuf, 0) catch continue;
-        if (std.mem.eql(u8, rname, repo)) count += 1;
+    pub fn next(self: *Iterator) ?Delta {
+        var buf: [2048]u8 = undefined;
+        while (self.index <= self.last) {
+            defer self.index +|= 1;
+            const filename = std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ self.repo, self.index }) catch unreachable;
+            var file = datad.openFile(filename, .{ .mode = .read_only }) catch continue;
+            return Delta.readFile(self.alloc, self.index, file) catch continue;
+        }
+        return null;
     }
-    return count;
+};
+
+pub fn iterator(a: Allocator, repo: []const u8) Iterator {
+    return .{
+        .alloc = a,
+        .repo = repo,
+        .last = last(repo),
+    };
 }
 
 pub fn last(repo: []const u8) usize {

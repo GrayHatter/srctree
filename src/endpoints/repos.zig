@@ -27,7 +27,7 @@ const Issues = @import("repos/issues.zig");
 const commit = Commits.commit;
 const htmlCommit = Commits.htmlCommit;
 
-const Diff = @import("../types/diffs.zig");
+const Types = @import("../types.zig");
 
 const gitweb = @import("../gitweb.zig");
 
@@ -86,12 +86,25 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
+        var i_count: usize = 0;
+        var d_count: usize = 0;
+        var itr = Types.Deltas.iterator(ctx.alloc, rd.name);
+        while (itr.next()) |dlt| {
+            switch (dlt.attach) {
+                .diff => d_count += 1,
+                .issue => i_count += 1,
+                else => {},
+            }
+            dlt.raze(ctx.alloc);
+        }
+
         try ctx.addRouteVar("repo_name", rd.name);
-        try ctx.addRouteVar("issuecount", "0");
         const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
         try ctx.addRouteVar("issueurl", issueurl);
 
-        const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{Diff.forRepoCount(rd.name)});
+        const issuecnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{i_count});
+        try ctx.addRouteVar("issuecount", issuecnt);
+        const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
         try ctx.addRouteVar("diffcount", diffcnt);
         const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
         try ctx.addRouteVar("diffurl", diffurl);
