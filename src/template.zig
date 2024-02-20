@@ -166,6 +166,7 @@ pub const Template = struct {
             while (width < verb.len and validChar(verb[width])) {
                 width += 1;
             }
+            std.debug.assert(width > 1);
             return .{ .verb = .{
                 .vari = verb[1..width],
                 .blob = blob[start..end],

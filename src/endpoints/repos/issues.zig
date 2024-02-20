@@ -86,6 +86,7 @@ fn newComment(ctx: *Context) Error!void {
             rd.name,
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
+        _ = delta.loadThread(ctx.alloc) catch unreachable;
         var c = Comments.new("name", msg.value) catch unreachable;
 
         delta.addComment(ctx.alloc, c) catch {};
