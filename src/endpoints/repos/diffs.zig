@@ -110,7 +110,7 @@ fn newComment(ctx: *Context) Error!void {
     var buf: [2048]u8 = undefined;
     if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
         var valid = post.validator();
-        const delta_id = try valid.require("diff-id");
+        const delta_id = try valid.require("did");
         const delta_index = isHex(delta_id.value) orelse return error.Unrouteable;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta_index });
 
@@ -129,8 +129,8 @@ fn newComment(ctx: *Context) Error!void {
 
 fn view(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    const diff_target = ctx.uri.next().?;
-    const index = isHex(diff_target) orelse return error.Unrouteable;
+    const delta_id = ctx.uri.next().?;
+    const index = isHex(delta_id) orelse return error.Unrouteable;
 
     var tmpl = Template.find("delta-diff.html");
     tmpl.init(ctx.alloc);
@@ -187,17 +187,7 @@ fn view(ctx: *Context) Error!void {
         @panic("oops");
     }
 
-    const hidden = [_]HTML.Attr{
-        .{ .key = "type", .value = "hidden" },
-        .{ .key = "name", .value = "diff-id" },
-        .{ .key = "value", .value = diff_target },
-    };
-
-    const form_data = [_]HTML.E{
-        HTML.input(&hidden),
-    };
-
-    _ = try tmpl.addElements(ctx.alloc, "form-data", &form_data);
+    try tmpl.ctx.?.put("delta_id", delta_id);
 
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     var file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
@@ -229,8 +219,8 @@ fn list(ctx: *Context) Error!void {
         delta_ctx.* = Template.Context.init(ctx.alloc);
         const builder = d.builder();
         try builder.build(delta_ctx);
-        try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{X}", .{d.index}));
-        try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{X}", .{d.index}));
+        try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{x}", .{d.index}));
+        try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{x}", .{d.index}));
         if (d.getComments(ctx.alloc)) |cmts| {
             try delta_ctx.put(
                 "comments_icon",
