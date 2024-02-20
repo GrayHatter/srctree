@@ -187,6 +187,8 @@ pub fn new(ath: []const u8, msg: []const u8) !Comment {
     var c = Comment{
         .author = ath,
         .message = msg,
+        .created = std.time.timestamp(),
+        .updated = std.time.timestamp(),
     };
     try c.writeNew(datad);
 

@@ -93,32 +93,36 @@ pub const Thread = struct {
         // TODO I hate this, but I'm prototyping, plz rewrite
         file.seekTo(0) catch return error.InputOutput;
         var thread: Thread = readVersioned(a, idx, file) catch return error.InputOutput;
+        try thread.loadComments(a);
         return thread;
+    }
+
+    fn loadComments(self: *Thread, a: Allocator) !void {
+        if (self.comment_data) |cd| {
+            self.comments = try Comments.loadFromData(a, cd);
+        }
     }
 
     pub fn getComments(self: *Thread, a: Allocator) ![]Comment {
         if (self.comments) |_| return self.comments.?;
-
-        if (self.comment_data) |cd| {
-            self.comments = try Comments.loadFromData(a, cd);
-            return self.comments.?;
-        }
-        std.debug.print("WARN: no comment data found\n", .{});
-        return &[0]Comment{};
+        self.loadComments(a) catch |err| {
+            std.debug.print("WARN: no comment data found ({})\n", .{err});
+            return &[0]Comment{};
+        };
+        return self.comments.?;
     }
 
     pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {
-        const target = (self.comments orelse &[0]Comment{}).len;
         if (self.comments) |*comments| {
-            if (a.resize(comments.*, target + 1)) {
-                comments.*.len = target + 1;
+            if (a.resize(comments.*, comments.len + 1)) {
+                comments.*.len += 1;
             } else {
-                self.comments = try a.realloc(comments.*, target + 1);
+                self.comments = try a.realloc(comments.*, comments.len + 1);
             }
         } else {
-            self.comments = try a.alloc(Comment, target + 1);
+            self.comments = try a.alloc(Comment, 1);
         }
-        self.comments.?[target] = c;
+        self.comments.?[self.comments.?.len - 1] = c;
         try self.writeOut();
     }
 
@@ -206,6 +210,8 @@ pub fn new(delta: Deltas.Delta) !Thread {
         .state = 0,
         .file = file,
         .delta_hash = delta.hash,
+        .created = std.time.timestamp(),
+        .updated = std.time.timestamp(),
     };
 
     return thread;
