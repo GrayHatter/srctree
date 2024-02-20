@@ -20,6 +20,7 @@ const Bleach = @import("../../bleach.zig");
 const Comments = Endpoint.Types.Comments;
 const Comment = Comments.Comment;
 const Deltas = Endpoint.Types.Deltas;
+const Humanize = @import("../../humanize.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = list } },
@@ -97,27 +98,6 @@ fn newComment(ctx: *Context) Error!void {
     return error.Unknown;
 }
 
-fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
-    var dom = DOM.new(a);
-    dom = dom.open(HTML.element("comment", null, null));
-
-    dom = dom.open(HTML.element("context", null, null));
-    dom.dupe(HTML.element(
-        "author",
-        &[_]HTML.E{HTML.text(Bleach.sanitizeAlloc(a, c.author, .{}) catch unreachable)},
-        null,
-    ));
-    dom.push(HTML.element("date", "now", null));
-    dom = dom.close();
-
-    dom = dom.open(HTML.element("message", null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.message, .{}) catch unreachable));
-    dom = dom.close();
-
-    dom = dom.close();
-    return dom.done();
-}
-
 fn view(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const issue_target = ctx.uri.next().?;
@@ -128,29 +108,31 @@ fn view(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    var issue = (Deltas.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var delta = (Deltas.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     dom.push(HTML.text(rd.name));
-    dom.push(HTML.text(issue.repo));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, issue.title, .{}) catch unreachable));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, issue.desc, .{}) catch unreachable));
+    dom.push(HTML.text(delta.repo));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.desc, .{}) catch unreachable));
+    _ = try tmpl.addElements(ctx.alloc, "issue", dom.done());
 
-    var comments = DOM.new(ctx.alloc);
-    for ([_]Comment{ .{
-        .author = "grayhatter",
-        .message = "Wow, srctree's issue view looks really good!",
-    }, .{
-        .author = "robinli",
-        .message = "I know, it's clearly the best I've even seen. Soon It'll even look good in Hastur!",
-    } }) |cm| {
-        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
+    _ = delta.loadThread(ctx.alloc) catch unreachable;
+    if (delta.getComments(ctx.alloc)) |cm| {
+        var comments: []Template.Context = try ctx.alloc.alloc(Template.Context, cm.len);
+
+        for (cm, comments) |comment, *cctx| {
+            cctx.* = Template.Context.init(ctx.alloc);
+            const builder = comment.builder();
+            try builder.build(cctx);
+            try cctx.put(
+                "date",
+                try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
+            );
+        }
+        try tmpl.ctx.?.putBlock("comments", comments);
+    } else |err| {
+        std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
+        @panic("oops");
     }
-    for (issue.getComments(ctx.alloc) catch unreachable) |cm| {
-        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
-    }
-
-    _ = try tmpl.addElements(ctx.alloc, "comments", comments.done());
-
-    _ = try tmpl.addElements(ctx.alloc, "patch_header", dom.done());
 
     const hidden = [_]HTML.Attr{
         .{ .key = "type", .value = "hidden" },
@@ -166,37 +148,6 @@ fn view(ctx: *Context) Error!void {
 
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
-
-//fn issueRow(a: Allocator, delta: Deltas.Delta) ![]HTML.Element {
-//    const title = try Bleach.sanitizeAlloc(a, issue.title, .{ .rules = .title });
-//    const desc = try Bleach.sanitizeAlloc(a, issue.desc, .{});
-//    const href = try std.fmt.allocPrint(a, "{x}", .{issue.index});
-//
-//    var dom = DOM.new(a);
-//    dom = dom.open(HTML.element("row", null, null));
-//    dom = dom.open(HTML.div(null, null));
-//
-//    dom = dom.open(HTML.element("issue", null, null));
-//    dom.dupe(HTML.span(
-//        try std.fmt.allocPrint(a, "0x{X}", .{issue.index}),
-//        &HTML.Attr.class("muted"),
-//    ));
-//    dom.push(try HTML.aHrefAlloc(a, title, href));
-//    dom = dom.close();
-//
-//    if (issue.comments) |cmts| {
-//        const count = try std.fmt.allocPrint(a, "\xee\xa0\x9c {}", .{cmts.len});
-//        dom.dupe(HTML.span(count, &HTML.Attr.class("icon")));
-//    } else {
-//        dom.dupe(HTML.span("\xee\xa0\x9c 0", &HTML.Attr.class("icon")));
-//    }
-//
-//    dom = dom.close();
-//
-//    dom.dupe(HTML.element("desc", desc, &HTML.Attr.class("muted")));
-//    dom = dom.close();
-//    return dom.done();
-//}
 
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
