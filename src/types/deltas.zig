@@ -222,6 +222,8 @@ pub fn new(repo: []const u8) !Delta {
 
     var d = Delta{
         .index = max + 1,
+        .created = std.time.timestamp(),
+        .updated = std.time.timestamp(),
         .state = 0,
         .repo = repo,
         .title = "",
