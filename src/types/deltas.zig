@@ -36,6 +36,7 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
                 .diff => .{ .diff = try reader.readIntNative(usize) },
                 .issue => .{ .issue = try reader.readIntNative(usize) },
                 .commit => .{ .issue = try reader.readIntNative(usize) },
+                .line => .{ .issue = try reader.readIntNative(usize) },
             };
         },
         else => return error.UnsupportedVersion,
@@ -48,12 +49,14 @@ pub const Attach = enum(u8) {
     diff = 1,
     issue = 2,
     commit = 3,
+    line = 4,
 
     pub fn fromInt(int: u8) Attach {
         return switch (int) {
             1 => .diff,
             2 => .issue,
             3 => .commit,
+            4 => .line,
             else => .nos,
         };
     }
@@ -74,6 +77,7 @@ pub const Delta = struct {
         diff: usize,
         issue: usize,
         commit: usize,
+        line: usize,
     } = .{ .nos = 0 },
     hash: [32]u8 = [_]u8{0} ** 32,
     thread: ?*Thread = null,
@@ -100,6 +104,7 @@ pub const Delta = struct {
             .diff => |att| try writer.writeIntNative(usize, att),
             .issue => |att| try writer.writeIntNative(usize, att),
             .commit => |att| try writer.writeIntNative(usize, att),
+            .line => |att| try writer.writeIntNative(usize, att),
         }
         // FIXME write 32 not a maybe
         if (self.thread) |thread| {
