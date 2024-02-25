@@ -9,23 +9,11 @@ pub const Threads = @This();
 
 const THREADS_VERSION: usize = 0;
 
-pub const Status = enum(u1) {
-    open = 0,
-    closed = 1,
-};
-
 /// while Zig specifies that the logical order of fields is little endian, I'm
 /// not sure that's the layout I want to go use. So don't depend on that yet.
 pub const State = packed struct {
-    status: Status = .open,
+    closed: bool = false,
     padding: u63 = 0,
-};
-
-pub const Source = enum(u8) {
-    issue = 0,
-    diff = 1,
-    remote = 2, // indeterminate if remote sources can be supported within a
-    // thread but for now they can be similar to an issue
 };
 
 test State {
@@ -44,7 +32,7 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
         0 => {
             var t = Thread{
                 .index = idx,
-                .state = try reader.readIntNative(usize),
+                .state = try reader.readStruct(State),
                 .created = try reader.readIntNative(i64),
                 .updated = try reader.readIntNative(i64),
                 .file = file,
@@ -60,7 +48,7 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
 
 pub const Thread = struct {
     index: usize,
-    state: usize,
+    state: State = .{},
     created: i64 = 0,
     updated: i64 = 0,
     delta_hash: [32]u8 = [_]u8{0} ** 32,
@@ -74,7 +62,7 @@ pub const Thread = struct {
         try self.file.seekTo(0);
         var writer = self.file.writer();
         try writer.writeIntNative(usize, THREADS_VERSION);
-        try writer.writeIntNative(usize, self.state);
+        try writer.writeStruct(self.state);
         try writer.writeIntNative(i64, self.created);
         try writer.writeIntNative(i64, self.updated);
         try writer.writeAll(&self.delta_hash);
@@ -123,6 +111,7 @@ pub const Thread = struct {
             self.comments = try a.alloc(Comment, 1);
         }
         self.comments.?[self.comments.?.len - 1] = c;
+        self.updated = std.time.timestamp();
         try self.writeOut();
     }
 
@@ -207,7 +196,6 @@ pub fn new(delta: Deltas.Delta) !Thread {
     try currMaxSet(max + 1);
     var thread = Thread{
         .index = max + 1,
-        .state = 0,
         .file = file,
         .delta_hash = delta.hash,
         .created = std.time.timestamp(),

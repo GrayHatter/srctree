@@ -7,6 +7,7 @@ const Comment = Comments.Comment;
 const Threads = Types.Threads;
 const Thread = Threads.Thread;
 const Template = @import("../template.zig");
+const State = Types.Threads.State;
 
 pub const Deltas = @This();
 
@@ -24,7 +25,7 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
     };
     switch (ver) {
         0 => {
-            d.state = try reader.readIntNative(usize);
+            d.state = try reader.readStruct(State);
             d.created = try reader.readIntNative(i64);
             d.updated = try reader.readIntNative(i64);
             d.repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
@@ -64,7 +65,7 @@ pub const Attach = enum(u8) {
 
 pub const Delta = struct {
     index: usize,
-    state: usize = 0,
+    state: State = .{},
     created: i64 = 0,
     updated: i64 = 0,
     repo: []const u8,
@@ -87,7 +88,7 @@ pub const Delta = struct {
         try self.file.seekTo(0);
         var writer = self.file.writer();
         try writer.writeIntNative(usize, DELTA_VERSION);
-        try writer.writeIntNative(usize, self.state);
+        try writer.writeStruct(self.state);
         try writer.writeIntNative(i64, self.created);
         try writer.writeIntNative(i64, self.updated);
         try writer.writeAll(self.repo);
@@ -134,7 +135,7 @@ pub const Delta = struct {
         if (self.thread) |thread| {
             return thread.getComments(a);
         }
-        return &[0]Comment{};
+        return error.ThreadNotLoaded;
     }
 
     pub fn addComment(self: *Delta, a: Allocator, c: Comment) !void {
@@ -229,7 +230,6 @@ pub fn new(repo: []const u8) !Delta {
         .index = max + 1,
         .created = std.time.timestamp(),
         .updated = std.time.timestamp(),
-        .state = 0,
         .repo = repo,
         .title = "",
         .desc = "",
