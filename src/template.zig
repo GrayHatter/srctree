@@ -4,6 +4,7 @@ const bldtmpls = @import("templates");
 const Allocator = std.mem.Allocator;
 
 const HTML = @import("html.zig");
+const Bleach = @import("bleach.zig");
 
 const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
@@ -34,7 +35,7 @@ pub const Context = struct {
                 };
             }
 
-            pub fn build(self: Self, ctx: *Context) !void {
+            pub fn buildUnsanitized(self: Self, ctx: *Context) !void {
                 // v0.12 only :(
                 comptime if (@import("builtin").zig_version.minor > 12) {
                     if (std.meta.hasMethod(T, "contextBuilder")) {
@@ -47,6 +48,10 @@ pub const Context = struct {
                         try ctx.put(field.name, @field(self.from, field.name));
                     }
                 }
+            }
+
+            pub fn build(self: Self, ctx: *Context) !void {
+                return self.buildUnsanitized(ctx);
             }
         };
     }

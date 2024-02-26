@@ -5,6 +5,7 @@ pub const Bleach = @This();
 pub const Error = error{
     NoSpaceLeft,
     OutOfMemory,
+    NotImplemented,
 };
 
 pub const Rules = enum {
@@ -51,7 +52,7 @@ pub fn sanitize(in: []const u8, out: []u8, opts: Options) Error![]u8 {
     return out[0..pos];
 }
 
-fn StreamSanitizer(comptime ReaderType: type) type {
+pub fn StreamSanitizer(comptime ReaderType: type) type {
     return struct {
         const Self = @This();
 
@@ -61,7 +62,7 @@ fn StreamSanitizer(comptime ReaderType: type) type {
         src_reader: ReaderType,
         src_opts: Options,
 
-        fn init(a: std.mem.Allocator, reader: ReaderType, opts: Options) !Self {
+        fn init(a: std.mem.Allocator, reader: ReaderType, opts: Options) Self {
             return Self{
                 .alloc = a,
                 .src_reader = reader,
@@ -74,12 +75,12 @@ fn StreamSanitizer(comptime ReaderType: type) type {
         pub fn read(self: *Self, buffer: []u8) StreamError!usize {
             _ = self;
             _ = buffer;
-            return 0;
+            return error.NotImplemented;
         }
     };
 }
 
-pub fn sanitizeStream(a: std.mem.Allocator, reader: anytype, opts: Options) !StreamSanitizer {
+pub fn streamSanitizer(a: std.mem.Allocator, reader: anytype, opts: Options) StreamSanitizer {
     return StreamSanitizer(@TypeOf(reader)).init(a, reader, opts);
 }
 
