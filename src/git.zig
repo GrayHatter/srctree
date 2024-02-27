@@ -203,7 +203,7 @@ const Pack = struct {
     }
 
     fn deltaInst(reader: *FBSReader, writer: anytype, base: []u8) !usize {
-        var readb: usize = try reader.readByte();
+        const readb: usize = try reader.readByte();
         if (readb == 0) {
             std.debug.print("INVALID INSTRUCTION 0x00\n", .{});
             @panic("Invalid state :<");
@@ -231,7 +231,7 @@ const Pack = struct {
             return size;
         } else {
             var stage: [128]u8 = undefined;
-            var s = stage[0..readb];
+            const s = stage[0..readb];
             _ = try reader.read(s);
             _ = try writer.write(s);
             //std.debug.print("INSERT {} \n", .{readb});
@@ -245,13 +245,13 @@ const Pack = struct {
 
         _ = try reader.read(&buf);
         shaToHex(&buf, &hexy);
-        var basez = repo.findBlob(a, &buf) catch return error.BlobMissing;
+        const basez = repo.findBlob(a, &buf) catch return error.BlobMissing;
         defer a.free(basez);
 
         var _zlib = zlib.decompressStream(a, reader.*) catch return error.PackCorrupt;
         defer _zlib.deinit();
         var zr = _zlib.reader();
-        var inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
+        const inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
         defer a.free(inst);
         var inst_fbs = std.io.fixedBufferStream(inst);
         var inst_reader = inst_fbs.reader();
@@ -269,12 +269,12 @@ const Pack = struct {
 
     fn loadDelta(self: Pack, a: Allocator, reader: *FBSReader, offset: usize, repo: Repo) ![]u8 {
         // fd pos is offset + 2-ish because of the header read
-        var srclen = try readVarInt(reader);
+        const srclen = try readVarInt(reader);
 
         var _zlib = zlib.decompressStream(a, reader.*) catch return error.PackCorrupt;
         defer _zlib.deinit();
         var zr = _zlib.reader();
-        var inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
+        const inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
         defer a.free(inst);
         var inst_fbs = std.io.fixedBufferStream(inst);
         var inst_reader = inst_fbs.reader();
@@ -283,7 +283,7 @@ const Pack = struct {
         _ = try readVarInt(&inst_reader);
 
         const baseobj_offset = offset - srclen;
-        var basez = try self.loadObj(a, baseobj_offset, repo);
+        const basez = try self.loadObj(a, baseobj_offset, repo);
         defer a.free(basez);
 
         var buffer = std.ArrayList(u8).init(a);
@@ -456,7 +456,7 @@ pub const Repo = struct {
     }
 
     fn findObj(self: Repo, a: Allocator, in_sha: SHA) !Object {
-        var data = try self.findBlob(a, in_sha);
+        const data = try self.findBlob(a, in_sha);
         return Object.init(data);
     }
 
@@ -523,7 +523,7 @@ pub const Repo = struct {
             var f = try self.dir.openFile(fname, .{});
             defer f.close();
             var buf: [40]u8 = undefined;
-            var read = try f.readAll(&buf);
+            const read = try f.readAll(&buf);
             std.debug.assert(read == 40);
             try list.append(Ref{ .branch = .{
                 .name = try a.dupe(u8, file.name),
@@ -533,7 +533,7 @@ pub const Repo = struct {
         }
         if (self.dir.openFile("packed-refs", .{})) |file| {
             var buf: [2048]u8 = undefined;
-            var size = try file.readAll(&buf);
+            const size = try file.readAll(&buf);
             const b = buf[0..size];
             var p_itr = std.mem.split(u8, b, "\n");
             _ = p_itr.next();
@@ -606,7 +606,7 @@ pub const Repo = struct {
     }
 
     pub fn commit(self: *const Repo, a: Allocator) !Commit {
-        var resolv = switch (self.head.?) {
+        const resolv = switch (self.head.?) {
             .sha => |s| s,
             .branch => |b| try self.ref(b.name["refs/heads/".len..]),
             .tag => return error.CommitMissing,
@@ -824,7 +824,7 @@ pub const Commit = struct {
     }
 
     pub fn fromReader(a: Allocator, sha: SHA, reader: Reader) !Commit {
-        var buf = try reader.readAllAlloc(a, 0xFFFF);
+        const buf = try reader.readAllAlloc(a, 0xFFFF);
         const dsha = try a.dupe(u8, sha);
         return try make(dsha, buf);
     }
@@ -934,7 +934,7 @@ pub const Blob = struct {
 
     pub fn toTree(self: Blob, a: Allocator, repo: Repo) !Tree {
         if (self.isFile()) return error.NotATree;
-        var tree = try Tree.fromRepo(a, repo, &self.hash);
+        const tree = try Tree.fromRepo(a, repo, &self.hash);
         return tree;
     }
 
@@ -978,7 +978,7 @@ pub const Tree = struct {
     objects: []Blob,
 
     pub fn pushPath(self: *Tree, a: Allocator, path: []const u8) !void {
-        var spath = self.path orelse {
+        const spath = self.path orelse {
             self.path = try a.dupe(u8, path);
             return;
         };
@@ -990,7 +990,7 @@ pub const Tree = struct {
     pub fn fromRepo(a: Allocator, r: Repo, sha: SHA) !Tree {
         var blob = try r.findObj(a, sha);
         defer blob.raze(a);
-        var b = try blob.reader().readAllAlloc(a, 0xffff);
+        const b = try blob.reader().readAllAlloc(a, 0xffff);
         return try Tree.make(a, sha, b);
     }
 
@@ -1033,14 +1033,14 @@ pub const Tree = struct {
     }
 
     pub fn fromReader(a: Allocator, sha: SHA, reader: Reader) !Tree {
-        var buf = try reader.readAllAlloc(a, 0xffff);
+        const buf = try reader.readAllAlloc(a, 0xffff);
         return try Tree.make(a, sha, buf);
     }
 
     pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]ChangeSet {
         const cmtt = try repo.commit(a);
         defer cmtt.raze(a);
-        var search_list: []?Blob = try a.alloc(?Blob, self.objects.len);
+        const search_list: []?Blob = try a.alloc(?Blob, self.objects.len);
         for (self.objects, search_list) |src, *dst| {
             dst.* = src;
         }
@@ -1154,7 +1154,7 @@ pub const Actions = struct {
 
     pub fn updateUpstream(self: Actions, branch: []const u8) !bool {
         var buf: [512]u8 = undefined;
-        var up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
+        const up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
 
         const fetch = try self.exec(&[_][]const u8{
             "git",
@@ -1235,8 +1235,8 @@ pub const Actions = struct {
 
     fn execCustom(self: Actions, argv: []const []const u8) !std.ChildProcess.ExecResult {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
-        var cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
-        var child = try std.ChildProcess.exec(.{
+        const cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
+        const child = try std.ChildProcess.exec(.{
             .cwd_dir = cwd,
             .allocator = self.alloc,
             .argv = argv,
@@ -1246,7 +1246,7 @@ pub const Actions = struct {
     }
 
     fn exec(self: Actions, argv: []const []const u8) ![]u8 {
-        var child = try self.execCustom(argv);
+        const child = try self.execCustom(argv);
         if (child.stderr.len > 0) std.debug.print("git Actions error\nstderr {s}\n", .{child.stderr});
         self.alloc.free(child.stderr);
 
@@ -1266,13 +1266,13 @@ test "hex tranlations" {
     var hexbuf: [40]u8 = undefined;
     var binbuf: [20]u8 = undefined;
 
-    var one = "370303630b3fc631a0cb3942860fb6f77446e9c1";
+    const one = "370303630b3fc631a0cb3942860fb6f77446e9c1";
     shaToBin(one, &binbuf);
     shaToHex(&binbuf, &hexbuf);
     try std.testing.expectEqualStrings(&binbuf, "\x37\x03\x03\x63\x0b\x3f\xc6\x31\xa0\xcb\x39\x42\x86\x0f\xb6\xf7\x74\x46\xe9\xc1");
     try std.testing.expectEqualStrings(&hexbuf, one);
 
-    var two = "0000000000000000000000000000000000000000";
+    const two = "0000000000000000000000000000000000000000";
     shaToBin(two, &binbuf);
     shaToHex(&binbuf, &hexbuf);
 
@@ -1281,7 +1281,7 @@ test "hex tranlations" {
 }
 
 test "read" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
@@ -1289,7 +1289,7 @@ test "read" {
 
     var d = try zlib.decompressStream(a, file.reader());
     defer d.deinit();
-    var count = try d.read(&b);
+    const count = try d.read(&b);
     //std.debug.print("{s}\n", .{b[0..count]});
     const commit = try Commit.make("370303630b3fc631a0cb3942860fb6f77446e9c1", b[0..count]);
     //std.debug.print("{}\n", .{commit});
@@ -1298,13 +1298,13 @@ test "read" {
 }
 
 test "file" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
     var d = try zlib.decompressStream(a, file.reader());
     defer d.deinit();
-    var dz = try d.reader().readAllAlloc(a, 0xffff);
+    const dz = try d.reader().readAllAlloc(a, 0xffff);
     var buffer = Object.init(dz);
     defer buffer.raze(a);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
@@ -1335,9 +1335,9 @@ test "not gpg" {
 }
 
 test "toParent" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
 
-    var cwd = try std.fs.cwd().openDir(".", .{});
+    const cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
     try repo.loadData(a);
@@ -1347,7 +1347,7 @@ test "toParent" {
     while (true) {
         count += 1;
         if (commit.parent[0]) |_| {
-            var parent = try commit.toParent(a, 0);
+            const parent = try commit.toParent(a, 0);
             commit.raze(a);
             commit = parent;
         } else break;
@@ -1364,7 +1364,7 @@ test "tree" {
     var _zlib = try zlib.decompressStream(a, file.reader());
     defer _zlib.deinit();
     var reader = _zlib.reader();
-    var data = try reader.readAllAlloc(a, 0xffff);
+    const data = try reader.readAllAlloc(a, 0xffff);
     defer a.free(data);
     var buffer = Object.init(data);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
@@ -1381,8 +1381,8 @@ test "tree decom" {
 
     var d = try zlib.decompressStream(a, file.reader());
     defer d.deinit();
-    var count = try d.read(&b);
-    var buf = try a.dupe(u8, b[0..count]);
+    const count = try d.read(&b);
+    const buf = try a.dupe(u8, b[0..count]);
     var tree = try Tree.make(a, "5edabf724389ef87fa5a5ddb2ebe6dbd888885ae", buf);
     defer tree.raze(a);
     for (tree.objects) |obj| {
@@ -1393,7 +1393,7 @@ test "tree decom" {
 
 test "tree child" {
     var a = std.testing.allocator;
-    var child = try std.ChildProcess.exec(.{
+    const child = try std.ChildProcess.exec(.{
         .allocator = a,
         .argv = &[_][]const u8{
             "git",
@@ -1408,9 +1408,9 @@ test "tree child" {
 }
 
 test "read pack" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
     var cwd = std.fs.cwd();
-    var dir = try cwd.openDir("repos/hastur", .{});
+    const dir = try cwd.openDir("repos/hastur", .{});
     var repo = try Repo.init(dir);
     defer repo.raze(a);
 
@@ -1436,9 +1436,9 @@ test "read pack" {
 }
 
 test "hopefully a delta" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
     var cwd = std.fs.cwd();
-    var dir = try cwd.openDir("repos/hastur", .{});
+    const dir = try cwd.openDir("repos/hastur", .{});
     var repo = try Repo.init(dir);
     defer repo.raze(a);
 
@@ -1456,8 +1456,8 @@ test "hopefully a delta" {
 }
 
 test "commit to tree" {
-    var a = std.testing.allocator;
-    var cwd = try std.fs.cwd().openDir(".", .{});
+    const a = std.testing.allocator;
+    const cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
@@ -1474,7 +1474,7 @@ test "commit to tree" {
 test "blob to commit" {
     var a = std.testing.allocator;
 
-    var cwd = try std.fs.cwd().openDir(".", .{});
+    const cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
@@ -1497,9 +1497,9 @@ test "blob to commit" {
 }
 
 test "mk sub tree" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
 
-    var cwd = try std.fs.cwd().openDir(".", .{});
+    const cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
@@ -1526,7 +1526,7 @@ test "mk sub tree" {
 test "commit mk sub tree" {
     var a = std.testing.allocator;
 
-    var cwd = try std.fs.cwd().openDir(".", .{});
+    const cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
@@ -1558,7 +1558,7 @@ test "commit mk sub tree" {
         std.debug.print("{any}\n", .{obj});
     defer csubtree2.raze(a);
 
-    var changed = try csubtree2.changedSet(a, &repo);
+    const changed = try csubtree2.changedSet(a, &repo);
     for (csubtree2.objects, changed) |o, c| {
         if (false) std.debug.print("{s} {s}\n", .{ o.name, c.sha });
         c.raze(a);
@@ -1678,7 +1678,7 @@ test "considering optimizing blob to commit" {
 test "ref delta" {
     var a = std.testing.allocator;
     var cwd = std.fs.cwd();
-    var dir = cwd.openDir("repos/hastur", .{}) catch return error.skip;
+    const dir = cwd.openDir("repos/hastur", .{}) catch return error.skip;
 
     var repo = try Repo.init(dir);
     defer repo.raze(a);
@@ -1702,11 +1702,11 @@ test "ref delta" {
 }
 
 test "forkRemote" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
     var tdir = std.testing.tmpDir(.{});
     defer tdir.cleanup();
 
-    var act = Actions{
+    const act = Actions{
         .alloc = a,
         .cwd = tdir.dir,
     };
@@ -1717,7 +1717,7 @@ test "forkRemote" {
 }
 
 test "new repo" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
     var tdir = std.testing.tmpDir(.{});
     defer tdir.cleanup();
 
@@ -1728,9 +1728,9 @@ test "new repo" {
 }
 
 test "updated at" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
 
-    var cwd = try std.fs.cwd().openDir(".", .{});
+    const cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
 
