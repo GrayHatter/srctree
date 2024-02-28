@@ -160,7 +160,7 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
 
         // upstream
         if (try Repos.hasUpstream(a, repo)) |url| {
-            var purl = try Repos.parseGitRemoteUrl(a, url);
+            const purl = try Repos.parseGitRemoteUrl(a, url);
             dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
             dom.push(HTML.text("Upstream: "));
             dom.push(HTML.anch(purl, try HTML.Attr.create(a, "href", purl)));
@@ -193,7 +193,7 @@ fn list(ctx: *Context) Error!void {
         while (itr.next() catch return Error.Unknown) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
-            var rdir = idir.dir.openDir(file.name, .{}) catch continue;
+            const rdir = idir.dir.openDir(file.name, .{}) catch continue;
             var rpo = git.Repo.init(rdir) catch continue;
             rpo.loadData(ctx.alloc) catch return error.Unknown;
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
@@ -221,7 +221,7 @@ fn list(ctx: *Context) Error!void {
             ) catch return error.Unknown;
         }
         dom = dom.close();
-        var data = dom.done();
+        const data = dom.done();
         var tmpl = Template.find("repos.html");
         tmpl.init(ctx.alloc);
         _ = tmpl.addElements(ctx.alloc, "repos", data) catch return Error.Unknown;
@@ -255,8 +255,8 @@ fn treeBlob(ctx: *Context) Error!void {
     _ = ctx.uri.next();
 
     var cwd = std.fs.cwd();
-    var filename = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    const filename = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
@@ -301,7 +301,7 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
     var resolve = repo.blob(ctx.alloc, &blb.hash) catch return error.Unknown;
     var reader = resolve.reader();
 
-    var d2 = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
+    const d2 = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
     const count = std.mem.count(u8, d2, "\n");
     dom = dom.open(HTML.element("code", null, null));
     var litr = std.mem.split(u8, d2, "\n");
@@ -325,7 +325,7 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
     }
 
     dom = dom.close();
-    var data = dom.done();
+    const data = dom.done();
     const filestr = try aPrint(
         ctx.alloc,
         "{pretty}",
@@ -425,7 +425,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     var tmpl = Template.find("repo.html");
     tmpl.init(ctx.alloc);
 
-    var head = if (repo.head) |h| switch (h) {
+    const head = if (repo.head) |h| switch (h) {
         .sha => |s| s,
         .branch => |b| b.name,
         else => "unknown",
