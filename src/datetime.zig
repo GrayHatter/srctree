@@ -119,7 +119,7 @@ pub fn fromEpochTz(sts: i64, tz: ?i32) !DateTime {
     self.years = yearsFrom(ts);
     self.weekday = @truncate((ts / 60 / 60 / 24 + 4) % 7);
 
-    var days = 719162 + ts / 60 / 60 / 24 - daysAtYear(self.years);
+    const days = 719162 + ts / 60 / 60 / 24 - daysAtYear(self.years);
     const both = monthsFrom(self.years, days);
     self.months = both[0];
     self.days = @truncate(both[1] + 1);
@@ -128,13 +128,13 @@ pub fn fromEpochTz(sts: i64, tz: ?i32) !DateTime {
 }
 
 pub fn fromEpoch(sts: i64) !DateTime {
-    var ts = try fromEpochTz(sts, null);
+    const ts = try fromEpochTz(sts, null);
     return ts;
 }
 
 /// Accepts a Unix Epoch int as a string of numbers
 pub fn fromEpochStr(str: []const u8) !DateTime {
-    var int = try std.fmt.parseInt(i64, str, 10);
+    const int = try std.fmt.parseInt(i64, str, 10);
     return fromEpoch(int);
 }
 
@@ -146,8 +146,8 @@ pub fn tzToSec(tzstr: []const u8) !i32 {
 
 /// Accepts a Unix Epoch int as a string of numbers and timezone in -HHMM format
 pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
-    var epoch = try std.fmt.parseInt(i64, str, 10);
-    var tz = try tzToSec(tzstr);
+    const epoch = try std.fmt.parseInt(i64, str, 10);
+    const tz = try tzToSec(tzstr);
     return fromEpochTz(epoch, tz);
 }
 
