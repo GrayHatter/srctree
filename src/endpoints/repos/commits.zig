@@ -92,7 +92,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
         comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
 
-    var map = CmmtMap.open(ctx.alloc, sha) catch unreachable;
+    const map = CmmtMap.open(ctx.alloc, sha) catch unreachable;
     for (map.comments) |cm| {
         comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
@@ -130,8 +130,8 @@ pub fn commit(ctx: *Context) Error!void {
     const sha = rd.noun orelse return error.Unrouteable;
     var cwd = std.fs.cwd();
     // FIXME user data flows into system
-    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
@@ -212,7 +212,7 @@ fn commitsList(
     var current: git.Commit = repo.commit(a) catch return error.Unknown;
     if (after) |aft| {
         std.debug.assert(aft.len <= 40);
-        var min = @min(aft.len, current.sha.len);
+        const min = @min(aft.len, current.sha.len);
         while (!std.mem.eql(u8, aft, current.sha[0..min])) {
             current = current.toParent(a, 0) catch {
                 std.debug.print("unable to build commit history\n", .{});
@@ -239,14 +239,14 @@ fn commitsList(
 pub fn commits(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
-    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     var cwd = std.fs.cwd();
-    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
     const after = null;
-    var commits_b = try ctx.alloc.alloc(Template.Context, 50);
+    const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
     const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
 
@@ -269,14 +269,14 @@ pub fn commitsAfter(ctx: *Context) Error!void {
 
     std.debug.assert(std.mem.eql(u8, "after", ctx.uri.next().?));
 
-    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     var cwd = std.fs.cwd();
-    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
     const after = ctx.uri.next();
-    var commits_b = try ctx.alloc.alloc(Template.Context, 50);
+    const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
     const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
 
