@@ -22,7 +22,7 @@ pub fn diffs(ctx: *Context) Error!void {
     }
     dom = dom.close();
 
-    var data = dom.done();
+    const data = dom.done();
 
     var tmpl = Template.find("actionable.html");
     tmpl.init(ctx.alloc);
@@ -44,7 +44,7 @@ pub fn todo(ctx: *Context) Error!void {
     }
     dom = dom.close();
 
-    var data = dom.done();
+    const data = dom.done();
 
     var tmpl = Template.find("actionable.html");
     tmpl.init(ctx.alloc);

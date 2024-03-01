@@ -33,7 +33,7 @@ fn default(ctx: *Context) Error!void {
         const conf = Ini.init(ctx.alloc, cffd) catch unreachable;
         if (conf.get("remote \"upstream\"")) |ns| {
             if (ns.get("url")) |url| {
-                var purl = try Repos.parseGitRemoteUrl(ctx.alloc, url);
+                const purl = try Repos.parseGitRemoteUrl(ctx.alloc, url);
                 dom = dom.open(HTML.h3(null, &HTML.Attr.class("upstream")));
                 dom.push(HTML.text("Upstream: "));
                 dom.push(HTML.anch(purl, try HTML.Attr.create(ctx.alloc, "href", purl)));
@@ -42,7 +42,7 @@ fn default(ctx: *Context) Error!void {
         }
     }
 
-    var data = dom.done();
+    const data = dom.done();
 
     var tmpl = Template.find("network.html");
     tmpl.init(ctx.alloc);

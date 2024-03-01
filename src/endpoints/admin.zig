@@ -28,7 +28,7 @@ pub const endpoints = [_]Route.MatchRouter{
 
 fn createRepo(a: Allocator, reponame: []const u8) !void {
     var dn_buf: [2048]u8 = undefined;
-    var dir = try std.fmt.bufPrint(&dn_buf, "repos/{}", .{reponame});
+    const dir = try std.fmt.bufPrint(&dn_buf, "repos/{}", .{reponame});
 
     var actions = git.Actions{
         .alloc = a,
@@ -54,7 +54,7 @@ fn default(ctx: *Context) Error!void {
     dom = dom.close();
     dom = dom.close();
 
-    var form = dom.done();
+    const form = dom.done();
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
@@ -75,7 +75,7 @@ fn cloneUpstream(ctx: *Context) Error!void {
         HTML.Attr{ .key = "value", .value = "https://srctree/reponame" },
     }));
     dom = dom.close();
-    var form = dom.done();
+    const form = dom.done();
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
@@ -93,7 +93,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
     const name = nameitr.first();
     std.debug.print("repo uri {s}\n", .{name});
 
-    var dir = std.fs.cwd().openDir("repos", .{}) catch return error.Unknown;
+    const dir = std.fs.cwd().openDir("repos", .{}) catch return error.Unknown;
     var act = git.Actions{
         .alloc = ctx.alloc,
         .cwd = dir,
@@ -113,7 +113,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
         HTML.Attr{ .key = "value", .value = "https://srctree/reponame" },
     }));
     dom = dom.close();
-    var form = dom.done();
+    const form = dom.done();
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
@@ -131,7 +131,7 @@ fn postNewRepo(ctx: *Context) Error!void {
             return error.Unknown
     else
         return error.Unknown;
-    var rname = valid.require("repo name") catch return error.Unknown;
+    const rname = valid.require("repo name") catch return error.Unknown;
 
     for (rname.value) |c| {
         if (std.ascii.isAlphanumeric(c)) continue;
@@ -141,11 +141,11 @@ fn postNewRepo(ctx: *Context) Error!void {
 
     std.debug.print("creating {s}\n", .{rname.value});
     var buf: [2048]u8 = undefined;
-    var dir_name = std.fmt.bufPrint(&buf, "repos/{s}", .{rname.value}) catch return error.Unknown;
+    const dir_name = std.fmt.bufPrint(&buf, "repos/{s}", .{rname.value}) catch return error.Unknown;
 
     if (std.fs.cwd().openDir(dir_name, .{})) |_| return error.Unknown else |_| {}
 
-    var new_repo = git.Repo.createNew(ctx.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
+    const new_repo = git.Repo.createNew(ctx.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
 
     std.debug.print("creating {any}\n", .{new_repo});
 
@@ -160,7 +160,7 @@ fn postNewRepo(ctx: *Context) Error!void {
         HTML.Attr{ .key = "value", .value = "repo name" },
     }));
     dom = dom.close();
-    var form = dom.done();
+    const form = dom.done();
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
@@ -183,7 +183,7 @@ fn newRepo(ctx: *Context) Error!void {
 
     dom = dom.close();
 
-    var form = dom.done();
+    const form = dom.done();
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);

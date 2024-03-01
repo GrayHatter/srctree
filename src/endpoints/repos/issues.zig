@@ -88,7 +88,7 @@ fn newComment(ctx: *Context) Error!void {
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
         _ = delta.loadThread(ctx.alloc) catch unreachable;
-        var c = Comments.new("name", msg.value) catch unreachable;
+        const c = Comments.new("name", msg.value) catch unreachable;
 
         delta.addComment(ctx.alloc, c) catch {};
         delta.writeOut() catch unreachable;
@@ -119,7 +119,7 @@ fn view(ctx: *Context) Error!void {
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
     if (delta.getComments(ctx.alloc)) |cm| {
-        var comments: []Template.Context = try ctx.alloc.alloc(Template.Context, cm.len);
+        const comments: []Template.Context = try ctx.alloc.alloc(Template.Context, cm.len);
 
         for (cm, comments) |comment, *cctx| {
             cctx.* = Template.Context.init(ctx.alloc);

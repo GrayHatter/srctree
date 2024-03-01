@@ -84,8 +84,8 @@ fn newPost(ctx: *Context) Error!void {
                 desc.value,
                 action.name,
             });
-            var data = Patch.loadRemote(ctx.alloc, src.value) catch unreachable;
-            var filename = std.fmt.allocPrint(
+            const data = Patch.loadRemote(ctx.alloc, src.value) catch unreachable;
+            const filename = std.fmt.allocPrint(
                 ctx.alloc,
                 "data/patch/{s}.{x}.patch",
                 .{ rd.name, delta.index },
@@ -118,7 +118,7 @@ fn newComment(ctx: *Context) Error!void {
         if (msg.value.len < 2) return ctx.response.redirect(loc, true) catch unreachable;
 
         var delta = Deltas.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
-        var c = Comments.new("name", msg.value) catch unreachable;
+        const c = Comments.new("name", msg.value) catch unreachable;
         _ = delta.loadThread(ctx.alloc) catch unreachable;
         delta.addComment(ctx.alloc, c) catch unreachable;
         delta.writeOut() catch unreachable;
@@ -170,7 +170,7 @@ fn view(ctx: *Context) Error!void {
     _ = delta.loadThread(ctx.alloc) catch unreachable;
 
     if (delta.getComments(ctx.alloc)) |cmts| {
-        var comments: []Template.Context = try ctx.alloc.alloc(Template.Context, cmts.len);
+        const comments: []Template.Context = try ctx.alloc.alloc(Template.Context, cmts.len);
 
         for (cmts, comments) |comment, *cctx| {
             cctx.* = Template.Context.init(ctx.alloc);
@@ -190,7 +190,7 @@ fn view(ctx: *Context) Error!void {
     try tmpl.ctx.?.put("delta_id", delta_id);
 
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
-    var file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
+    const file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         const patch = try Patch.patchHtml(ctx.alloc, fdata);

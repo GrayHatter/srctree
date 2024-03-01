@@ -47,7 +47,7 @@ fn countAll(a: Allocator, until: i64, root_cmt: Git.Commit) !*HeatMapArray {
         for (commit.parent[1..], 1..) |par, pidx| {
             if (par) |_| {
                 seen.?.insert(par.?) catch return &hits;
-                var parent = try commit.toParent(a, @truncate(pidx));
+                const parent = try commit.toParent(a, @truncate(pidx));
                 //defer parent.raze(a);
                 _ = try countAll(a, until, parent);
             }
@@ -60,12 +60,12 @@ fn countAll(a: Allocator, until: i64, root_cmt: Git.Commit) !*HeatMapArray {
 }
 
 fn findCommits(a: Allocator, until: i64, gitdir: []const u8) !*HeatMapArray {
-    var repo_dir = try std.fs.cwd().openDir(gitdir, .{});
+    const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
     try repo.loadData(a);
     defer repo.raze(a);
 
-    var commit = repo.commit(a) catch return &hits;
+    const commit = repo.commit(a) catch return &hits;
     return try countAll(a, until, commit);
 }
 
@@ -108,7 +108,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
             var buf: [1024]u8 = undefined;
             switch (file.kind) {
                 .directory, .sym_link => {
-                    var name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
+                    const name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
                     _ = findCommits(ctx.alloc, until, name) catch unreachable;
                     repo_count +|= 1;
                 },
@@ -160,7 +160,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
         for (month[1..]) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY) catch unreachable;
             defer day_off += 1;
-            var rows = try ctx.alloc.alloc(HTML.Attribute, 2);
+            const rows = try ctx.alloc.alloc(HTML.Attribute, 2);
             const class = if (date.timestamp >= nowish.timestamp)
                 "day-hide"
             else switch (16 - @clz(hits[day_off])) {
