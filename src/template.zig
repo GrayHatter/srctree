@@ -119,7 +119,7 @@ pub const Template = struct {
         name: []const u8,
         els: []const HTML.Element,
     ) !void {
-        var list = try a.alloc([]u8, els.len);
+        const list = try a.alloc([]u8, els.len);
         defer a.free(list);
         for (list, els) |*l, e| {
             l.* = try std.fmt.allocPrint(a, fmt, .{e});
@@ -127,7 +127,7 @@ pub const Template = struct {
         defer {
             for (list) |l| a.free(l);
         }
-        var value = try std.mem.join(a, "", list);
+        const value = try std.mem.join(a, "", list);
 
         try self.ctx.?.put(name, value);
     }
@@ -142,7 +142,7 @@ pub const Template = struct {
     }
 
     pub fn build(self: *Template, ext_a: ?Allocator) ![]u8 {
-        var a = ext_a orelse self.alloc orelse unreachable; // return error.AllocatorInvalid;
+        const a = ext_a orelse self.alloc orelse unreachable; // return error.AllocatorInvalid;
         return std.fmt.allocPrint(a, "{}", .{self});
     }
 
@@ -351,7 +351,7 @@ fn tail(path: []const u8) []const u8 {
 pub const builtin: [bldtmpls.names.len]Template = blk: {
     @setEvalBranchQuota(5000);
     var t: [bldtmpls.names.len]Template = undefined;
-    inline for (bldtmpls.names, &t) |file, *dst| {
+    for (bldtmpls.names, &t) |file, *dst| {
         dst.* = Template{
             .alloc = null,
             .path = file,
@@ -366,7 +366,7 @@ pub var dynamic: []Template = undefined;
 
 fn load(a: Allocator) !void {
     var cwd = std.fs.cwd();
-    var idir = cwd.openIterableDir(TEMPLATE_PATH, .{}) catch |err| {
+    var idir = cwd.openDir(TEMPLATE_PATH, .{ .iterate = true }) catch |err| {
         std.debug.print("Unable to build dynamic templates ({})\n", .{err});
         return;
     };
@@ -455,7 +455,7 @@ test "load templates" {
 }
 
 test "init" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
 
     var tmpl = find("user_commits.html");
     tmpl.init(a);

@@ -13,7 +13,7 @@ child: ?*DOM = null,
 next: ?HTML.E = null,
 
 pub fn new(a: Allocator) *DOM {
-    var self = a.create(DOM) catch unreachable;
+    const self = a.create(DOM) catch unreachable;
     self.* = DOM{
         .alloc = a,
         .elems = std.ArrayList(HTML.E).init(a),
@@ -67,7 +67,7 @@ pub fn done(self: *DOM) []HTML.E {
 }
 
 test "basic" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
     var dom = new(a);
     try std.testing.expect(dom.child == null);
     _ = dom.done();
@@ -81,7 +81,7 @@ test "open close" {
     var new_dom = dom.open(HTML.div(null, null));
     try std.testing.expect(new_dom.child == null);
     try std.testing.expect(dom.child == new_dom);
-    var closed = new_dom.close();
+    const closed = new_dom.close();
     try std.testing.expect(dom == closed);
     try std.testing.expect(dom.child == null);
 

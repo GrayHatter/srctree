@@ -53,12 +53,12 @@ fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
     var list = std.ArrayList(uWSGIVar).init(a);
     var buf = b;
     while (buf.len > 0) {
-        var keysize = readU16(buf[0..2]);
+        const keysize = readU16(buf[0..2]);
         buf = buf[2..];
         const key = try a.dupe(u8, buf[0..keysize]);
         buf = buf[keysize..];
 
-        var valsize = readU16(buf[0..2]);
+        const valsize = readU16(buf[0..2]);
         buf = buf[2..];
         const val = try a.dupe(u8, if (valsize == 0) "" else buf[0..valsize]);
         buf = buf[valsize..];
@@ -78,7 +78,7 @@ fn readHeader(a: Allocator, acpt: std.net.StreamServer.Connection) !Request {
     var ptr: [*]u8 = @ptrCast(&uwsgi_header);
     _ = try acpt.stream.read(@alignCast(ptr[0..4]));
 
-    var buf: []u8 = try a.alloc(u8, uwsgi_header.size);
+    const buf: []u8 = try a.alloc(u8, uwsgi_header.size);
     const read = try acpt.stream.read(buf);
     if (read != uwsgi_header.size) {
         std.log.err("unexpected read size {} {}", .{ read, uwsgi_header.size });
@@ -123,7 +123,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         });
 
         var arena = std.heap.ArenaAllocator.init(a);
-        var alloc = arena.allocator();
+        const alloc = arena.allocator();
         var response = Response.init(alloc, &request);
 
         var post_data: ?UserData.PostData = null;
@@ -148,7 +148,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
             query = try UserData.readQuery(a, qs);
         }
 
-        var usrdata = UserData.UserData{
+        const usrdata = UserData.UserData{
             .post_data = post_data,
             .query_data = query,
         };

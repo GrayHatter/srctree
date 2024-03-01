@@ -15,7 +15,7 @@ pub fn serve(a: Allocator, srv: *Server) !void {
     connection: while (true) {
         var arena = std.heap.ArenaAllocator.init(a);
         defer arena.deinit();
-        var alloc = arena.allocator();
+        const alloc = arena.allocator();
 
         var http_resp = try srv.accept(.{
             .allocator = alloc,
@@ -42,7 +42,7 @@ pub fn serve(a: Allocator, srv: *Server) !void {
             try http_resp.headers.append("connection", "close");
 
             var request = try Request.init(alloc, http_resp);
-            var response = Response.init(alloc, &request);
+            const response = Response.init(alloc, &request);
 
             var ctx = try Context.init(
                 alloc,

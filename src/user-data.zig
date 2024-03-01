@@ -122,7 +122,7 @@ fn normilizeUrlEncoded(in: []const u8, out: []u8) ![]u8 {
     var len: usize = 0;
     var i: usize = 0;
     while (i < in.len) {
-        var c = &in[i];
+        const c = &in[i];
         var char: u8 = 0xff;
         switch (c.*) {
             '+' => char = ' ',
@@ -150,7 +150,7 @@ fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype
 
             var itr = std.mem.split(u8, data, "&");
             const count = std.mem.count(u8, data, "&") +| 1;
-            var items = try a.alloc(DataItem, count);
+            const items = try a.alloc(DataItem, count);
             for (items) |*itm| {
                 const idata = itr.next().?;
                 var odata = try a.dupe(u8, idata);
@@ -211,7 +211,7 @@ const MultiData = struct {
 fn parseMultiData(data: []const u8) !MultiData {
     var extra = std.mem.split(u8, data, ";");
     const first = extra.first();
-    var header = try DataHeader.fromStr(first);
+    const header = try DataHeader.fromStr(first);
     var mdata: MultiData = .{
         .header = header,
         .str = first[@tagName(header).len + 1 ..],
@@ -238,7 +238,7 @@ fn parseMultiFormData(a: Allocator, data: []const u8) !DataItem {
         var headeritr = std.mem.split(u8, post_item.headers.?, "\r\n");
         while (headeritr.next()) |header| {
             if (header.len == 0) continue;
-            var md = try parseMultiData(header);
+            const md = try parseMultiData(header);
             if (md.name) |name| post_item.name = name;
             // TODO look for other headers or other data
         }
@@ -262,7 +262,7 @@ fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: 
 
             const boundry = boundry_buffer[0 .. bound_given.len + 2];
             const count = std.mem.count(u8, data, boundry) -| 1;
-            var items = try a.alloc(DataItem, count);
+            const items = try a.alloc(DataItem, count);
             var itr = std.mem.split(u8, data, boundry);
             _ = itr.first(); // the RFC says I'm supposed to ignore the preamble :<
             for (items) |*itm| {
@@ -275,8 +275,8 @@ fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: 
 }
 
 pub fn readBody(a: Allocator, acpt: std.net.StreamServer.Connection, size: usize, htype: []const u8) !PostData {
-    var post_buf: []u8 = try a.alloc(u8, size);
-    var read_size = try acpt.stream.read(post_buf);
+    const post_buf: []u8 = try a.alloc(u8, size);
+    const read_size = try acpt.stream.read(post_buf);
     if (read_size != size) return error.UnexpectedHttpBodySize;
 
     const items = switch (try ContentType.fromStr(htype)) {

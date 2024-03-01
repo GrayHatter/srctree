@@ -15,7 +15,7 @@ pub const Attribute = struct {
     }
 
     pub fn alloc(a: Allocator, keys: []const []const u8, vals: []const ?[]const u8) ![]Attribute {
-        var all = try a.alloc(Attribute, @max(keys.len, vals.len));
+        const all = try a.alloc(Attribute, @max(keys.len, vals.len));
         for (all, keys, vals) |*dst, k, v| {
             dst.* = Attribute{
                 .key = try a.dupe(u8, k),

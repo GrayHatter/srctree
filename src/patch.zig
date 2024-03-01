@@ -106,7 +106,7 @@ fn fetch(a: Allocator, uri: []const u8) ![]u8 {
     //     std.debug.print("stdlib request failed with error {}\n", .{err});
     // }
 
-    var curl = try CURL.curlRequest(a, uri);
+    const curl = try CURL.curlRequest(a, uri);
     if (curl.code != 200) return error.UnexpectedResponseCode;
 
     if (curl.body) |b| return b;
@@ -120,7 +120,7 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
 // TODO move this function, I tried it, and now I hate it!
 pub fn patchHtml(a: Allocator, patch: []const u8) ![]HTML.Element {
     var p = Patch{ .patch = patch };
-    var diffs = p.filesSlice(a) catch return &[0]HTML.Element{};
+    const diffs = p.filesSlice(a) catch return &[0]HTML.Element{};
     defer a.free(diffs);
 
     var dom = DOM.new(a);
@@ -157,7 +157,7 @@ pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
         const dirty = litr.next().?;
         var clean = a.alloc(u8, @max(64, dirty.len * 2)) catch unreachable;
         clean = Bleach.sanitize(dirty, clean, .{}) catch bigger: {
-            var big = a.realloc(clean, clean.len * 2) catch unreachable;
+            const big = a.realloc(clean, clean.len * 2) catch unreachable;
             break :bigger Bleach.sanitize(dirty, big, .{}) catch unreachable;
         };
         const attr: ?[]const HTML.Attr = if (clean.len > 0 and (clean[0] == '-' or clean[0] == '+'))
@@ -205,7 +205,7 @@ test "filesSlice" {
     var p = Patch{
         .patch = a_patch,
     };
-    var files = try p.filesSlice(a);
+    const files = try p.filesSlice(a);
     defer a.free(files);
     try std.testing.expect(files.len == 2);
     var h: Header = undefined;

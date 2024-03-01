@@ -124,11 +124,11 @@ pub fn main() !void {
             try usock.listen(uaddr);
             defer usock.close();
 
-            var path = try std.fs.cwd().realpathAlloc(a, FILE);
+            const path = try std.fs.cwd().realpathAlloc(a, FILE);
             defer a.free(path);
-            var zpath = try a.dupeZ(u8, path);
+            const zpath = try a.dupeZ(u8, path);
             defer a.free(zpath);
-            var mode = std.os.linux.chmod(zpath, 0o777);
+            const mode = std.os.linux.chmod(zpath, 0o777);
             if (false) std.debug.print("mode {o}\n", .{mode});
             try print("Unix server listening\n", .{});
 

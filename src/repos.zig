@@ -34,7 +34,7 @@ pub fn parseGitRemoteUrl(a: Allocator, url: []const u8) ![]u8 {
         var p = try a.dupe(u8, url[4..end]);
         if (std.mem.indexOf(u8, p, ":")) |i| p[i] = '/';
         const joiner = [_][]const u8{ "https://", p };
-        var http = try std.mem.join(a, "", &joiner);
+        const http = try std.mem.join(a, "", &joiner);
         return http;
     }
 
@@ -84,7 +84,7 @@ pub fn updateThread() void {
     while (true) {
         for (names) |rname| {
             const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
-            var dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
+            const dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
             var repo = Git.Repo.init(dir) catch continue;
             defer repo.raze(a);
             repo.loadData(a) catch {
@@ -92,7 +92,7 @@ pub fn updateThread() void {
             };
 
             const rhead = repo.HEAD(a) catch continue;
-            var head: []const u8 = switch (rhead) {
+            const head: []const u8 = switch (rhead) {
                 .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
                 .tag => |t| t.name,
                 else => "main",

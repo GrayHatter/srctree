@@ -80,7 +80,7 @@ fn namespace(a: Allocator, name: []const u8, itr: *std.mem.SplitIterator(u8, .se
     var list = std.ArrayList(Setting).init(a);
 
     while (itr.peek()) |peek| {
-        var line = std.mem.trim(u8, peek, " \n\t");
+        const line = std.mem.trim(u8, peek, " \n\t");
         if (line.len == 0) {
             _ = itr.next();
             continue;
@@ -102,14 +102,14 @@ fn namespace(a: Allocator, name: []const u8, itr: *std.mem.SplitIterator(u8, .se
 }
 
 pub fn init(a: Allocator, file: std.fs.File) !Config {
-    var data = try file.readToEndAlloc(a, 1 <<| 18);
+    const data = try file.readToEndAlloc(a, 1 <<| 18);
     defer a.free(data);
     var itr = std.mem.split(u8, data, "\n");
 
     var list = std.ArrayList(Namespace).init(a);
 
     while (itr.next()) |wide| {
-        var line = std.mem.trim(u8, wide, " \n\t");
+        const line = std.mem.trim(u8, wide, " \n\t");
         if (line.len == 0) continue;
 
         if (line[0] == '[' and line[line.len - 1] == ']') {

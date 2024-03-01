@@ -121,7 +121,7 @@ fn __objects(ctx: *Context) Error!void {
 
     var cwd = std.fs.cwd();
     var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
@@ -134,7 +134,7 @@ fn __objects(ctx: *Context) Error!void {
 
     filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}/objects/{s}/{s}", .{ rd.name, o2, o38 });
     var file = cwd.openFile(filename, .{}) catch unreachable;
-    var data = file.readToEndAlloc(ctx.alloc, 0xffffff) catch unreachable;
+    const data = file.readToEndAlloc(ctx.alloc, 0xffffff) catch unreachable;
 
     //var sha: [40]u8 = undefined;
     //@memcpy(sha[0..2], o2[0..2]);
@@ -154,8 +154,8 @@ fn __info(ctx: *Context) Error!void {
     const rd = Endpoint.REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
-    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    var dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
@@ -176,7 +176,7 @@ fn __info(ctx: *Context) Error!void {
         }
     }
 
-    var data = try adata.toOwnedSlice();
+    const data = try adata.toOwnedSlice();
 
     ctx.response.status = .ok;
     ctx.response.start() catch return Error.Unknown;

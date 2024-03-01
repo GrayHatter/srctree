@@ -34,7 +34,7 @@ fn normilize(name: []const u8) !void {
 
 pub fn add(h: *Headers, comptime name: []const u8, value: []const u8) !void {
     try normilize(name);
-    var res = try h.index.getOrPut(name);
+    const res = try h.index.getOrPut(name);
     if (res.found_existing) {
         res.value_ptr.* = Value{
             .str = value,
