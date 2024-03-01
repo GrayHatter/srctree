@@ -52,7 +52,7 @@ pub fn new(name: []const u8, loc: []const u8, hl: bool) !Network {
     if (!validName(name) or !validLocation(loc)) return error.InvalidNetwork;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.network", .{name});
-    var file = try datad.createFile(filename, .{});
+    const file = try datad.createFile(filename, .{});
     var nw = Network{
         .name = name,
         .location = loc,

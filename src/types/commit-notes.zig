@@ -79,6 +79,6 @@ pub fn raze() void {
 pub fn open(a: Allocator, hash: []const u8) !CommitMap {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.cmap", .{std.fmt.fmtSliceHexLower(hash)});
-    var file = try datad.createFile(filename, .{});
+    const file = try datad.createFile(filename, .{});
     return try CommitMap.readFile(a, hash, file);
 }

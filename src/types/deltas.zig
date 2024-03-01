@@ -15,7 +15,7 @@ const DELTA_VERSION: usize = 0;
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
     var reader = file.reader();
-    var ver: usize = try reader.readIntNative(usize);
+    const ver: usize = try reader.readIntNative(usize);
     var d: Delta = .{
         .index = idx,
         .repo = undefined,
@@ -119,13 +119,13 @@ pub const Delta = struct {
     }
 
     pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Delta {
-        var delta: Delta = try readVersioned(a, idx, file);
+        const delta: Delta = try readVersioned(a, idx, file);
         return delta;
     }
 
     pub fn loadThread(self: *Delta, a: Allocator) !*const Thread {
         if (self.thread != null) return error.MemoryAlreadyLoaded;
-        var t = try a.create(Thread);
+        const t = try a.create(Thread);
         t.* = try Threads.open(a, self.thread_id) orelse return error.UnableToLoadThread;
         self.thread = t;
         return t;
@@ -199,7 +199,7 @@ pub const Iterator = struct {
         while (self.index <= self.last) {
             defer self.index +|= 1;
             const filename = std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ self.repo, self.index }) catch unreachable;
-            var file = datad.openFile(filename, .{ .mode = .read_only }) catch continue;
+            const file = datad.openFile(filename, .{ .mode = .read_only }) catch continue;
             return Delta.readFile(self.alloc, self.index, file) catch continue;
         }
         return null;
@@ -220,10 +220,10 @@ pub fn last(repo: []const u8) usize {
 
 pub fn new(repo: []const u8) !Delta {
     // TODO this is probably a bug
-    var max: usize = currMax(repo) catch 0;
+    const max: usize = currMax(repo) catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, max + 1 });
-    var file = try datad.createFile(filename, .{});
+    const file = try datad.createFile(filename, .{});
     try currMaxSet(repo, max + 1);
 
     var d = Delta{
@@ -249,6 +249,6 @@ pub fn open(a: std.mem.Allocator, repo: []const u8, index: usize) !?Delta {
 
     var buf: [2048]u8 = undefined;
     const filename = std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, index }) catch return error.InvalidTarget;
-    var file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
+    const file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
     return try Delta.readFile(a, index, file);
 }

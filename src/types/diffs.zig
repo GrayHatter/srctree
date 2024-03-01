@@ -13,7 +13,7 @@ const DIFF_VERSION: usize = 0;
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Diff {
     var reader = file.reader();
-    var ver: usize = try reader.readIntNative(usize);
+    const ver: usize = try reader.readIntNative(usize);
     return switch (ver) {
         0 => return Diff{
             .index = idx,
@@ -157,12 +157,12 @@ pub fn forRepoCount(repo: []const u8) usize {
         defer file.close();
         var reader = file.reader();
         _ = reader.readIntNative(usize) catch continue; // version
-        var state: usize = reader.readIntNative(usize) catch continue;
+        const state: usize = reader.readIntNative(usize) catch continue;
         if (state != 0) continue;
         _ = reader.readIntNative(usize) catch continue; // created
         _ = reader.readIntNative(usize) catch continue; // updated
         var nbuf: [2048]u8 = undefined;
-        var rname = reader.readUntilDelimiter(&nbuf, 0) catch continue;
+        const rname = reader.readUntilDelimiter(&nbuf, 0) catch continue;
         if (std.mem.eql(u8, rname, repo)) count += 1;
     }
     return count;
@@ -173,11 +173,11 @@ pub fn last() usize {
 }
 
 pub fn new(repo: []const u8, delta: Deltas.Delta) !Diff {
-    var max: usize = currMax() catch 0;
+    const max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{max + 1});
-    var file = try datad.createFile(filename, .{});
-    var d = Diff{
+    const file = try datad.createFile(filename, .{});
+    const d = Diff{
         .index = max + 1,
         .state = 0,
         .repo = repo,
@@ -197,6 +197,6 @@ pub fn open(a: std.mem.Allocator, index: usize) !?Diff {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{index});
-    var file = try datad.openFile(filename, .{ .mode = .read_write });
+    const file = try datad.openFile(filename, .{ .mode = .read_write });
     return try Diff.readFile(a, index, file);
 }

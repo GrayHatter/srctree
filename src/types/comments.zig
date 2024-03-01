@@ -22,7 +22,7 @@ pub fn charToKind(c: u8) TargetKind {
 
 fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
     var reader = file.reader();
-    var ver: usize = try reader.readIntNative(usize);
+    const ver: usize = try reader.readIntNative(usize);
     return switch (ver) {
         0 => return Comment{
             .state = try reader.readIntNative(usize),
@@ -131,7 +131,7 @@ pub const Comment = struct {
         const filename = try std.fmt.bufPrint(&buf, "{x}.comment", .{std.fmt.fmtSliceHexLower(&self.hash)});
         var file = try d.createFile(filename, .{});
         defer file.close();
-        var w = file.writer();
+        const w = file.writer();
         try self.writeStruct(w);
     }
 
@@ -202,7 +202,7 @@ pub fn loadFromData(a: Allocator, cd: []const u8) ![]Comment {
     }
     const count = cd.len / 32;
     if (count == 0) return &[0]Comment{};
-    var comments = try a.alloc(Comment, count);
+    const comments = try a.alloc(Comment, count);
     for (comments, 0..) |*c, i| {
         c.* = try Comments.open(a, cd[i * 32 .. (i + 1) * 32]);
     }
@@ -218,7 +218,7 @@ test "comment" {
     };
 
     // zig fmt: off
-    var hash = c.toHash();
+    const hash = c.toHash();
     try std.testing.expectEqualSlices(
         u8,
         &[_]u8{
@@ -242,7 +242,7 @@ test "comment" {
         "217805e5b50c05f522acfebaeaa4acc2d650d1dd48fc340ebb5394605693c9c8.comment",
         filename,
     );
-    var blob = try dir.dir.readFileAlloc(a, filename, 0xFF);
+    const blob = try dir.dir.readFileAlloc(a, filename, 0xFF);
     defer a.free(blob);
 
     // zig fmt: off

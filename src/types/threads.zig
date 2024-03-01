@@ -27,7 +27,7 @@ test State {
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
     var reader = file.reader();
-    var int: usize = try reader.readIntNative(usize);
+    const int: usize = try reader.readIntNative(usize);
     return switch (int) {
         0 => {
             var t = Thread{
@@ -189,12 +189,12 @@ pub fn last() usize {
 }
 
 pub fn new(delta: Deltas.Delta) !Thread {
-    var max: usize = currMax() catch 0;
+    const max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{max + 1});
-    var file = try datad.createFile(filename, .{});
+    const file = try datad.createFile(filename, .{});
     try currMaxSet(max + 1);
-    var thread = Thread{
+    const thread = Thread{
         .index = max + 1,
         .file = file,
         .delta_hash = delta.hash,
@@ -211,6 +211,6 @@ pub fn open(a: std.mem.Allocator, index: usize) !?Thread {
 
     var buf: [2048]u8 = undefined;
     const filename = std.fmt.bufPrint(&buf, "{x}.thread", .{index}) catch return error.InvalidTarget;
-    var file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
+    const file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
     return try Thread.readFile(a, index, file);
 }

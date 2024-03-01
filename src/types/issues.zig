@@ -29,7 +29,7 @@ test State {
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Issue {
     var reader = file.reader();
-    var int: usize = try reader.readIntNative(usize);
+    const int: usize = try reader.readIntNative(usize);
     return switch (int) {
         0 => Issue{
             .index = idx,
@@ -84,7 +84,7 @@ pub const Issue = struct {
 
     pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Issue {
         try file.seekTo(0);
-        var issue: Issue = try readVersioned(a, idx, file);
+        const issue: Issue = try readVersioned(a, idx, file);
         return issue;
     }
 
@@ -155,11 +155,11 @@ pub fn last() usize {
 }
 
 pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Issue {
-    var max: usize = currMax() catch 0;
+    const max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{max + 1});
-    var file = try datad.createFile(filename, .{});
-    var d = Issue{
+    const file = try datad.createFile(filename, .{});
+    const d = Issue{
         .index = max + 1,
         .state = 0,
         .repo = repo,
@@ -180,6 +180,6 @@ pub fn open(a: std.mem.Allocator, index: usize) !?Issue {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{index});
-    var file = try datad.openFile(filename, .{ .mode = .read_write });
+    const file = try datad.openFile(filename, .{ .mode = .read_write });
     return try Issue.readFile(a, index, file);
 }

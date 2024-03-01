@@ -12,7 +12,7 @@ pub const User = struct {
 
         var fp: ?[]u8 = try a.alloc(u8, 40);
         errdefer if (fp) |ffp| a.free(ffp);
-        var count = try file.read(fp.?);
+        const count = try file.read(fp.?);
         if (count != 40) {
             a.free(fp.?);
             fp = null;
@@ -50,7 +50,7 @@ pub fn findMTLSFingerprint(a: Allocator, fp: []const u8) !User {
         const file = try datad.openFile(f.name, .{});
         errdefer file.close();
         var ckb: [40]u8 = undefined;
-        var count = try file.read(&ckb);
+        const count = try file.read(&ckb);
         if (count != 40) {
             file.close();
             continue;
