@@ -275,6 +275,15 @@ fn treeBlob(ctx: *Context) Error!void {
     return tree(ctx, &repo, &files);
 }
 
+fn guessLang(name: []const u8) []const u8 {
+    if (std.mem.endsWith(u8, name, "zig")) {
+        return "zig";
+    } else if (std.mem.endsWith(u8, name, "html")) {
+        return "html";
+    }
+    return "zig";
+}
+
 fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
     var tmpl = Template.find("blob.html");
     tmpl.init(ctx.alloc);
@@ -302,13 +311,50 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
     var reader = resolve.reader();
 
     const d2 = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
-    const count = std.mem.count(u8, d2, "\n");
-    dom = dom.open(HTML.element("code", null, null));
-    var litr = std.mem.split(u8, d2, "\n");
+    var child = std.ChildProcess.init(&[_][]const u8{ "pygmentize", "-f", "html", "-l", guessLang(blb.name) }, ctx.alloc);
+    child.stdin_behavior = .Pipe;
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Ignore;
+    child.expand_arg0 = .no_expand;
+    child.spawn() catch unreachable;
 
+    const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
+    var poll_fd = [_]std.os.pollfd{
+        .{
+            .fd = child.stdout.?.handle,
+            .events = std.os.POLL.IN,
+            .revents = undefined,
+        },
+    };
+    _ = std.os.write(child.stdin.?.handle, d2) catch unreachable;
+    std.os.close(child.stdin.?.handle);
+    child.stdin = null;
+
+    var buf = std.ArrayList(u8).init(ctx.alloc);
+    const abuf = try ctx.alloc.alloc(u8, 0xffffff);
+    while (true) {
+        const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
+        if (events_len == 0) continue;
+        if (poll_fd[0].revents & std.os.POLL.IN != 0) {
+            const amt = std.os.read(poll_fd[0].fd, abuf) catch unreachable;
+            if (amt == 0) break;
+            try buf.appendSlice(abuf[0..amt]);
+        } else if (poll_fd[0].revents & err_mask != 0) {
+            break;
+        }
+    }
+    ctx.alloc.free(abuf);
+
+    _ = child.wait() catch unreachable;
+    const formatted = try buf.toOwnedSlice();
+
+    dom = dom.open(HTML.element("code", null, null));
+    var litr = std.mem.split(u8, formatted[28..][0 .. formatted.len - 38], "\n");
+
+    const count = std.mem.count(u8, d2, "\n");
     for (0..count + 1) |i| {
-        var buf: [12]u8 = undefined;
-        const b = std.fmt.bufPrint(&buf, "#L{}", .{i + 1}) catch unreachable;
+        var pbuf: [12]u8 = undefined;
+        const b = std.fmt.bufPrint(&pbuf, "#L{}", .{i + 1}) catch unreachable;
         const attrs = try HTML.Attribute.alloc(ctx.alloc, &[_][]const u8{
             "num",
             "id",
@@ -318,10 +364,8 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
             b[1..],
             b,
         });
-        const dirty = litr.next().?;
-        var clean = try ctx.alloc.alloc(u8, dirty.len * 2);
-        clean = Bleach.sanitize(dirty, clean, .{}) catch return error.Unknown;
-        dom.push(HTML.element("ln", clean, attrs));
+        const line = litr.next().?;
+        dom.push(HTML.element("ln", line, attrs));
     }
 
     dom = dom.close();
