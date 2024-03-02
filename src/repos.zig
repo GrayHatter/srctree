@@ -11,7 +11,7 @@ pub fn allNames(a: Allocator) ![][]u8 {
     var list = std.ArrayList([]u8).init(a);
 
     const cwd = std.fs.cwd();
-    var repo_dirs = cwd.openIterableDir("repos", .{}) catch unreachable;
+    var repo_dirs = cwd.openDir("repos", .{ .iterate = true }) catch unreachable;
     defer repo_dirs.close();
     var itr_repo = repo_dirs.iterate();
 

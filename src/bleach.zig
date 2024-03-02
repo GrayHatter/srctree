@@ -36,11 +36,11 @@ pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8, opts: Options) Error!
 
     var out_size: usize = 0;
     for (in) |c| out_size +|= try func(c, null);
-    var out = try a.alloc(u8, out_size);
+    const out = try a.alloc(u8, out_size);
     return try sanitize(in, out, opts);
 }
 
-// if an error is encountered, state of out is undefined
+/// if an error is encountered, `out` is undefined
 pub fn sanitize(in: []const u8, out: []u8, opts: Options) Error![]u8 {
     const func = opts.rules.func();
 
@@ -52,25 +52,39 @@ pub fn sanitize(in: []const u8, out: []u8, opts: Options) Error![]u8 {
     return out[0..pos];
 }
 
-pub fn StreamSanitizer(comptime ReaderType: type) type {
+pub fn StreamSanitizer(comptime Context: type) type {
     return struct {
         const Self = @This();
 
-        pub const StreamError = ReaderType.Error || Error;
+        pub const StreamError = Context.Error || Error;
 
         alloc: std.mem.Allocator,
-        src_reader: ReaderType,
+        context: Context,
         src_opts: Options,
+        sanitizer: RuleFn,
 
-        fn init(a: std.mem.Allocator, reader: ReaderType, opts: Options) Self {
+        fn init(a: std.mem.Allocator, reader: Context, opts: Options) Self {
             return Self{
                 .alloc = a,
                 .src_reader = reader,
                 .src_opts = opts,
+                .sanitizer = opts.rules.func(),
             };
         }
 
         pub fn raze(_: *Self) void {}
+
+        pub fn any(self: *const Self) std.io.AnyReader {
+            return .{
+                .context = @ptrCast(*self.context),
+                .readFn = typeErasedReadFn,
+            };
+        }
+
+        pub fn typeErasedReadFn(context: *const anyopaque, buffer: []u8) anyerror!usize {
+            const ptr: *const Context = @alignCast(@ptrCast(context));
+            return read(ptr.*, buffer);
+        }
 
         pub fn read(self: *Self, buffer: []u8) StreamError!usize {
             _ = self;

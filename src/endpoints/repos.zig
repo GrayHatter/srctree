@@ -71,7 +71,7 @@ pub const RouteData = struct {
 
     pub fn exists(self: RouteData) bool {
         var cwd = std.fs.cwd();
-        if (cwd.openIterableDir("./repos", .{})) |idir| {
+        if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
             var itr = idir.iterate();
             while (itr.next() catch return false) |file| {
                 if (file.kind != .directory and file.kind != .sym_link) continue;
@@ -187,13 +187,13 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
 
 fn list(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
-    if (cwd.openIterableDir("./repos", .{})) |idir| {
+    if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
         var repos = std.ArrayList(git.Repo).init(ctx.alloc);
         var itr = idir.iterate();
         while (itr.next() catch return Error.Unknown) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
-            const rdir = idir.dir.openDir(file.name, .{}) catch continue;
+            const rdir = idir.openDir(file.name, .{}) catch continue;
             var rpo = git.Repo.init(rdir) catch continue;
             rpo.loadData(ctx.alloc) catch return error.Unknown;
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;

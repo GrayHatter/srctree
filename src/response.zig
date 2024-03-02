@@ -92,9 +92,10 @@ pub fn start(res: *Response) !void {
     if (res.status == .internal_server_error) res.status = .ok;
     switch (res.downstream) {
         .http => {
-            res.request.raw_request.http.transfer_encoding = .chunked;
-            res.phase = .headers;
-            return res.request.raw_request.http.do();
+            unreachable;
+            //res.request.raw_request.http.transfer_encoding = .chunked;
+            //res.phase = .headers;
+            //return res.request.raw_request.http.do();
         },
         else => {},
     }

@@ -1,5 +1,7 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const endian = builtin.cpu.arch.endian();
 
 const Comments = @import("comments.zig");
 const Comment = Comments.Comment;
@@ -27,14 +29,14 @@ test State {
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
     var reader = file.reader();
-    const int: usize = try reader.readIntNative(usize);
+    const int: usize = try reader.readInt(usize, endian);
     return switch (int) {
         0 => {
             var t = Thread{
                 .index = idx,
                 .state = try reader.readStruct(State),
-                .created = try reader.readIntNative(i64),
-                .updated = try reader.readIntNative(i64),
+                .created = try reader.readInt(i64, endian),
+                .updated = try reader.readInt(i64, endian),
                 .file = file,
             };
             _ = try reader.read(&t.delta_hash);
@@ -61,10 +63,10 @@ pub const Thread = struct {
     pub fn writeOut(self: Thread) !void {
         try self.file.seekTo(0);
         var writer = self.file.writer();
-        try writer.writeIntNative(usize, THREADS_VERSION);
+        try writer.writeInt(usize, THREADS_VERSION, endian);
         try writer.writeStruct(self.state);
-        try writer.writeIntNative(i64, self.created);
-        try writer.writeIntNative(i64, self.updated);
+        try writer.writeInt(i64, self.created, endian);
+        try writer.writeInt(i64, self.updated, endian);
         try writer.writeAll(&self.delta_hash);
 
         if (self.comments) |cmts| {
@@ -147,7 +149,7 @@ fn currMaxSet(count: usize) !void {
     var cnt_file = try datad.createFile(filename, .{});
     defer cnt_file.close();
     var writer = cnt_file.writer();
-    _ = try writer.writeIntNative(usize, count);
+    _ = try writer.writeInt(usize, count, endian);
 }
 
 fn currMax() !usize {
@@ -156,7 +158,7 @@ fn currMax() !usize {
     var cnt_file = try datad.openFile(filename, .{ .mode = .read_write });
     defer cnt_file.close();
     var reader = cnt_file.reader();
-    const count: usize = try reader.readIntNative(usize);
+    const count: usize = try reader.readInt(usize, endian);
     return count;
 }
 

@@ -41,7 +41,7 @@ pub fn build(b: *std.Build) void {
 
     for (binaries.items) |ex| {
         addSrcTemplates(ex);
-        ex.addOptions("config", options);
+        ex.root_module.addOptions("config", options);
         if (enable_libcurl) {
             ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
             ex.linkLibC();
@@ -61,7 +61,7 @@ fn buildSrcTemplates(b: *std.Build) ![][]const u8 {
 
     const tmplsrcdir = "templates";
     var cwd = std.fs.cwd();
-    var idir = cwd.openIterableDir(tmplsrcdir, .{}) catch |err| {
+    var idir = cwd.openDir(tmplsrcdir, .{ .iterate = true }) catch |err| {
         std.debug.print("template build error {}", .{err});
         return err;
     };
@@ -79,19 +79,18 @@ fn buildSrcTemplates(b: *std.Build) ![][]const u8 {
 fn addSrcTemplates(cs: *std.Build.Step.Compile) void {
     var b = cs.step.owner;
 
-    var list = buildSrcTemplates(b) catch @panic("unable to build src files");
+    const list = buildSrcTemplates(b) catch @panic("unable to build src files");
     const templates = b.addOptions();
     templates.addOption(
         []const []const u8,
         "names",
         list,
     );
-
-    cs.addOptions("templates", templates);
+    cs.root_module.addOptions("templates", templates);
 
     for (list) |file| {
-        cs.addAnonymousModule(file, .{
-            .source_file = .{ .path = file },
+        _ = cs.root_module.addAnonymousImport(file, .{
+            .root_source_file = .{ .path = file },
         });
     }
 }

@@ -42,7 +42,7 @@ pub fn delta(origin: i64, diff: i64) Humanize {
 }
 
 fn abs(in: i64) i64 {
-    return std.math.absInt(in) catch unreachable;
+    return @intCast(@abs(in));
 }
 
 fn width(self: Humanize) Width {

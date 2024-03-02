@@ -1,5 +1,7 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const endian = builtin.cpu.arch.endian();
 
 const Types = @import("../types.zig");
 const Comments = Types.Comments;
@@ -15,7 +17,7 @@ const DELTA_VERSION: usize = 0;
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
     var reader = file.reader();
-    const ver: usize = try reader.readIntNative(usize);
+    const ver: usize = try reader.readInt(usize, endian);
     var d: Delta = .{
         .index = idx,
         .repo = undefined,
@@ -26,18 +28,18 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
     switch (ver) {
         0 => {
             d.state = try reader.readStruct(State);
-            d.created = try reader.readIntNative(i64);
-            d.updated = try reader.readIntNative(i64);
+            d.created = try reader.readInt(i64, endian);
+            d.updated = try reader.readInt(i64, endian);
             d.repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
             d.title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
             d.desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
-            d.thread_id = try reader.readIntNative(usize);
-            d.attach = switch (Attach.fromInt(try reader.readIntNative(u8))) {
-                .nos => .{ .nos = try reader.readIntNative(usize) },
-                .diff => .{ .diff = try reader.readIntNative(usize) },
-                .issue => .{ .issue = try reader.readIntNative(usize) },
-                .commit => .{ .issue = try reader.readIntNative(usize) },
-                .line => .{ .issue = try reader.readIntNative(usize) },
+            d.thread_id = try reader.readInt(usize, endian);
+            d.attach = switch (Attach.fromInt(try reader.readInt(u8, endian))) {
+                .nos => .{ .nos = try reader.readInt(usize, endian) },
+                .diff => .{ .diff = try reader.readInt(usize, endian) },
+                .issue => .{ .issue = try reader.readInt(usize, endian) },
+                .commit => .{ .issue = try reader.readInt(usize, endian) },
+                .line => .{ .issue = try reader.readInt(usize, endian) },
             };
         },
         else => return error.UnsupportedVersion,
@@ -87,25 +89,25 @@ pub const Delta = struct {
     pub fn writeOut(self: Delta) !void {
         try self.file.seekTo(0);
         var writer = self.file.writer();
-        try writer.writeIntNative(usize, DELTA_VERSION);
+        try writer.writeInt(usize, DELTA_VERSION, endian);
         try writer.writeStruct(self.state);
-        try writer.writeIntNative(i64, self.created);
-        try writer.writeIntNative(i64, self.updated);
+        try writer.writeInt(i64, self.created, endian);
+        try writer.writeInt(i64, self.updated, endian);
         try writer.writeAll(self.repo);
         try writer.writeAll("\x00");
         try writer.writeAll(self.title);
         try writer.writeAll("\x00");
         try writer.writeAll(self.desc);
         try writer.writeAll("\x00");
-        try writer.writeIntNative(usize, self.thread_id);
+        try writer.writeInt(usize, self.thread_id, endian);
 
-        try writer.writeIntNative(u8, @intFromEnum(self.attach));
+        try writer.writeInt(u8, @intFromEnum(self.attach), endian);
         switch (self.attach) {
-            .nos => |att| try writer.writeIntNative(usize, att),
-            .diff => |att| try writer.writeIntNative(usize, att),
-            .issue => |att| try writer.writeIntNative(usize, att),
-            .commit => |att| try writer.writeIntNative(usize, att),
-            .line => |att| try writer.writeIntNative(usize, att),
+            .nos => |att| try writer.writeInt(usize, att, endian),
+            .diff => |att| try writer.writeInt(usize, att, endian),
+            .issue => |att| try writer.writeInt(usize, att, endian),
+            .commit => |att| try writer.writeInt(usize, att, endian),
+            .line => |att| try writer.writeInt(usize, att, endian),
         }
         // FIXME write 32 not a maybe
         if (self.thread) |thread| {
@@ -175,7 +177,7 @@ fn currMaxSet(repo: []const u8, count: usize) !void {
     var cnt_file = try datad.createFile(filename, .{});
     defer cnt_file.close();
     var writer = cnt_file.writer();
-    _ = try writer.writeIntNative(usize, count);
+    _ = try writer.writeInt(usize, count, endian);
 }
 
 fn currMax(repo: []const u8) !usize {
@@ -184,7 +186,7 @@ fn currMax(repo: []const u8) !usize {
     var cnt_file = try datad.openFile(filename, .{ .mode = .read_write });
     defer cnt_file.close();
     var reader = cnt_file.reader();
-    const count: usize = try reader.readIntNative(usize);
+    const count: usize = try reader.readInt(usize, endian);
     return count;
 }
 

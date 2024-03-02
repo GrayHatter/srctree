@@ -42,7 +42,7 @@ pub fn new() !User {
 
 pub fn findMTLSFingerprint(a: Allocator, fp: []const u8) !User {
     if (fp.len != 40) return error.InvalidFingerprint;
-    var idir = try datad.openIterableDir(".", .{});
+    var idir = try datad.openDir(".", .{ .iterate = true });
     defer idir.close();
     var itr = idir.iterate();
     while (try itr.next()) |f| {

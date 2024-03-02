@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const zlib = std.compress.zlib;
 const hexLower = std.fmt.fmtSliceHexLower;
 const PROT = std.os.PROT;
-const MAP = std.os.MAP;
+const MAP_TYPE = std.os.linux.MAP_TYPE;
 
 pub const Error = error{
     ReadError,
@@ -128,7 +128,7 @@ const Pack = struct {
         try f.seekFromEnd(0);
         const length = try f.getPos();
         const offset = 0;
-        return std.os.mmap(null, length, PROT.READ, MAP.SHARED, f.handle, offset);
+        return std.os.mmap(null, length, PROT.READ, .{ .TYPE = .SHARED }, f.handle, offset);
     }
 
     pub fn fanOut(self: Pack, i: u8) u32 {
@@ -184,8 +184,7 @@ const Pack = struct {
     }
 
     fn loadBlob(a: Allocator, reader: *FBSReader) ![]u8 {
-        var _zlib = try zlib.decompressStream(a, reader.*);
-        defer _zlib.deinit();
+        var _zlib = zlib.decompressor(reader.*);
         var zr = _zlib.reader();
         return try zr.readAllAlloc(a, 0xffffff);
     }
@@ -248,8 +247,7 @@ const Pack = struct {
         const basez = repo.findBlob(a, &buf) catch return error.BlobMissing;
         defer a.free(basez);
 
-        var _zlib = zlib.decompressStream(a, reader.*) catch return error.PackCorrupt;
-        defer _zlib.deinit();
+        var _zlib = zlib.decompressor(reader.*);
         var zr = _zlib.reader();
         const inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
         defer a.free(inst);
@@ -271,8 +269,7 @@ const Pack = struct {
         // fd pos is offset + 2-ish because of the header read
         const srclen = try readVarInt(reader);
 
-        var _zlib = zlib.decompressStream(a, reader.*) catch return error.PackCorrupt;
-        defer _zlib.deinit();
+        var _zlib = zlib.decompressor(reader.*);
         var zr = _zlib.reader();
         const inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
         defer a.free(inst);
@@ -480,16 +477,16 @@ pub const Repo = struct {
         }
         if (self.loadFileObj(sha)) |fd| {
             defer fd.close();
-            var _zlib = try zlib.decompressStream(a, fd.reader());
-            defer _zlib.deinit();
-            var reader = _zlib.reader();
+
+            var decom = zlib.decompressor(fd.reader());
+            var reader = decom.reader();
             return try reader.readAllAlloc(a, 0xffff);
         } else |_| {}
         return error.ObjectMissing;
     }
 
     pub fn loadPacks(self: *Repo, a: Allocator) !void {
-        var idir = try self.dir.openIterableDir("./objects/pack", .{});
+        var idir = try self.dir.openDir("./objects/pack", .{ .iterate = true });
         var itr = idir.iterate();
         var i: usize = 0;
         while (try itr.next()) |file| {
@@ -502,7 +499,7 @@ pub const Repo = struct {
         while (try itr.next()) |file| {
             if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
 
-            self.packs[i] = try Pack.init(idir.dir, try a.dupe(u8, file.name[0 .. file.name.len - 4]));
+            self.packs[i] = try Pack.init(idir, try a.dupe(u8, file.name[0 .. file.name.len - 4]));
             //self.loadPackIdx(a, fd.reader());
             i += 1;
         }
@@ -512,7 +509,7 @@ pub const Repo = struct {
 
     pub fn loadRefs(self: *Repo, a: Allocator) !void {
         var list = std.ArrayList(Ref).init(a);
-        var idir = try self.dir.openIterableDir("refs/heads", .{});
+        var idir = try self.dir.openDir("refs/heads", .{ .iterate = true });
         defer idir.close();
         var itr = idir.iterate();
         while (try itr.next()) |file| {
@@ -1233,10 +1230,10 @@ pub const Actions = struct {
         });
     }
 
-    fn execCustom(self: Actions, argv: []const []const u8) !std.ChildProcess.ExecResult {
+    fn execCustom(self: Actions, argv: []const []const u8) !std.ChildProcess.RunResult {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
         const cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
-        const child = try std.ChildProcess.exec(.{
+        const child = try std.ChildProcess.run(.{
             .cwd_dir = cwd,
             .allocator = self.alloc,
             .argv = argv,
@@ -1281,14 +1278,11 @@ test "hex tranlations" {
 }
 
 test "read" {
-    const a = std.testing.allocator;
-
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
     var b: [1 << 16]u8 = undefined;
 
-    var d = try zlib.decompressStream(a, file.reader());
-    defer d.deinit();
+    var d = zlib.decompressor(file.reader());
     const count = try d.read(&b);
     //std.debug.print("{s}\n", .{b[0..count]});
     const commit = try Commit.make("370303630b3fc631a0cb3942860fb6f77446e9c1", b[0..count]);
@@ -1302,8 +1296,7 @@ test "file" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    var d = try zlib.decompressStream(a, file.reader());
-    defer d.deinit();
+    var d = zlib.decompressor(file.reader());
     const dz = try d.reader().readAllAlloc(a, 0xffff);
     var buffer = Object.init(dz);
     defer buffer.raze(a);
@@ -1361,8 +1354,7 @@ test "tree" {
 
     var cwd = std.fs.cwd();
     var file = try cwd.openFile("./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{});
-    var _zlib = try zlib.decompressStream(a, file.reader());
-    defer _zlib.deinit();
+    var _zlib = zlib.decompressor(file.reader());
     var reader = _zlib.reader();
     const data = try reader.readAllAlloc(a, 0xffff);
     defer a.free(data);
@@ -1379,8 +1371,7 @@ test "tree decom" {
     var file = try cwd.openFile("./.git/objects/5e/dabf724389ef87fa5a5ddb2ebe6dbd888885ae", .{});
     var b: [1 << 16]u8 = undefined;
 
-    var d = try zlib.decompressStream(a, file.reader());
-    defer d.deinit();
+    var d = zlib.decompressor(file.reader());
     const count = try d.read(&b);
     const buf = try a.dupe(u8, b[0..count]);
     var tree = try Tree.make(a, "5edabf724389ef87fa5a5ddb2ebe6dbd888885ae", buf);
@@ -1393,7 +1384,7 @@ test "tree decom" {
 
 test "tree child" {
     var a = std.testing.allocator;
-    const child = try std.ChildProcess.exec(.{
+    const child = try std.ChildProcess.run(.{
         .allocator = a,
         .argv = &[_][]const u8{
             "git",

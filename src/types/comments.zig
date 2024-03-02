@@ -1,5 +1,7 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
 
 const Template = @import("../template.zig");
@@ -22,28 +24,28 @@ pub fn charToKind(c: u8) TargetKind {
 
 fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
     var reader = file.reader();
-    const ver: usize = try reader.readIntNative(usize);
+    const ver: usize = try reader.readInt(usize, endian);
     return switch (ver) {
         0 => return Comment{
-            .state = try reader.readIntNative(usize),
-            .created = try reader.readIntNative(i64),
-            .updated = try reader.readIntNative(i64),
-            .tz = try reader.readIntNative(i32),
-            .target = switch (try reader.readIntNative(u8)) {
-                0 => .{ .diff = try reader.readIntNative(usize) },
-                'D' => .{ .diff = try reader.readIntNative(usize) },
-                'I' => .{ .issue = try reader.readIntNative(usize) },
+            .state = try reader.readInt(usize, endian),
+            .created = try reader.readInt(i64, endian),
+            .updated = try reader.readInt(i64, endian),
+            .tz = try reader.readInt(i32, endian),
+            .target = switch (try reader.readInt(u8, endian)) {
+                0 => .{ .diff = try reader.readInt(usize, endian) },
+                'D' => .{ .diff = try reader.readInt(usize, endian) },
+                'I' => .{ .issue = try reader.readInt(usize, endian) },
                 'r' => .{ .reply = .{
-                    .to = switch (try reader.readIntNative(u8)) {
-                        'c' => .{ .comment = try reader.readIntNative(usize) },
+                    .to = switch (try reader.readInt(u8, endian)) {
+                        'c' => .{ .comment = try reader.readInt(usize, endian) },
                         'C' => .{ .commit = .{
-                            .number = try reader.readIntNative(usize),
-                            .meta = try reader.readIntNative(usize),
+                            .number = try reader.readInt(usize, endian),
+                            .meta = try reader.readInt(usize, endian),
                         } },
                         'd' => .{ .diff = .{
-                            .number = try reader.readIntNative(usize),
-                            .file = try reader.readIntNative(usize),
-                            .revision = try reader.readIntNative(usize),
+                            .number = try reader.readInt(usize, endian),
+                            .file = try reader.readInt(usize, endian),
+                            .revision = try reader.readInt(usize, endian),
                         } },
                         else => return error.CommentCorrupted,
                     },
@@ -136,17 +138,17 @@ pub const Comment = struct {
     }
 
     fn writeStruct(self: Comment, w: Writer) !void {
-        try w.writeIntNative(usize, CMMT_VERSION);
-        try w.writeIntNative(usize, self.state);
-        try w.writeIntNative(i64, self.created);
-        try w.writeIntNative(i64, self.updated);
-        try w.writeIntNative(i32, self.tz);
-        try w.writeIntNative(u8, @intFromEnum(self.target));
+        try w.writeInt(usize, CMMT_VERSION, endian);
+        try w.writeInt(usize, self.state, endian);
+        try w.writeInt(i64, self.created, endian);
+        try w.writeInt(i64, self.updated, endian);
+        try w.writeInt(i32, self.tz, endian);
+        try w.writeInt(u8, @intFromEnum(self.target), endian);
         switch (self.target) {
-            .nos => try w.writeIntNative(usize, 0),
+            .nos => try w.writeInt(usize, 0, endian),
             .commit => |c| try w.writeAll(&c),
-            .diff => try w.writeIntNative(usize, self.target.diff),
-            .issue => try w.writeIntNative(usize, self.target.issue),
+            .diff => try w.writeInt(usize, self.target.diff, endian),
+            .issue => try w.writeInt(usize, self.target.issue, endian),
             .reply => unreachable,
         }
 

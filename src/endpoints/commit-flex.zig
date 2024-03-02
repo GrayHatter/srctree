@@ -37,7 +37,7 @@ fn countAll(a: Allocator, until: i64, root_cmt: Git.Commit) !*HeatMapArray {
         }
 
         if (commit_time < until) return &hits;
-        const day_off: usize = std.math.absCast(@divFloor(commit_time - until, DAY));
+        const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
         if (owner_email) |email| {
             if (std.mem.eql(u8, email, commit.author.email)) {
                 hits[day_off] += 1;
@@ -87,7 +87,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     var repo_count: usize = 0;
     var cwd = std.fs.cwd();
-    if (cwd.openIterableDir("./repos", .{})) |idir| {
+    if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
         reset_hits(ctx.alloc);
         if (Ini.default(ctx.alloc)) |ini| {
             if (ini.get("owner")) |ns| {

@@ -140,18 +140,21 @@ pub fn main() !void {
             };
         },
         .http => {
-            var srv = Server.init(a, .{ .reuse_address = true });
+            unreachable;
+            // I don't have time to read through the whole update before I know
+            // it's not gonna change again real soon... fucking zig...
+            //var srv = Server.init(a, .{ .reuse_address = true });
 
-            const addr = std.net.Address.parseIp(HOST, PORT) catch unreachable;
-            try srv.listen(addr);
-            try print("HTTP Server listening\n", .{});
+            //const addr = std.net.Address.parseIp(HOST, PORT) catch unreachable;
+            //try srv.listen(addr);
+            //try print("HTTP Server listening\n", .{});
 
-            HTTP.serve(a, &srv) catch {
-                if (@errorReturnTrace()) |trace| {
-                    std.debug.dumpStackTrace(trace.*);
-                }
-                std.os.exit(1);
-            };
+            //HTTP.serve(a, &srv) catch {
+            //    if (@errorReturnTrace()) |trace| {
+            //        std.debug.dumpStackTrace(trace.*);
+            //    }
+            //    std.os.exit(1);
+            //};
         },
         else => {},
     }
