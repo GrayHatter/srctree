@@ -276,12 +276,18 @@ fn treeBlob(ctx: *Context) Error!void {
 }
 
 fn guessLang(name: []const u8) []const u8 {
-    if (std.mem.endsWith(u8, name, "zig")) {
+    if (std.mem.endsWith(u8, name, ".zig")) {
         return "zig";
-    } else if (std.mem.endsWith(u8, name, "html")) {
+    } else if (std.mem.endsWith(u8, name, ".html")) {
         return "html";
+    } else if (std.mem.endsWith(u8, name, ".h")) {
+        return "cpp";
+    } else if (std.mem.endsWith(u8, name, ".c")) {
+        return "c";
+    } else if (std.mem.endsWith(u8, name, ".cpp")) {
+        return "cpp";
     }
-    return "zig";
+    return "text";
 }
 
 fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
