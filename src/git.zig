@@ -1150,9 +1150,6 @@ pub const Actions = struct {
     cwd: ?std.fs.Dir = null,
 
     pub fn updateUpstream(self: Actions, branch: []const u8) !bool {
-        var buf: [512]u8 = undefined;
-        const up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
-
         const fetch = try self.exec(&[_][]const u8{
             "git",
             "fetch",
@@ -1162,6 +1159,8 @@ pub const Actions = struct {
         if (fetch.len > 0) std.debug.print("fetch {s}\n", .{fetch});
         self.alloc.free(fetch);
 
+        var buf: [512]u8 = undefined;
+        const up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
         const pull = try self.execCustom(&[_][]const u8{
             "git",
             "merge-base",
