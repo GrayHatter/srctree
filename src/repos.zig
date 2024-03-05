@@ -7,6 +7,8 @@ const Ini = @import("ini.zig");
 
 const Repos = @This();
 
+const DEBUG = false;
+
 pub fn allNames(a: Allocator) ![][]u8 {
     var list = std.ArrayList([]u8).init(a);
 
@@ -141,7 +143,9 @@ pub fn updateThread() void {
                     if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
                 }
             } else {
-                std.debug.print("Skipping for {s} no new branches {} {}\n", .{ rname, repo_update, last_push });
+                if (DEBUG) {
+                    std.debug.print("Skipping for {s} no new branches {} {}\n", .{ rname, repo_update, last_push });
+                }
             }
         }
         std.time.sleep(sleep_for);
