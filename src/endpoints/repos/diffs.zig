@@ -175,7 +175,7 @@ fn view(ctx: *Context) Error!void {
         for (cmts, comments) |comment, *cctx| {
             cctx.* = Template.Context.init(ctx.alloc);
             const builder = comment.builder();
-            try builder.build(cctx);
+            try builder.build(ctx.alloc, cctx);
             try cctx.put(
                 "date",
                 try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
@@ -218,7 +218,7 @@ fn list(ctx: *Context) Error!void {
         const delta_ctx = &tmpl_ctx[end];
         delta_ctx.* = Template.Context.init(ctx.alloc);
         const builder = d.builder();
-        try builder.build(delta_ctx);
+        try builder.build(ctx.alloc, delta_ctx);
         try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{x}", .{d.index}));
         try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{x}", .{d.index}));
         _ = d.loadThread(ctx.alloc) catch unreachable;

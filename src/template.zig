@@ -35,11 +35,10 @@ pub const Context = struct {
                 };
             }
 
-            pub fn buildUnsanitized(self: Self, ctx: *Context) !void {
-                // v0.12 only :(
+            pub fn buildUnsanitized(self: Self, a: Allocator, ctx: *Context) !void {
                 comptime if (@import("builtin").zig_version.minor > 12) {
-                    if (std.meta.hasMethod(T, "contextBuilder")) {
-                        return self.from.contextBuilder(ctx);
+                    if (std.meta.hasMethod(T, "contextBuilderUnsanitized")) {
+                        return self.from.contextBuilderUnsanitized(a, ctx);
                     }
                 };
 
@@ -50,8 +49,14 @@ pub const Context = struct {
                 }
             }
 
-            pub fn build(self: Self, ctx: *Context) !void {
-                return self.buildUnsanitized(ctx);
+            pub fn build(self: Self, a: Allocator, ctx: *Context) !void {
+                comptime if (@import("builtin").zig_version.minor > 12) {
+                    if (std.meta.hasMethod(T, "contextBuilder")) {
+                        return self.from.contextBuilder(a, ctx);
+                    }
+                };
+
+                return self.buildUnsanitized(a, ctx);
             }
         };
     }
