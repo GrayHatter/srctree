@@ -3,6 +3,7 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 
+const Bleach = @import("../bleach.zig");
 const Types = @import("../types.zig");
 const Comments = Types.Comments;
 const Comment = Comments.Comment;
@@ -149,6 +150,14 @@ pub const Delta = struct {
 
     pub fn builder(self: Delta) Template.Context.Builder(Delta) {
         return Template.Context.Builder(Delta).init(self);
+    }
+
+    pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
+        try ctx.put("title", try Bleach.sanitizeAlloc(a, self.title, .{}));
+        try ctx.put("desc", try Bleach.sanitizeAlloc(a, self.desc, .{}));
+
+        try ctx.put("index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
+        try ctx.put("title_uri", try std.fmt.allocPrint(a, "{x}", .{self.index}));
     }
 
     pub fn raze(self: Delta, _: std.mem.Allocator) void {
