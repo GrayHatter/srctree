@@ -139,8 +139,8 @@ pub fn fromEpochStr(str: []const u8) !DateTime {
 }
 
 pub fn tzToSec(tzstr: []const u8) !i32 {
-    const tzm = try std.fmt.parseInt(i16, tzstr[tzstr.len - 2 .. tzstr.len], 10);
-    const tzh = try std.fmt.parseInt(i16, tzstr[0 .. tzstr.len - 2], 10);
+    const tzm: i32 = try std.fmt.parseInt(i16, tzstr[tzstr.len - 2 .. tzstr.len], 10);
+    const tzh: i32 = try std.fmt.parseInt(i16, tzstr[0 .. tzstr.len - 2], 10);
     return (tzh * 60 + tzm) * 60;
 }
 
