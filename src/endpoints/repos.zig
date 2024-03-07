@@ -499,7 +499,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     dom.push(HTML.span(branches, null));
 
     const c = repo.commit(ctx.alloc) catch return error.Unknown;
-    dom.push(HTML.span(c.message[0..@min(c.message.len, 58)], null));
+    dom.push(HTML.span(c.title[0..@min(c.title.len, 50)], null));
     const commit_time = try aPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
     dom = dom.open(HTML.span(null, &HTML.Attr.class("muted")));
     const commit_href = try aPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha[0..8] });
