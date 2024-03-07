@@ -128,7 +128,7 @@ pub fn commit(ctx: *Context) Error!void {
     if (rd.verb == null) return commits(ctx);
 
     const sha = rd.noun orelse return error.Unrouteable;
-    var cwd = std.fs.cwd();
+    const cwd = std.fs.cwd();
     // FIXME user data flows into system
     const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
@@ -154,7 +154,11 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
         try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
     ));
     cd_dom.push(HTML.br());
-    cd_dom.push(HTML.text(c.message));
+    cd_dom.push(HTML.text(c.title));
+    if (c.body.len > 0) {
+        cd_dom.push(HTML.br());
+        cd_dom.push(HTML.text(c.body));
+    }
     cd_dom = cd_dom.close();
     const cdata = cd_dom.done();
 
@@ -186,12 +190,8 @@ fn commitContext(a: Allocator, c: git.Commit, repo: []const u8, comptime _: bool
 
     try ctx.put("sha", c.sha[0..8]);
     try ctx.put("uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
-    if (std.mem.indexOf(u8, c.message, "\n\n")) |i| {
-        try ctx.put("msg_title", c.message[0..i]);
-        try ctx.put("msg", c.message[i + 2 ..]);
-    } else {
-        try ctx.put("msg", c.message);
-    }
+    try ctx.put("msg_title", c.title);
+    try ctx.put("msg", c.body);
 
     //if (top) "top" else "foot", null, null));
     const parent = c.parent[0] orelse "00000000";
