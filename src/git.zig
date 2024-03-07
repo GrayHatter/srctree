@@ -747,6 +747,8 @@ pub const Commit = struct {
     author: Actor,
     committer: Actor,
     message: []const u8,
+    title: []const u8,
+    body: []const u8,
     repo: ?*const Repo = null,
     gpgsig: GPGSig,
 
@@ -816,6 +818,13 @@ pub const Commit = struct {
             };
         }
         self.message = lines.rest();
+        if (std.mem.indexOf(u8, self.message, "\n\n")) |nl| {
+            self.title = self.message[0..nl];
+            self.body = self.message[nl + 2 ..];
+        } else {
+            self.title = self.message;
+            self.body = self.message[0..0];
+        }
         self.sha = sha;
         return self;
     }
