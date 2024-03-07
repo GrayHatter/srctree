@@ -275,7 +275,7 @@ fn treeBlob(ctx: *Context) Error!void {
     return tree(ctx, &repo, &files);
 }
 
-fn guessLang(name: []const u8) []const u8 {
+fn guessLang(name: []const u8) ?[]const u8 {
     if (std.mem.endsWith(u8, name, ".zig")) {
         return "zig";
     } else if (std.mem.endsWith(u8, name, ".html")) {
@@ -287,7 +287,7 @@ fn guessLang(name: []const u8) []const u8 {
     } else if (std.mem.endsWith(u8, name, ".cpp")) {
         return "cpp";
     }
-    return "text";
+    return null;
 }
 
 fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
@@ -316,48 +316,63 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
     var resolve = repo.blob(ctx.alloc, &blb.hash) catch return error.Unknown;
     var reader = resolve.reader();
 
+    var formatted: []const u8 = undefined;
+
     const d2 = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
-    var child = std.ChildProcess.init(&[_][]const u8{ "pygmentize", "-f", "html", "-l", guessLang(blb.name) }, ctx.alloc);
-    child.stdin_behavior = .Pipe;
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    child.expand_arg0 = .no_expand;
-    child.spawn() catch unreachable;
+    if (guessLang(blb.name)) |lang| {
+        var child = std.ChildProcess.init(&[_][]const u8{
+            "pygmentize",
+            "-f",
+            "html",
+            "-l",
+            lang,
+        }, ctx.alloc);
+        child.stdin_behavior = .Pipe;
+        child.stdout_behavior = .Pipe;
+        child.stderr_behavior = .Ignore;
+        child.expand_arg0 = .no_expand;
+        child.spawn() catch unreachable;
 
-    const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
-    var poll_fd = [_]std.os.pollfd{
-        .{
-            .fd = child.stdout.?.handle,
-            .events = std.os.POLL.IN,
-            .revents = undefined,
-        },
-    };
-    _ = std.os.write(child.stdin.?.handle, d2) catch unreachable;
-    std.os.close(child.stdin.?.handle);
-    child.stdin = null;
-
-    var buf = std.ArrayList(u8).init(ctx.alloc);
-    const abuf = try ctx.alloc.alloc(u8, 0xffffff);
-    while (true) {
-        const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
-        if (events_len == 0) continue;
-        if (poll_fd[0].revents & std.os.POLL.IN != 0) {
-            const amt = std.os.read(poll_fd[0].fd, abuf) catch unreachable;
-            if (amt == 0) break;
-            try buf.appendSlice(abuf[0..amt]);
-        } else if (poll_fd[0].revents & err_mask != 0) {
-            break;
+        const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
+        var poll_fd = [_]std.os.pollfd{
+            .{
+                .fd = child.stdout.?.handle,
+                .events = std.os.POLL.IN,
+                .revents = undefined,
+            },
+        };
+        _ = std.os.write(child.stdin.?.handle, d2) catch unreachable;
+        std.os.close(child.stdin.?.handle);
+        child.stdin = null;
+        var buf = std.ArrayList(u8).init(ctx.alloc);
+        const abuf = try ctx.alloc.alloc(u8, 0xffffff);
+        while (true) {
+            const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
+            if (events_len == 0) continue;
+            if (poll_fd[0].revents & std.os.POLL.IN != 0) {
+                const amt = std.os.read(poll_fd[0].fd, abuf) catch unreachable;
+                if (amt == 0) break;
+                try buf.appendSlice(abuf[0..amt]);
+            } else if (poll_fd[0].revents & err_mask != 0) {
+                break;
+            }
         }
-    }
-    ctx.alloc.free(abuf);
+        ctx.alloc.free(abuf);
 
-    _ = child.wait() catch unreachable;
-    const formatted = try buf.toOwnedSlice();
+        _ = child.wait() catch unreachable;
+        formatted = try buf.toOwnedSlice();
+    } else {
+        formatted = d2;
+    }
 
     dom = dom.open(HTML.element("code", null, null));
-    var litr = std.mem.split(u8, formatted[28..][0 .. formatted.len - 38], "\n");
+    // TODO
+    var litr = if (guessLang(blb.name)) |_|
+        std.mem.split(u8, formatted[28..][0 .. formatted.len - 38], "\n")
+    else
+        std.mem.split(u8, d2, "\n");
 
-    const count = std.mem.count(u8, d2, "\n");
+    const count = std.mem.count(u8, formatted, "\n");
     for (0..count + 1) |i| {
         var pbuf: [12]u8 = undefined;
         const b = std.fmt.bufPrint(&pbuf, "#L{}", .{i + 1}) catch unreachable;
