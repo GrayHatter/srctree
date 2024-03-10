@@ -295,7 +295,7 @@ fn guessLang(name: []const u8) ?[]const u8 {
 
 const BlameCommit = struct {
     sha: []const u8,
-    parent: []const u8,
+    parent: ?[]const u8 = null,
     title: []const u8,
     filename: []const u8,
     author: struct {
@@ -326,7 +326,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
         const cmt = gp.value_ptr;
         if (!gp.found_existing) {
             cmt.*.sha = line[0..40];
-            cmt.*.parent = "";
+            cmt.*.parent = null;
             while (true) {
                 const next = in_lines.next() orelse return error.UnexpectedEndOfBlame;
                 if (next[0] == '\t') {
@@ -390,6 +390,9 @@ fn blame(ctx: *Context) Error!void {
     } else Bleach.sanitizeAlloc(ctx.alloc, source_lines.items, .{}) catch return error.Unknown;
 
     const tctx = try wrapLineNumbersBlame(ctx.alloc, formatted, parsed.lines);
+    for (tctx) |*c| {
+        try c.put("repo_name", rd.name);
+    }
 
     var tmpl = Template.find("blame.html");
     tmpl.init(ctx.alloc);
@@ -454,9 +457,11 @@ fn wrapLineNumbersBlame(
         if (i < count) {
             try ctx.put("sha", blames[i].commit.sha[0..8]);
             try ctx.put("author", blames[i].commit.author.name);
+            try ctx.put("time", try Humanize.unix(blames[i].commit.author.time).printAlloc(a));
         } else {
             try ctx.put("sha", blames[i - 1].commit.sha[0..8]);
             try ctx.put("author", blames[i - 1].commit.author.name);
+            try ctx.put("time", try Humanize.unix(blames[i - 1].commit.author.time).printAlloc(a));
         }
         const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
         try ctx.put("num", b[2..]);
