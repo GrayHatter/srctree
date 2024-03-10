@@ -673,6 +673,7 @@ pub const Repo = struct {
     }
 
     pub fn getActions(self: *const Repo, a: Allocator) Actions {
+        // FIXME if (!self.bare) provide_working_dir_to_git
         return Actions{
             .alloc = a,
             .repo = self,
@@ -888,7 +889,13 @@ pub const Commit = struct {
         a.free(self.sha);
         a.free(self.blob);
     }
-    pub fn format(self: Commit, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+
+    pub fn format(
+        self: Commit,
+        comptime _: []const u8,
+        _: std.fmt.FormatOptions,
+        out: anytype,
+    ) !void {
         try out.print(
             \\Commit{{
             \\commit {s}
@@ -1235,6 +1242,16 @@ pub const Actions = struct {
             "git",
             "show",
             sha,
+        });
+    }
+
+    pub fn blame(self: Actions, name: []const u8) ![]u8 {
+        std.debug.print("{s}\n", .{name});
+        return try self.exec(&[_][]const u8{
+            "git",
+            "blame",
+            "--porcelain",
+            name,
         });
     }
 

@@ -14,6 +14,8 @@ const DOM = Endpoint.DOM;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
+const ROUTE = Endpoint.Router.ROUTE;
+const MatchRouter = Endpoint.Router.MatchRouter;
 
 const Bleach = @import("../bleach.zig");
 const Humanize = @import("../humanize.zig");
@@ -31,7 +33,7 @@ const Types = @import("../types.zig");
 
 const gitweb = @import("../gitweb.zig");
 
-const endpoints = [_]Endpoint.Router.MatchRouter{
+const endpoints = [_]MatchRouter{
     .{ .name = "", .match = .{ .call = treeBlob } },
     .{ .name = "blob", .match = .{ .call = treeBlob } },
     .{ .name = "commits", .match = .{ .simple = &Commits.routes } },
@@ -39,6 +41,7 @@ const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "tree", .match = .{ .call = treeBlob } },
     .{ .name = "diffs", .match = .{ .route = &Diffs.router } },
     .{ .name = "issues", .match = .{ .route = &Issues.router } },
+    ROUTE("blame", blame),
 } ++ gitweb.endpoints;
 
 pub const RouteData = struct {
@@ -290,6 +293,202 @@ fn guessLang(name: []const u8) ?[]const u8 {
     return null;
 }
 
+const BlameCommit = struct {
+    sha: []const u8,
+    parent: []const u8,
+    title: []const u8,
+    filename: []const u8,
+    author: struct {
+        name: []const u8,
+        time: i64,
+        tz: i32,
+    },
+};
+
+const BlameLine = struct {
+    commit: BlameCommit,
+    line: []const u8,
+};
+
+fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
+    map: std.StringHashMap(BlameCommit),
+    lines: []BlameLine,
+} {
+    var map = std.StringHashMap(BlameCommit).init(a);
+
+    const count = std.mem.count(u8, blame_txt, "\n\t");
+    const lines = try a.alloc(BlameLine, count);
+    var in_lines = std.mem.split(u8, blame_txt, "\n");
+    for (lines) |*blm| {
+        const line = in_lines.next() orelse break;
+        if (line.len < 40) break;
+        const gp = try map.getOrPut(line[0..40]);
+        const cmt = gp.value_ptr;
+        if (!gp.found_existing) {
+            cmt.*.sha = line[0..40];
+            cmt.*.parent = "";
+            while (true) {
+                const next = in_lines.next() orelse return error.UnexpectedEndOfBlame;
+                if (next[0] == '\t') {
+                    blm.*.line = next[1..];
+                    break;
+                }
+
+                if (std.mem.startsWith(u8, next, "author ")) {
+                    cmt.*.author.name = next["author ".len..];
+                } else if (std.mem.startsWith(u8, next, "author-time ")) {
+                    cmt.*.author.time = try std.fmt.parseInt(i64, next["author-time ".len..], 10);
+                } else if (std.mem.startsWith(u8, next, "author-tz ")) {
+                    cmt.*.author.tz = try std.fmt.parseInt(i32, next["author-tz ".len..], 10);
+                } else if (std.mem.startsWith(u8, next, "summary ")) {
+                    cmt.*.title = next["summary ".len..];
+                } else if (std.mem.startsWith(u8, next, "previous ")) {
+                    cmt.*.parent = next["previous ".len..][0..40];
+                } else if (std.mem.startsWith(u8, next, "filename ")) {
+                    cmt.*.filename = next["filename ".len..];
+                } else {
+                    continue;
+                }
+            }
+        } else {
+            blm.line = in_lines.next().?[1..];
+        }
+        blm.commit = cmt.*;
+    }
+
+    return .{
+        .map = map,
+        .lines = lines,
+    };
+}
+
+fn blame(ctx: *Context) Error!void {
+    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
+    _ = ctx.uri.next();
+    const blame_file = ctx.uri.rest();
+
+    var cwd = std.fs.cwd();
+    const fname = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const dir = cwd.openDir(fname, .{}) catch return error.Unknown;
+    var repo = git.Repo.init(dir) catch return error.Unknown;
+    defer repo.raze(ctx.alloc);
+
+    var actions = repo.getActions(ctx.alloc);
+    const git_blame = actions.blame(blame_file) catch unreachable;
+
+    const parsed = parseBlame(ctx.alloc, git_blame) catch unreachable;
+    var source_lines = std.ArrayList(u8).init(ctx.alloc);
+    for (parsed.lines) |line| {
+        try source_lines.appendSlice(line.line);
+        try source_lines.append('\n');
+    }
+
+    const formatted = if (guessLang(blame_file)) |lang| fmt: {
+        var pre = try highlight(ctx.alloc, lang, source_lines.items);
+        break :fmt pre[28..][0 .. pre.len - 38];
+    } else Bleach.sanitizeAlloc(ctx.alloc, source_lines.items, .{}) catch return error.Unknown;
+
+    const tctx = try wrapLineNumbersBlame(ctx.alloc, formatted, parsed.lines);
+
+    var tmpl = Template.find("blame.html");
+    tmpl.init(ctx.alloc);
+
+    try tmpl.ctx.?.putBlock("blame_lines", tctx);
+
+    tmpl.addVar("filename", blame_file) catch return error.Unknown;
+    ctx.response.status = .ok;
+
+    try ctx.sendTemplate(&tmpl);
+}
+
+fn highlight(a: Allocator, lang: []const u8, text: []const u8) ![]u8 {
+    var child = std.ChildProcess.init(&[_][]const u8{ "pygmentize", "-f", "html", "-l", lang }, a);
+    child.stdin_behavior = .Pipe;
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Ignore;
+    child.expand_arg0 = .no_expand;
+    child.spawn() catch unreachable;
+
+    const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
+    var poll_fd = [_]std.os.pollfd{
+        .{
+            .fd = child.stdout.?.handle,
+            .events = std.os.POLL.IN,
+            .revents = undefined,
+        },
+    };
+    _ = std.os.write(child.stdin.?.handle, text) catch unreachable;
+    std.os.close(child.stdin.?.handle);
+    child.stdin = null;
+    var buf = std.ArrayList(u8).init(a);
+    const abuf = try a.alloc(u8, 0xffffff);
+    while (true) {
+        const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
+        if (events_len == 0) continue;
+        if (poll_fd[0].revents & std.os.POLL.IN != 0) {
+            const amt = std.os.read(poll_fd[0].fd, abuf) catch unreachable;
+            if (amt == 0) break;
+            try buf.appendSlice(abuf[0..amt]);
+        } else if (poll_fd[0].revents & err_mask != 0) {
+            break;
+        }
+    }
+    a.free(abuf);
+
+    _ = child.wait() catch unreachable;
+    return try buf.toOwnedSlice();
+}
+
+fn wrapLineNumbersBlame(
+    a: Allocator,
+    text: []const u8,
+    blames: []BlameLine,
+) ![]Template.Context {
+    const count = std.mem.count(u8, text, "\n");
+    var litr = std.mem.split(u8, text, "\n");
+    var tctx = try a.alloc(Template.Context, count + 1);
+    for (0..count + 1) |i| {
+        var ctx = &tctx[i];
+        ctx.* = Template.Context.init(a);
+        if (i < count) {
+            try ctx.put("sha", blames[i].commit.sha[0..8]);
+            try ctx.put("author", blames[i].commit.author.name);
+        } else {
+            try ctx.put("sha", blames[i - 1].commit.sha[0..8]);
+            try ctx.put("author", blames[i - 1].commit.author.name);
+        }
+        const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
+        try ctx.put("num", b[2..]);
+        try ctx.put("id", b[1..]);
+        try ctx.put("href", b);
+        try ctx.put("line", litr.next().?);
+    }
+    return tctx;
+}
+
+fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
+    var dom = root_dom;
+    dom = dom.open(HTML.element("code", null, null));
+    // TODO
+
+    const count = std.mem.count(u8, text, "\n");
+    var litr = std.mem.split(u8, text, "\n");
+    for (0..count + 1) |i| {
+        var pbuf: [12]u8 = undefined;
+        const b = std.fmt.bufPrint(&pbuf, "#L{}", .{i + 1}) catch unreachable;
+        const attrs = try HTML.Attribute.alloc(
+            a,
+            &[_][]const u8{ "num", "id", "href" },
+            &[_]?[]const u8{ b[2..], b[1..], b },
+        );
+        const line = litr.next().?;
+        dom.push(HTML.element("ln", line, attrs));
+    }
+
+    return dom.close();
+}
+
 fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
     var tmpl = Template.find("blob.html");
     tmpl.init(ctx.alloc);
@@ -311,92 +510,37 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
         } else return error.InvalidURI;
     }
 
-    var dom = DOM.new(ctx.alloc);
-
     var resolve = repo.blob(ctx.alloc, &blb.hash) catch return error.Unknown;
     var reader = resolve.reader();
 
     var formatted: []const u8 = undefined;
 
     const d2 = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
+
     if (guessLang(blb.name)) |lang| {
-        var child = std.ChildProcess.init(&[_][]const u8{
-            "pygmentize",
-            "-f",
-            "html",
-            "-l",
-            lang,
-        }, ctx.alloc);
-        child.stdin_behavior = .Pipe;
-        child.stdout_behavior = .Pipe;
-        child.stderr_behavior = .Ignore;
-        child.expand_arg0 = .no_expand;
-        child.spawn() catch unreachable;
-
-        const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
-        var poll_fd = [_]std.os.pollfd{
-            .{
-                .fd = child.stdout.?.handle,
-                .events = std.os.POLL.IN,
-                .revents = undefined,
-            },
-        };
-        _ = std.os.write(child.stdin.?.handle, d2) catch unreachable;
-        std.os.close(child.stdin.?.handle);
-        child.stdin = null;
-        var buf = std.ArrayList(u8).init(ctx.alloc);
-        const abuf = try ctx.alloc.alloc(u8, 0xffffff);
-        while (true) {
-            const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
-            if (events_len == 0) continue;
-            if (poll_fd[0].revents & std.os.POLL.IN != 0) {
-                const amt = std.os.read(poll_fd[0].fd, abuf) catch unreachable;
-                if (amt == 0) break;
-                try buf.appendSlice(abuf[0..amt]);
-            } else if (poll_fd[0].revents & err_mask != 0) {
-                break;
-            }
-        }
-        ctx.alloc.free(abuf);
-
-        _ = child.wait() catch unreachable;
-        formatted = try buf.toOwnedSlice();
+        const pre = try highlight(ctx.alloc, lang, d2);
+        formatted = pre[28..][0 .. pre.len - 38];
     } else {
-        formatted = d2;
+        formatted = Bleach.sanitizeAlloc(ctx.alloc, d2, .{}) catch return error.Unknown;
     }
 
-    dom = dom.open(HTML.element("code", null, null));
-    // TODO
-    var litr = if (guessLang(blb.name)) |_|
-        std.mem.split(u8, formatted[28..][0 .. formatted.len - 38], "\n")
-    else
-        std.mem.split(u8, d2, "\n");
-
-    const count = std.mem.count(u8, formatted, "\n");
-    for (0..count + 1) |i| {
-        var pbuf: [12]u8 = undefined;
-        const b = std.fmt.bufPrint(&pbuf, "#L{}", .{i + 1}) catch unreachable;
-        const attrs = try HTML.Attribute.alloc(ctx.alloc, &[_][]const u8{
-            "num",
-            "id",
-            "href",
-        }, &[_]?[]const u8{
-            b[2..],
-            b[1..],
-            b,
-        });
-        const line = litr.next().?;
-        dom.push(HTML.element("ln", line, attrs));
-    }
-
-    dom = dom.close();
+    var dom = DOM.new(ctx.alloc);
+    dom = try wrapLineNumbers(ctx.alloc, dom, formatted);
     const data = dom.done();
+
     const filestr = try aPrint(
         ctx.alloc,
         "{pretty}",
         .{HTML.div(data, &HTML.Attr.class("code-block"))},
     );
-    tmpl.addVar("files", filestr) catch return error.Unknown;
+    tmpl.addVar("blob", filestr) catch return error.Unknown;
+    tmpl.addVar("filename", blb.name) catch return error.Unknown;
+    ctx.uri.reset();
+    _ = ctx.uri.next();
+    tmpl.addVar("repo", ctx.uri.next() orelse "unknown") catch return error.Unknown;
+    _ = ctx.uri.next();
+    tmpl.addVar("uri_filename", ctx.uri.rest()) catch return error.Unknown;
+
     ctx.response.status = .ok;
 
     try ctx.sendTemplate(&tmpl);
@@ -421,8 +565,7 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]HTML.E {
     dom = dom.open(HTML.element("code", null, null));
     var litr = std.mem.split(u8, readme, "\n");
     while (litr.next()) |dirty| {
-        var clean = try a.alloc(u8, dirty.len * 2);
-        clean = Bleach.sanitize(dirty, clean, .{}) catch return error.Unknown;
+        const clean = Bleach.sanitizeAlloc(a, dirty, .{}) catch return error.Unknown;
         dom.push(HTML.element("ln", clean, null));
     }
     dom = dom.close();
@@ -487,7 +630,7 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
 }
 
 fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
-    var tmpl = Template.find("repo.html");
+    var tmpl = Template.find("tree.html");
     tmpl.init(ctx.alloc);
 
     const head = if (repo.head) |h| switch (h) {
@@ -574,4 +717,3 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
 
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }
-// this is the end

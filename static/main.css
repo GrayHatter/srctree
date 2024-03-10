@@ -1,5 +1,5 @@
 html {
-	/*background: #201B22;*/
+	background: #222222;
 	background-image: linear-gradient(0deg, #290015 0%, #222222 6%);
 	color-scheme: light dark;
 	color: #FFFFEB;
@@ -112,7 +112,21 @@ code {
 	text-align: left;
 	white-space: pre;
 	width: 100%;
-	> ln {
+	.blame-line {
+		display: block;
+		.blame-header {
+			sha { 
+				width: 5em;
+				display: inline-block;
+			}
+			author {
+				width: 8em;
+				display: inline-block;
+			}
+		}
+	}
+
+	ln {
 		width: 100%;
 		display: inline-block;
 		&:before {
@@ -507,6 +521,30 @@ comment {
 		display: block;
 		height: 25px;
 		padding: 4px 0 4px 12px;
+	}
+}
+
+blob {
+	text-align: left;
+	display: block;
+	margin-bottom: 1em;
+
+
+	header {
+		background: #333;
+		border-radius: 3px 3px 0 0;
+		border: 1px gray solid;
+		border-bottom: 0px;
+		display: flex;
+		justify-content: space-between;
+		height: 1.5em;
+		padding: 4px 12px;
+	}
+	.code-block { 
+		padding: 4px 12px;
+		border: 1px gray solid;
+		border-bottom: 0px;
+		border-top: 0px;
 	}
 }
 

@@ -10,7 +10,11 @@
       <blob>
         <a class="btn" href="<!-- blame_uri ORNULL -->/blame">blame</a>
         <header><!-- filename --></header>
-        <!-- blame -->
+        <div class="code-block">
+        <code>
+<!-- FOREACH blame_lines --><span class="blame-line"><span class="blame-header"><sha><!-- sha --></sha><author><!-- author --></author><time><!-- time ORNULL --></time></span><ln num="<!-- num -->" id="<!-- id -->" href="<!-- href -->"><!-- line --></ln></span><!-- END !-->
+        </code>
+        </div>
       </blob>
     </content>
   </body>
