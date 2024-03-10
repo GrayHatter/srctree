@@ -1,26 +1,40 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const endian = builtin.cpu.arch.endian();
 
 pub const Users = @This();
 
+const USER_VERSION: usize = 0;
+
+pub fn readVersioned(a: Allocator, file: std.fs.File) !User {
+    var reader = file.reader();
+    const ver: usize = try reader.readInt(usize, endian);
+    switch (ver) {
+        0 => {
+            var local: User = undefined;
+            if (try reader.read(&local.mtls_fp) != 40) return error.InvalidFile;
+            local.username = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
+            return User{
+                .mtls_fp = local.mtls_fp,
+                .username = local.username,
+            };
+        },
+        else => return error.UnsupportedVersion,
+    }
+}
+
 pub const User = struct {
+    mtls_fp: [40]u8 = .{0} ** 40,
     username: []u8,
-    mtls_fp: ?[]u8 = null,
 
-    pub fn readFile(a: Allocator, username: []const u8, file: std.fs.File) !User {
+    pub fn readFile(a: Allocator, file: std.fs.File) !User {
         defer file.close();
+        return readVersioned(a, file);
+    }
 
-        var fp: ?[]u8 = try a.alloc(u8, 40);
-        errdefer if (fp) |ffp| a.free(ffp);
-        const count = try file.read(fp.?);
-        if (count != 40) {
-            a.free(fp.?);
-            fp = null;
-        }
-        return User{
-            .username = try a.dupe(u8, username),
-            .mtls_fp = fp,
-        };
+    pub fn raze(self: User, a: Allocator) void {
+        a.free(self.username);
     }
 };
 
@@ -42,25 +56,10 @@ pub fn new() !User {
 
 pub fn findMTLSFingerprint(a: Allocator, fp: []const u8) !User {
     if (fp.len != 40) return error.InvalidFingerprint;
-    var idir = try datad.openDir(".", .{ .iterate = true });
-    defer idir.close();
-    var itr = idir.iterate();
-    while (try itr.next()) |f| {
-        if (f.kind != .file) continue;
-        const file = try datad.openFile(f.name, .{});
-        errdefer file.close();
-        var ckb: [40]u8 = undefined;
-        const count = try file.read(&ckb);
-        if (count != 40) {
-            file.close();
-            continue;
-        }
-        if (std.mem.eql(u8, &ckb, fp)) {
-            try file.seekTo(0);
-            return try User.readFile(a, f.name, file);
-        }
-    }
-    return error.UserNotFound;
+    var fpfbuf: [43]u8 = undefined;
+    const fname = try std.fmt.bufPrint(&fpfbuf, "{s}.fp", .{fp});
+    const file = datad.openFile(fname, .{}) catch return error.UserNotFound;
+    return User.readFile(a, file);
 }
 
 pub fn open(a: Allocator, username: []const u8) !User {
