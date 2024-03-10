@@ -83,3 +83,7 @@ pub fn format(self: Humanize, comptime f: []const u8, _: std.fmt.FormatOptions, 
         try out.print("{} {s} in the future", .{ self.reduced(), @tagName(self.width()) });
     }
 }
+
+pub fn printAlloc(self: Humanize, a: std.mem.Allocator) ![]u8 {
+    return std.fmt.allocPrint(a, "{}", .{self});
+}
