@@ -36,6 +36,10 @@ pub const User = struct {
     pub fn raze(self: User, a: Allocator) void {
         a.free(self.username);
     }
+
+    pub fn writeOut(_: User) !void {
+        unreachable; // not implemented
+    }
 };
 
 var datad: std.fs.Dir = undefined;
