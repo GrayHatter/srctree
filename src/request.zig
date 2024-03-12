@@ -87,3 +87,13 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
 fn addHeader(h: *HeaderList, name: []const u8, val: []const u8) !void {
     try h.append(.{ .name = name, .val = val });
 }
+
+pub fn getHeader(self: Request, key: []const u8) ?[]const u8 {
+    for (self.headers.items) |itm| {
+        if (std.mem.eql(u8, itm.name, key)) {
+            return itm.val;
+        }
+    } else {
+        return null;
+    }
+}
