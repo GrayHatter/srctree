@@ -88,7 +88,11 @@ fn newComment(ctx: *Context) Error!void {
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
         _ = delta.loadThread(ctx.alloc) catch unreachable;
-        const c = Comments.new("name", msg.value) catch unreachable;
+        const username = if (ctx.auth.valid())
+            (ctx.auth.user(ctx.alloc) catch unreachable).username
+        else
+            "public";
+        const c = Comments.new(username, msg.value) catch unreachable;
 
         delta.addComment(ctx.alloc, c) catch {};
         delta.writeOut() catch unreachable;
