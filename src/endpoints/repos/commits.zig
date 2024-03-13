@@ -201,7 +201,7 @@ fn commitContext(a: Allocator, c: git.Commit, repo: []const u8, comptime _: bool
     return ctx;
 }
 
-fn commitsList(
+fn buildList(
     a: Allocator,
     repo: git.Repo,
     name: []const u8,
@@ -248,7 +248,7 @@ pub fn commits(ctx: *Context) Error!void {
     const after = null;
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
-    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
+    const cmts_list = try buildList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
@@ -278,7 +278,7 @@ pub fn commitsAfter(ctx: *Context) Error!void {
     const after = ctx.uri.next();
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
-    const cmts_list = try commitsList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
+    const cmts_list = try buildList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
