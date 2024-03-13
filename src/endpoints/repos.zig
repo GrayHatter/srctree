@@ -36,8 +36,8 @@ const gitweb = @import("../gitweb.zig");
 const endpoints = [_]MatchRouter{
     .{ .name = "", .match = .{ .call = treeBlob } },
     .{ .name = "blob", .match = .{ .call = treeBlob } },
-    .{ .name = "commits", .match = .{ .simple = &Commits.routes } },
-    .{ .name = "commit", .match = .{ .call = commit } },
+    ROUTE("commit", &Commits.router),
+    ROUTE("commits", &Commits.router),
     .{ .name = "tree", .match = .{ .call = treeBlob } },
     .{ .name = "diffs", .match = .{ .route = &Diffs.router } },
     .{ .name = "issues", .match = .{ .route = &Issues.router } },
@@ -74,13 +74,13 @@ pub const RouteData = struct {
 
     pub fn exists(self: RouteData) bool {
         var cwd = std.fs.cwd();
-        if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
-            var itr = idir.iterate();
-            while (itr.next() catch return false) |file| {
-                if (file.kind != .directory and file.kind != .sym_link) continue;
-                if (std.mem.eql(u8, file.name, self.name)) return true;
-            }
-        } else |_| {}
+        var dir = cwd.openDir("./repos", .{ .iterate = true }) catch return false;
+        defer dir.close();
+        var itr = dir.iterate();
+        while (itr.next() catch return false) |file| {
+            if (file.kind != .directory and file.kind != .sym_link) continue;
+            if (std.mem.eql(u8, file.name, self.name)) return true;
+        }
         return false;
     }
 };

@@ -916,17 +916,41 @@ pub const Commit = struct {
     }
 };
 
+/// TODO for commitish
+/// direct
+/// - [x] sha
+/// - [ ] refname
+/// - [ ] describe output (tag, etc)
+/// - [ ] @
+/// - [ ] ^
+/// - [ ] +
+/// - [ ] :
+/// range
+/// - [ ] ..
+/// - [ ] ...
+/// - [ ] ^
+/// - [ ] ^-
+/// - [ ] ^!
+///
+///
 /// Warning only has support for sha currently
-pub fn commitish(shaish: []const u8) bool {
-    if (shaish.len < 3 or shaish.len > 40) return false;
+pub fn commitish(rev: []const u8) bool {
+    if (rev.len < 4 or rev.len > 40) return false;
 
-    for (shaish) |c| switch (c) {
+    for (rev) |c| switch (c) {
         'a'...'f' => continue,
         'A'...'F' => continue,
         '0'...'9' => continue,
+        '.' => continue,
         else => return false,
     };
     return true;
+}
+
+pub fn commitishRepo(rev: []const u8, repo: Repo) bool {
+    _ = rev;
+    _ = repo;
+    return false;
 }
 
 pub const Blob = struct {

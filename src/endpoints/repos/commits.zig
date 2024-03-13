@@ -26,8 +26,14 @@ const POST = Endpoint.Router.Methods.POST;
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = commits } },
-    .{ .name = "after", .methods = GET, .match = .{ .call = commitsAfter } },
+    .{ .name = "before", .methods = GET, .match = .{ .call = commitsBefore } },
 };
+
+pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
+    const rd = RouteData.make(&ctx.uri) orelse return commits;
+    _ = rd;
+    return commits;
+}
 
 fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
     var dom = DOM.new(a);
@@ -128,12 +134,14 @@ pub fn commit(ctx: *Context) Error!void {
     if (rd.verb == null) return commits(ctx);
 
     const sha = rd.noun orelse return error.Unrouteable;
+    if (std.mem.indexOf(u8, sha, ".") != null) return error.Unrouteable;
     const cwd = std.fs.cwd();
     // FIXME user data flows into system
     const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
+    defer repo.raze(ctx.alloc);
 
     if (std.mem.endsWith(u8, sha, ".patch"))
         return commitPatch(ctx, sha, repo)
@@ -205,15 +213,27 @@ fn buildList(
     a: Allocator,
     repo: git.Repo,
     name: []const u8,
-    after: ?[]const u8,
+    before: ?[]const u8,
+    elms: []Template.Context,
+    sha: []u8,
+) ![]Template.Context {
+    return buildListBetween(a, repo, name, null, before, elms, sha);
+}
+
+fn buildListBetween(
+    a: Allocator,
+    repo: git.Repo,
+    name: []const u8,
+    left: ?[]const u8,
+    right: ?[]const u8,
     elms: []Template.Context,
     sha: []u8,
 ) ![]Template.Context {
     var current: git.Commit = repo.commit(a) catch return error.Unknown;
-    if (after) |aft| {
-        std.debug.assert(aft.len <= 40);
-        const min = @min(aft.len, current.sha.len);
-        while (!std.mem.eql(u8, aft, current.sha[0..min])) {
+    if (right) |r| {
+        std.debug.assert(r.len <= 40);
+        const min = @min(r.len, current.sha.len);
+        while (!std.mem.eql(u8, r, current.sha[0..min])) {
             current = current.toParent(a, 0) catch {
                 std.debug.print("unable to build commit history\n", .{});
                 return elms[0..0];
@@ -229,6 +249,10 @@ fn buildList(
         count = i;
         @memcpy(sha, current.sha[0..8]);
         c.* = try commitContext(a, current, name, false);
+        if (left) |l| {
+            const min = @min(l.len, current.sha.len);
+            if (std.mem.eql(u8, l, current.sha[0..min])) break;
+        }
         current = current.toParent(a, 0) catch {
             break;
         };
@@ -239,23 +263,37 @@ fn buildList(
 pub fn commits(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
+    const commitish = rd.noun;
+    if (commitish) |cmish| {
+        std.debug.print("{s}\n", .{cmish});
+        if (!git.commitish(cmish)) return error.Unrouteable;
+        if (std.mem.indexOf(u8, cmish, "..")) |i| {
+            const left = cmish[0..i];
+            if (!git.commitish(left)) return error.Unrouteable;
+            const right = cmish[i + 2 ..];
+            if (!git.commitish(right)) return error.Unrouteable;
+
+            std.debug.print("{s}, {s}\n", .{ left, right });
+        }
+    } else {}
+
     const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     var cwd = std.fs.cwd();
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
+    defer repo.raze(ctx.alloc);
 
-    const after = null;
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
-    const cmts_list = try buildList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
+    const cmts_list = try buildList(ctx.alloc, repo, rd.name, null, commits_b, &last_sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
 
     try tmpl.ctx.?.putBlock("commits", cmts_list);
 
-    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/after/{s}", .{ rd.name, last_sha });
+    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
     _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
         try HTML.linkBtnAlloc(ctx.alloc, "More", target),
     }) catch return error.Unknown;
@@ -264,7 +302,7 @@ pub fn commits(ctx: *Context) Error!void {
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }
 
-pub fn commitsAfter(ctx: *Context) Error!void {
+pub fn commitsBefore(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     std.debug.assert(std.mem.eql(u8, "after", ctx.uri.next().?));
@@ -275,17 +313,17 @@ pub fn commitsAfter(ctx: *Context) Error!void {
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
-    const after = ctx.uri.next();
+    const before = ctx.uri.next();
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
-    const cmts_list = try buildList(ctx.alloc, repo, rd.name, after, commits_b, &last_sha);
+    const cmts_list = try buildList(ctx.alloc, repo, rd.name, before, commits_b, &last_sha);
 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
 
     try tmpl.ctx.?.putBlock("commits", cmts_list);
 
-    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/after/{s}", .{ rd.name, last_sha });
+    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
     _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
         try HTML.linkBtnAlloc(ctx.alloc, "More", target),
     }) catch return error.Unknown;
