@@ -288,18 +288,8 @@ pub fn commits(ctx: *Context) Error!void {
     var last_sha: [8]u8 = undefined;
     const cmts_list = try buildList(ctx.alloc, repo, rd.name, null, commits_b, &last_sha);
 
-    var tmpl = Template.find("commits.html");
-    tmpl.init(ctx.alloc);
-
-    try tmpl.ctx.?.putBlock("commits", cmts_list);
-
-    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
-    _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
-        try HTML.linkBtnAlloc(ctx.alloc, "More", target),
-    }) catch return error.Unknown;
-
-    ctx.response.status = .ok;
-    ctx.sendTemplate(&tmpl) catch return error.Unknown;
+    const before_txt = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
+    return sendCommits(ctx, cmts_list, before_txt);
 }
 
 pub fn commitsBefore(ctx: *Context) Error!void {
@@ -317,15 +307,18 @@ pub fn commitsBefore(ctx: *Context) Error!void {
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
     const cmts_list = try buildList(ctx.alloc, repo, rd.name, before, commits_b, &last_sha);
+    const before_txt = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
+    return sendCommits(ctx, cmts_list, before_txt);
+}
 
+fn sendCommits(ctx: *Context, list: []Template.Context, before_txt: []const u8) Error!void {
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
 
-    try tmpl.ctx.?.putBlock("commits", cmts_list);
+    try tmpl.ctx.?.putBlock("commits", list);
 
-    const target = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
     _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
-        try HTML.linkBtnAlloc(ctx.alloc, "More", target),
+        try HTML.linkBtnAlloc(ctx.alloc, "More", before_txt),
     }) catch return error.Unknown;
 
     ctx.response.status = .ok;
