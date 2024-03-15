@@ -19,7 +19,8 @@ In an unsorted order
   - [x] view commits
   - [ ] blame view for files/dirs
   - [ ] view history for file
-  - [ ] syntax highlighting
+  - [-] syntax highlighting
+  - [ ] native syntax highlighting
   - [ ] README markdown support/formatting
   - [ ] fold repo .files by default
   - [ ] comment on commits
