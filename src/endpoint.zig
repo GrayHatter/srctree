@@ -42,3 +42,6 @@ pub const admin = &ADMIN.endpoints;
 
 pub const NETWORK = @import("endpoints/network.zig");
 pub const network = &NETWORK.endpoints;
+
+pub const SEARCH = @import("endpoints/search.zig");
+pub const search = &SEARCH.router;

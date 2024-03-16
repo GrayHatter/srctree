@@ -96,6 +96,7 @@ const root = [_]MatchRouter{
     ROUTE("repos", endpoint.repo),
     ROUTE("todo", endpoint.USERS.todo),
     ROUTE("user", endpoint.commitFlex),
+    ROUTE("search", endpoint.search),
 };
 
 fn notfound(ctx: *Context) Error!void {
