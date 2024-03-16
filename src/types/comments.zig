@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
 
+const Bleach = @import("../bleach.zig");
 const Template = @import("../template.zig");
 
 pub const Comments = @This();
@@ -162,6 +163,11 @@ pub const Comment = struct {
     }
     pub fn builder(self: Comment) Template.Context.Builder(Comment) {
         return Template.Context.Builder(Comment).init(self);
+    }
+
+    pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void {
+        try ctx.put("author", try Bleach.sanitizeAlloc(a, self.author, .{}));
+        try ctx.put("message", try Bleach.sanitizeAlloc(a, self.message, .{}));
     }
 };
 
