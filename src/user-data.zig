@@ -60,12 +60,49 @@ pub const PostData = struct {
 };
 
 pub const QueryData = struct {
+    alloc: Allocator,
     rawquery: []const u8,
+    items: []DataItem,
 
+    /// segments name=value&name2=otherval
+    /// segment in  name=%22dquote%22
+    /// segment out name="dquote"
+    fn parseSegment(a: Allocator, seg: []const u8) !DataItem {
+        if (std.mem.indexOf(u8, seg, "=")) |i| {
+            const alen = seg.len - i - 1;
+            const input = seg[i + 1 .. seg.len];
+            var value: []u8 = @constCast(input);
+            if (alen > 0) {
+                value = try a.alloc(u8, alen);
+                value = try normalizeUrlEncoded(input, value);
+            }
+            return .{
+                .data = seg,
+                .name = seg[0..i],
+                .value = value,
+            };
+        } else {
+            return .{
+                .data = seg,
+                .name = seg,
+                .value = seg[seg.len..seg.len],
+            };
+        }
+    }
+
+    /// TODO leaks on error
     pub fn init(a: Allocator, query: []const u8) !QueryData {
-        _ = a;
+        var itr = std.mem.split(u8, query, "&");
+        const count = std.mem.count(u8, query, "&") + 1;
+        const items = try a.alloc(DataItem, count);
+        for (items) |*item| {
+            item.* = try parseSegment(a, itr.next().?);
+        }
+
         return QueryData{
+            .alloc = a,
             .rawquery = query,
+            .items = items,
         };
     }
 
@@ -118,7 +155,7 @@ pub const ContentType = union(enum) {
     }
 };
 
-fn normilizeUrlEncoded(in: []const u8, out: []u8) ![]u8 {
+fn normalizeUrlEncoded(in: []const u8, out: []u8) ![]u8 {
     var len: usize = 0;
     var i: usize = 0;
     while (i < in.len) {
@@ -157,8 +194,8 @@ fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype
                 var name = odata;
                 var value = odata;
                 if (std.mem.indexOf(u8, idata, "=")) |i| {
-                    name = try normilizeUrlEncoded(idata[0..i], odata[0..i]);
-                    value = try normilizeUrlEncoded(idata[i + 1 ..], odata[i + 1 ..]);
+                    name = try normalizeUrlEncoded(idata[0..i], odata[0..i]);
+                    value = try normalizeUrlEncoded(idata[i + 1 ..], odata[i + 1 ..]);
                 }
                 itm.* = .{
                     .data = odata,
