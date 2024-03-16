@@ -23,7 +23,6 @@ a {
 		padding: 6px 18px;
 		border: 2px outset gray;
 		border-bottom-color: #7a003f;
-
 	}
 }
 
@@ -268,7 +267,7 @@ search {
 	border-bottom: 0px;
 	padding: 4px ;
 	display: flex;
-	justify-content: space-between;
+	justify-content: space-around;
 }
 
 actionable {
