@@ -332,9 +332,9 @@ pub fn SearchList(T: type) type {
                 if (std.mem.eql(u8, rule.subject, name)) {
                     if (@TypeOf(@field(target, name)) == []const u8) {
                         if (rule.around) {
-                            return std.mem.indexOf(u8, rule.match, @field(target, name)) != null;
+                            return std.mem.count(u8, @field(target, name), rule.match) > 0;
                         } else {
-                            return std.mem.eql(u8, rule.match, @field(target, name));
+                            return std.mem.eql(u8, @field(target, name), rule.match);
                         }
                     }
                 }

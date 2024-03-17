@@ -33,7 +33,8 @@ fn search(ctx: *Context) Error!void {
     std.debug.print("query {s}\n", .{q.value});
 
     const rules = [_]Deltas.SearchRule{
-        //.{ .subject = "repo", .match = "srctree2" },
+        .{ .subject = "repo", .match = "srctree" },
+        //.{ .subject = "title", .match = "issue", .around = true },
     };
 
     var list = std.ArrayList(Template.Context).init(ctx.alloc);
@@ -52,5 +53,5 @@ fn search(ctx: *Context) Error!void {
         "search",
         Bleach.sanitizeAlloc(ctx.alloc, q.value, .{}) catch unreachable,
     );
-    ctx.sendTemplate(&tmpl) catch return error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }
