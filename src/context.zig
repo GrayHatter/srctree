@@ -13,6 +13,8 @@ pub const UserData = @import("user-data.zig").UserData;
 pub const Template = @import("template.zig");
 pub const UriIter = @import("endpoint.zig").Router.UriIter;
 
+const Error = @import("errors.zig").Error;
+
 pub const Context = @This();
 
 alloc: Allocator,
@@ -49,9 +51,11 @@ pub fn addRouteVar(ctx: *Context, name: []const u8, val: []const u8) !void {
 }
 
 /// TODO fix these unreachable, currently debugging
-pub fn sendTemplate(ctx: *Context, t: *Template.Template) !void {
-    ctx.response.start() catch unreachable;
-    //
+pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
+    ctx.response.start() catch |err| switch (err) {
+        error.BrokenPipe => return error.NetworkCrash,
+        else => unreachable,
+    };
     const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
     try t.addVar("header.auth", loggedin);
     if (ctx.request.auth.user(ctx.alloc)) |usr| {

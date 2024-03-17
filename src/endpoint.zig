@@ -9,24 +9,9 @@ pub const Template = @import("template.zig");
 pub const Router = @import("routes.zig");
 pub const Types = @import("types.zig");
 
-pub const Error = ServerError || ClientError;
+pub const Errors = @import("errors.zig");
 
-pub const ServerError = error{
-    AndExit,
-    OutOfMemory,
-    NoSpaceLeft,
-    ReqResInvalid,
-    Unknown,
-};
-
-pub const ClientError = error{
-    Abusive,
-    BadData,
-    DataMissing,
-    InvalidURI,
-    Unauthenticated,
-    Unrouteable,
-};
+pub const Error = Errors.ServerError || Errors.ClientError || Errors.NetworkError;
 
 pub const router = Router.router;
 

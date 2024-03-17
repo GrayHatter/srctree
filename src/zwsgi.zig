@@ -163,6 +163,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
 
         Router.baseRouter(&ctx) catch |err| {
             switch (err) {
+                error.NetworkCrash => std.debug.print("client disconnect'\n", .{}),
                 error.Unrouteable => {
                     std.debug.print("Unrouteable'\n", .{});
                     if (@errorReturnTrace()) |trace| {
@@ -184,7 +185,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
                 error.BadData,
                 error.DataMissing,
                 => {
-                    std.debug.print("Abusive {}\n", .{request});
+                    std.debug.print("Abusive {} because {}\n", .{ request, err });
                     for (request.raw_request.zwsgi.vars) |vars| {
                         std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
                     }
