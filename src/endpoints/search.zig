@@ -4,6 +4,7 @@ const Allocator = std.mem.Allocator;
 const HTML = Endpoint.HTML;
 const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
+const Deltas = @import("../types/deltas.zig");
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const ROUTE = Endpoint.Router.ROUTE;
@@ -31,6 +32,22 @@ fn search(ctx: *Context) Error!void {
 
     std.debug.print("query {s}\n", .{q.value});
 
+    const rules = [_]Deltas.SearchRule{
+        .{ .subject = "message", .match = "text" },
+    };
+
+    var list = std.ArrayList(Template.Context).init(ctx.alloc);
+    var itr = Deltas.search(ctx.alloc, &rules);
+    while (itr.next(ctx.alloc)) |next_| {
+        if (next_) |next| {
+            var c = Template.Context.init(ctx.alloc);
+            const builder = next.builder();
+            builder.build(ctx.alloc, &c) catch unreachable;
+            try list.append(c);
+        } else break;
+    } else |_| return error.Unknown;
+
+    try tmpl.ctx.?.putBlock("list", list.items);
     try tmpl.ctx.?.put(
         "search",
         Bleach.sanitizeAlloc(ctx.alloc, q.value, .{}) catch unreachable,

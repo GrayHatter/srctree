@@ -73,7 +73,7 @@ fn newPost(ctx: *Context) Error!void {
         var delta = Deltas.new(rd.name) catch unreachable;
         //delta.src = src;
         delta.title = title.value;
-        delta.desc = desc.value;
+        delta.message = desc.value;
         delta.attach = .{ .diff = 0 };
         delta.writeOut() catch unreachable;
 
@@ -154,7 +154,7 @@ fn view(ctx: *Context) Error!void {
     dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable));
     dom = dom.close();
     dom = dom.open(HTML.p(null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.desc, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable));
     dom = dom.close();
     dom = dom.close();
 

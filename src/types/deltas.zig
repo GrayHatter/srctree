@@ -19,33 +19,29 @@ const DELTA_VERSION: usize = 0;
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
     var reader = file.reader();
     const ver: usize = try reader.readInt(usize, endian);
-    var d: Delta = .{
-        .index = idx,
-        .repo = undefined,
-        .title = undefined,
-        .desc = undefined,
-        .file = file,
-    };
-    switch (ver) {
-        0 => {
-            d.state = try reader.readStruct(State);
-            d.created = try reader.readInt(i64, endian);
-            d.updated = try reader.readInt(i64, endian);
-            d.repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
-            d.title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
-            d.desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
-            d.thread_id = try reader.readInt(usize, endian);
-            d.attach = switch (Attach.fromInt(try reader.readInt(u8, endian))) {
+    return switch (ver) {
+        0 => Delta{
+            .index = idx,
+            .file = file,
+            .state = try reader.readStruct(State),
+            .created = try reader.readInt(i64, endian),
+            .updated = try reader.readInt(i64, endian),
+            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .message = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            //.author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .author = "",
+            .thread_id = try reader.readInt(usize, endian),
+            .attach = switch (Attach.fromInt(try reader.readInt(u8, endian))) {
                 .nos => .{ .nos = try reader.readInt(usize, endian) },
                 .diff => .{ .diff = try reader.readInt(usize, endian) },
                 .issue => .{ .issue = try reader.readInt(usize, endian) },
                 .commit => .{ .issue = try reader.readInt(usize, endian) },
                 .line => .{ .issue = try reader.readInt(usize, endian) },
-            };
+            },
         },
         else => return error.UnsupportedVersion,
-    }
-    return d;
+    };
 }
 
 pub const Attach = enum(u8) {
@@ -73,7 +69,8 @@ pub const Delta = struct {
     updated: i64 = 0,
     repo: []const u8,
     title: []const u8,
-    desc: []const u8,
+    message: []const u8,
+    author: []const u8 = "",
     thread_id: usize = 0,
 
     attach: union(Attach) {
@@ -98,8 +95,10 @@ pub const Delta = struct {
         try writer.writeAll("\x00");
         try writer.writeAll(self.title);
         try writer.writeAll("\x00");
-        try writer.writeAll(self.desc);
+        try writer.writeAll(self.message);
         try writer.writeAll("\x00");
+        //try writer.writeAll(self.author);
+        //try writer.writeAll("\x00");
         try writer.writeInt(usize, self.thread_id, endian);
 
         try writer.writeInt(u8, @intFromEnum(self.attach), endian);
@@ -154,7 +153,7 @@ pub const Delta = struct {
 
     pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
         try ctx.put("title", try Bleach.sanitizeAlloc(a, self.title, .{}));
-        try ctx.put("desc", try Bleach.sanitizeAlloc(a, self.desc, .{}));
+        try ctx.put("desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
 
         try ctx.put("index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
         try ctx.put("title_uri", try std.fmt.allocPrint(a, "{x}", .{self.index}));
@@ -173,7 +172,7 @@ var datad: std.fs.Dir = undefined;
 pub fn init(dir: []const u8) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}/deltas", .{dir});
-    datad = try std.fs.cwd().makeOpenPath(filename, .{});
+    datad = try std.fs.cwd().makeOpenPath(filename, .{ .iterate = true });
 }
 
 pub fn raze() void {
@@ -243,7 +242,8 @@ pub fn new(repo: []const u8) !Delta {
         .updated = std.time.timestamp(),
         .repo = repo,
         .title = "",
-        .desc = "",
+        .message = "",
+        .author = "",
         .file = file,
     };
 
@@ -262,4 +262,50 @@ pub fn open(a: std.mem.Allocator, repo: []const u8, index: usize) !?Delta {
     const filename = std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, index }) catch return error.InvalidTarget;
     const file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
     return try Delta.readFile(a, index, file);
+}
+
+pub const SearchRule = struct {
+    subject: []const u8,
+    match: []const u8,
+    inverse: bool = false,
+};
+
+pub fn SearchList(T: type) type {
+    return struct {
+        current: ?T = null,
+        rules: []const SearchRule,
+
+        // TODO better ABI
+        iterable: std.fs.Dir.Iterator,
+
+        const Self = @This();
+
+        pub fn next(self: *Self, a: Allocator) anyerror!?T {
+            const line = (try self.iterable.next()) orelse return null;
+            if (line.kind == .file and std.mem.endsWith(u8, line.name, ".delta")) {
+                const file = try datad.openFile(line.name, .{});
+                self.current = Delta.readFile(a, 0, file) catch return self.next(a);
+
+                return self.current;
+            }
+            return self.next(a);
+        }
+
+        pub fn raze(_: Self) void {}
+    };
+}
+
+pub fn searchRepo(
+    _: std.mem.Allocator,
+    _: []const u8,
+    _: []const SearchRule,
+) SearchList(Delta) {
+    unreachable;
+}
+
+pub fn search(_: std.mem.Allocator, rules: []const SearchRule) SearchList(Delta) {
+    return .{
+        .rules = rules,
+        .iterable = datad.iterate(),
+    };
 }

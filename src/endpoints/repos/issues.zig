@@ -62,7 +62,7 @@ fn newPost(ctx: *Context) Error!void {
         const msg = try valid.require("desc");
         var delta = Deltas.new(rd.name) catch unreachable;
         delta.title = title.value;
-        delta.desc = msg.value;
+        delta.message = msg.value;
         delta.attach = .{ .issue = 0 };
         delta.writeOut() catch unreachable;
 
@@ -118,7 +118,7 @@ fn view(ctx: *Context) Error!void {
     dom.push(HTML.text(rd.name));
     dom.push(HTML.text(delta.repo));
     dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.desc, .{}) catch unreachable));
+    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable));
     _ = try tmpl.addElements(ctx.alloc, "issue", dom.done());
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
@@ -163,8 +163,8 @@ fn list(ctx: *Context) Error!void {
         delta_ctx.* = Template.Context.init(ctx.alloc);
         const builder = d.builder();
         builder.build(ctx.alloc, delta_ctx) catch unreachable;
-        try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{x}", .{d.index}));
-        try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{x}", .{d.index}));
+        //try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{x}", .{d.index}));
+        //try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{x}", .{d.index}));
         _ = d.loadThread(ctx.alloc) catch unreachable;
         if (d.getComments(ctx.alloc)) |cmts| {
             try delta_ctx.put(
