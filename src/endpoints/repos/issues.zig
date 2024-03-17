@@ -50,7 +50,7 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
 fn new(ctx: *Context) Error!void {
     var tmpl = comptime Template.find("issue-new.html");
     tmpl.init(ctx.alloc);
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn newPost(ctx: *Context) Error!void {
@@ -142,7 +142,7 @@ fn view(ctx: *Context) Error!void {
 
     try tmpl.ctx.?.put("delta_id", delta_id);
 
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn list(ctx: *Context) Error!void {
@@ -163,8 +163,6 @@ fn list(ctx: *Context) Error!void {
         delta_ctx.* = Template.Context.init(ctx.alloc);
         const builder = d.builder();
         builder.build(ctx.alloc, delta_ctx) catch unreachable;
-        //try delta_ctx.put("index", try std.fmt.allocPrint(ctx.alloc, "0x{x}", .{d.index}));
-        //try delta_ctx.put("title_uri", try std.fmt.allocPrint(ctx.alloc, "{x}", .{d.index}));
         _ = d.loadThread(ctx.alloc) catch unreachable;
         if (d.getComments(ctx.alloc)) |cmts| {
             try delta_ctx.put(
@@ -178,5 +176,5 @@ fn list(ctx: *Context) Error!void {
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
     try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
-    ctx.sendTemplate(&tmpl) catch return error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }

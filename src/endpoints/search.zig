@@ -33,7 +33,7 @@ fn search(ctx: *Context) Error!void {
     std.debug.print("query {s}\n", .{q.value});
 
     const rules = [_]Deltas.SearchRule{
-        .{ .subject = "message", .match = "text" },
+        //.{ .subject = "repo", .match = "srctree2" },
     };
 
     var list = std.ArrayList(Template.Context).init(ctx.alloc);

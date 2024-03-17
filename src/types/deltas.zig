@@ -156,7 +156,15 @@ pub const Delta = struct {
         try ctx.put("desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
 
         try ctx.put("index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
-        try ctx.put("title_uri", try std.fmt.allocPrint(a, "{x}", .{self.index}));
+        try ctx.put("title_uri", try std.fmt.allocPrint(
+            a,
+            "/repo/{s}/{s}/{x}",
+            .{
+                self.repo,
+                if (self.attach == .issue) "issues" else "diffs",
+                self.index,
+            },
+        ));
     }
 
     pub fn raze(self: Delta, _: std.mem.Allocator) void {
@@ -268,6 +276,7 @@ pub const SearchRule = struct {
     subject: []const u8,
     match: []const u8,
     inverse: bool = false,
+    around: bool = false,
 };
 
 pub fn SearchList(T: type) type {
@@ -283,12 +292,54 @@ pub fn SearchList(T: type) type {
         pub fn next(self: *Self, a: Allocator) anyerror!?T {
             const line = (try self.iterable.next()) orelse return null;
             if (line.kind == .file and std.mem.endsWith(u8, line.name, ".delta")) {
-                const file = try datad.openFile(line.name, .{});
-                self.current = Delta.readFile(a, 0, file) catch return self.next(a);
+                if (std.mem.lastIndexOf(u8, line.name[0 .. line.name.len - 6], ".")) |i| {
+                    const num = std.fmt.parseInt(
+                        usize,
+                        line.name[i + 1 .. line.name.len - 6],
+                        16,
+                    ) catch return self.next(a);
+                    const file = try datad.openFile(line.name, .{});
+                    self.current = Delta.readFile(a, num, file) catch {
+                        file.close();
+                        return self.next(a);
+                    };
 
-                return self.current;
+                    if (!try self.evalAll(self.current.?)) {
+                        file.close();
+                        return self.next(a);
+                    }
+
+                    return self.current;
+                } else {}
             }
             return self.next(a);
+        }
+
+        fn evalAll(self: Self, target: T) !bool {
+            for (self.rules) |rule| {
+                if (!try self.eval(rule, target)) return false;
+            } else return true;
+        }
+
+        /// TODO: I think this function might overrun for some inputs
+        /// TODO: add support for int types
+        fn eval(_: Self, rule: SearchRule, target: T) !bool {
+            if (comptime std.meta.hasMethod(T, "searchEval")) {
+                return target.searchEval(rule);
+            }
+
+            inline for (comptime std.meta.fieldNames(T)) |name| {
+                if (std.mem.eql(u8, rule.subject, name)) {
+                    if (@TypeOf(@field(target, name)) == []const u8) {
+                        if (rule.around) {
+                            return std.mem.indexOf(u8, rule.match, @field(target, name)) != null;
+                        } else {
+                            return std.mem.eql(u8, rule.match, @field(target, name));
+                        }
+                    }
+                }
+            }
+            return error.UnsupportedRule;
         }
 
         pub fn raze(_: Self) void {}
