@@ -272,6 +272,7 @@ pub fn open(a: std.mem.Allocator, repo: []const u8, index: usize) !?Delta {
     return try Delta.readFile(a, index, file);
 }
 
+/// By assumption, a subject of len 0 will search across anything
 pub const SearchRule = struct {
     subject: []const u8,
     match: []const u8,
@@ -304,7 +305,7 @@ pub fn SearchList(T: type) type {
                         return self.next(a);
                     };
 
-                    if (!try self.evalAll(self.current.?)) {
+                    if (!self.evalAll(self.current.?)) {
                         file.close();
                         return self.next(a);
                     }
@@ -315,31 +316,37 @@ pub fn SearchList(T: type) type {
             return self.next(a);
         }
 
-        fn evalAll(self: Self, target: T) !bool {
+        fn evalAll(self: Self, target: T) bool {
             for (self.rules) |rule| {
-                if (!try self.eval(rule, target)) return false;
+                if (!self.eval(rule, target)) return false;
             } else return true;
         }
 
         /// TODO: I think this function might overrun for some inputs
         /// TODO: add support for int types
-        fn eval(_: Self, rule: SearchRule, target: T) !bool {
+        fn eval(_: Self, rule: SearchRule, target: T) bool {
             if (comptime std.meta.hasMethod(T, "searchEval")) {
                 return target.searchEval(rule);
             }
 
+            const any = rule.subject.len == 0;
+
             inline for (comptime std.meta.fieldNames(T)) |name| {
-                if (std.mem.eql(u8, rule.subject, name)) {
+                if (any or std.mem.eql(u8, rule.subject, name)) {
                     if (@TypeOf(@field(target, name)) == []const u8) {
-                        if (rule.around) {
-                            return std.mem.count(u8, @field(target, name), rule.match) > 0;
-                        } else {
-                            return std.mem.eql(u8, @field(target, name), rule.match);
+                        const found = if (rule.around or any)
+                            std.mem.count(u8, @field(target, name), rule.match) > 0
+                        else
+                            std.mem.eql(u8, @field(target, name), rule.match);
+                        if (found) {
+                            return true;
+                        } else if (!any) {
+                            return false;
                         }
                     }
                 }
             }
-            return error.UnsupportedRule;
+            return true and !any;
         }
 
         pub fn raze(_: Self) void {}

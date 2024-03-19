@@ -31,15 +31,39 @@ fn search(ctx: *Context) Error!void {
     };
 
     std.debug.print("query {s}\n", .{q.value});
+    var rules = std.ArrayList(Deltas.SearchRule).init(ctx.alloc);
 
-    const rules = [_]Deltas.SearchRule{
-        .{ .subject = "repo", .match = "srctree" },
-        //.{ .subject = "title", .match = "issue", .around = true },
-    };
+    var itr = std.mem.split(u8, q.value, " ");
+    while (itr.next()) |r_line| {
+        var line = r_line;
+        line = std.mem.trim(u8, line, " ");
+        if (line.len == 0) continue;
+        const inverse = line[0] == '-';
+        if (inverse) {
+            line = line[1..];
+        }
+        if (std.mem.indexOf(u8, line, ":")) |i| {
+            try rules.append(Deltas.SearchRule{
+                .subject = line[0..i],
+                .match = line[i + 1 ..],
+                .inverse = inverse,
+            });
+        } else {
+            try rules.append(Deltas.SearchRule{
+                .subject = "",
+                .match = line,
+                .inverse = inverse,
+            });
+        }
+    }
+
+    for (rules.items) |rule| {
+        std.debug.print("rule = {s} : {s}\n", .{ rule.subject, rule.match });
+    }
 
     var list = std.ArrayList(Template.Context).init(ctx.alloc);
-    var itr = Deltas.search(ctx.alloc, &rules);
-    while (itr.next(ctx.alloc)) |next_| {
+    var search_results = Deltas.search(ctx.alloc, rules.items);
+    while (search_results.next(ctx.alloc)) |next_| {
         if (next_) |next| {
             var c = Template.Context.init(ctx.alloc);
             const builder = next.builder();
