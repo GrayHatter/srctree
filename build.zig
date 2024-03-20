@@ -4,7 +4,6 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // build options
     const enable_libcurl = b.option(bool, "libcurl", "enable linking with libcurl") orelse false;
     const options = b.addOptions();
     options.addOption(bool, "libcurl", enable_libcurl);
@@ -14,18 +13,17 @@ pub fn build(b: *std.Build) void {
 
     const templates_compiled = try compileTemplates(b);
 
-    // srctree bin
     const exe = b.addExecutable(.{
-        .name = "tree",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .name = "srctree",
+        .root_source_file = .{
+            .path = "src/main.zig",
+        },
         .target = target,
         .optimize = optimize,
     });
     b.installArtifact(exe);
     binaries.append(exe) catch unreachable;
-    //exe.root_module.addImport("templates-compiled", templates_compiled);
 
-    // Run commands
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| {
@@ -34,7 +32,6 @@ pub fn build(b: *std.Build) void {
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
 
-    // Tests
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
