@@ -82,8 +82,8 @@ fn newPost(ctx: *Context) Error!void {
                 desc.value,
                 action.name,
             });
-            var data = Patch.loadRemote(ctx.alloc, src.value) catch unreachable;
-            var filename = std.fmt.allocPrint(
+            const data = Patch.loadRemote(ctx.alloc, src.value) catch unreachable;
+            const filename = std.fmt.allocPrint(
                 ctx.alloc,
                 "data/patch/{s}.{x}.patch",
                 .{ rd.name, delta.index },
@@ -116,7 +116,7 @@ fn newComment(ctx: *Context) Error!void {
         if (msg.value.len < 2) return ctx.response.redirect(loc, true) catch unreachable;
 
         var diff = Deltas.open(ctx.alloc, rd.name, diff_index) catch unreachable orelse return error.Unrouteable;
-        var c = Comments.new("name", msg.value) catch unreachable;
+        const c = Comments.new("name", msg.value) catch unreachable;
 
         diff.addComment(ctx.alloc, c) catch {};
         diff.writeOut() catch unreachable;

@@ -53,7 +53,7 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
 fn new(ctx: *Context) Error!void {
     var tmpl = comptime Template.find("diff-new.html");
     tmpl.init(ctx.alloc);
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn inNetwork(str: []const u8) bool {
@@ -102,7 +102,7 @@ fn newPost(ctx: *Context) Error!void {
     var tmpl = Template.find("diff-new.html");
     tmpl.init(ctx.alloc);
     try tmpl.addVar("diff", "new data attempting");
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn newComment(ctx: *Context) Error!void {
@@ -202,7 +202,7 @@ fn view(ctx: *Context) Error!void {
         f.close();
     } else try tmpl.addString("patch", "Patch not found");
 
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn list(ctx: *Context) Error!void {
@@ -236,5 +236,5 @@ fn list(ctx: *Context) Error!void {
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
     try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
-    ctx.sendTemplate(&tmpl) catch return error.Unknown;
+    try ctx.sendTemplate(&tmpl);
 }

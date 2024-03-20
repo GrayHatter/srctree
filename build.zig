@@ -12,6 +12,8 @@ pub fn build(b: *std.Build) void {
     var binaries = std.ArrayList(*std.Build.Step.Compile).init(b.allocator);
     defer binaries.clearAndFree();
 
+    const templates_compiled = try compileTemplates(b);
+
     // srctree bin
     const exe = b.addExecutable(.{
         .name = "tree",
@@ -21,6 +23,7 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
     binaries.append(exe) catch unreachable;
+    //exe.root_module.addImport("templates-compiled", templates_compiled);
 
     // Run commands
     const run_cmd = b.addRunArtifact(exe);
@@ -40,7 +43,7 @@ pub fn build(b: *std.Build) void {
     binaries.append(unit_tests) catch unreachable;
 
     for (binaries.items) |ex| {
-        addSrcTemplates(ex);
+        ex.root_module.addImport("templates-compiled", templates_compiled);
         ex.root_module.addOptions("config", options);
         if (enable_libcurl) {
             ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
@@ -52,6 +55,31 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+}
+
+fn compileTemplates(b: *std.Build) !*std.Build.Module {
+    const compiled = b.addModule("templates-compiled", .{
+        .root_source_file = .{
+            .path = "src/template-compiled.zig",
+        },
+    });
+
+    const list = buildSrcTemplates(b) catch @panic("unable to build src files");
+    const found = b.addOptions();
+    found.addOption(
+        []const []const u8,
+        "names",
+        list,
+    );
+    compiled.addOptions("found_templates", found);
+
+    for (list) |file| {
+        _ = compiled.addAnonymousImport(file, .{
+            .root_source_file = .{ .path = file },
+        });
+    }
+
+    return compiled;
 }
 
 var template_list: ?[][]const u8 = null;
@@ -73,24 +101,4 @@ fn buildSrcTemplates(b: *std.Build) ![][]const u8 {
     }
     template_list = try arrlist.toOwnedSlice();
     return template_list.?;
-}
-
-/// eventually I'd love to make this comptime but alas
-fn addSrcTemplates(cs: *std.Build.Step.Compile) void {
-    var b = cs.step.owner;
-
-    const list = buildSrcTemplates(b) catch @panic("unable to build src files");
-    const templates = b.addOptions();
-    templates.addOption(
-        []const []const u8,
-        "names",
-        list,
-    );
-    cs.root_module.addOptions("templates", templates);
-
-    for (list) |file| {
-        _ = cs.root_module.addAnonymousImport(file, .{
-            .root_source_file = .{ .path = file },
-        });
-    }
 }

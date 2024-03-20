@@ -1,10 +1,9 @@
 const std = @import("std");
-const bldtmpls = @import("templates");
+const compiled = @import("templates-compiled");
 
 const Allocator = std.mem.Allocator;
 
 const HTML = @import("html.zig");
-const Bleach = @import("bleach.zig");
 
 const MAX_BYTES = 2 <<| 15;
 const TEMPLATE_PATH = "templates/";
@@ -95,8 +94,7 @@ pub const Context = struct {
 pub const Template = struct {
     alloc: ?Allocator = null,
     ctx: ?Context = null,
-    path: []const u8,
-    /// expected to be a pointer to path.
+    // path: []const u8,
     name: []const u8,
     blob: []const u8,
     parent: ?*const Template = null,
@@ -329,7 +327,7 @@ pub const Directive = struct {
             pub fn loop(self: Verb, block: *const Context, out: anytype) anyerror!void {
                 var t = Template{
                     .name = self.vari,
-                    .path = "/dev/null",
+                    //.path = "/dev/null",
                     // would be nice not to have to do a mov here
                     .ctx = block.*,
                     .blob = self.blob,
@@ -353,15 +351,15 @@ fn tail(path: []const u8) []const u8 {
     return path[0..0];
 }
 
-pub const builtin: [bldtmpls.names.len]Template = blk: {
+pub const builtin: [compiled.data.len]Template = blk: {
     @setEvalBranchQuota(5000);
-    var t: [bldtmpls.names.len]Template = undefined;
-    for (bldtmpls.names, &t) |file, *dst| {
+    var t: [compiled.data.len]Template = undefined;
+    for (compiled.data, &t) |filedata, *dst| {
         dst.* = Template{
             .alloc = null,
-            .path = file,
-            .name = tail(file),
-            .blob = @embedFile(file),
+            //.path = filedata.path,
+            .name = tail(filedata.path),
+            .blob = filedata.blob,
         };
     }
     break :blk t;
@@ -386,10 +384,11 @@ fn load(a: Allocator) !void {
             file.name,
         });
         defer a.free(name);
-        const path = try a.dupe(u8, file.name);
+        const tail_ = tail(file.name);
+        const name_ = try a.dupe(u8, tail_);
         try list.append(.{
-            .path = path,
-            .name = tail(path),
+            //.path = path,
+            .name = name_,
             .blob = try cwd.readFileAlloc(a, name, MAX_BYTES),
         });
     }
@@ -402,7 +401,8 @@ pub fn init(a: Allocator) void {
 
 pub fn raze(a: Allocator) void {
     for (dynamic) |t| {
-        a.free(t.path);
+        // leaks?
+        a.free(t.name);
         a.free(t.blob);
     }
     a.free(dynamic);
@@ -436,8 +436,8 @@ test "build.zig included templates" {
     };
 
     names: for (names) |name| {
-        for (bldtmpls.names) |bld| {
-            if (std.mem.eql(u8, name, bld)) continue :names;
+        for (compiled.data) |bld| {
+            if (std.mem.eql(u8, name, bld.path)) continue :names;
         } else return error.TemplateMissing;
     }
 }
@@ -449,7 +449,7 @@ test "load templates" {
 
     //try std.testing.expectEqual(3, builtin.len);
     for (builtin) |bi| {
-        if (std.mem.eql(u8, bi.path, "templates/index.html")) {
+        if (std.mem.eql(u8, bi.name, "index.html")) {
             try std.testing.expectEqualStrings("index.html", bi.name);
             try std.testing.expectEqualStrings("<!DOCTYPE html>", bi.blob[0..15]);
             break;
@@ -470,7 +470,7 @@ test "directive nothing" {
     var a = std.testing.allocator;
     var t = Template{
         .alloc = null,
-        .path = "/dev/null",
+        //.path = "/dev/null",
         .name = "test",
         .blob = "<!-- nothing -->",
     };
@@ -484,7 +484,7 @@ test "directive ORELSE" {
     var a = std.testing.allocator;
     var t = Template{
         .alloc = null,
-        .path = "/dev/null",
+        //.path = "/dev/null",
         .name = "test",
         .blob = "<!-- this ORELSE string until end -->",
     };
@@ -498,7 +498,7 @@ test "directive ORNULL" {
     var a = std.testing.allocator;
     var t = Template{
         .alloc = null,
-        .path = "/dev/null",
+        //.path = "/dev/null",
         .name = "test",
         // Invalid because 'string until end' is known to be unreachable
         .blob = "<!-- this ORNULL string until end -->",
@@ -510,7 +510,7 @@ test "directive ORNULL" {
 
     t = Template{
         .alloc = null,
-        .path = "/dev/null",
+        //.path = "/dev/null",
         .name = "test",
         .blob = "<!-- this ORNULL -->",
     };
@@ -547,7 +547,7 @@ test "directive FOREACH" {
 
     var t = Template{
         .alloc = null,
-        .path = "/dev/null",
+        //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };

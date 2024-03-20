@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const Request = @import("request.zig");
 const Headers = @import("headers.zig");
 const UserData = @import("user-data.zig");
-const Template = @import("template.zig").Template;
+const Template = @import("template").Template;
 
 const Response = @This();
 
