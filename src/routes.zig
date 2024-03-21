@@ -76,13 +76,13 @@ pub fn any(comptime name: []const u8, comptime match: Callable) MatchRouter {
     return mr;
 }
 
-pub fn get(comptime name: []const u8, comptime match: Callable) MatchRouter {
+pub fn GET(comptime name: []const u8, comptime match: Callable) MatchRouter {
     var mr = ROUTE(name, match);
     mr.methods = Methods.GET;
     return mr;
 }
 
-pub fn post(comptime name: []const u8, comptime match: Callable) MatchRouter {
+pub fn POST(comptime name: []const u8, comptime match: Callable) MatchRouter {
     var mr = ROUTE(name, match);
     mr.methods = Methods.POST;
     return mr;

@@ -14,16 +14,13 @@ const UriIter = Endpoint.Router.UriIter;
 
 const git = @import("../git.zig");
 
-const GET = Endpoint.Router.Methods.GET;
-const POST = Endpoint.Router.Methods.POST;
-
 pub const endpoints = [_]Route.MatchRouter{
     Route.ROUTE("", view),
-    Route.ROUTE("post", view),
+    Route.POST("post", view),
     Route.ROUTE("new-repo", newRepo),
-    Route.post("new-repo", postNewRepo),
+    Route.POST("new-repo", postNewRepo),
     Route.ROUTE("clone-upstream", cloneUpstream),
-    Route.post("clone-upstream", postCloneUpstream),
+    Route.POST("clone-upstream", postCloneUpstream),
 };
 
 fn createRepo(a: Allocator, reponame: []const u8) !void {
