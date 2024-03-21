@@ -9,11 +9,10 @@ const Context = @import("../../context.zig");
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
+const ROUTE = Endpoint.Router.ROUTE;
+const POST = Endpoint.Router.POST;
 
 const Repo = @import("../repos.zig");
-
-const GET = Endpoint.Router.Methods.GET;
-const POST = Endpoint.Router.Methods.POST;
 
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
@@ -23,10 +22,10 @@ const Deltas = Endpoint.Types.Deltas;
 const Humanize = @import("../../humanize.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "", .methods = GET, .match = .{ .call = list } },
-    .{ .name = "new", .methods = GET, .match = .{ .call = new } },
-    .{ .name = "new", .methods = POST, .match = .{ .call = newPost } },
-    .{ .name = "add-comment", .methods = POST, .match = .{ .call = newComment } },
+    ROUTE("", list),
+    ROUTE("new", new),
+    POST("new", newPost),
+    POST("add-comment", newComment),
 };
 
 fn isHex(input: []const u8) ?usize {
@@ -176,5 +175,10 @@ fn list(ctx: *Context) Error!void {
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
     try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
+
+    var default_search_buf: [0xFF]u8 = undefined;
+    const def_search = try std.fmt.bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
+
+    try tmpl.ctx.?.put("search", def_search);
     try ctx.sendTemplate(&tmpl);
 }
