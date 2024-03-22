@@ -264,5 +264,10 @@ fn list(ctx: *Context) Error!void {
     tmpl.init(ctx.alloc);
     //_ = try tmpl.addElements(ctx.alloc, "list", tmpl_ctx[0..end]);
     try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
+    
+    var default_search_buf: [0xFF]u8 = undefined;
+    const def_search = try std.fmt.bufPrint(&default_search_buf, "is:diff repo:{s} ", .{rd.name});
+    try tmpl.ctx.?.put("search", def_search);
+    
     try ctx.sendTemplate(&tmpl);
 }

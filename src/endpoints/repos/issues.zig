@@ -178,7 +178,7 @@ fn list(ctx: *Context) Error!void {
 
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try std.fmt.bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
-
     try tmpl.ctx.?.put("search", def_search);
+
     try ctx.sendTemplate(&tmpl);
 }
