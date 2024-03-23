@@ -218,7 +218,7 @@ fn view(ctx: *Context) Error!void {
     _ = try tmpl.addElements(ctx.alloc, "form-data", &form_data);
 
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
-    var file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
+    const file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         const patch = try Patch.patchHtml(ctx.alloc, fdata);
