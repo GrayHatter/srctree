@@ -52,7 +52,7 @@ fn gitUploadPack(ctx: *Context) Error!void {
     defer map.deinit();
 
     //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
-    if (ctx.response.usr_data != null and ctx.response.usr_data.?.post_data == null) {
+    if (ctx.req_data.post_data == null) {
         try map.put("PATH_TRANSLATED", path_tr);
         try map.put("QUERY_STRING", "service=git-upload-pack");
         try map.put("REQUEST_METHOD", "GET");
@@ -87,12 +87,10 @@ fn gitUploadPack(ctx: *Context) Error!void {
             .revents = undefined,
         },
     };
-    if (ctx.response.usr_data) |usr| {
-        if (usr.post_data) |pd| {
-            _ = std.os.write(child.stdin.?.handle, pd.rawpost) catch unreachable;
-            std.os.close(child.stdin.?.handle);
-            child.stdin = null;
-        }
+    if (ctx.req_data.post_data) |pd| {
+        _ = std.os.write(child.stdin.?.handle, pd.rawpost) catch unreachable;
+        std.os.close(child.stdin.?.handle);
+        child.stdin = null;
     }
     var buf = try ctx.alloc.alloc(u8, 0xffffff);
     var headers_required = true;

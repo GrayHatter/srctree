@@ -7,7 +7,7 @@ const Context = @import("context.zig");
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
-const UserData = @import("user-data.zig");
+const RequestData = @import("user-data.zig");
 
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
@@ -126,13 +126,13 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         const alloc = arena.allocator();
         var response = Response.init(alloc, &request);
 
-        var post_data: ?UserData.PostData = null;
+        var post_data: ?RequestData.PostData = null;
         if (find(request.raw_request.zwsgi.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
             const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
 
             const post_size = try std.fmt.parseInt(usize, h_len, 10);
             if (post_size > 0) {
-                post_data = try UserData.readBody(a, acpt, post_size, h_type);
+                post_data = try RequestData.readBody(a, acpt, post_size, h_type);
                 if (dump_vars) std.log.info(
                     "post data \"{s}\" {{{any}}}",
                     .{ post_data.rawdata, post_data.rawdata },
@@ -143,22 +143,21 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
                 }
             }
         }
-        var query: UserData.QueryData = undefined;
+        var query: RequestData.QueryData = undefined;
         if (find(request.raw_request.zwsgi.vars, "QUERY_STRING")) |qs| {
-            query = try UserData.readQuery(a, qs);
+            query = try RequestData.readQuery(a, qs);
         }
 
-        const usrdata = UserData.UserData{
+        const req_data = RequestData.RequestData{
             .post_data = post_data,
             .query_data = query,
         };
-        response.usr_data = usrdata;
 
         var ctx = try Context.init(
             alloc,
             request,
             response,
-            usrdata,
+            req_data,
         );
 
         Router.baseRouter(&ctx) catch |err| {

@@ -55,7 +55,7 @@ fn new(ctx: *Context) Error!void {
 fn newPost(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
+    if (ctx.req_data.post_data) |post| {
         var valid = post.validator();
         const title = try valid.require("title");
         const msg = try valid.require("desc");
@@ -67,7 +67,7 @@ fn newPost(ctx: *Context) Error!void {
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
         return ctx.response.redirect(loc, true) catch unreachable;
-    };
+    }
 
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
     return ctx.response.redirect(loc, true) catch unreachable;
@@ -75,7 +75,7 @@ fn newPost(ctx: *Context) Error!void {
 
 fn newComment(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
+    if (ctx.req_data.post_data) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const msg = try valid.require("comment");
@@ -99,7 +99,7 @@ fn newComment(ctx: *Context) Error!void {
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
         ctx.response.redirect(loc, true) catch unreachable;
         return;
-    };
+    }
     return error.Unknown;
 }
 

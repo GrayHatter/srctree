@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 
 const Request = @import("request.zig");
 const Headers = @import("headers.zig");
-const UserData = @import("user-data.zig");
+const userdata = @import("user-data.zig");
 const Template = @import("template").Template;
 
 const Response = @This();
@@ -55,9 +55,6 @@ downstream: union(Downstream) {
     http: std.http.Server.Response.Writer,
 },
 status: std.http.Status = .internal_server_error,
-/// The correct way to access post_data is with postData until this API
-/// officially becomes stable
-usr_data: ?UserData.UserData = null,
 
 pub fn init(a: Allocator, req: *Request) Response {
     var res = Response{
@@ -71,10 +68,6 @@ pub fn init(a: Allocator, req: *Request) Response {
     };
     res.headersInit() catch @panic("unable to create Response obj");
     return res;
-}
-
-pub fn postData(res: *Response) ?UserData.UserData {
-    return res.post_data;
 }
 
 fn headersInit(res: *Response) !void {

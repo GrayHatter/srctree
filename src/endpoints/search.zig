@@ -9,6 +9,7 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const ROUTE = Endpoint.Router.ROUTE;
 
+const UserData = @import("../user-data.zig").UserData;
 const Bleach = @import("../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
@@ -20,20 +21,20 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     return Endpoint.Router.router(ctx, &routes);
 }
 
+const SearchReq = struct {
+    q: []const u8,
+};
+
 fn search(ctx: *Context) Error!void {
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
 
-    var v = ctx.usr_data.query_data.validator();
-    const q = v.require("q") catch |err| {
-        std.debug.print("no q\n", .{});
-        return err;
-    };
+    const udata = UserData(SearchReq).init(ctx.req_data.query_data) catch return error.BadData;
 
-    std.debug.print("query {s}\n", .{q.value});
+    std.debug.print("query {s}\n", .{udata.q});
     var rules = std.ArrayList(Deltas.SearchRule).init(ctx.alloc);
 
-    var itr = std.mem.split(u8, q.value, " ");
+    var itr = std.mem.split(u8, udata.q, " ");
     while (itr.next()) |r_line| {
         var line = r_line;
         line = std.mem.trim(u8, line, " ");
@@ -75,7 +76,7 @@ fn search(ctx: *Context) Error!void {
     try tmpl.ctx.?.putBlock("list", list.items);
     try tmpl.ctx.?.put(
         "search",
-        Bleach.sanitizeAlloc(ctx.alloc, q.value, .{}) catch unreachable,
+        Bleach.sanitizeAlloc(ctx.alloc, udata.q, .{}) catch unreachable,
     );
     try ctx.sendTemplate(&tmpl);
 }

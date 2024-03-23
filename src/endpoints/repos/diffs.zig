@@ -11,6 +11,8 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 
+const UserData = @import("../../user-data.zig").UserData;
+
 const Repo = @import("../repos.zig");
 
 const GET = Endpoint.Router.Methods.GET;
@@ -62,29 +64,37 @@ fn inNetwork(str: []const u8) bool {
     return true;
 }
 
+const IssueCreateReq = struct {
+    patch_uri: []const u8,
+    title: []const u8,
+    desc: []const u8,
+    //action: ?union(enum) {
+    //    submit: bool,
+    //    preview: bool,
+    //},
+
+};
+
 fn newPost(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
-        var valid = post.validator();
-        const src = try valid.require("diff source");
-        const title = try valid.require("title");
-        const desc = try valid.require("desc");
-        const action = valid.optional("submit") orelse valid.optional("preview") orelse return error.BadData;
+    if (ctx.req_data.post_data) |post| {
+        const udata = UserData(IssueCreateReq).init(post) catch return error.BadData;
+
         var delta = Deltas.new(rd.name) catch unreachable;
         //delta.src = src;
-        delta.title = title.value;
-        delta.message = desc.value;
+        delta.title = udata.title;
+        delta.message = udata.desc;
         delta.attach = .{ .diff = 0 };
         delta.writeOut() catch unreachable;
 
-        if (inNetwork(src.value)) {
+        if (inNetwork(udata.patch_uri)) {
             std.debug.print("src {s}\ntitle {s}\ndesc {s}\naction {s}\n", .{
-                src.value,
-                title.value,
-                desc.value,
-                action.name,
+                udata.patch_uri,
+                udata.title,
+                udata.desc,
+                "unimplemented",
             });
-            const data = Patch.loadRemote(ctx.alloc, src.value) catch unreachable;
+            const data = Patch.loadRemote(ctx.alloc, udata.patch_uri) catch unreachable;
             const filename = std.fmt.allocPrint(
                 ctx.alloc,
                 "data/patch/{s}.{x}.patch",
@@ -97,7 +107,7 @@ fn newPost(ctx: *Context) Error!void {
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
         return ctx.response.redirect(loc, true) catch unreachable;
-    };
+    }
 
     var tmpl = Template.find("diff-new.html");
     tmpl.init(ctx.alloc);
@@ -108,7 +118,7 @@ fn newPost(ctx: *Context) Error!void {
 fn newComment(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.response.usr_data) |usrdata| if (usrdata.post_data) |post| {
+    if (ctx.req_data.post_data) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const delta_index = isHex(delta_id.value) orelse return error.Unrouteable;
@@ -127,7 +137,7 @@ fn newComment(ctx: *Context) Error!void {
         delta.addComment(ctx.alloc, c) catch unreachable;
         delta.writeOut() catch unreachable;
         return ctx.response.redirect(loc, true) catch unreachable;
-    };
+    }
     return error.Unknown;
 }
 

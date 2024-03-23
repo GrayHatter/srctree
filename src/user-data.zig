@@ -1,4 +1,5 @@
 const std = @import("std");
+const Type = @import("builtin").Type;
 
 const Allocator = std.mem.Allocator;
 
@@ -111,7 +112,7 @@ pub const QueryData = struct {
     }
 };
 
-pub const UserData = struct {
+pub const RequestData = struct {
     post_data: ?PostData,
     query_data: QueryData,
 };
@@ -154,6 +155,50 @@ pub const ContentType = union(enum) {
         return error.UnknownContentType;
     }
 };
+
+pub fn UserData(comptime T: type) type {
+    return struct {
+        req: T,
+
+        const Self = @This();
+
+        pub fn init(data: anytype) !T {
+            return switch (@TypeOf(data)) {
+                QueryData => initGet(data),
+                PostData => initPost(data),
+                else => comptime unreachable,
+            };
+        }
+
+        fn initGet(data: QueryData) !T {
+            var valid = data.validator();
+
+            var req: T = undefined;
+            inline for (std.meta.fields(T)) |field| {
+                @field(req, field.name) = switch (@typeInfo(field.type)) {
+                    .Optional => if (valid.optional(field.name)) |o| o.value else null,
+                    .Pointer => (try valid.require(field.name)).value,
+                    else => unreachable,
+                };
+            }
+            return req;
+        }
+
+        fn initPost(data: PostData) !T {
+            var valid = data.validator();
+
+            var req: T = undefined;
+            inline for (std.meta.fields(T)) |field| {
+                @field(req, field.name) = switch (@typeInfo(field.type)) {
+                    .Optional => if (valid.optional(field.name)) |o| o.value else null,
+                    .Pointer => (try valid.require(field.name)).value,
+                    else => unreachable,
+                };
+            }
+            return req;
+        }
+    };
+}
 
 fn normalizeUrlEncoded(in: []const u8, out: []u8) ![]u8 {
     var len: usize = 0;
@@ -331,14 +376,14 @@ pub fn readQuery(a: Allocator, query: []const u8) !QueryData {
     return QueryData.init(a, query);
 }
 
-pub fn parseUserData(
+pub fn parseRequestData(
     a: Allocator,
     query: []const u8,
     acpt: std.net.StreamServer.Connection,
     size: usize,
     htype: []const u8,
-) !UserData {
-    return UserData{
+) !RequestData {
+    return RequestData{
         .post_data = try readBody(a, acpt, size, htype),
         .query_data = try readQuery(a, query),
     };

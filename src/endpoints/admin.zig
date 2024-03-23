@@ -5,6 +5,7 @@ const Allocator = std.mem.Allocator;
 const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
 const Route = @import("../routes.zig");
+const UserData = @import("../user-data.zig").UserData;
 const HTML = Endpoint.HTML;
 //const elm = HTML.element;
 const DOM = Endpoint.DOM;
@@ -36,7 +37,7 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
 }
 
 fn default(ctx: *Context) Error!void {
-    try ctx.response.request.auth.validOrError();
+    try ctx.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -60,7 +61,7 @@ fn default(ctx: *Context) Error!void {
 }
 
 fn cloneUpstream(ctx: *Context) Error!void {
-    try ctx.response.request.auth.validOrError();
+    try ctx.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -80,13 +81,16 @@ fn cloneUpstream(ctx: *Context) Error!void {
     try ctx.sendTemplate(&tmpl);
 }
 
-fn postCloneUpstream(ctx: *Context) Error!void {
-    try ctx.response.request.auth.validOrError();
+const CloneUpstreamReq = struct {
+    repo_uri: []const u8,
+};
 
-    var valid = ctx.response.usr_data.?.post_data.?.validator();
-    const ruri = valid.require("repo uri") catch return error.Unknown;
-    std.debug.print("repo uri {s}\n", .{ruri.value});
-    var nameitr = std.mem.splitBackwards(u8, ruri.value, "/");
+fn postCloneUpstream(ctx: *Context) Error!void {
+    try ctx.request.auth.validOrError();
+
+    const udata = UserData(CloneUpstreamReq).init(ctx.req_data.post_data.?) catch return error.BadData;
+    std.debug.print("repo uri {s}\n", .{udata.repo_uri});
+    var nameitr = std.mem.splitBackwards(u8, udata.repo_uri, "/");
     const name = nameitr.first();
     std.debug.print("repo uri {s}\n", .{name});
 
@@ -96,7 +100,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
         .cwd = dir,
     };
     std.debug.print("fork bare {s}\n", .{
-        act.forkRemote(ruri.value, name) catch return error.Unknown,
+        act.forkRemote(udata.repo_uri, name) catch return error.Unknown,
     });
 
     var dom = DOM.new(ctx.alloc);
@@ -121,11 +125,8 @@ fn postCloneUpstream(ctx: *Context) Error!void {
 fn postNewRepo(ctx: *Context) Error!void {
     try ctx.request.auth.validOrError();
     // TODO ini repo dir
-    var valid = if (ctx.response.usr_data) |usr|
-        if (usr.post_data) |p|
-            p.validator()
-        else
-            return error.Unknown
+    var valid = if (ctx.req_data.post_data) |p|
+        p.validator()
     else
         return error.Unknown;
     const rname = valid.require("repo name") catch return error.Unknown;
@@ -190,9 +191,9 @@ fn newRepo(ctx: *Context) Error!void {
 
 fn view(ctx: *Context) Error!void {
     try ctx.request.auth.validOrError();
-    if (ctx.response.usr_data) |usr| if (usr.post_data) |pd| {
+    if (ctx.req_data.post_data) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(ctx);
-    };
+    }
     return default(ctx);
 }
