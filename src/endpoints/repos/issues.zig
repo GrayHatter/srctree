@@ -111,14 +111,19 @@ fn view(ctx: *Context) Error!void {
     var tmpl = Template.find("delta-issue.html");
     tmpl.init(ctx.alloc);
 
-    var dom = DOM.new(ctx.alloc);
-
     var delta = (Deltas.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
-    dom.push(HTML.text(rd.name));
-    dom.push(HTML.text(delta.repo));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable));
-    _ = try tmpl.addElements(ctx.alloc, "issue", dom.done());
+    try tmpl.ctx.?.put("repo", rd.name);
+    //dom.push(HTML.text(delta.repo));
+
+    try tmpl.ctx.?.put(
+        "title",
+        Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable,
+    );
+
+    try tmpl.ctx.?.put(
+        "desc",
+        Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable,
+    );
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
     if (delta.getComments(ctx.alloc)) |cm| {

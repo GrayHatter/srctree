@@ -152,6 +152,7 @@ repos {
 }
 
 
+
 repo {
 	display: block;
 	&.landing {
@@ -349,6 +350,35 @@ commit {
 textarea.paste {
 	width: 100%;
 	min-height: 20em;
+}
+
+delta.issue {
+	display: flex;
+	justify-content: space-between;
+	margin-bottom: 1em;
+
+
+	issue {
+		width: 48%;
+		name {
+			background: #333;
+			border-radius: 3px 3px 0 0;
+			border: 1px gray solid;
+			border-bottom: 0px;
+			display: flex;
+			justify-content: space-between;
+			height: 1.5em;
+			padding: 4px 12px;
+		}
+		desc {
+			border: 1px solid gray;
+			display: block;
+			padding: 8px;
+		}
+	}
+	comments {
+		width: 48%;
+	}
 }
 
 patchrequest {

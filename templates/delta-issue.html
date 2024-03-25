@@ -6,8 +6,12 @@
   </head>
   <body>
     <!-- _body_header.html -->
-    <content class="issue">
-      <!-- issue -->
+    <content>
+    <delta class="issue">
+      <issue>
+        <name><!-- title --></name>
+        <desc><!-- desc --></desc>
+      </issue>
       <comments>
         <!-- FOREACH comments -->
         <!-- _comment.html -->
@@ -19,6 +23,7 @@
           <input type="hidden" name="did" value="<!-- delta_id -->" />
         </form>
       </comments>
+    </delta>
     </content>
   </body>
 </html>
