@@ -77,7 +77,7 @@ content {
 	width: 1050px;
 
 	h3 { text-align: left; }
-	&.patch {
+	&.diff {
 		display: flex;
 		justify-content: center;
 		gap: 1em;
