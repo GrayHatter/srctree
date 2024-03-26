@@ -57,9 +57,9 @@ pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
         else => unreachable,
     };
     const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
-    try t.addVar("header.auth", loggedin);
+    try t.addVar("Header.auth", loggedin);
     if (ctx.request.auth.user(ctx.alloc)) |usr| {
-        try t.addVar("current_username", usr.username);
+        try t.addVar("Current_username", usr.username);
     } else |_| {}
     //
     const page = try t.buildFor(ctx.alloc, ctx.template_ctx);

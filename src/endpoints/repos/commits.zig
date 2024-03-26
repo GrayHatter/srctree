@@ -77,7 +77,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     if (std.mem.indexOf(u8, diff, "diff")) |i| {
         diff = diff[i..];
     }
-    _ = tmpl.addElements(ctx.alloc, "commits", dom.done()) catch return error.Unknown;
+    _ = tmpl.addElements(ctx.alloc, "Commits", dom.done()) catch return error.Unknown;
 
     var diff_dom = DOM.new(ctx.alloc);
     diff_dom = diff_dom.open(HTML.element("diff", null, null));
@@ -85,7 +85,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     diff_dom.pushSlice(try Patch.patchHtml(ctx.alloc, diff));
     diff_dom = diff_dom.close();
     diff_dom = diff_dom.close();
-    _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "diff", diff_dom.done()) catch return error.Unknown;
+    _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Diff", diff_dom.done()) catch return error.Unknown;
 
     var comments = DOM.new(ctx.alloc);
     for ([_]Comment{ .{
@@ -103,7 +103,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
         comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     }
 
-    _ = try tmpl.addElements(ctx.alloc, "comments", comments.done());
+    _ = try tmpl.addElements(ctx.alloc, "Comments", comments.done());
 
     ctx.response.status = .ok;
     return ctx.sendTemplate(&tmpl) catch unreachable;
@@ -196,16 +196,16 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
 fn commitContext(a: Allocator, c: git.Commit, repo: []const u8, comptime _: bool) !Template.Context {
     var ctx = Template.Context.init(a);
 
-    try ctx.put("sha", c.sha[0..8]);
-    try ctx.put("uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
-    try ctx.put("msg_title", c.title);
-    try ctx.put("msg", c.body);
+    try ctx.put("Sha", c.sha[0..8]);
+    try ctx.put("Uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
+    try ctx.put("Msg_title", c.title);
+    try ctx.put("Msg", c.body);
 
     //if (top) "top" else "foot", null, null));
     const parent = c.parent[0] orelse "00000000";
-    try ctx.put("author", c.author.name);
-    try ctx.put("parent", parent[0..8]);
-    try ctx.put("parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, parent[0..8] }));
+    try ctx.put("Author", c.author.name);
+    try ctx.put("Parent", parent[0..8]);
+    try ctx.put("Parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, parent[0..8] }));
     return ctx;
 }
 
@@ -315,9 +315,9 @@ fn sendCommits(ctx: *Context, list: []Template.Context, before_txt: []const u8) 
     var tmpl = Template.find("commits.html");
     tmpl.init(ctx.alloc);
 
-    try tmpl.ctx.?.putBlock("commits", list);
+    try tmpl.ctx.?.putBlock("Commits", list);
 
-    _ = tmpl.addElements(ctx.alloc, "after", &[_]HTML.E{
+    _ = tmpl.addElements(ctx.alloc, "After", &[_]HTML.E{
         try HTML.linkBtnAlloc(ctx.alloc, "More", before_txt),
     }) catch return error.Unknown;
 

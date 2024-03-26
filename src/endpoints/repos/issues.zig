@@ -112,16 +112,16 @@ fn view(ctx: *Context) Error!void {
     tmpl.init(ctx.alloc);
 
     var delta = (Deltas.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
-    try tmpl.ctx.?.put("repo", rd.name);
+    try tmpl.ctx.?.put("Repo", rd.name);
     //dom.push(HTML.text(delta.repo));
 
     try tmpl.ctx.?.put(
-        "title",
+        "Title",
         Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable,
     );
 
     try tmpl.ctx.?.put(
-        "desc",
+        "Desc",
         Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable,
     );
 
@@ -134,17 +134,17 @@ fn view(ctx: *Context) Error!void {
             const builder = comment.builder();
             builder.build(ctx.alloc, cctx) catch unreachable;
             try cctx.put(
-                "date",
+                "Date",
                 try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
             );
         }
-        try tmpl.ctx.?.putBlock("comments", comments);
+        try tmpl.ctx.?.putBlock("Comments", comments);
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
         @panic("oops");
     }
 
-    try tmpl.ctx.?.put("delta_id", delta_id);
+    try tmpl.ctx.?.put("Delta_id", delta_id);
 
     try ctx.sendTemplate(&tmpl);
 }
@@ -170,7 +170,7 @@ fn list(ctx: *Context) Error!void {
         _ = d.loadThread(ctx.alloc) catch unreachable;
         if (d.getComments(ctx.alloc)) |cmts| {
             try delta_ctx.put(
-                "comments_icon",
+                "Comments_icon",
                 try std.fmt.allocPrint(ctx.alloc, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{cmts.len}),
             );
         } else |_| unreachable;
@@ -179,11 +179,11 @@ fn list(ctx: *Context) Error!void {
     }
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
-    try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
+    try tmpl.ctx.?.putBlock("List", tmpl_ctx[0..end]);
 
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try std.fmt.bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
-    try tmpl.ctx.?.put("search", def_search);
+    try tmpl.ctx.?.put("Search", def_search);
 
     try ctx.sendTemplate(&tmpl);
 }

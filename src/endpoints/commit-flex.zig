@@ -194,6 +194,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
     var tmpl = Template.find("user_commits.html");
     tmpl.init(ctx.alloc);
 
-    _ = tmpl.addElements(ctx.alloc, "flexes", flex) catch return Error.Unknown;
+    _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
     return ctx.sendTemplate(&tmpl) catch unreachable;
 }

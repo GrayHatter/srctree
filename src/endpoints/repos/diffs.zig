@@ -168,7 +168,7 @@ fn view(ctx: *Context) Error!void {
     dom = dom.close();
     dom = dom.close();
 
-    _ = try tmpl.addElements(ctx.alloc, "patch_header", dom.done());
+    _ = try tmpl.addElements(ctx.alloc, "Patch_header", dom.done());
 
     // meme saved to protect history
     //for ([_]Comment{ .{
@@ -191,26 +191,26 @@ fn view(ctx: *Context) Error!void {
             const builder = comment.builder();
             builder.build(ctx.alloc, cctx) catch unreachable;
             try cctx.put(
-                "date",
+                "Date",
                 try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
             );
         }
-        try tmpl.ctx.?.putBlock("comments", comments);
+        try tmpl.ctx.?.putBlock("Comments", comments);
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
         @panic("oops");
     }
 
-    try tmpl.ctx.?.put("delta_id", delta_id);
+    try tmpl.ctx.?.put("Delta_id", delta_id);
 
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     const file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         const patch = try Patch.patchHtml(ctx.alloc, fdata);
-        _ = try tmpl.addElementsFmt(ctx.alloc, "{pretty}", "patch", patch);
+        _ = try tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Patch", patch);
         f.close();
-    } else try tmpl.addString("patch", "Patch not found");
+    } else try tmpl.addString("Patch", "Patch not found");
 
     try ctx.sendTemplate(&tmpl);
 }
@@ -236,7 +236,7 @@ fn list(ctx: *Context) Error!void {
         _ = d.loadThread(ctx.alloc) catch unreachable;
         if (d.getComments(ctx.alloc)) |cmts| {
             try delta_ctx.put(
-                "comments_icon",
+                "Comments_icon",
                 try std.fmt.allocPrint(ctx.alloc, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{cmts.len}),
             );
         } else |_| unreachable;
@@ -245,6 +245,6 @@ fn list(ctx: *Context) Error!void {
     }
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
-    try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
+    try tmpl.ctx.?.putBlock("List", tmpl_ctx[0..end]);
     try ctx.sendTemplate(&tmpl);
 }

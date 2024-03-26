@@ -167,9 +167,9 @@ pub const Template = struct {
     }
 
     fn directiveVerb(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive.Kind {
-        if (std.mem.eql(u8, noun, "FOREACH")) {
-            const start = 3 + (std.mem.indexOf(u8, blob, "-->") orelse return null);
-            const end = std.mem.indexOf(u8, blob, "<!-- END !-->") orelse return null;
+        if (std.mem.eql(u8, noun, "For")) {
+            const start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
+            const end = std.mem.indexOf(u8, blob, "</For>") orelse return null;
             var width: usize = 1;
             while (width < verb.len and validChar(verb[width])) {
                 width += 1;
@@ -184,8 +184,9 @@ pub const Template = struct {
     }
 
     fn validDirective(str: []const u8) ?Directive {
-        if (str.len == 0) return null;
-        const end = std.mem.indexOf(u8, str, " -->") orelse return null;
+        if (str.len < 2) return null;
+        if (!std.ascii.isUpper(str[0]) and str[0] != '_') return null;
+        const end = std.mem.indexOf(u8, str, ">") orelse return null;
 
         var width: usize = 0;
         while (width < str.len and validChar(str[width])) {
@@ -215,7 +216,7 @@ pub const Template = struct {
             };
         } else if (directiveVerb(vari, verb, str)) |kind| {
             return Directive{
-                .end = std.mem.indexOf(u8, str, "!-->") orelse return null,
+                .end = std.mem.indexOf(u8, str, "</For>") orelse return null,
                 .kind = kind,
             };
         } else if (std.mem.startsWith(u8, verb, " ORELSE ")) {
@@ -228,7 +229,7 @@ pub const Template = struct {
                     },
                 },
             };
-        } else if (std.mem.startsWith(u8, verb, " ORNULL -->")) {
+        } else if (std.mem.startsWith(u8, verb, " ORNULL>")) {
             return Directive{
                 .end = end,
                 .kind = .{ .noun = .{
@@ -250,34 +251,34 @@ pub const Template = struct {
         var ctx = self.ctx orelse unreachable; // return error.TemplateContextMissing;
         var blob = self.blob;
         while (blob.len > 0) {
-            if (std.mem.indexOf(u8, blob, "<!-- ")) |offset| {
+            if (std.mem.indexOf(u8, blob, "<")) |offset| {
                 try out.writeAll(blob[0..offset]);
                 blob = blob[offset..];
                 //var i: usize = 5;
                 //var c = blob[i];
-                if (validDirective(blob[5..])) |drct| {
-                    const end = drct.end + 5;
+                if (validDirective(blob[1..])) |drct| {
+                    const end = drct.end + 1;
                     switch (drct.kind) {
                         .noun => |noun| {
                             const var_name = noun.vari;
                             if (ctx.get(var_name)) |v_blob| {
                                 try out.writeAll(v_blob);
-                                blob = blob[end + 4 ..];
+                                blob = blob[end + 1 ..];
                             } else {
                                 switch (noun.otherwise) {
                                     .str => |str| {
                                         try out.writeAll(str);
-                                        blob = blob[end + 4 ..];
+                                        blob = blob[end + 1 ..];
                                     },
                                     .ign => {
-                                        try out.writeAll(blob[0 .. end + 4]);
-                                        blob = blob[end + 4 ..];
+                                        try out.writeAll(blob[0 .. end + 1]);
+                                        blob = blob[end + 1 ..];
                                     },
                                     .del => {
-                                        blob = blob[end + 4 ..];
+                                        blob = blob[end + 1 ..];
                                     },
                                     .template => |subt| {
-                                        blob = blob[end + 4 ..];
+                                        blob = blob[end + 1 ..];
                                         var subtmpl = subt;
                                         subtmpl.ctx = self.ctx;
                                         try subtmpl.format(fmts, .{}, out);
@@ -292,15 +293,19 @@ pub const Template = struct {
                                 }
                             } else {
                                 std.debug.print("block missing [{s}]\n", .{verb.vari});
-                                try out.writeAll(blob[0 .. end + 4]);
+                                try out.writeAll(blob[0 .. end + 6]);
                             }
-                            blob = blob[end + 4 ..];
+                            blob = blob[end + 6 ..];
                         },
                     }
                 } else {
-                    return try out.writeAll(blob);
+                    if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
+                        try out.writeAll(blob[0..next]);
+                        blob = blob[next..];
+                    } else {
+                        return try out.writeAll(blob);
+                    }
                 }
-
                 continue;
             }
             return try out.writeAll(blob);
@@ -466,6 +471,23 @@ test "init" {
     tmpl.init(a);
 }
 
+test "directive something" {
+    var a = std.testing.allocator;
+    var t = Template{
+        .alloc = null,
+        //.path = "/dev/null",
+        .name = "test",
+        .blob = "<Something>",
+    };
+
+    var ctx = Context.init(a);
+    try ctx.put("Something", "Some Text Here");
+    defer ctx.raze();
+    const page = try t.buildFor(a, ctx);
+    defer a.free(page);
+    try std.testing.expectEqualStrings("Some Text Here", page);
+}
+
 test "directive nothing" {
     var a = std.testing.allocator;
     var t = Template{
@@ -480,13 +502,27 @@ test "directive nothing" {
     try std.testing.expectEqualStrings("<!-- nothing -->", page);
 }
 
+test "directive nothing new" {
+    var a = std.testing.allocator;
+    var t = Template{
+        .alloc = null,
+        //.path = "/dev/null",
+        .name = "test",
+        .blob = "<Nothing>",
+    };
+
+    const page = try t.buildFor(a, Context.init(a));
+    defer a.free(page);
+    try std.testing.expectEqualStrings("<Nothing>", page);
+}
+
 test "directive ORELSE" {
     var a = std.testing.allocator;
     var t = Template{
         .alloc = null,
         //.path = "/dev/null",
         .name = "test",
-        .blob = "<!-- this ORELSE string until end -->",
+        .blob = "<This ORELSE string until end>",
     };
 
     const page = try t.buildFor(a, Context.init(a));
@@ -501,18 +537,18 @@ test "directive ORNULL" {
         //.path = "/dev/null",
         .name = "test",
         // Invalid because 'string until end' is known to be unreachable
-        .blob = "<!-- this ORNULL string until end -->",
+        .blob = "<This ORNULL string until end>",
     };
 
     const page = try t.buildFor(a, Context.init(a));
     defer a.free(page);
-    try std.testing.expectEqualStrings("<!-- this ORNULL string until end -->", page);
+    try std.testing.expectEqualStrings("<This ORNULL string until end>", page);
 
     t = Template{
         .alloc = null,
         //.path = "/dev/null",
         .name = "test",
-        .blob = "<!-- this ORNULL -->",
+        .blob = "<This ORNULL>",
     };
 
     const nullpage = try t.buildFor(a, Context.init(a));
@@ -526,23 +562,15 @@ test "directive FOREACH" {
     var a = std.testing.allocator;
 
     const blob =
-        \\<!-- FOREACH name -->
-        \\<div><!-- loop --></div>
-        \\<!-- END !-->
+        \\<div><For Loop><span><Name></span></For></div>
     ;
 
     const expected: []const u8 =
-        \\
-        \\<div>not that</div>
-        \\
+        \\<div><span>not that</span></div>
     ;
 
     const dbl_expected: []const u8 =
-        \\
-        \\<div>first</div>
-        \\
-        \\<div>second</div>
-        \\
+        \\<div><span>first</span><span>second</span></div>
     ;
 
     var t = Template{
@@ -556,14 +584,14 @@ test "directive FOREACH" {
     var blocks: [1]Context = [1]Context{
         Context.init(a),
     };
-    try blocks[0].put("loop", "not that");
-    try ctx.putBlock("name", &blocks);
+    try blocks[0].put("Name", "not that");
+    defer blocks[0].raze();
+    try ctx.putBlock("Loop", &blocks);
     defer ctx.ctx_slice.deinit();
 
     const page = try t.buildFor(a, ctx);
     defer a.free(page);
     try std.testing.expectEqualStrings(expected, page);
-    blocks[0].raze();
 
     // many
     var many_blocks: [2]Context = [_]Context{
@@ -572,10 +600,10 @@ test "directive FOREACH" {
     };
     // what... 2 is many
 
-    try many_blocks[0].put("loop", "first");
-    try many_blocks[1].put("loop", "second");
+    try many_blocks[0].put("Name", "first");
+    try many_blocks[1].put("Name", "second");
 
-    try ctx.putBlock("name", &many_blocks);
+    try ctx.putBlock("Loop", &many_blocks);
 
     const dbl_page = try t.buildFor(a, ctx);
     defer a.free(dbl_page);

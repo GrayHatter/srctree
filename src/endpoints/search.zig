@@ -73,9 +73,9 @@ fn search(ctx: *Context) Error!void {
         } else break;
     } else |_| return error.Unknown;
 
-    try tmpl.ctx.?.putBlock("list", list.items);
+    try tmpl.ctx.?.putBlock("List", list.items);
     try tmpl.ctx.?.put(
-        "search",
+        "Search",
         Bleach.sanitizeAlloc(ctx.alloc, udata.q, .{}) catch unreachable,
     );
     try ctx.sendTemplate(&tmpl);

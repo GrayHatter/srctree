@@ -152,11 +152,11 @@ pub const Delta = struct {
     }
 
     pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
-        try ctx.put("title", try Bleach.sanitizeAlloc(a, self.title, .{}));
-        try ctx.put("desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
+        try ctx.put("Title", try Bleach.sanitizeAlloc(a, self.title, .{}));
+        try ctx.put("Desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
 
-        try ctx.put("index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
-        try ctx.put("title_uri", try std.fmt.allocPrint(
+        try ctx.put("Index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
+        try ctx.put("Title_uri", try std.fmt.allocPrint(
             a,
             "/repo/{s}/{s}/{x}",
             .{

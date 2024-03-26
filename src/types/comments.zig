@@ -166,8 +166,8 @@ pub const Comment = struct {
     }
 
     pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void {
-        try ctx.put("author", try Bleach.sanitizeAlloc(a, self.author, .{}));
-        try ctx.put("message", try Bleach.sanitizeAlloc(a, self.message, .{}));
+        try ctx.put("Author", try Bleach.sanitizeAlloc(a, self.author, .{}));
+        try ctx.put("Message", try Bleach.sanitizeAlloc(a, self.message, .{}));
     }
 };
 

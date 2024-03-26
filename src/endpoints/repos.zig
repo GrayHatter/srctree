@@ -101,16 +101,16 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
             dlt.raze(ctx.alloc);
         }
 
-        try ctx.addRouteVar("repo_name", rd.name);
+        try ctx.addRouteVar("Repo_name", rd.name);
         const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
-        try ctx.addRouteVar("issueurl", issueurl);
+        try ctx.addRouteVar("Issueurl", issueurl);
 
         const issuecnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{i_count});
-        try ctx.addRouteVar("issuecount", issuecnt);
+        try ctx.addRouteVar("Issuecount", issuecnt);
         const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
-        try ctx.addRouteVar("diffcount", diffcnt);
+        try ctx.addRouteVar("Diffcount", diffcnt);
         const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
-        try ctx.addRouteVar("diffurl", diffurl);
+        try ctx.addRouteVar("Diffurl", diffurl);
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();
@@ -227,7 +227,7 @@ fn list(ctx: *Context) Error!void {
         const data = dom.done();
         var tmpl = Template.find("repos.html");
         tmpl.init(ctx.alloc);
-        _ = tmpl.addElements(ctx.alloc, "repos", data) catch return Error.Unknown;
+        _ = tmpl.addElements(ctx.alloc, "Repos", data) catch return Error.Unknown;
 
         try ctx.sendTemplate(&tmpl);
     } else |err| {
@@ -247,7 +247,7 @@ fn newRepo(ctx: *Context) Error!void {
     var tmpl = Template.find("repo.html");
     tmpl.init(ctx.alloc);
 
-    tmpl.addVar("files", "<h3>New Repo!</h3><p>Todo, add content here</p>") catch return error.Unknown;
+    tmpl.addVar("Files", "<h3>New Repo!</h3><p>Todo, add content here</p>") catch return error.Unknown;
     ctx.response.status = .ok;
 
     try ctx.sendTemplate(&tmpl);
@@ -391,15 +391,15 @@ fn blame(ctx: *Context) Error!void {
 
     const tctx = try wrapLineNumbersBlame(ctx.alloc, formatted, parsed.lines);
     for (tctx) |*c| {
-        try c.put("repo_name", rd.name);
+        try c.put("Repo_name", rd.name);
     }
 
     var tmpl = Template.find("blame.html");
     tmpl.init(ctx.alloc);
 
-    try tmpl.ctx.?.putBlock("blame_lines", tctx);
+    try tmpl.ctx.?.putBlock("Blame_lines", tctx);
 
-    tmpl.addVar("filename", blame_file) catch return error.Unknown;
+    tmpl.addVar("Filename", blame_file) catch return error.Unknown;
     ctx.response.status = .ok;
 
     try ctx.sendTemplate(&tmpl);
@@ -455,19 +455,19 @@ fn wrapLineNumbersBlame(
         var ctx = &tctx[i];
         ctx.* = Template.Context.init(a);
         if (i < count) {
-            try ctx.put("sha", blames[i].commit.sha[0..8]);
-            try ctx.put("author", blames[i].commit.author.name);
-            try ctx.put("time", try Humanize.unix(blames[i].commit.author.time).printAlloc(a));
+            try ctx.put("Sha", blames[i].commit.sha[0..8]);
+            try ctx.put("Author", blames[i].commit.author.name);
+            try ctx.put("Time", try Humanize.unix(blames[i].commit.author.time).printAlloc(a));
         } else {
-            try ctx.put("sha", blames[i - 1].commit.sha[0..8]);
-            try ctx.put("author", blames[i - 1].commit.author.name);
-            try ctx.put("time", try Humanize.unix(blames[i - 1].commit.author.time).printAlloc(a));
+            try ctx.put("Sha", blames[i - 1].commit.sha[0..8]);
+            try ctx.put("Author", blames[i - 1].commit.author.name);
+            try ctx.put("Time", try Humanize.unix(blames[i - 1].commit.author.time).printAlloc(a));
         }
         const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
-        try ctx.put("num", b[2..]);
-        try ctx.put("id", b[1..]);
-        try ctx.put("href", b);
-        try ctx.put("line", litr.next().?);
+        try ctx.put("Num", b[2..]);
+        try ctx.put("Id", b[1..]);
+        try ctx.put("Href", b);
+        try ctx.put("Line", litr.next().?);
     }
     return tctx;
 }
@@ -538,13 +538,13 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
         "{pretty}",
         .{HTML.div(data, &HTML.Attr.class("code-block"))},
     );
-    tmpl.addVar("blob", filestr) catch return error.Unknown;
-    tmpl.addVar("filename", blb.name) catch return error.Unknown;
+    tmpl.addVar("Blob", filestr) catch return error.Unknown;
+    tmpl.addVar("Filename", blb.name) catch return error.Unknown;
     ctx.uri.reset();
     _ = ctx.uri.next();
-    tmpl.addVar("repo", ctx.uri.next() orelse "unknown") catch return error.Unknown;
+    tmpl.addVar("Repo", ctx.uri.next() orelse "unknown") catch return error.Unknown;
     _ = ctx.uri.next();
-    tmpl.addVar("uri_filename", ctx.uri.rest()) catch return error.Unknown;
+    tmpl.addVar("Uri_filename", ctx.uri.rest()) catch return error.Unknown;
 
     ctx.response.status = .ok;
 
@@ -643,7 +643,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
         .branch => |b| b.name,
         else => "unknown",
     } else "unknown";
-    tmpl.addVar("branch.default", head) catch return error.Unknown;
+    tmpl.addVar("Branch.default", head) catch return error.Unknown;
 
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     ctx.uri.reset();
@@ -707,7 +707,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
 
     dom = dom.close();
     const data = dom.done();
-    _ = tmpl.addElements(ctx.alloc, "repo", data) catch return error.Unknown;
+    _ = tmpl.addElements(ctx.alloc, "Repo", data) catch return error.Unknown;
 
     for (files.objects) |obj| {
         if (isReadme(obj.name)) {
@@ -715,7 +715,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
             var reader = resolve.reader();
             const readme_txt = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
             const readme = htmlReadme(ctx.alloc, readme_txt) catch unreachable;
-            _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "readme", readme) catch return error.Unknown;
+            _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Readme", readme) catch return error.Unknown;
             break;
         }
     }

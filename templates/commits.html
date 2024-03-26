@@ -2,26 +2,26 @@
 <html>
   <head>
     <title>srctree</title>
-    <!-- _meta_head.html -->
+    <_meta_head.html>
   </head>
   <body>
-    <!-- _body_header.html -->
+    <_body_header.html>
     <content>
-      <!-- FOREACH commits -->
+      <For Commits>
         <commit>
           <data>
-            <a href="<!-- uri ORELSE # -->" class=muted><!-- sha --></a>
-            <span><!-- msg_title ORNULL --></span>
+            <a href="<Uri ORELSE #>" class=muted><Sha></a>
+            <span><Msg_title ORNULL></span>
             <br />
-            <!-- msg -->
+            <Msg>
           </data>
           <foot>
-          <author><!-- author --></author>
-            <span>parent <a href="<!-- parent_uri -->"><!-- parent --></a></span>
+          <author><Author></author>
+            <span>parent <a href="<Parent_uri>"><Parent></a></span>
           </foot>
         </commit>
-      <!-- END !-->
-      <!-- after ORNULL -->
+      </For>
+      <After ORNULL>
     </content>
   </body>
 </html>

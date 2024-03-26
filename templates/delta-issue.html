@@ -2,25 +2,25 @@
 <html>
   <head>
     <title>srctree</title>
-    <!-- _meta_head.html -->
+    <_meta_head.html>
   </head>
   <body>
-    <!-- _body_header.html -->
+    <_body_header.html>
     <content>
     <delta class="issue">
       <issue>
-        <name><!-- title --></name>
-        <desc><!-- desc --></desc>
+        <name><Title></name>
+        <desc><Desc></desc>
       </issue>
       <comments>
-        <!-- FOREACH comments -->
-        <!-- _comment.html -->
-        <!-- END !-->
+        <For Comments>
+          <_comment.html>
+        </For>
         <form class="pretty" action="add-comment" method="POST">
-          <context><!-- current_username ORNULL --></context>
+          <context><Current_username ORNULL></context>
           <textarea name="comment"></textarea>
           <button type="submit" name="comment">Comment</button>
-          <input type="hidden" name="did" value="<!-- delta_id -->" />
+          <input type="hidden" name="did" value="<Delta_id>" />
         </form>
       </comments>
     </delta>

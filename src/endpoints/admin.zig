@@ -56,7 +56,7 @@ fn default(ctx: *Context) Error!void {
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    _ = tmpl.addElements(ctx.alloc, "Form", form) catch unreachable;
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -77,7 +77,7 @@ fn cloneUpstream(ctx: *Context) Error!void {
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    _ = tmpl.addElements(ctx.alloc, "Form", form) catch unreachable;
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -118,7 +118,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    _ = tmpl.addElements(ctx.alloc, "Form", form) catch unreachable;
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -162,7 +162,7 @@ fn postNewRepo(ctx: *Context) Error!void {
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    _ = tmpl.addElements(ctx.alloc, "Form", form) catch unreachable;
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -185,7 +185,7 @@ fn newRepo(ctx: *Context) Error!void {
 
     var tmpl = Template.find("admin.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "form", form) catch unreachable;
+    _ = tmpl.addElements(ctx.alloc, "Form", form) catch unreachable;
     try ctx.sendTemplate(&tmpl);
 }
 
