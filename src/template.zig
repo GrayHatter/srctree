@@ -1,4 +1,5 @@
 const std = @import("std");
+const build_mode = @import("builtin").mode;
 const compiled = @import("templates-compiled");
 
 const Allocator = std.mem.Allocator;
@@ -73,6 +74,9 @@ pub const Context = struct {
     }
 
     pub fn put(self: *Context, name: []const u8, value: []const u8) !void {
+        if (comptime build_mode == .Debug)
+            if (!std.ascii.isUpper(name[0]))
+                std.debug.print("Warning Template can't resolve {s}\n", .{name});
         try self.ctx.put(name, value);
     }
 
