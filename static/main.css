@@ -557,8 +557,6 @@ blob {
 	text-align: left;
 	display: block;
 	margin-bottom: 1em;
-
-
 	header {
 		background: #333;
 		border-radius: 3px 3px 0 0;
@@ -628,6 +626,23 @@ blob {
 	}
 }
 
+
+.flex-month {
+	border: 1px solid gray;
+	display: block;
+	margin: 2rem 0 10rem;
+	border-radius: 4px 4px 0 0;
+	intro {
+		border-radius: 4px 4px 0 0;
+		padding: 10px;
+		background: #333;
+		display: flex;
+		justify-content: space-between;
+		align-items: baseline;
+		text-align: left;
+	}
+
+}
 
 
 pre { line-height: 125%; }

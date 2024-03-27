@@ -195,5 +195,22 @@ pub fn commitFlex(ctx: *Context) Error!void {
     tmpl.init(ctx.alloc);
 
     _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
+
+    var months_journal: [2]Template.Context = undefined;
+
+    for (&months_journal) |*mj| {
+        mj.* = Template.Context.init(ctx.alloc);
+        try mj.put("Month", "This is the month string");
+        var rows: [2]Template.Context = undefined;
+
+        for (&rows) |*row| {
+            row.* = Template.Context.init(ctx.alloc);
+            try row.*.put("Line", "This is a line");
+        }
+        try mj.putBlock("Rows", &rows);
+    }
+
+    try tmpl.ctx.?.putBlock("Months", &months_journal);
+
     return ctx.sendTemplate(&tmpl) catch unreachable;
 }
