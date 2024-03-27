@@ -170,34 +170,40 @@ pub const Template = struct {
         return false;
     }
 
-    fn directiveVerb(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive.Kind {
+    fn directiveVerb(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive {
         if (std.mem.eql(u8, noun, "For")) {
             const start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
-            const end = std.mem.indexOf(u8, blob, "</For>") orelse return null;
+            const end = 6 + (std.mem.lastIndexOf(u8, blob, "</For>") orelse return null);
+
             var width: usize = 1;
             while (width < verb.len and validChar(verb[width])) {
                 width += 1;
             }
             std.debug.assert(width > 1);
-            return .{ .verb = .{
-                .vari = verb[1..width],
-                .blob = blob[start..end],
-            } };
+            return .{
+                .end = end,
+                .kind = .{
+                    .verb = .{
+                        .vari = verb[1..width],
+                        .blob = blob[start .. end - 6],
+                    },
+                },
+            };
         }
         return null;
     }
 
     fn validDirective(str: []const u8) ?Directive {
         if (str.len < 2) return null;
-        if (!std.ascii.isUpper(str[0]) and str[0] != '_') return null;
-        const end = std.mem.indexOf(u8, str, ">") orelse return null;
+        if (!std.ascii.isUpper(str[1]) and str[1] != '_') return null;
+        const end = 1 + (std.mem.indexOf(u8, str, ">") orelse return null);
 
-        var width: usize = 0;
+        var width: usize = 1;
         while (width < str.len and validChar(str[width])) {
             width += 1;
         }
 
-        const vari = str[0..width];
+        const vari = str[1..width];
         const verb = str[width..];
 
         if (vari[0] == '_') {
@@ -219,17 +225,14 @@ pub const Template = struct {
                 } },
             };
         } else if (directiveVerb(vari, verb, str)) |kind| {
-            return Directive{
-                .end = std.mem.indexOf(u8, str, "</For>") orelse return null,
-                .kind = kind,
-            };
+            return kind;
         } else if (std.mem.startsWith(u8, verb, " ORELSE ")) {
             return Directive{
                 .end = end,
                 .kind = .{
                     .noun = .{
                         .vari = str[0..width],
-                        .otherwise = .{ .str = str[width + 8 .. end] },
+                        .otherwise = .{ .str = str[width + 8 .. end - 1] },
                     },
                 },
             };
@@ -260,29 +263,29 @@ pub const Template = struct {
                 blob = blob[offset..];
                 //var i: usize = 5;
                 //var c = blob[i];
-                if (validDirective(blob[1..])) |drct| {
-                    const end = drct.end + 1;
+                if (validDirective(blob)) |drct| {
+                    const end = drct.end;
                     switch (drct.kind) {
                         .noun => |noun| {
                             const var_name = noun.vari;
                             if (ctx.get(var_name)) |v_blob| {
                                 try out.writeAll(v_blob);
-                                blob = blob[end + 1 ..];
+                                blob = blob[end..];
                             } else {
                                 switch (noun.otherwise) {
                                     .str => |str| {
                                         try out.writeAll(str);
-                                        blob = blob[end + 1 ..];
+                                        blob = blob[end..];
                                     },
                                     .ign => {
-                                        try out.writeAll(blob[0 .. end + 1]);
-                                        blob = blob[end + 1 ..];
+                                        try out.writeAll(blob[0..end]);
+                                        blob = blob[end..];
                                     },
                                     .del => {
-                                        blob = blob[end + 1 ..];
+                                        blob = blob[end..];
                                     },
                                     .template => |subt| {
-                                        blob = blob[end + 1 ..];
+                                        blob = blob[end..];
                                         var subtmpl = subt;
                                         subtmpl.ctx = self.ctx;
                                         try subtmpl.format(fmts, .{}, out);
@@ -297,9 +300,9 @@ pub const Template = struct {
                                 }
                             } else {
                                 std.debug.print("block missing [{s}]\n", .{verb.vari});
-                                try out.writeAll(blob[0 .. end + 6]);
+                                try out.writeAll(blob[0..end]);
                             }
-                            blob = blob[end + 6 ..];
+                            blob = blob[end..];
                         },
                     }
                 } else {
@@ -560,9 +563,9 @@ test "directive ORNULL" {
     try std.testing.expectEqualStrings("", nullpage);
 }
 
-test "directive FOR" {}
+test "directive For 0..n" {}
 
-test "directive FOREACH" {
+test "directive For" {
     var a = std.testing.allocator;
 
     const blob =
@@ -615,4 +618,95 @@ test "directive FOREACH" {
 
     many_blocks[0].raze();
     many_blocks[1].raze();
+}
+
+test "directive For & For" {
+    var a = std.testing.allocator;
+
+    const blob =
+        \\<div>
+        \\  <For Loop>
+        \\    <span><Name></span>
+        \\    <For Numbers>
+        \\      <Number>
+        \\    </For>
+        \\  </For>
+        \\</div>
+    ;
+
+    const expected: []const u8 =
+        \\<div>
+        \\  
+        \\    <span>Alice</span>
+        \\    
+        \\      A0
+        \\    
+        \\      A1
+        \\    
+        \\      A2
+        \\    
+        \\  
+        \\    <span>Bob</span>
+        \\    
+        \\      B0
+        \\    
+        \\      B1
+        \\    
+        \\      B2
+        \\    
+        \\  
+        \\</div>
+    ;
+
+    var t = Template{
+        .alloc = null,
+        //.path = "/dev/null",
+        .name = "test",
+        .blob = blob,
+    };
+
+    var ctx = Context.init(a);
+    var outer = [2]Context{
+        Context.init(a),
+        Context.init(a),
+    };
+
+    try outer[0].put("Name", "Alice");
+    defer outer[0].raze();
+
+    var arena = std.heap.ArenaAllocator.init(a);
+    defer arena.deinit();
+    const aa = arena.allocator();
+
+    const lput = "Number";
+
+    var in0: [3]Context = undefined;
+    try outer[0].putBlock("Numbers", &in0);
+    for (0..3) |i| {
+        in0[i] = Context.init(aa);
+        try in0[i].put(
+            lput,
+            try std.fmt.allocPrint(aa, "A{}", .{i}),
+        );
+    }
+
+    try outer[1].put("Name", "Bob");
+    defer outer[1].raze();
+
+    var in1: [3]Context = undefined;
+    try outer[1].putBlock("Numbers", &in1);
+    for (0..3) |i| {
+        in1[i] = Context.init(aa);
+        try in1[i].put(
+            lput,
+            try std.fmt.allocPrint(aa, "B{}", .{i}),
+        );
+    }
+
+    try ctx.putBlock("Loop", &outer);
+    defer ctx.ctx_slice.deinit();
+
+    const page = try t.buildFor(a, ctx);
+    defer a.free(page);
+    try std.testing.expectEqualStrings(expected, page);
 }
