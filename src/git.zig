@@ -486,8 +486,9 @@ pub const Repo = struct {
     }
 
     pub fn loadPacks(self: *Repo, a: Allocator) !void {
-        var idir = try self.dir.openDir("./objects/pack", .{ .iterate = true });
-        var itr = idir.iterate();
+        var dir = try self.dir.openDir("./objects/pack", .{ .iterate = true });
+        defer dir.close();
+        var itr = dir.iterate();
         var i: usize = 0;
         while (try itr.next()) |file| {
             if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
@@ -499,8 +500,7 @@ pub const Repo = struct {
         while (try itr.next()) |file| {
             if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
 
-            self.packs[i] = try Pack.init(idir, try a.dupe(u8, file.name[0 .. file.name.len - 4]));
-            //self.loadPackIdx(a, fd.reader());
+            self.packs[i] = try Pack.init(dir, try a.dupe(u8, file.name[0 .. file.name.len - 4]));
             i += 1;
         }
     }

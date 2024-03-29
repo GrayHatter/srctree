@@ -262,6 +262,7 @@ fn treeBlob(ctx: *Context) Error!void {
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
+    defer repo.raze(ctx.alloc);
 
     const cmt = repo.commit(ctx.alloc) catch return newRepo(ctx);
     var files: git.Tree = cmt.mkTree(ctx.alloc) catch return error.Unknown;
