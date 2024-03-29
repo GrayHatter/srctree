@@ -110,9 +110,15 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
     return find(list, search) orelse "[missing]";
 }
 
-pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
+pub fn serve(alloc_: Allocator, streamsrv: *StreamServer) !void {
     while (true) {
+        var arena = std.heap.ArenaAllocator.init(alloc_);
+        defer arena.deinit();
+        const a = arena.allocator();
+
         var acpt = try streamsrv.accept();
+        defer acpt.stream.close();
+
         var request = try readHeader(a, acpt);
 
         std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
@@ -122,9 +128,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
             findOr(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
         });
 
-        var arena = std.heap.ArenaAllocator.init(a);
-        const alloc = arena.allocator();
-        var response = Response.init(alloc, &request);
+        var response = Response.init(a, &request);
 
         var post_data: ?RequestData.PostData = null;
         if (find(request.raw_request.zwsgi.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
@@ -153,12 +157,7 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
             .query_data = query,
         };
 
-        var ctx = try Context.init(
-            alloc,
-            request,
-            response,
-            req_data,
-        );
+        var ctx = try Context.init(a, request, response, req_data);
 
         Router.baseRouter(&ctx) catch |err| {
             switch (err) {
@@ -193,7 +192,5 @@ pub fn serve(a: Allocator, streamsrv: *StreamServer) !void {
         };
 
         if (response.phase != .closed) try response.finish();
-        arena.deinit();
-        acpt.stream.close();
     }
 }
