@@ -103,6 +103,15 @@ fn monthsFrom(year: usize, days: usize) struct { u8, usize } {
     return .{ m, d };
 }
 
+pub fn currentMonth() []const u8 {
+    const n = now();
+    return MONTHS[n.months];
+}
+
+pub fn month(self: DateTime) []const u8 {
+    return MONTHS[self.months];
+}
+
 pub fn fromEpochTz(sts: i64, tz: ?i32) !DateTime {
     if (sts < 0) return error.UnsupportedTimeStamp;
 
@@ -152,7 +161,7 @@ pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
 }
 
 pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    if (std.mem.eql(u8, fstr, "dtime")) {
+    if (comptime std.mem.eql(u8, fstr, "dtime")) {
         return out.print("{s} {:0>2}:{:0>2}:{:0>2}", .{
             WEEKDAYS[self.weekday],
             self.hours,

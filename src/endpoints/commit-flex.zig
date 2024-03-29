@@ -59,6 +59,57 @@ fn countAll(a: Allocator, until: i64, root_cmt: Git.Commit) !*HeatMapArray {
     }
 }
 
+fn buildJournal(
+    a: Allocator,
+    list: *std.ArrayList(Template.Context),
+    email: ?[]const u8,
+    gitdir: []const u8,
+) !void {
+    const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
+    var repo = try Git.Repo.init(repo_dir);
+    try repo.loadData(a);
+    defer repo.raze(a);
+
+    var lseen = std.BufSet.init(a);
+    const until = (try DateTime.fromEpoch(DateTime.now().timestamp - DAY * 30)).timestamp;
+    var commit = try repo.commit(a);
+
+    while (true) {
+        var ctx = Template.Context.init(a);
+        if (lseen.contains(commit.sha)) break;
+        var commit_time = commit.author.timestamp;
+        if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
+            commit_time += tzs;
+        }
+        if (commit_time < until) break;
+
+        if (std.mem.eql(u8, email.?, commit.author.email)) {
+            try ctx.put("Name", try a.dupe(u8, commit.author.name));
+            try ctx.put("Date", try std.fmt.allocPrint(
+                a,
+                "{}",
+                .{try DateTime.fromEpoch(commit.author.timestamp)},
+            ));
+            try ctx.put("Repo", try a.dupe(u8, gitdir[8..]));
+            try ctx.put("Sha", try a.dupe(u8, commit.sha));
+            try list.append(ctx);
+        }
+
+        for (commit.parent[1..], 1..) |par, pidx| {
+            if (par) |_| {
+                lseen.insert(par.?) catch break;
+                const parent = try commit.toParent(a, @truncate(pidx));
+                //defer parent.raze(a);
+                _ = try countAll(a, until, parent);
+            }
+        }
+        commit = commit.toParent(a, 0) catch |err| switch (err) {
+            error.NoParent => break,
+            else => |e| return e,
+        };
+    }
+}
+
 fn findCommits(a: Allocator, until: i64, gitdir: []const u8) !*HeatMapArray {
     const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
@@ -85,6 +136,8 @@ pub fn commitFlex(ctx: *Context) Error!void {
     }
     const until = date.timestamp;
 
+    var journal = std.ArrayList(Template.Context).init(ctx.alloc);
+
     var repo_count: usize = 0;
     var cwd = std.fs.cwd();
     if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
@@ -101,7 +154,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
                 }
             }
         } else |_| {}
-        defer owner_email = null;
 
         var itr = idir.iterate();
         while (itr.next() catch return Error.Unknown) |file| {
@@ -110,12 +162,16 @@ pub fn commitFlex(ctx: *Context) Error!void {
                 .directory, .sym_link => {
                     const name = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
                     _ = findCommits(ctx.alloc, until, name) catch unreachable;
+                    buildJournal(ctx.alloc, &journal, owner_email, name) catch {
+                        return error.Unknown;
+                    };
                     repo_count +|= 1;
                 },
                 else => {},
             }
         }
     } else |_| unreachable;
+    defer owner_email = null;
 
     var dom = DOM.new(ctx.alloc);
     var tcount: u16 = 0;
@@ -144,20 +200,20 @@ pub fn commitFlex(ctx: *Context) Error!void {
     var printed_month: usize = (date.months + 10) % 12;
     var day_off: usize = 0;
     for (0..53) |_| {
-        var month: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
+        var column: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
         if ((printed_month % 12) != date.months - 1) {
             const next_week = DateTime.fromEpoch(date.timestamp + WEEK) catch unreachable;
             printed_month += 1;
             if ((printed_month % 12) != next_week.months - 1) {
-                month[0] = HTML.div("&nbsp;", &monthAtt);
+                column[0] = HTML.div("&nbsp;", &monthAtt);
             } else {
-                month[0] = HTML.div(DateTime.MONTHS[printed_month % 12 + 1][0..3], &monthAtt);
+                column[0] = HTML.div(DateTime.MONTHS[printed_month % 12 + 1][0..3], &monthAtt);
             }
         } else {
-            month[0] = HTML.div("&nbsp;", &monthAtt);
+            column[0] = HTML.div("&nbsp;", &monthAtt);
         }
 
-        for (month[1..]) |*m| {
+        for (column[1..]) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY) catch unreachable;
             defer day_off += 1;
             const rows = try ctx.alloc.alloc(HTML.Attribute, 2);
@@ -185,7 +241,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
             });
             m.* = HTML.div(null, rows);
         }
-        dom.push(HTML.div(month, &HTML.Attr.class("col")));
+        dom.push(HTML.div(column, &HTML.Attr.class("col")));
     }
     dom = dom.close();
 
@@ -196,22 +252,15 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
 
-    var months_journal = std.ArrayList(Template.Context).init(ctx.alloc);
-    try months_journal.append(Template.Context.init(ctx.alloc));
-    try months_journal.append(Template.Context.init(ctx.alloc));
+    var jlist = std.ArrayList(Template.Context).init(ctx.alloc);
+    try jlist.append(Template.Context.init(ctx.alloc));
+    for (jlist.items) |*mj| {
+        try mj.put("Month", DateTime.currentMonth());
 
-    for (months_journal.items) |*mj| {
-        try mj.put("Month", "This is the month string");
-        var rows: [2]Template.Context = undefined;
-
-        for (&rows) |*row| {
-            row.* = Template.Context.init(ctx.alloc);
-            try row.*.put("Line", "This is a line");
-        }
-        try mj.putBlock("Rows", &rows);
+        try mj.putBlock("Rows", journal.items);
     }
 
-    try tmpl.ctx.?.putBlock("Months", months_journal.items);
+    try tmpl.ctx.?.putBlock("Months", jlist.items);
 
     return ctx.sendTemplate(&tmpl) catch unreachable;
 }

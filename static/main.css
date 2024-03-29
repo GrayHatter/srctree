@@ -575,6 +575,12 @@ blob {
 	}
 }
 
+journal {
+	display: flex;
+	justify-content: space-between;
+
+}
+
 .commit-flex {
 	width: 1050px;
 	margin: auto;
