@@ -260,6 +260,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
         try mj.putBlock("Rows", journal.items);
     }
 
+    // TODO sort by date
     try tmpl.ctx.?.putBlock("Months", jlist.items);
 
     return ctx.sendTemplate(&tmpl) catch unreachable;
