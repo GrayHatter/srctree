@@ -88,7 +88,7 @@ fn buildJournal(
             try ctx.put("Date", try std.fmt.allocPrint(
                 a,
                 "{}",
-                .{try DateTime.fromEpoch(commit.author.timestamp)},
+                .{try DateTime.fromEpoch(commit_time)},
             ));
             try ctx.put("Repo", try a.dupe(u8, gitdir[8..]));
             try ctx.put("Sha", try a.dupe(u8, commit.sha));
