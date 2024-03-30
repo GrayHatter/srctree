@@ -379,7 +379,7 @@ pub const builtin: [compiled.data.len]Template = blk: {
 
 pub var dynamic: []Template = undefined;
 
-fn load(a: Allocator) !void {
+fn loadTemplates(a: Allocator) !void {
     var cwd = std.fs.cwd();
     var idir = cwd.openDir(TEMPLATE_PATH, .{ .iterate = true }) catch |err| {
         std.debug.print("Unable to build dynamic templates ({})\n", .{err});
@@ -408,7 +408,7 @@ fn load(a: Allocator) !void {
 }
 
 pub fn init(a: Allocator) void {
-    load(a) catch unreachable;
+    loadTemplates(a) catch unreachable;
 }
 
 pub fn raze(a: Allocator) void {
@@ -427,6 +427,12 @@ pub fn findWhenever(name: []const u8) Template {
         }
     }
     unreachable;
+}
+
+pub fn load(a: Allocator, comptime name: []const u8) Template {
+    var t = find(name);
+    t.init(a);
+    return t;
 }
 
 pub fn find(comptime name: []const u8) Template {
