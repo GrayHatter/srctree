@@ -1,15 +1,17 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Comments = @import("comments.zig");
-const Comment = Comments.Comment;
-const Deltas = @import("deltas.zig");
-const Threads = @import("threads.zig");
-const Thread = Threads.Thread;
+const Comment = @import("comment.zig");
+const Delta = @import("delta.zig");
+const Thread = @import("thread.zig");
 
-pub const Diffs = @This();
-
+pub const Diff = @This();
+pub const TYPE_PREFIX = "{s}/diffs";
 const DIFF_VERSION: usize = 0;
+pub var datad: std.fs.Dir = undefined;
+
+pub fn init(_: []const u8) !void {}
+pub fn initType() !void {}
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Diff {
     var reader = file.reader();
@@ -30,89 +32,75 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Diff {
     };
 }
 
-pub const Diff = struct {
-    index: usize,
-    state: usize,
-    created: i64 = 0,
-    updated: i64 = 0,
-    repo: []const u8,
-    delta_hash: [32]u8,
-    source_uri: ?[]const u8,
+index: usize,
+state: usize,
+created: i64 = 0,
+updated: i64 = 0,
+repo: []const u8,
+delta_hash: [32]u8,
+source_uri: ?[]const u8,
 
-    file: std.fs.File,
+file: std.fs.File,
 
-    pub fn writeOut(self: Diff) !void {
-        try self.file.seekTo(0);
-        var writer = self.file.writer();
-        try writer.writeIntNative(usize, DIFF_VERSION);
-        try writer.writeIntNative(usize, self.state);
-        try writer.writeIntNative(i64, self.created);
-        try writer.writeIntNative(i64, self.updated);
-        try writer.writeAll(self.repo);
-        try writer.writeAll("\x00");
-        try writer.writeAll(self.source_uri);
-        try writer.writeAll("\x00");
-        try self.file.setEndPos(self.file.getPos() catch unreachable);
-    }
-
-    pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Diff {
-        var diff: Diff = try readVersioned(a, idx, file);
-        var list = std.ArrayList(Comment).init(a);
-        if (diff.comment_data) |cd| {
-            const count = cd.len / 32;
-            for (0..count) |i| {
-                try list.append(Comments.open(a, cd[i * 32 .. (i + 1) * 32]) catch continue);
-            }
-            diff.comments = try list.toOwnedSlice();
-        }
-        return diff;
-    }
-
-    pub fn getComments(self: *Diff, a: Allocator) ![]Comment {
-        if (self.comments) |_| return self.comments.?;
-
-        if (self.comment_data) |cd| {
-            self.comments = try Comments.loadFromData(a, cd);
-        }
-        return &[0]Comment{};
-    }
-
-    pub fn addComment(self: *Diff, a: Allocator, c: Comment) !void {
-        const target = (self.comments orelse &[0]Comment{}).len;
-        if (self.comments) |*comments| {
-            if (a.resize(comments.*, target + 1)) {
-                comments.*.len = target + 1;
-            } else {
-                self.comments = try a.realloc(comments.*, target + 1);
-            }
-        } else {
-            self.comments = try a.alloc(Comment, target + 1);
-        }
-        self.comments.?[target] = c;
-        try self.writeOut();
-    }
-
-    pub fn raze(self: Diff, a: std.mem.Allocator) void {
-        //if (self.alloc_data) |data| {
-        //    a.free(data);
-        //}
-        if (self.comments) |c| {
-            a.free(c);
-        }
-        self.file.close();
-    }
-};
-
-var datad: std.fs.Dir = undefined;
-
-pub fn init(dir: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}/diffs", .{dir});
-    datad = try std.fs.cwd().openDir(filename, .{});
+pub fn writeOut(self: Diff) !void {
+    try self.file.seekTo(0);
+    var writer = self.file.writer();
+    try writer.writeIntNative(usize, DIFF_VERSION);
+    try writer.writeIntNative(usize, self.state);
+    try writer.writeIntNative(i64, self.created);
+    try writer.writeIntNative(i64, self.updated);
+    try writer.writeAll(self.repo);
+    try writer.writeAll("\x00");
+    try writer.writeAll(self.source_uri);
+    try writer.writeAll("\x00");
+    try self.file.setEndPos(self.file.getPos() catch unreachable);
 }
 
-pub fn raze() void {
-    datad.close();
+pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Diff {
+    var diff: Diff = try readVersioned(a, idx, file);
+    var list = std.ArrayList(Comment).init(a);
+    if (diff.comment_data) |cd| {
+        const count = cd.len / 32;
+        for (0..count) |i| {
+            try list.append(Comment.open(a, cd[i * 32 .. (i + 1) * 32]) catch continue);
+        }
+        diff.comments = try list.toOwnedSlice();
+    }
+    return diff;
+}
+
+pub fn getComments(self: *Diff, a: Allocator) ![]Comment {
+    if (self.comments) |_| return self.comments.?;
+
+    if (self.comment_data) |cd| {
+        self.comments = try Comment.loadFromData(a, cd);
+    }
+    return &[0]Comment{};
+}
+
+pub fn addComment(self: *Diff, a: Allocator, c: Comment) !void {
+    const target = (self.comments orelse &[0]Comment{}).len;
+    if (self.comments) |*comments| {
+        if (a.resize(comments.*, target + 1)) {
+            comments.*.len = target + 1;
+        } else {
+            self.comments = try a.realloc(comments.*, target + 1);
+        }
+    } else {
+        self.comments = try a.alloc(Comment, target + 1);
+    }
+    self.comments.?[target] = c;
+    try self.writeOut();
+}
+
+pub fn raze(self: Diff, a: std.mem.Allocator) void {
+    //if (self.alloc_data) |data| {
+    //    a.free(data);
+    //}
+    if (self.comments) |c| {
+        a.free(c);
+    }
+    self.file.close();
 }
 
 fn currMaxSet(count: usize) !void {
@@ -172,7 +160,7 @@ pub fn last() usize {
     return currMax() catch 0;
 }
 
-pub fn new(repo: []const u8, delta: Deltas.Delta) !Diff {
+pub fn new(repo: []const u8, delta: Delta) !Diff {
     const max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{max + 1});

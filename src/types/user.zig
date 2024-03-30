@@ -3,9 +3,14 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 
-pub const Users = @This();
+pub const User = @This();
 
+pub const TYPE_PREFIX = "{s}/users";
 const USER_VERSION: usize = 0;
+
+pub var datad: std.fs.Dir = undefined;
+pub fn init(_: []const u8) !void {}
+pub fn initType() !void {}
 
 pub fn readVersioned(a: Allocator, file: std.fs.File) !User {
     var reader = file.reader();
@@ -24,34 +29,20 @@ pub fn readVersioned(a: Allocator, file: std.fs.File) !User {
     }
 }
 
-pub const User = struct {
-    mtls_fp: [40]u8 = .{0} ** 40,
-    username: []u8,
+mtls_fp: [40]u8 = .{0} ** 40,
+username: []u8,
 
-    pub fn readFile(a: Allocator, file: std.fs.File) !User {
-        defer file.close();
-        return readVersioned(a, file);
-    }
-
-    pub fn raze(self: User, a: Allocator) void {
-        a.free(self.username);
-    }
-
-    pub fn writeOut(_: User) !void {
-        unreachable; // not implemented
-    }
-};
-
-var datad: std.fs.Dir = undefined;
-
-pub fn init(dir: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}/users", .{dir});
-    datad = try std.fs.cwd().openDir(filename, .{});
+pub fn readFile(a: Allocator, file: std.fs.File) !User {
+    defer file.close();
+    return readVersioned(a, file);
 }
 
-pub fn raze() void {
-    datad.close();
+pub fn raze(self: User, a: Allocator) void {
+    a.free(self.username);
+}
+
+pub fn writeOut(_: User) !void {
+    unreachable; // not implemented
 }
 
 pub fn new() !User {

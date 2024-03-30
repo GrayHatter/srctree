@@ -1,12 +1,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const Comments = @import("comments.zig");
-const Comment = Comments.Comment;
+const Comment = @import("comment.zig");
 
-pub const Issues = @This();
+pub const Issue = @This();
 
+pub const TYPE_PREFIX = "{s}/issues";
 const ISSUE_VERSION: usize = 0;
+pub var datad: std.fs.Dir = undefined;
+
+pub fn initType() !void {}
 
 pub const Status = enum(u1) {
     open = 0,
@@ -47,92 +50,78 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Issue {
     };
 }
 
-pub const Issue = struct {
-    index: usize,
-    state: usize,
-    created: i64 = 0,
-    updated: i64 = 0,
-    repo: []const u8,
-    title: []const u8,
-    desc: []const u8,
+index: usize,
+state: usize,
+created: i64 = 0,
+updated: i64 = 0,
+repo: []const u8,
+title: []const u8,
+desc: []const u8,
 
-    comment_data: ?[]const u8,
-    comments: ?[]Comment = null,
-    file: std.fs.File,
+comment_data: ?[]const u8,
+comments: ?[]Comment = null,
+file: std.fs.File,
 
-    pub fn writeOut(self: Issue) !void {
-        try self.file.seekTo(0);
-        var writer = self.file.writer();
-        try writer.writeIntNative(usize, ISSUE_VERSION);
-        try writer.writeIntNative(usize, self.state);
-        try writer.writeIntNative(i64, self.created);
-        try writer.writeIntNative(i64, self.updated);
-        try writer.writeAll(self.repo);
-        try writer.writeAll("\x00");
-        try writer.writeAll(self.title);
-        try writer.writeAll("\x00");
-        try writer.writeAll(self.desc);
-        try writer.writeAll("\x00");
-        if (self.comments) |cmts| {
-            for (cmts) |*c| {
-                try writer.writeAll(c.toHash());
-            }
+pub fn writeOut(self: Issue) !void {
+    try self.file.seekTo(0);
+    var writer = self.file.writer();
+    try writer.writeIntNative(usize, ISSUE_VERSION);
+    try writer.writeIntNative(usize, self.state);
+    try writer.writeIntNative(i64, self.created);
+    try writer.writeIntNative(i64, self.updated);
+    try writer.writeAll(self.repo);
+    try writer.writeAll("\x00");
+    try writer.writeAll(self.title);
+    try writer.writeAll("\x00");
+    try writer.writeAll(self.desc);
+    try writer.writeAll("\x00");
+    if (self.comments) |cmts| {
+        for (cmts) |*c| {
+            try writer.writeAll(c.toHash());
         }
-        try writer.writeAll("\x00");
-        try self.file.setEndPos(self.file.getPos() catch unreachable);
     }
-
-    pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Issue {
-        try file.seekTo(0);
-        const issue: Issue = try readVersioned(a, idx, file);
-        return issue;
-    }
-
-    pub fn getComments(self: *Issue, a: Allocator) ![]Comment {
-        if (self.comments) |_| return self.comments.?;
-
-        if (self.comment_data) |cd| {
-            self.comments = try Comments.loadFromData(a, cd);
-        }
-        return &[0]Comment{};
-    }
-
-    pub fn addComment(self: *Issue, a: Allocator, c: Comment) !void {
-        const target = (self.comments orelse &[0]Comment{}).len;
-        if (self.comments) |*comments| {
-            if (a.resize(comments.*, target + 1)) {
-                comments.*.len = target + 1;
-            } else {
-                self.comments = try a.realloc(comments.*, target + 1);
-            }
-        } else {
-            self.comments = try a.alloc(Comment, target + 1);
-        }
-        self.comments.?[target] = c;
-        try self.writeOut();
-    }
-
-    pub fn raze(self: Issue, a: std.mem.Allocator) void {
-        //if (self.alloc_data) |data| {
-        //    a.free(data);
-        //}
-        if (self.comments) |c| {
-            a.free(c);
-        }
-        self.file.close();
-    }
-};
-
-var datad: std.fs.Dir = undefined;
-
-pub fn init(dir: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}/issues", .{dir});
-    datad = try std.fs.cwd().openDir(filename, .{});
+    try writer.writeAll("\x00");
+    try self.file.setEndPos(self.file.getPos() catch unreachable);
 }
 
-pub fn raze() void {
-    datad.close();
+pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Issue {
+    try file.seekTo(0);
+    const issue: Issue = try readVersioned(a, idx, file);
+    return issue;
+}
+
+pub fn getComments(self: *Issue, a: Allocator) ![]Comment {
+    if (self.comments) |_| return self.comments.?;
+
+    if (self.comment_data) |cd| {
+        self.comments = try Comment.loadFromData(a, cd);
+    }
+    return &[0]Comment{};
+}
+
+pub fn addComment(self: *Issue, a: Allocator, c: Comment) !void {
+    const target = (self.comments orelse &[0]Comment{}).len;
+    if (self.comments) |*comments| {
+        if (a.resize(comments.*, target + 1)) {
+            comments.*.len = target + 1;
+        } else {
+            self.comments = try a.realloc(comments.*, target + 1);
+        }
+    } else {
+        self.comments = try a.alloc(Comment, target + 1);
+    }
+    self.comments.?[target] = c;
+    try self.writeOut();
+}
+
+pub fn raze(self: Issue, a: std.mem.Allocator) void {
+    //if (self.alloc_data) |data| {
+    //    a.free(data);
+    //}
+    if (self.comments) |c| {
+        a.free(c);
+    }
+    self.file.close();
 }
 
 fn currMaxSet(count: usize) !void {

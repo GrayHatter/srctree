@@ -17,9 +17,8 @@ const RouteData = Repos.RouteData;
 const git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
 const Patch = @import("../../patch.zig");
-const CmmtMap = @import("../../types/commit-notes.zig");
-const Comments = Endpoint.Types.Comments;
-const Comment = Comments.Comment;
+const CmmtMap = Endpoint.Types.CommitMap;
+const Comment = Endpoint.Types.Comment;
 
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;

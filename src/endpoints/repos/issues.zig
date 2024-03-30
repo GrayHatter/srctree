@@ -16,9 +16,8 @@ const Repo = @import("../repos.zig");
 
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
-const Comments = Endpoint.Types.Comments;
-const Comment = Comments.Comment;
-const Deltas = Endpoint.Types.Deltas;
+const Comment = Endpoint.Types.Comment;
+const Delta = Endpoint.Types.Delta;
 const Humanize = @import("../../humanize.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
@@ -59,7 +58,7 @@ fn newPost(ctx: *Context) Error!void {
         var valid = post.validator();
         const title = try valid.require("title");
         const msg = try valid.require("desc");
-        var delta = Deltas.new(rd.name) catch unreachable;
+        var delta = Delta.new(rd.name) catch unreachable;
         delta.title = title.value;
         delta.message = msg.value;
         delta.attach = .{ .issue = 0 };
@@ -81,7 +80,7 @@ fn newComment(ctx: *Context) Error!void {
         const msg = try valid.require("comment");
         const issue_index = isHex(delta_id.value) orelse return error.Unrouteable;
 
-        var delta = Deltas.open(
+        var delta = Delta.open(
             ctx.alloc,
             rd.name,
             issue_index,
@@ -91,7 +90,7 @@ fn newComment(ctx: *Context) Error!void {
             (ctx.auth.user(ctx.alloc) catch unreachable).username
         else
             "public";
-        const c = Comments.new(username, msg.value) catch unreachable;
+        const c = Comment.new(username, msg.value) catch unreachable;
 
         delta.addComment(ctx.alloc, c) catch {};
         delta.writeOut() catch unreachable;
@@ -111,7 +110,7 @@ fn view(ctx: *Context) Error!void {
     var tmpl = Template.find("delta-issue.html");
     tmpl.init(ctx.alloc);
 
-    var delta = (Deltas.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var delta = (Delta.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     try tmpl.ctx.?.put("Repo", rd.name);
     //dom.push(HTML.text(delta.repo));
 
@@ -152,12 +151,12 @@ fn view(ctx: *Context) Error!void {
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
-    const last = Deltas.last(rd.name) + 1;
+    const last = Delta.last(rd.name) + 1;
     var end: usize = 0;
 
     var tmpl_ctx = try ctx.alloc.alloc(Template.Context, last);
     for (0..last) |i| {
-        var d = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
+        var d = Delta.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
             d.raze(ctx.alloc);
             continue;

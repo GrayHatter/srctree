@@ -1,39 +1,30 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-pub const Networks = @This();
+pub const Network = @This();
 
-const NET_VERSION: usize = 0;
+pub const TYPE_PREFIX = "{s}/networks";
+const NETWORK_VERSION: usize = 0;
+pub var datad: std.fs.Dir = undefined;
 
-pub const Network = struct {
-    name: []u8,
-    location: []u8,
-    highlight: u8,
+pub fn init(_: []const u8) !void {}
+pub fn initType() !void {}
 
-    file: std.fs.File,
+name: []u8,
+location: []u8,
+highlight: u8,
 
-    pub fn writeOut(self: Network) !void {
-        try self.file.seekTo(0);
-        const w = self.file.writer();
-        try w.writeIntNative(usize, NET_VERSION);
-        try w.writeAll(self.name);
-        try w.writeAll("\x00");
-        try w.writeAll(self.uri);
-        try w.writeAll("\x00");
-        try w.writeIntNative(u8, self.highlight);
-    }
-};
+file: std.fs.File,
 
-var datad: std.fs.Dir = undefined;
-
-pub fn init(dir: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}/networks", .{dir});
-    datad = try std.fs.cwd().openDir(filename, .{});
-}
-
-pub fn raze() void {
-    datad.close();
+pub fn writeOut(self: Network) !void {
+    try self.file.seekTo(0);
+    const w = self.file.writer();
+    try w.writeIntNative(usize, NETWORK_VERSION);
+    try w.writeAll(self.name);
+    try w.writeAll("\x00");
+    try w.writeAll(self.uri);
+    try w.writeAll("\x00");
+    try w.writeIntNative(u8, self.highlight);
 }
 
 pub fn validName(name: []const u8) bool {

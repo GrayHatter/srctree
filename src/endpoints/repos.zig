@@ -91,7 +91,7 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     if (rd.exists()) {
         var i_count: usize = 0;
         var d_count: usize = 0;
-        var itr = Types.Deltas.iterator(ctx.alloc, rd.name);
+        var itr = Types.Delta.iterator(ctx.alloc, rd.name);
         while (itr.next()) |dlt| {
             switch (dlt.attach) {
                 .diff => d_count += 1,

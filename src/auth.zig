@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 
 const Request = @import("request.zig");
 const HeaderList = Request.HeaderList;
-const Users = @import("types/users.zig");
+const User = @import("types.zig").User;
 
 const Auth = @This();
 
@@ -87,10 +87,10 @@ pub fn validOrError(auth: Auth) !void {
     if (!auth.valid()) return error.Unauthenticated;
 }
 
-pub fn user(auth: Auth, a: Allocator) !Users.User {
+pub fn user(auth: Auth, a: Allocator) !User {
     switch (auth.method) {
         .mtls => {
-            return try Users.findMTLSFingerprint(a, auth.payload.mtls.fingerprint);
+            return try User.findMTLSFingerprint(a, auth.payload.mtls.fingerprint);
         },
         else => return error.NotImplemted,
     }

@@ -3,13 +3,17 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 
-const Comments = @import("comments.zig");
-const Comment = Comments.Comment;
-const Deltas = @import("deltas.zig");
+const Comment = @import("comment.zig");
+const Delta = @import("delta.zig");
 
-pub const Threads = @This();
+pub const Thread = @This();
 
+pub const TYPE_PREFIX = "{s}/threads";
 const THREADS_VERSION: usize = 0;
+pub var datad: std.fs.Dir = undefined;
+
+pub fn init(_: []const u8) !void {}
+pub fn initType() !void {}
 
 /// while Zig specifies that the logical order of fields is little endian, I'm
 /// not sure that's the layout I want to go use. So don't depend on that yet.
@@ -48,99 +52,82 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
     };
 }
 
-pub const Thread = struct {
-    index: usize,
-    state: State = .{},
-    created: i64 = 0,
-    updated: i64 = 0,
-    delta_hash: [32]u8 = [_]u8{0} ** 32,
-    hash: [32]u8 = [_]u8{0} ** 32,
+index: usize,
+state: State = .{},
+created: i64 = 0,
+updated: i64 = 0,
+delta_hash: [32]u8 = [_]u8{0} ** 32,
+hash: [32]u8 = [_]u8{0} ** 32,
 
-    comment_data: ?[]const u8 = null,
-    comments: ?[]Comment = null,
-    file: std.fs.File,
+comment_data: ?[]const u8 = null,
+comments: ?[]Comment = null,
+file: std.fs.File,
 
-    pub fn writeOut(self: Thread) !void {
-        try self.file.seekTo(0);
-        var writer = self.file.writer();
-        try writer.writeInt(usize, THREADS_VERSION, endian);
-        try writer.writeStruct(self.state);
-        try writer.writeInt(i64, self.created, endian);
-        try writer.writeInt(i64, self.updated, endian);
-        try writer.writeAll(&self.delta_hash);
+pub fn writeOut(self: Thread) !void {
+    try self.file.seekTo(0);
+    var writer = self.file.writer();
+    try writer.writeInt(usize, THREADS_VERSION, endian);
+    try writer.writeStruct(self.state);
+    try writer.writeInt(i64, self.created, endian);
+    try writer.writeInt(i64, self.updated, endian);
+    try writer.writeAll(&self.delta_hash);
 
-        if (self.comments) |cmts| {
-            for (cmts) |*c| {
-                try writer.writeAll(c.toHash());
-            }
-        }
-        try writer.writeAll("\x00");
-        try self.file.setEndPos(self.file.getPos() catch unreachable);
-    }
-
-    // TODO mmap
-    pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Thread {
-        // TODO I hate this, but I'm prototyping, plz rewrite
-        file.seekTo(0) catch return error.InputOutput;
-        var thread: Thread = readVersioned(a, idx, file) catch return error.InputOutput;
-        try thread.loadComments(a);
-        return thread;
-    }
-
-    fn loadComments(self: *Thread, a: Allocator) !void {
-        if (self.comment_data) |cd| {
-            self.comments = try Comments.loadFromData(a, cd);
+    if (self.comments) |cmts| {
+        for (cmts) |*c| {
+            try writer.writeAll(c.toHash());
         }
     }
-
-    pub fn getComments(self: *Thread, a: Allocator) ![]Comment {
-        if (self.comments) |_| return self.comments.?;
-        self.loadComments(a) catch |err| {
-            std.debug.print("WARN: no comment data found ({})\n", .{err});
-            return &[0]Comment{};
-        };
-        return self.comments.?;
-    }
-
-    pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {
-        if (self.comments) |*comments| {
-            if (a.resize(comments.*, comments.len + 1)) {
-                comments.*.len += 1;
-            } else {
-                self.comments = try a.realloc(comments.*, comments.len + 1);
-            }
-        } else {
-            self.comments = try a.alloc(Comment, 1);
-        }
-        self.comments.?[self.comments.?.len - 1] = c;
-        self.updated = std.time.timestamp();
-        try self.writeOut();
-    }
-
-    pub fn raze(self: Thread, a: std.mem.Allocator) void {
-        //if (self.alloc_data) |data| {
-        //    a.free(data);
-        //}
-        if (self.comments) |c| {
-            a.free(c);
-        }
-        self.file.close();
-    }
-};
-
-var datad: std.fs.Dir = undefined;
-
-pub fn init(dir: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}/threads", .{dir});
-    datad = std.fs.cwd().openDir(filename, .{}) catch |err| switch (err) {
-        error.FileNotFound => try std.fs.cwd().makeOpenPath(filename, .{}),
-        else => return err,
-    };
+    try writer.writeAll("\x00");
+    try self.file.setEndPos(self.file.getPos() catch unreachable);
 }
 
-pub fn raze() void {
-    datad.close();
+// TODO mmap
+pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Thread {
+    // TODO I hate this, but I'm prototyping, plz rewrite
+    file.seekTo(0) catch return error.InputOutput;
+    var thread: Thread = readVersioned(a, idx, file) catch return error.InputOutput;
+    try thread.loadComments(a);
+    return thread;
+}
+
+fn loadComments(self: *Thread, a: Allocator) !void {
+    if (self.comment_data) |cd| {
+        self.comments = try Comment.loadFromData(a, cd);
+    }
+}
+
+pub fn getComments(self: *Thread, a: Allocator) ![]Comment {
+    if (self.comments) |_| return self.comments.?;
+    self.loadComments(a) catch |err| {
+        std.debug.print("WARN: no comment data found ({})\n", .{err});
+        return &[0]Comment{};
+    };
+    return self.comments.?;
+}
+
+pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {
+    if (self.comments) |*comments| {
+        if (a.resize(comments.*, comments.len + 1)) {
+            comments.*.len += 1;
+        } else {
+            self.comments = try a.realloc(comments.*, comments.len + 1);
+        }
+    } else {
+        self.comments = try a.alloc(Comment, 1);
+    }
+    self.comments.?[self.comments.?.len - 1] = c;
+    self.updated = std.time.timestamp();
+    try self.writeOut();
+}
+
+pub fn raze(self: Thread, a: std.mem.Allocator) void {
+    //if (self.alloc_data) |data| {
+    //    a.free(data);
+    //}
+    if (self.comments) |c| {
+        a.free(c);
+    }
+    self.file.close();
 }
 
 fn currMaxSet(count: usize) !void {
@@ -190,7 +177,7 @@ pub fn last() usize {
     return currMax() catch 0;
 }
 
-pub fn new(delta: Deltas.Delta) !Thread {
+pub fn new(delta: Delta) !Thread {
     const max: usize = currMax() catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{max + 1});

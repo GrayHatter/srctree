@@ -3,8 +3,13 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Comments = @import("comments.zig");
-const Comment = Comments.Comment;
+const Comment = @import("comment.zig");
+pub const TYPE_PREFIX = "{s}/cmmtmap";
+pub var datad: std.fs.Dir = undefined;
+
+pub fn initType() !void {}
+
+pub fn raze() void {}
 
 pub const CommitMap = struct {
     version: u8 = 0,
@@ -48,7 +53,7 @@ pub const CommitMap = struct {
         const cdata = data[1..];
         const count = cdata.len / 32;
         for (0..count) |i| {
-            try list.append(try Comments.open(a, cdata[i * 32 .. (i + 1) * 32]));
+            try list.append(try Comment.open(a, cdata[i * 32 .. (i + 1) * 32]));
         }
 
         std.debug.assert(ver == 0);
@@ -63,18 +68,6 @@ pub const CommitMap = struct {
         };
     }
 };
-
-var datad: std.fs.Dir = undefined;
-
-pub fn init(dir: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}/cmmtmap", .{dir});
-    datad = try std.fs.cwd().openDir(filename, .{});
-}
-
-pub fn raze() void {
-    datad.close();
-}
 
 pub fn open(a: Allocator, hash: []const u8) !CommitMap {
     var buf: [2048]u8 = undefined;

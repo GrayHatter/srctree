@@ -18,14 +18,14 @@ const Repo = @import("../repos.zig");
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
-const CURL = @import("../../curl.zig");
-const Bleach = @import("../../bleach.zig");
-const Threads = Endpoint.Types.Threads;
-const Deltas = Endpoint.Types.Deltas;
-const Comments = Endpoint.Types.Comments;
-const Comment = Comments.Comment;
+const Thread = Endpoint.Types.Thread;
+const Delta = Endpoint.Types.Delta;
+const Comment = Endpoint.Types.Comment;
+
 const Patch = @import("../../patch.zig");
 const Humanize = @import("../../humanize.zig");
+const CURL = @import("../../curl.zig");
+const Bleach = @import("../../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .methods = GET, .match = .{ .call = list } },
@@ -80,7 +80,7 @@ fn newPost(ctx: *Context) Error!void {
     if (ctx.req_data.post_data) |post| {
         const udata = UserData(IssueCreateReq).init(post) catch return error.BadData;
 
-        var delta = Deltas.new(rd.name) catch unreachable;
+        var delta = Delta.new(rd.name) catch unreachable;
         //delta.src = src;
         delta.title = udata.title;
         delta.message = udata.desc;
@@ -127,12 +127,12 @@ fn newComment(ctx: *Context) Error!void {
         const msg = try valid.require("comment");
         if (msg.value.len < 2) return ctx.response.redirect(loc, true) catch unreachable;
 
-        var delta = Deltas.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
+        var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
         const username = if (ctx.auth.valid())
             (ctx.auth.user(ctx.alloc) catch unreachable).username
         else
             "public";
-        const c = Comments.new(username, msg.value) catch unreachable;
+        const c = Comment.new(username, msg.value) catch unreachable;
         _ = delta.loadThread(ctx.alloc) catch unreachable;
         delta.addComment(ctx.alloc, c) catch unreachable;
         delta.writeOut() catch unreachable;
@@ -151,7 +151,7 @@ fn view(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    var delta = Deltas.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
+    var delta = Delta.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
         error.InvalidTarget => return error.Unrouteable,
         error.InputOutput => unreachable,
         error.Other => unreachable,
@@ -218,12 +218,12 @@ fn view(ctx: *Context) Error!void {
 fn list(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
-    const last = Deltas.last(rd.name) + 1;
+    const last = Delta.last(rd.name) + 1;
     var end: usize = 0;
 
     var tmpl_ctx = try ctx.alloc.alloc(Template.Context, last);
     for (0..last) |i| {
-        var d = Deltas.open(ctx.alloc, rd.name, i) catch continue orelse continue;
+        var d = Delta.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .diff) {
             d.raze(ctx.alloc);
             continue;

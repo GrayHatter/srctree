@@ -4,14 +4,27 @@ const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
 
+const Types = @import("../types.zig");
+
 const Bleach = @import("../bleach.zig");
 const Template = @import("../template.zig");
 
-pub const Comments = @This();
+pub const Comment = @This();
 
-const Writer = std.fs.File.Writer;
+const Writer = Types.Writer;
 
 const CMMT_VERSION: usize = 0;
+
+pub const TYPE_PREFIX = "{s}/messages";
+
+pub var datad: std.fs.Dir = undefined;
+
+pub fn init(_: []const u8) !void {}
+pub fn initType() !void {}
+
+pub fn raze() void {
+    datad.close();
+}
 
 pub fn charToKind(c: u8) TargetKind {
     return switch (c) {
@@ -106,81 +119,67 @@ pub const Targets = union(TargetKind) {
     reply: Reply,
 };
 
-pub const Comment = struct {
-    state: usize = 0,
-    created: i64 = 0,
-    tz: i32 = 0,
-    updated: i64 = 0,
-    target: Targets = .{ .nos = {} },
+state: usize = 0,
+created: i64 = 0,
+tz: i32 = 0,
+updated: i64 = 0,
+target: Targets = .{ .nos = {} },
 
-    author: []const u8,
-    message: []const u8,
+author: []const u8,
+message: []const u8,
 
-    hash: [sha256.digest_length]u8 = undefined,
+hash: [sha256.digest_length]u8 = undefined,
 
-    pub fn toHash(self: *Comment) *const [sha256.digest_length]u8 {
-        var h = sha256.init(.{});
-        h.update(self.author);
-        h.update(self.message);
-        h.update(std.mem.asBytes(&self.created));
-        h.update(std.mem.asBytes(&self.updated));
-        h.final(&self.hash);
-        return &self.hash;
-    }
-
-    pub fn writeNew(self: *Comment, d: std.fs.Dir) !void {
-        var buf: [2048]u8 = undefined;
-        _ = self.toHash();
-        const filename = try std.fmt.bufPrint(&buf, "{x}.comment", .{std.fmt.fmtSliceHexLower(&self.hash)});
-        var file = try d.createFile(filename, .{});
-        defer file.close();
-        const w = file.writer();
-        try self.writeStruct(w);
-    }
-
-    fn writeStruct(self: Comment, w: Writer) !void {
-        try w.writeInt(usize, CMMT_VERSION, endian);
-        try w.writeInt(usize, self.state, endian);
-        try w.writeInt(i64, self.created, endian);
-        try w.writeInt(i64, self.updated, endian);
-        try w.writeInt(i32, self.tz, endian);
-        try w.writeInt(u8, @intFromEnum(self.target), endian);
-        switch (self.target) {
-            .nos => try w.writeInt(usize, 0, endian),
-            .commit => |c| try w.writeAll(&c),
-            .diff => try w.writeInt(usize, self.target.diff, endian),
-            .issue => try w.writeInt(usize, self.target.issue, endian),
-            .reply => unreachable,
-        }
-
-        try w.writeAll(self.author);
-        try w.writeAll("\x00");
-        try w.writeAll(self.message);
-    }
-
-    pub fn readFile(a: std.mem.Allocator, file: std.fs.File) !Comment {
-        return readVersioned(a, file);
-    }
-    pub fn builder(self: Comment) Template.Context.Builder(Comment) {
-        return Template.Context.Builder(Comment).init(self);
-    }
-
-    pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void {
-        try ctx.put("Author", try Bleach.sanitizeAlloc(a, self.author, .{}));
-        try ctx.put("Message", try Bleach.sanitizeAlloc(a, self.message, .{}));
-    }
-};
-
-var datad: std.fs.Dir = undefined;
-
-pub fn init(dir: []const u8) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}/messages", .{dir});
-    datad = try std.fs.cwd().openDir(filename, .{});
+pub fn toHash(self: *Comment) *const [sha256.digest_length]u8 {
+    var h = sha256.init(.{});
+    h.update(self.author);
+    h.update(self.message);
+    h.update(std.mem.asBytes(&self.created));
+    h.update(std.mem.asBytes(&self.updated));
+    h.final(&self.hash);
+    return &self.hash;
 }
 
-pub fn raze() void {
-    datad.close();
+pub fn writeNew(self: *Comment, d: std.fs.Dir) !void {
+    var buf: [2048]u8 = undefined;
+    _ = self.toHash();
+    const filename = try std.fmt.bufPrint(&buf, "{x}.comment", .{std.fmt.fmtSliceHexLower(&self.hash)});
+    var file = try d.createFile(filename, .{});
+    defer file.close();
+    const w = file.writer();
+    try self.writeStruct(w);
+}
+
+fn writeStruct(self: Comment, w: Writer) !void {
+    try w.writeInt(usize, CMMT_VERSION, endian);
+    try w.writeInt(usize, self.state, endian);
+    try w.writeInt(i64, self.created, endian);
+    try w.writeInt(i64, self.updated, endian);
+    try w.writeInt(i32, self.tz, endian);
+    try w.writeInt(u8, @intFromEnum(self.target), endian);
+    switch (self.target) {
+        .nos => try w.writeInt(usize, 0, endian),
+        .commit => |c| try w.writeAll(&c),
+        .diff => try w.writeInt(usize, self.target.diff, endian),
+        .issue => try w.writeInt(usize, self.target.issue, endian),
+        .reply => unreachable,
+    }
+
+    try w.writeAll(self.author);
+    try w.writeAll("\x00");
+    try w.writeAll(self.message);
+}
+
+pub fn readFile(a: std.mem.Allocator, file: std.fs.File) !Comment {
+    return readVersioned(a, file);
+}
+pub fn builder(self: Comment) Template.Context.Builder(Comment) {
+    return Template.Context.Builder(Comment).init(self);
+}
+
+pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void {
+    try ctx.put("Author", try Bleach.sanitizeAlloc(a, self.author, .{}));
+    try ctx.put("Message", try Bleach.sanitizeAlloc(a, self.message, .{}));
 }
 
 pub fn open(a: Allocator, hash: []const u8) !Comment {
@@ -212,7 +211,7 @@ pub fn loadFromData(a: Allocator, cd: []const u8) ![]Comment {
     if (count == 0) return &[0]Comment{};
     const comments = try a.alloc(Comment, count);
     for (comments, 0..) |*c, i| {
-        c.* = try Comments.open(a, cd[i * 32 .. (i + 1) * 32]);
+        c.* = try Comment.open(a, cd[i * 32 .. (i + 1) * 32]);
     }
     return comments;
 }

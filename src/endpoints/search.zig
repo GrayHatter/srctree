@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 const HTML = Endpoint.HTML;
 const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
-const Deltas = @import("../types/deltas.zig");
+const Delta = @import("../types.zig").Delta;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const ROUTE = Endpoint.Router.ROUTE;
@@ -32,7 +32,7 @@ fn search(ctx: *Context) Error!void {
     const udata = UserData(SearchReq).init(ctx.req_data.query_data) catch return error.BadData;
 
     std.debug.print("query {s}\n", .{udata.q});
-    var rules = std.ArrayList(Deltas.SearchRule).init(ctx.alloc);
+    var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
     var itr = std.mem.split(u8, udata.q, " ");
     while (itr.next()) |r_line| {
@@ -44,13 +44,13 @@ fn search(ctx: *Context) Error!void {
             line = line[1..];
         }
         if (std.mem.indexOf(u8, line, ":")) |i| {
-            try rules.append(Deltas.SearchRule{
+            try rules.append(Delta.SearchRule{
                 .subject = line[0..i],
                 .match = line[i + 1 ..],
                 .inverse = inverse,
             });
         } else {
-            try rules.append(Deltas.SearchRule{
+            try rules.append(Delta.SearchRule{
                 .subject = "",
                 .match = line,
                 .inverse = inverse,
@@ -63,7 +63,7 @@ fn search(ctx: *Context) Error!void {
     }
 
     var list = std.ArrayList(Template.Context).init(ctx.alloc);
-    var search_results = Deltas.search(ctx.alloc, rules.items);
+    var search_results = Delta.search(ctx.alloc, rules.items);
     while (search_results.next(ctx.alloc)) |next_| {
         if (next_) |next| {
             var c = Template.Context.init(ctx.alloc);

@@ -1,23 +1,36 @@
-pub const Comments = @import("types/comments.zig");
-pub const CommitMap = @import("types/commit-notes.zig");
-pub const Deltas = @import("types/deltas.zig");
-pub const Diffs = @import("types/diffs.zig");
-pub const Issues = @import("types/issues.zig");
-pub const Networks = @import("types/users.zig");
-pub const Threads = @import("types/threads.zig");
-pub const Users = @import("types/users.zig");
+const std = @import("std");
+
+pub const Comment = @import("types/comment.zig");
+pub const CommitMap = @import("types/commit-note.zig");
+pub const Delta = @import("types/delta.zig");
+pub const Diff = @import("types/diff.zig");
+pub const Issue = @import("types/issue.zig");
+pub const Network = @import("types/network.zig");
+pub const Thread = @import("types/thread.zig");
+pub const User = @import("types/user.zig");
+
+pub const Writer = std.fs.File.Writer;
+
+pub const TypeStorage = std.fs.Dir;
 
 pub fn init(dir: []const u8) !void {
-    try Comments.init(dir);
-    try CommitMap.init(dir);
-    try Deltas.init(dir);
-    try Diffs.init(dir);
-    try Issues.init(dir);
-    try Networks.init(dir);
-    try Threads.init(dir);
-    try Users.init(dir);
+    inline for (.{
+        Comment,
+        CommitMap,
+        Delta,
+        Diff,
+        Issue,
+        Network,
+        Thread,
+        User,
+    }) |inc| {
+        var buf: [2048]u8 = undefined;
+        const filename = try std.fmt.bufPrint(&buf, inc.TYPE_PREFIX, .{dir});
+        inc.datad = try std.fs.cwd().makeOpenPath(filename, .{ .iterate = true });
+        try inc.initType();
+    }
 }
 
 pub fn raze() void {
-    Diffs.raze();
+    //Diff.raze();
 }
