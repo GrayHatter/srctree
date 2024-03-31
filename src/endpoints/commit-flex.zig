@@ -15,12 +15,15 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 
 const Scribe = struct {
+    const Commit = struct {
+        name: []const u8,
+        repo: []const u8,
+        date: DateTime,
+        sha: []const u8,
+    };
+
     const Option = union(enum) {
-        commit: struct {
-            repo: []const u8,
-            date: DateTime,
-            sha: [40]u8,
-        },
+        commit: Commit,
     };
 
     thing: Option,
@@ -67,9 +70,20 @@ fn countAll(
     }
 }
 
+fn journalLessThan(_: void, left: Scribe.Commit, right: Scribe.Commit) bool {
+    if (left.date.timestamp < right.date.timestamp) return true;
+    if (left.date.timestamp > right.date.timestamp) return false;
+    if (left.repo.len < right.repo.len) return true;
+    return false;
+}
+
+fn journalSorted(_: void, left: Scribe.Commit, right: Scribe.Commit) bool {
+    return !journalLessThan({}, left, right);
+}
+
 fn buildJournal(
     a: Allocator,
-    list: *std.ArrayList(Template.Context),
+    list: *std.ArrayList(Scribe.Commit),
     email: ?[]const u8,
     gitdir: []const u8,
 ) !void {
@@ -83,24 +97,19 @@ fn buildJournal(
     var commit = try repo.commit(a);
 
     while (true) {
-        var ctx = Template.Context.init(a);
         if (lseen.contains(commit.sha)) break;
         var commit_time = commit.author.timestamp;
         if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
             commit_time += tzs;
         }
         if (commit_time < until) break;
-
         if (std.mem.eql(u8, email.?, commit.author.email)) {
-            try ctx.put("Name", try a.dupe(u8, commit.author.name));
-            try ctx.put("Date", try std.fmt.allocPrint(
-                a,
-                "{}",
-                .{try DateTime.fromEpoch(commit_time)},
-            ));
-            try ctx.put("Repo", try a.dupe(u8, gitdir[8..]));
-            try ctx.put("Sha", try a.dupe(u8, commit.sha));
-            try list.append(ctx);
+            try list.append(.{
+                .name = try a.dupe(u8, commit.author.name),
+                .date = try DateTime.fromEpoch(commit_time),
+                .sha = try a.dupe(u8, commit.sha),
+                .repo = try a.dupe(u8, gitdir[8..]),
+            });
         }
 
         //for (commit.parent[1..], 1..) |par, pidx| {
@@ -143,8 +152,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
     }
     const until = date.timestamp;
 
-    var journal = std.ArrayList(Template.Context).init(ctx.alloc);
-
     var email: ?[]const u8 = null;
     if (Ini.default(ctx.alloc)) |ini| {
         if (ini.get("owner")) |ns| {
@@ -165,6 +172,9 @@ pub fn commitFlex(ctx: *Context) Error!void {
     var dir = std.fs.cwd().openDir("./repos", .{ .iterate = true }) catch {
         return error.Unknown;
     };
+
+    var journal = std.ArrayList(Scribe.Commit).init(ctx.alloc);
+
     var itr = dir.iterate();
     while (itr.next() catch return Error.Unknown) |file| {
         var buf: [1024]u8 = undefined;
@@ -241,12 +251,25 @@ pub fn commitFlex(ctx: *Context) Error!void {
     try tmpl.ctx.?.put("Checked_repos", try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}));
     _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
 
+    std.sort.pdq(Scribe.Commit, journal.items, {}, journalSorted);
+
+    var journal_ctx = std.ArrayList(Template.Context).init(ctx.alloc);
+
+    for (journal.items) |itm| {
+        var jctx = Template.Context.init(ctx.alloc);
+        try jctx.put("Name", itm.name);
+        try jctx.put("Repo", itm.repo);
+        try jctx.put("Date", try std.fmt.allocPrint(ctx.alloc, "{}", .{itm.date}));
+        try jctx.put("Sha", itm.sha);
+        try journal_ctx.append(jctx);
+    }
+
     var jlist = std.ArrayList(Template.Context).init(ctx.alloc);
     try jlist.append(Template.Context.init(ctx.alloc));
     for (jlist.items) |*mj| {
         try mj.put("Month", DateTime.currentMonth());
 
-        try mj.putBlock("Rows", journal.items);
+        try mj.putBlock("Rows", journal_ctx.items);
     }
 
     // TODO sort by date
