@@ -30,7 +30,8 @@ pub const routes = [_]Endpoint.Router.MatchRouter{
 
 pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return commits;
-    _ = rd;
+    if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
+        return commit;
     return commits;
 }
 

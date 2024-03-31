@@ -17,6 +17,8 @@ fn validChar(c: u8) bool {
     };
 }
 
+const DEBUG = false;
+
 pub const Context = struct {
     pub const HashMap = std.StringHashMap([]const u8);
     pub const HashMapSlice = std.StringHashMap([]const Context);
@@ -231,7 +233,7 @@ pub const Template = struct {
                 .end = end,
                 .kind = .{
                     .noun = .{
-                        .vari = str[0..width],
+                        .vari = str[1..width],
                         .otherwise = .{ .str = str[width + 8 .. end - 1] },
                     },
                 },
@@ -240,7 +242,7 @@ pub const Template = struct {
             return Directive{
                 .end = end,
                 .kind = .{ .noun = .{
-                    .vari = str[0..width],
+                    .vari = str[1..width],
                     .otherwise = .{ .del = {} },
                 } },
             };
@@ -272,6 +274,7 @@ pub const Template = struct {
                                 try out.writeAll(v_blob);
                                 blob = blob[end..];
                             } else {
+                                if (DEBUG) std.debug.print("[missing var {s}]\n", .{var_name});
                                 switch (noun.otherwise) {
                                     .str => |str| {
                                         try out.writeAll(str);
