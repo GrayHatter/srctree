@@ -15,7 +15,7 @@ const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
 pub const endpoints = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "", .methods = GET, .match = .{ .call = default } },
+    .{ .name = "", .methods = .{ .GET = true }, .match = .{ .call = default } },
 };
 
 fn default(ctx: *Context) Error!void {

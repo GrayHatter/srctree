@@ -19,8 +19,6 @@ const Ini = @import("ini.zig");
 const Humanize = @import("humanize.zig");
 const Bleach = @import("bleach.zig");
 
-const POST = Endpoint.Router.Methods.POST;
-
 pub const endpoints = [_]Endpoint.Router.MatchRouter{
     .{ .name = "objects", .match = .{ .call = gitUploadPack } },
     .{ .name = "info", .match = .{ .simple = &[_]Endpoint.Router.MatchRouter{
@@ -28,7 +26,7 @@ pub const endpoints = [_]Endpoint.Router.MatchRouter{
         .{ .name = "refs", .match = .{ .call = gitUploadPack } },
     } } },
 
-    .{ .name = "git-upload-pack", .methods = POST, .match = .{ .call = gitUploadPack } },
+    .{ .name = "git-upload-pack", .methods = .{ .POST = true }, .match = .{ .call = gitUploadPack } },
 };
 
 pub fn router(ctx: *Context) Error!Endpoint.Endpoint {

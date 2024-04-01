@@ -20,20 +20,33 @@ pub const Router = *const fn (*Context) Error!Callable;
 pub const Callable = *const fn (*Context) Error!void;
 
 /// Methods is a struct so bitwise or will work as expected
-pub const Methods = struct {
-    pub const GET = 1;
-    pub const HEAD = 2;
-    pub const POST = 4;
-    pub const PUT = 8;
-    pub const DELETE = 16;
-    pub const CONNECT = 32;
-    pub const OPTIONS = 64;
-    pub const TRACE = 128;
+pub const Methods = packed struct {
+    GET: bool = false,
+    HEAD: bool = false,
+    POST: bool = false,
+    PUT: bool = false,
+    DELETE: bool = false,
+    CONNECT: bool = false,
+    OPTIONS: bool = false,
+    TRACE: bool = false,
+
+    pub fn matchMethod(self: Methods, req: Request.Methods) bool {
+        return switch (req) {
+            .GET => self.GET,
+            .HEAD => self.HEAD,
+            .POST => self.POST,
+            .PUT => self.PUT,
+            .DELETE => self.DELETE,
+            .CONNECT => self.CONNECT,
+            .OPTIONS => self.OPTIONS,
+            .TRACE => self.TRACE,
+        };
+    }
 };
 
 pub const _Endpoint = struct {
     callable: Callable,
-    methods: u8 = Methods.GET,
+    methods: Methods = .{ .GET = true },
 };
 
 pub const MatchRouter = struct {
@@ -43,7 +56,7 @@ pub const MatchRouter = struct {
         route: Router,
         simple: []const MatchRouter,
     },
-    methods: u8 = Methods.GET,
+    methods: Methods = .{ .GET = true },
 };
 
 pub fn ROUTE(comptime name: []const u8, comptime match: anytype) MatchRouter {
@@ -66,25 +79,25 @@ pub fn ROUTE(comptime name: []const u8, comptime match: anytype) MatchRouter {
             else => @compileError("match type not supported"),
         },
 
-        .methods = Methods.GET,
+        .methods = .{ .GET = true },
     };
 }
 
 pub fn any(comptime name: []const u8, comptime match: Callable) MatchRouter {
     var mr = ROUTE(name, match);
-    mr.methods = Methods.GET | Methods.POST;
+    mr.methods = .{ .GET = true, .POST = true };
     return mr;
 }
 
 pub fn GET(comptime name: []const u8, comptime match: Callable) MatchRouter {
     var mr = ROUTE(name, match);
-    mr.methods = Methods.GET;
+    mr.methods = .{ .GET = true };
     return mr;
 }
 
 pub fn POST(comptime name: []const u8, comptime match: Callable) MatchRouter {
     var mr = ROUTE(name, match);
-    mr.methods = Methods.POST;
+    mr.methods = .{ .POST = true };
     return mr;
 }
 
@@ -122,7 +135,7 @@ pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Callable {
         if (eql(search, ep.name)) {
             switch (ep.match) {
                 .call => |call| {
-                    if (@intFromEnum(ctx.request.method) & ep.methods > 0)
+                    if (ep.methods.matchMethod(ctx.request.method))
                         return call;
                 },
                 .route => |route| {

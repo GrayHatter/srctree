@@ -28,10 +28,10 @@ const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "", .methods = GET, .match = .{ .call = list } },
-    .{ .name = "new", .methods = GET, .match = .{ .call = new } },
-    .{ .name = "new", .methods = POST, .match = .{ .call = newPost } },
-    .{ .name = "add-comment", .methods = POST, .match = .{ .call = newComment } },
+    .{ .name = "", .match = .{ .call = list } },
+    .{ .name = "new", .match = .{ .call = new } },
+    .{ .name = "new", .methods = .{ .POST = true }, .match = .{ .call = newPost } },
+    .{ .name = "add-comment", .methods = .{ .POST = true }, .match = .{ .call = newComment } },
 };
 
 fn isHex(input: []const u8) ?usize {
