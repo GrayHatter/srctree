@@ -12,6 +12,7 @@ const DOM = Endpoint.DOM;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
+const POLL = std.posix.POLL;
 
 const git = @import("git.zig");
 const Ini = @import("ini.zig");
@@ -79,26 +80,26 @@ fn gitUploadPack(ctx: *Context) Error!void {
 
     child.spawn() catch unreachable;
 
-    const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
-    var poll_fd = [_]std.os.pollfd{
+    const err_mask = POLL.ERR | POLL.NVAL | POLL.HUP;
+    var poll_fd = [_]std.posix.pollfd{
         .{
             .fd = child.stdout.?.handle,
-            .events = std.os.POLL.IN,
+            .events = POLL.IN,
             .revents = undefined,
         },
     };
     if (ctx.req_data.post_data) |pd| {
-        _ = std.os.write(child.stdin.?.handle, pd.rawpost) catch unreachable;
-        std.os.close(child.stdin.?.handle);
+        _ = std.posix.write(child.stdin.?.handle, pd.rawpost) catch unreachable;
+        std.posix.close(child.stdin.?.handle);
         child.stdin = null;
     }
     var buf = try ctx.alloc.alloc(u8, 0xffffff);
     var headers_required = true;
     while (true) {
-        const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
+        const events_len = std.posix.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
         if (events_len == 0) continue;
-        if (poll_fd[0].revents & std.os.POLL.IN != 0) {
-            const amt = std.os.read(poll_fd[0].fd, buf) catch unreachable;
+        if (poll_fd[0].revents & POLL.IN != 0) {
+            const amt = std.posix.read(poll_fd[0].fd, buf) catch unreachable;
             if (amt == 0) break;
             if (headers_required) {
                 _ = ctx.response.write("HTTP/1.1 200 OK\r\n") catch unreachable;

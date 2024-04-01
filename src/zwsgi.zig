@@ -1,7 +1,7 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
-const StreamServer = std.net.StreamServer;
+const Server = std.net.Server;
 
 const Context = @import("context.zig");
 const Request = @import("request.zig");
@@ -33,7 +33,7 @@ const uWSGIVar = struct {
 
 pub const zWSGIRequest = struct {
     header: uProtoHeader,
-    acpt: std.net.StreamServer.Connection,
+    acpt: Server.Connection,
     vars: []uWSGIVar,
     body: ?[]u8 = null,
 };
@@ -73,7 +73,7 @@ fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
 
 const dump_vars = false;
 
-fn readHeader(a: Allocator, acpt: std.net.StreamServer.Connection) !Request {
+fn readHeader(a: Allocator, acpt: Server.Connection) !Request {
     var uwsgi_header = uProtoHeader{};
     var ptr: [*]u8 = @ptrCast(&uwsgi_header);
     _ = try acpt.stream.read(@alignCast(ptr[0..4]));
@@ -110,13 +110,13 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
     return find(list, search) orelse "[missing]";
 }
 
-pub fn serve(alloc_: Allocator, streamsrv: *StreamServer) !void {
+pub fn serve(alloc_: Allocator, srv: *Server) !void {
     while (true) {
         var arena = std.heap.ArenaAllocator.init(alloc_);
         defer arena.deinit();
         const a = arena.allocator();
 
-        var acpt = try streamsrv.accept();
+        var acpt = try srv.accept();
         defer acpt.stream.close();
 
         var request = try readHeader(a, acpt);

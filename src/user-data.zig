@@ -356,7 +356,12 @@ fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: 
     }
 }
 
-pub fn readBody(a: Allocator, acpt: std.net.StreamServer.Connection, size: usize, htype: []const u8) !PostData {
+pub fn readBody(
+    a: Allocator,
+    acpt: std.net.Server.Connection,
+    size: usize,
+    htype: []const u8,
+) !PostData {
     const post_buf: []u8 = try a.alloc(u8, size);
     const read_size = try acpt.stream.read(post_buf);
     if (read_size != size) return error.UnexpectedHttpBodySize;

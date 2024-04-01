@@ -414,24 +414,24 @@ fn highlight(a: Allocator, lang: []const u8, text: []const u8) ![]u8 {
     child.expand_arg0 = .no_expand;
     child.spawn() catch unreachable;
 
-    const err_mask = std.os.POLL.ERR | std.os.POLL.NVAL | std.os.POLL.HUP;
-    var poll_fd = [_]std.os.pollfd{
+    const err_mask = std.posix.POLL.ERR | std.posix.POLL.NVAL | std.posix.POLL.HUP;
+    var poll_fd = [_]std.posix.pollfd{
         .{
             .fd = child.stdout.?.handle,
-            .events = std.os.POLL.IN,
+            .events = std.posix.POLL.IN,
             .revents = undefined,
         },
     };
-    _ = std.os.write(child.stdin.?.handle, text) catch unreachable;
-    std.os.close(child.stdin.?.handle);
+    _ = std.posix.write(child.stdin.?.handle, text) catch unreachable;
+    std.posix.close(child.stdin.?.handle);
     child.stdin = null;
     var buf = std.ArrayList(u8).init(a);
     const abuf = try a.alloc(u8, 0xffffff);
     while (true) {
-        const events_len = std.os.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
+        const events_len = std.posix.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
         if (events_len == 0) continue;
-        if (poll_fd[0].revents & std.os.POLL.IN != 0) {
-            const amt = std.os.read(poll_fd[0].fd, abuf) catch unreachable;
+        if (poll_fd[0].revents & std.posix.POLL.IN != 0) {
+            const amt = std.posix.read(poll_fd[0].fd, abuf) catch unreachable;
             if (amt == 0) break;
             try buf.appendSlice(abuf[0..amt]);
         } else if (poll_fd[0].revents & err_mask != 0) {

@@ -43,7 +43,7 @@ pub fn build(b: *std.Build) void {
         ex.root_module.addImport("templates-compiled", templates_compiled);
         ex.root_module.addOptions("config", options);
         if (enable_libcurl) {
-            ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .Static });
+            ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .static });
             ex.linkLibC();
         }
     }

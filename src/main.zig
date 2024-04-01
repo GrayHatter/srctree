@@ -120,9 +120,8 @@ pub fn main() !void {
             } else |_| {}
 
             const uaddr = try std.net.Address.initUnix(FILE);
-            var usock = std.net.StreamServer.init(.{});
-            try usock.listen(uaddr);
-            defer usock.close();
+            var server = try uaddr.listen(.{});
+            defer server.deinit();
 
             const path = try std.fs.cwd().realpathAlloc(a, FILE);
             defer a.free(path);
@@ -132,11 +131,11 @@ pub fn main() !void {
             if (false) std.debug.print("mode {o}\n", .{mode});
             try print("Unix server listening\n", .{});
 
-            zWSGI.serve(a, &usock) catch {
+            zWSGI.serve(a, &server) catch {
                 if (@errorReturnTrace()) |trace| {
                     std.debug.dumpStackTrace(trace.*);
                 }
-                std.os.exit(1);
+                std.posix.exit(1);
             };
         },
         .http => {

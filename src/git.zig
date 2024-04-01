@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const zlib = std.compress.zlib;
 const hexLower = std.fmt.fmtSliceHexLower;
-const PROT = std.os.PROT;
+const PROT = std.posix.PROT;
 const MAP_TYPE = std.os.linux.MAP_TYPE;
 
 pub const Error = error{
@@ -128,7 +128,11 @@ const Pack = struct {
         try f.seekFromEnd(0);
         const length = try f.getPos();
         const offset = 0;
-        return std.os.mmap(null, length, PROT.READ, .{ .TYPE = .SHARED }, f.handle, offset);
+        return std.posix.mmap(null, length, PROT.READ, .{ .TYPE = .SHARED }, f.handle, offset);
+    }
+
+    fn munmap(mem: []align(std.mem.page_size) const u8) void {
+        std.posix.munmap(mem);
     }
 
     pub fn fanOut(self: Pack, i: u8) u32 {
@@ -312,8 +316,8 @@ const Pack = struct {
     pub fn raze(self: Pack, a: Allocator) void {
         self.pack_fd.close();
         self.idx_fd.close();
-        std.os.munmap(@alignCast(self.pack));
-        std.os.munmap(@alignCast(self.idx));
+        munmap(@alignCast(self.pack));
+        munmap(@alignCast(self.idx));
         a.free(self.name);
     }
 };

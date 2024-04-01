@@ -52,7 +52,7 @@ tranfer_mode: TransferMode = .static,
 downstream: union(Downstream) {
     buffer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
     zwsgi: std.net.Stream.Writer,
-    http: std.http.Server.Response.Writer,
+    http: std.io.AnyWriter,
 },
 status: std.http.Status = .internal_server_error,
 
@@ -180,9 +180,7 @@ fn flush(res: *Response) !void {
 pub fn finish(res: *Response) !void {
     res.phase = .closed;
     switch (res.downstream) {
-        .http => {
-            try res.request.raw_request.http.finish();
-        },
+        .http => {},
         //.zwsgi => |*w| _ = try w.write("0\r\n\r\n"),
         else => {},
     }
