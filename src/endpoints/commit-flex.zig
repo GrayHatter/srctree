@@ -18,6 +18,7 @@ const Scribe = struct {
     const Commit = struct {
         name: []const u8,
         repo: []const u8,
+        title: []const u8,
         date: DateTime,
         sha: []const u8,
 
@@ -25,6 +26,7 @@ const Scribe = struct {
             var jctx = Template.Context.init(a);
             try jctx.put("Name", self.name);
             try jctx.put("Repo", self.repo);
+            try jctx.put("Title", self.title);
             try jctx.put("Date", try std.fmt.allocPrint(a, "{}", .{self.date}));
             try jctx.put("Sha", self.sha);
             return jctx;
@@ -115,6 +117,7 @@ fn buildJournal(
         if (std.mem.eql(u8, email.?, commit.author.email)) {
             try list.append(.{
                 .name = try a.dupe(u8, commit.author.name),
+                .title = try a.dupe(u8, commit.title),
                 .date = DateTime.fromEpoch(commit_time),
                 .sha = try a.dupe(u8, commit.sha),
                 .repo = try a.dupe(u8, gitdir[8..]),
