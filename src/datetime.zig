@@ -47,17 +47,22 @@ pub const WEEKDAYS = [_][]const u8{
 };
 
 pub fn now() DateTime {
-    return fromEpoch(std.time.timestamp()) catch unreachable;
+    return fromEpoch(std.time.timestamp());
 }
 
 pub fn today() DateTime {
     var self = now();
+    return self.removeTime();
+}
+
+pub fn removeTime(self: DateTime) DateTime {
+    var output = self;
     const offset = @as(i64, self.hours) * 60 * 60 + @as(i64, self.minutes) * 60 + self.seconds;
-    self.timestamp -|= offset;
-    self.hours = 0;
-    self.minutes = 0;
-    self.seconds = 0;
-    return self;
+    output.timestamp -|= offset;
+    output.hours = 0;
+    output.minutes = 0;
+    output.seconds = 0;
+    return output;
 }
 
 fn leapYear(year: usize) bool {
@@ -112,8 +117,8 @@ pub fn month(self: DateTime) []const u8 {
     return MONTHS[self.months];
 }
 
-pub fn fromEpochTz(sts: i64, tz: ?i32) !DateTime {
-    if (sts < 0) return error.UnsupportedTimeStamp;
+pub fn fromEpochTz(sts: i64, tz: ?i32) DateTime {
+    if (sts < 0) unreachable; // return error.UnsupportedTimeStamp;
 
     var self: DateTime = undefined;
     self.timestamp = sts;
@@ -136,8 +141,8 @@ pub fn fromEpochTz(sts: i64, tz: ?i32) !DateTime {
     return self;
 }
 
-pub fn fromEpoch(sts: i64) !DateTime {
-    const ts = try fromEpochTz(sts, null);
+pub fn fromEpoch(sts: i64) DateTime {
+    const ts = fromEpochTz(sts, null);
     return ts;
 }
 
@@ -209,7 +214,7 @@ test "datetime" {
         .hours = 0,
         .minutes = 0,
         .seconds = 0,
-    }, try DateTime.fromEpoch(0));
+    }, DateTime.fromEpoch(0));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1697312998,
@@ -220,7 +225,7 @@ test "datetime" {
         .hours = 19,
         .minutes = 49,
         .seconds = 58,
-    }, try DateTime.fromEpoch(1697312998));
+    }, DateTime.fromEpoch(1697312998));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148799,
@@ -231,7 +236,7 @@ test "datetime" {
         .hours = 23,
         .minutes = 59,
         .seconds = 59,
-    }, try DateTime.fromEpoch(915148799));
+    }, DateTime.fromEpoch(915148799));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148800,
@@ -242,7 +247,7 @@ test "datetime" {
         .hours = 0,
         .minutes = 0,
         .seconds = 0,
-    }, try DateTime.fromEpoch(915148800));
+    }, DateTime.fromEpoch(915148800));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1002131014,
@@ -253,5 +258,5 @@ test "datetime" {
         .hours = 17,
         .minutes = 43,
         .seconds = 34,
-    }, try DateTime.fromEpoch(1002131014));
+    }, DateTime.fromEpoch(1002131014));
 }
