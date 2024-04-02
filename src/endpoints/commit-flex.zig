@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
 const Endpoint = @import("../endpoint.zig");
 const Git = @import("../git.zig");
@@ -116,8 +117,8 @@ fn buildJournal(
         if (commit_time < until) break;
         if (std.mem.eql(u8, email.?, commit.author.email)) {
             try list.append(.{
-                .name = try a.dupe(u8, commit.author.name),
-                .title = try a.dupe(u8, commit.title),
+                .name = try Bleach.sanitizeAlloc(a, commit.author.name, .{}),
+                .title = try Bleach.sanitizeAlloc(a, commit.title, .{}),
                 .date = DateTime.fromEpoch(commit_time),
                 .sha = try a.dupe(u8, commit.sha),
                 .repo = try a.dupe(u8, gitdir[8..]),
