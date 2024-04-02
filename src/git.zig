@@ -751,6 +751,7 @@ pub const Commit = struct {
     parent: [3]?SHA,
     author: Actor,
     committer: Actor,
+    /// Raw message including the title and body
     message: []const u8,
     title: []const u8,
     body: []const u8,
