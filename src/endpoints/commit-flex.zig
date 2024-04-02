@@ -293,10 +293,25 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
         var today_grp = Template.Context.init(ctx.alloc);
         try today_grp.put("Group", "Today");
+        if (todays.items.len > 1) {
+            try today_grp.put("Lead", try std.fmt.allocPrint(
+                ctx.alloc,
+                "{} commits today",
+                .{todays.items.len},
+            ));
+        }
+
         try today_grp.putBlock("Rows", todays.items);
         try groups.append(today_grp);
         var yesterday_grp = Template.Context.init(ctx.alloc);
         try yesterday_grp.put("Group", "Yesterday");
+        if (yesterdays.items.len > 1) {
+            try yesterday_grp.put("Lead", try std.fmt.allocPrint(
+                ctx.alloc,
+                "{} commits yesterday",
+                .{yesterdays.items.len},
+            ));
+        }
         try yesterday_grp.putBlock("Rows", yesterdays.items);
         try groups.append(yesterday_grp);
         var last_weeks_grp = Template.Context.init(ctx.alloc);
