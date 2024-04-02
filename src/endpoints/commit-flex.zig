@@ -20,6 +20,15 @@ const Scribe = struct {
         repo: []const u8,
         date: DateTime,
         sha: []const u8,
+
+        pub fn toContext(self: Commit, a: Allocator) !Template.Context {
+            var jctx = Template.Context.init(a);
+            try jctx.put("Name", self.name);
+            try jctx.put("Repo", self.repo);
+            try jctx.put("Date", try std.fmt.allocPrint(a, "{}", .{self.date}));
+            try jctx.put("Sha", self.sha);
+            return jctx;
+        }
     };
 
     const Option = union(enum) {
@@ -93,7 +102,7 @@ fn buildJournal(
     defer repo.raze(a);
 
     var lseen = std.BufSet.init(a);
-    const until = (try DateTime.fromEpoch(DateTime.now().timestamp - DAY * 30)).timestamp;
+    const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
     var commit = try repo.commit(a);
 
     while (true) {
@@ -106,7 +115,7 @@ fn buildJournal(
         if (std.mem.eql(u8, email.?, commit.author.email)) {
             try list.append(.{
                 .name = try a.dupe(u8, commit.author.name),
-                .date = try DateTime.fromEpoch(commit_time),
+                .date = DateTime.fromEpoch(commit_time),
                 .sha = try a.dupe(u8, commit.sha),
                 .repo = try a.dupe(u8, gitdir[8..]),
             });
@@ -146,13 +155,14 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     var nowish = DateTime.now();
     var date = DateTime.today();
-    date = DateTime.fromEpoch(date.timestamp + DAY - YEAR) catch unreachable;
+    date = DateTime.fromEpoch(date.timestamp + DAY - YEAR);
     while (date.weekday != 0) {
-        date = DateTime.fromEpoch(date.timestamp - DAY) catch unreachable;
+        date = DateTime.fromEpoch(date.timestamp - DAY);
     }
     const until = date.timestamp;
 
     var email: ?[]const u8 = null;
+    var tz_offset: ?i32 = null;
     if (Ini.default(ctx.alloc)) |ini| {
         if (ini.get("owner")) |ns| {
             if (ns.get("email")) |c_email| {
@@ -160,7 +170,8 @@ pub fn commitFlex(ctx: *Context) Error!void {
             }
             if (ns.get("tz")) |ts| {
                 if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
-                    nowish = DateTime.fromEpoch(nowish.timestamp + tzs) catch unreachable;
+                    tz_offset = tzs;
+                    nowish = DateTime.fromEpoch(nowish.timestamp + tzs);
                 }
             }
         }
@@ -173,7 +184,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
         return error.Unknown;
     };
 
-    var journal = std.ArrayList(Scribe.Commit).init(ctx.alloc);
+    var scribe_list = std.ArrayList(Scribe.Commit).init(ctx.alloc);
 
     var itr = dir.iterate();
     while (itr.next() catch return Error.Unknown) |file| {
@@ -182,7 +193,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
             .directory, .sym_link => {
                 const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
                 _ = findCommits(ctx.alloc, &hits, &seen, until, repo, email) catch unreachable;
-                buildJournal(ctx.alloc, &journal, email, repo) catch {
+                buildJournal(ctx.alloc, &scribe_list, email, repo) catch {
                     return error.Unknown;
                 };
                 repo_count +|= 1;
@@ -200,7 +211,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
     for (0..53) |_| {
         var column: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
         if ((printed_month % 12) != date.months - 1) {
-            const next_week = DateTime.fromEpoch(date.timestamp + WEEK) catch unreachable;
+            const next_week = DateTime.fromEpoch(date.timestamp + WEEK);
             printed_month += 1;
             if ((printed_month % 12) != next_week.months - 1) {
                 column[0] = HTML.div("&nbsp;", &monthAtt);
@@ -212,7 +223,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
         }
 
         for (column[1..]) |*m| {
-            defer date = DateTime.fromEpoch(date.timestamp + DAY) catch unreachable;
+            defer date = DateTime.fromEpoch(date.timestamp + DAY);
             defer day_off += 1;
             const rows = try ctx.alloc.alloc(HTML.Attribute, 2);
             const class = if (date.timestamp >= nowish.timestamp)
@@ -251,29 +262,55 @@ pub fn commitFlex(ctx: *Context) Error!void {
     try tmpl.ctx.?.put("Checked_repos", try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}));
     _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
 
-    std.sort.pdq(Scribe.Commit, journal.items, {}, journalSorted);
+    std.sort.pdq(Scribe.Commit, scribe_list.items, {}, journalSorted);
 
-    var journal_ctx = std.ArrayList(Template.Context).init(ctx.alloc);
+    {
+        const today = if (tz_offset) |tz|
+            DateTime.fromEpoch(DateTime.today().timestamp + tz).removeTime()
+        else
+            DateTime.today();
+        const yesterday = DateTime.fromEpoch(today.timestamp - 86400);
+        const last_week = DateTime.fromEpoch(yesterday.timestamp - 86400 * 7);
 
-    for (journal.items) |itm| {
-        var jctx = Template.Context.init(ctx.alloc);
-        try jctx.put("Name", itm.name);
-        try jctx.put("Repo", itm.repo);
-        try jctx.put("Date", try std.fmt.allocPrint(ctx.alloc, "{}", .{itm.date}));
-        try jctx.put("Sha", itm.sha);
-        try journal_ctx.append(jctx);
+        var groups = std.ArrayList(Template.Context).init(ctx.alloc);
+
+        var todays = std.ArrayList(Template.Context).init(ctx.alloc);
+        var yesterdays = std.ArrayList(Template.Context).init(ctx.alloc);
+        var last_weeks = std.ArrayList(Template.Context).init(ctx.alloc);
+        var last_months = std.ArrayList(Template.Context).init(ctx.alloc);
+
+        for (scribe_list.items) |each| {
+            if (today.timestamp < each.date.timestamp) {
+                try todays.append(try each.toContext(ctx.alloc));
+            } else if (yesterday.timestamp < each.date.timestamp) {
+                try yesterdays.append(try each.toContext(ctx.alloc));
+            } else if (last_week.timestamp < each.date.timestamp) {
+                try last_weeks.append(try each.toContext(ctx.alloc));
+            } else {
+                try last_months.append(try each.toContext(ctx.alloc));
+            }
+        }
+
+        var today_grp = Template.Context.init(ctx.alloc);
+        try today_grp.put("Group", "Today");
+        try today_grp.putBlock("Rows", todays.items);
+        try groups.append(today_grp);
+        var yesterday_grp = Template.Context.init(ctx.alloc);
+        try yesterday_grp.put("Group", "Yesterday");
+        try yesterday_grp.putBlock("Rows", yesterdays.items);
+        try groups.append(yesterday_grp);
+        var last_weeks_grp = Template.Context.init(ctx.alloc);
+        try last_weeks_grp.put("Group", "Last Week");
+        try last_weeks_grp.putBlock("Rows", last_weeks.items);
+        try groups.append(last_weeks_grp);
+        var last_months_grp = Template.Context.init(ctx.alloc);
+        try last_months_grp.put("Group", "Last Month");
+        try last_months_grp.putBlock("Rows", last_months.items);
+        try groups.append(last_months_grp);
+
+        // TODO sort by date
+        try tmpl.ctx.?.putBlock("Months", groups.items);
     }
-
-    var jlist = std.ArrayList(Template.Context).init(ctx.alloc);
-    try jlist.append(Template.Context.init(ctx.alloc));
-    for (jlist.items) |*mj| {
-        try mj.put("Month", DateTime.currentMonth());
-
-        try mj.putBlock("Rows", journal_ctx.items);
-    }
-
-    // TODO sort by date
-    try tmpl.ctx.?.putBlock("Months", jlist.items);
 
     return ctx.sendTemplate(&tmpl) catch unreachable;
 }
