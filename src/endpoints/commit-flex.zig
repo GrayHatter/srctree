@@ -158,13 +158,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
     const monthAtt = HTML.Attr.class("month");
 
     var nowish = DateTime.now();
-    var date = DateTime.today();
-    date = DateTime.fromEpoch(date.timestamp + DAY - YEAR);
-    while (date.weekday != 0) {
-        date = DateTime.fromEpoch(date.timestamp - DAY);
-    }
-    const until = date.timestamp;
-
     var email: ?[]const u8 = null;
     var tz_offset: ?i32 = null;
     if (Ini.default(ctx.alloc)) |ini| {
@@ -180,6 +173,12 @@ pub fn commitFlex(ctx: *Context) Error!void {
             }
         }
     } else |_| {}
+    var date = nowish.removeTime();
+    date = DateTime.fromEpoch(date.timestamp + DAY - YEAR);
+    while (date.weekday != 0) {
+        date = DateTime.fromEpoch(date.timestamp - DAY);
+    }
+    const until = date.timestamp;
 
     var hits: HeatMapArray = .{0} ** (366 + 6);
     var seen = std.BufSet.init(ctx.alloc);
@@ -230,7 +229,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
             defer day_off += 1;
             const rows = try ctx.alloc.alloc(HTML.Attribute, 2);
-            const class = if (date.timestamp >= nowish.timestamp)
+            const class = if (date.timestamp >= nowish.timestamp - 1)
                 "day-hide"
             else switch (16 - @clz(hits[day_off])) {
                 0 => "day",
@@ -270,7 +269,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     {
         const today = if (tz_offset) |tz|
-            DateTime.fromEpoch(DateTime.today().timestamp + tz).removeTime()
+            DateTime.fromEpoch(DateTime.now().timestamp + tz).removeTime()
         else
             DateTime.today();
         const yesterday = DateTime.fromEpoch(today.timestamp - 86400);
