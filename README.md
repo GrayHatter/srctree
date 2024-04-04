@@ -36,11 +36,17 @@ In an unsorted order
   - [ ] support for viewing branches
   - [ ] network collection & browsing
   - [x] owner heat map
-  - [ ] owner activity journal
+  - [-] owner activity journal
+    - [x] commits
+    - [ ] anything other that
   - [ ] user accounts
   - [ ] new account setup
   - [ ] git via ssh support
-  - [ ] basic logic for template system
+  - [-] basic logic for template system
+    - [x] For
+    - [x] ORNULL
+    - [x] ORELSE "default"
+    - [ ] if/with
   - [ ] 
   - [ ] docs for everything
   - [ ] docs for template engine
