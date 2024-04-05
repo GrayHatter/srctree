@@ -2,6 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
+const api = @import("api.zig");
 const Template = @import("template.zig");
 const Context = @import("context.zig");
 const Response = @import("response.zig");
@@ -10,7 +11,9 @@ const endpoint = @import("endpoint.zig");
 const HTML = @import("html.zig");
 const StaticFile = @import("static-file.zig");
 
-const Error = endpoint.Error;
+// TODO relocate this error
+pub const Error = endpoint.Error;
+
 pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 
 const div = HTML.div;
@@ -103,13 +106,14 @@ pub fn POST(comptime name: []const u8, comptime match: Callable) MatchRouter {
 
 const root = [_]MatchRouter{
     ROUTE("admin", endpoint.admin),
+    ROUTE("api", api.router),
     ROUTE("diffs", endpoint.USERS.diffs),
     ROUTE("network", endpoint.network),
     ROUTE("repo", endpoint.repo),
     ROUTE("repos", endpoint.repo),
+    ROUTE("search", endpoint.search),
     ROUTE("todo", endpoint.USERS.todo),
     ROUTE("user", endpoint.commitFlex),
-    ROUTE("search", endpoint.search),
 };
 
 fn notfound(ctx: *Context) Error!void {
