@@ -29,7 +29,8 @@ const Scribe = struct {
             try jctx.put("Repo", self.repo);
             try jctx.put("Title", self.title);
             try jctx.put("Date", try std.fmt.allocPrint(a, "{}", .{self.date}));
-            try jctx.put("Sha", self.sha);
+            try jctx.put("ShaLong", self.sha);
+            try jctx.put("Sha", self.sha[0..8]);
             return jctx;
         }
     };
@@ -60,7 +61,7 @@ fn countAll(
             commit_time += tzs;
         }
 
-        if (commit_time < until) return hits;
+        if (commit_time < until and commit.committer.timestamp < until) return hits;
         const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
         if (email) |email_| {
             if (std.mem.eql(u8, email_, commit.author.email)) {
@@ -69,14 +70,16 @@ fn countAll(
         } else hits[day_off] += 1;
         for (commit.parent[1..], 1..) |par, pidx| {
             if (par) |_| {
-                seen.insert(par.?) catch return hits;
+                seen.insert(par.?) catch unreachable;
                 const parent = try commit.toParent(a, @truncate(pidx));
                 //defer parent.raze(a);
                 _ = try countAll(a, hits, seen, until, parent, email);
             }
         }
         commit = commit.toParent(a, 0) catch |err| switch (err) {
-            error.NoParent => return hits,
+            error.NoParent => {
+                return hits;
+            },
             else => |e| return e,
         };
     }
@@ -160,19 +163,26 @@ pub fn commitFlex(ctx: *Context) Error!void {
     var nowish = DateTime.now();
     var email: ?[]const u8 = null;
     var tz_offset: ?i32 = null;
-    if (Ini.default(ctx.alloc)) |ini| {
-        if (ini.get("owner")) |ns| {
-            if (ns.get("email")) |c_email| {
-                email = c_email;
-            }
-            if (ns.get("tz")) |ts| {
-                if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
-                    tz_offset = tzs;
-                    nowish = DateTime.fromEpoch(nowish.timestamp + tzs);
+    var query = ctx.req_data.query_data.validator();
+    const user = query.optional("user");
+
+    if (user) |u| {
+        email = u.value;
+    } else {
+        if (Ini.default(ctx.alloc)) |ini| {
+            if (ini.get("owner")) |ns| {
+                if (ns.get("email")) |c_email| {
+                    email = c_email;
+                }
+                if (ns.get("tz")) |ts| {
+                    if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
+                        tz_offset = tzs;
+                        nowish = DateTime.fromEpoch(nowish.timestamp + tzs);
+                    }
                 }
             }
-        }
-    } else |_| {}
+        } else |_| {}
+    }
     var date = nowish.removeTime();
     date = DateTime.fromEpoch(date.timestamp + DAY - YEAR);
     while (date.weekday != 0) {
