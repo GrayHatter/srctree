@@ -9,7 +9,7 @@ const zWSGIRequest = zWSGI.zWSGIRequest;
 
 pub const Request = @import("request.zig");
 pub const Response = @import("response.zig");
-pub const RequestData = @import("user-data.zig").RequestData;
+pub const RequestData = @import("request_data.zig").RequestData;
 pub const Template = @import("template.zig");
 pub const UriIter = @import("endpoint.zig").Router.UriIter;
 

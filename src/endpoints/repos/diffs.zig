@@ -11,7 +11,7 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 
-const UserData = @import("../../user-data.zig").UserData;
+const UserData = @import("../../request_data.zig").UserData;
 
 const Repo = @import("../repos.zig");
 

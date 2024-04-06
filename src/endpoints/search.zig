@@ -9,7 +9,7 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const ROUTE = Endpoint.Router.ROUTE;
 
-const UserData = @import("../user-data.zig").UserData;
+const UserData = @import("../request_data.zig").UserData;
 const Bleach = @import("../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{

@@ -7,7 +7,7 @@ const Context = @import("context.zig");
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
-const UserData = @import("user-data.zig");
+const RequestData = @import("request_data.zig");
 
 const MAX_HEADER_SIZE = 1 <<| 13;
 
