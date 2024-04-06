@@ -230,7 +230,8 @@ const Pack = struct {
             if (size == 0) size = 0x10000;
             //std.debug.print("    size: {:12}         {b:0>24} \n", .{ size, size });
             //std.debug.print("COPY {: >4} {: >4}\n", .{ offs, size });
-            if (size != try writer.write(base[offs..][0..size])) @panic("write didn't not fail");
+            if (size != try writer.write(base[offs..][0..size]))
+                @panic("write didn't not fail");
             return size;
         } else {
             var stage: [128]u8 = undefined;
