@@ -25,6 +25,7 @@ uri: UriIter,
 auth: Auth,
 // TODO fix this API
 template_ctx: Template.Context,
+route_ctx: ?*const anyopaque = null,
 
 const VarPair = struct {
     []const u8,
@@ -65,5 +66,19 @@ pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
     const page = try t.buildFor(ctx.alloc, ctx.template_ctx);
     defer ctx.alloc.free(page);
     ctx.response.send(page) catch unreachable;
+    ctx.response.finish() catch unreachable;
+}
+
+pub fn sendJSON(ctx: *Context, json: anytype) Error!void {
+    ctx.response.start() catch |err| switch (err) {
+        error.BrokenPipe => return error.NetworkCrash,
+        else => unreachable,
+    };
+
+    const data = std.json.stringifyAlloc(ctx.alloc, json, .{}) catch |err| {
+        std.debug.print("Error trying to print json {}\n", .{err});
+        return error.Unknown;
+    };
+    ctx.response.writeAll(data) catch unreachable;
     ctx.response.finish() catch unreachable;
 }

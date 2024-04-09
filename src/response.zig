@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const AnyWriter = std.io.AnyWriter;
 
 const Request = @import("request.zig");
 const Headers = @import("headers.zig");
@@ -97,8 +98,7 @@ pub fn start(res: *Response) !void {
     _ = try res.write("\r\n");
 }
 
-pub fn sendHeaders(res: *Response) !void {
-    res.phase = .headers;
+fn sendHTTPHeader(res: *const Response) !void {
     _ = switch (res.status) {
         .ok => try res.write("HTTP/1.1 200 OK\r\n"),
         .found => try res.write("HTTP/1.1 302 Found\r\n"),
@@ -106,11 +106,14 @@ pub fn sendHeaders(res: *Response) !void {
         .not_found => try res.write("HTTP/1.1 404 Not Found\r\n"),
         else => return Error.UnknownStatus,
     };
+}
+
+pub fn sendHeaders(res: *Response) !void {
+    res.phase = .headers;
+    try res.sendHTTPHeader();
     var itr = res.headers.index.iterator();
     while (itr.next()) |header| {
         var buf: [512]u8 = undefined;
-
-        // TODO descend
         const b = try std.fmt.bufPrint(&buf, "{s}: {s}\r\n", .{ header.key_ptr.*, header.value_ptr.str });
         _ = try res.write(b);
     }
@@ -142,31 +145,47 @@ pub fn send(res: *Response, data: []const u8) !void {
     try res.writeAll(data);
 }
 
-pub fn writer(res: *Response) Writer {
+pub fn writer(res: *const Response) Writer {
     return .{ .context = res };
 }
 
-pub fn writeChunk(res: *Response, data: []const u8) !void {
-    var size: [0xffff]u8 = undefined;
+pub fn anyWriter(res: *const Response) AnyWriter {
+    return .{
+        .context = res,
+        .writeFn = typeErasedWrite,
+    };
+}
+
+pub fn writeChunk(res: *const Response, data: []const u8) !void {
+    comptime unreachable;
+    var size: [0xff]u8 = undefined;
     const chunk = try std.fmt.bufPrint(&size, "{x}\r\n", .{data.len});
     try res.writeAll(chunk);
     try res.writeAll(data);
     try res.writeAll("\r\n");
 }
 
-pub fn writeAll(res: *Response, data: []const u8) !void {
+pub fn writeAll(res: *const Response, data: []const u8) !void {
     var index: usize = 0;
     while (index < data.len) {
         index += try write(res, data[index..]);
     }
 }
 
+pub fn typeErasedWrite(opq: *const anyopaque, data: []const u8) anyerror!usize {
+    const cast: *const Response = @alignCast(@ptrCast(opq));
+    return try write(cast, data);
+}
+
 /// Raw writer, use with caution! To use phase checking, use send();
-pub fn write(res: *Response, data: []const u8) !usize {
+pub fn write(res: *const Response, data: []const u8) !usize {
     return switch (res.downstream) {
         .zwsgi => |*w| try w.write(data),
         .http => |*w| try w.write(data),
-        .buffer => |*w| try w.write(data),
+        .buffer => {
+            var bff: *Response = @constCast(res);
+            return try bff.write(data);
+        },
     };
 }
 
