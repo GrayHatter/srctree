@@ -14,6 +14,7 @@ Good luck!
 
 ## TODO
 In an unsorted order
+  - [ ] manual code sync
   - [x] view code
   - [x] public http clone
   - [x] view commits

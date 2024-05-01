@@ -69,7 +69,7 @@ fn cloneUpstream(ctx: *Context) Error!void {
         HTML.Attr{ .key = "action", .value = action },
     }));
     dom.push(HTML.element("input", null, &[_]HTML.Attr{
-        HTML.Attr{ .key = "name", .value = "repo uri" },
+        HTML.Attr{ .key = "name", .value = "repo_uri" },
         HTML.Attr{ .key = "value", .value = "https://srctree/reponame" },
     }));
     dom = dom.close();
