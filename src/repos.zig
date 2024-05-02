@@ -107,7 +107,7 @@ pub fn updateThread() void {
             ) catch unreachable;
 
             if (hasUpstream(a, repo) catch continue) |up| {
-                repo.dir.writeFile("srctree_last_update", update) catch {};
+                repo.dir.writeFile(.{ .sub_path = "srctree_last_update", .data = update }) catch {};
                 a.free(up);
                 var acts = repo.getActions(a);
                 const updated = acts.updateUpstream(head) catch er: {
@@ -133,7 +133,7 @@ pub fn updateThread() void {
             const repo_update = repo.updatedAt(a) catch 0;
             if (repo_update > last_push) {
                 if (hasDownstream(a, repo) catch continue) |down| {
-                    repo.dir.writeFile("srctree_last_downdate", update) catch {};
+                    repo.dir.writeFile(.{ .sub_path = "srctree_last_downdate", .data = update }) catch {};
                     a.free(down);
                     var acts = repo.getActions(a);
                     const updated = acts.updateDownstream() catch er: {

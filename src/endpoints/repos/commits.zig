@@ -198,9 +198,9 @@ fn commitContext(a: Allocator, c: git.Commit, repo: []const u8, comptime _: bool
 
     try ctx.put("Sha", c.sha[0..8]);
     try ctx.put("Uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
-    try ctx.put("Msg_title", c.title);
-    try ctx.put("Msg", c.body);
-
+    // TODO handle error.NotImplemented
+    try ctx.put("Msg_title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
+    try ctx.put("Msg", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
     //if (top) "top" else "foot", null, null));
     const parent = c.parent[0] orelse "00000000";
     try ctx.put("Author", c.author.name);
