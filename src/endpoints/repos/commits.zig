@@ -88,15 +88,15 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Diff", diff_dom.done()) catch return error.Unknown;
 
     var comments = DOM.new(ctx.alloc);
-    for ([_]Comment{ .{
-        .author = "robinli",
-        .message = "Woah, I didn't know srctree had the ability to comment on commits!",
-    }, .{
-        .author = "grayhatter",
-        .message = "Hah, yeah, added it the other day... pretty dope huh?",
-    } }) |cm| {
-        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
-    }
+    //for ([_]Comment{ .{
+    //    .author = "robinli",
+    //    .message = "Woah, I didn't know srctree had the ability to comment on commits!",
+    //}, .{
+    //    .author = "grayhatter",
+    //    .message = "Hah, yeah, added it the other day... pretty dope huh?",
+    //} }) |cm| {
+    //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
+    //}
 
     const map = CmmtMap.open(ctx.alloc, sha) catch unreachable;
     for (map.comments) |cm| {
@@ -134,7 +134,7 @@ pub fn commit(ctx: *Context) Error!void {
     if (rd.verb == null) return commits(ctx);
 
     const sha = rd.noun orelse return error.Unrouteable;
-    if (std.mem.indexOf(u8, sha, ".") != null) return error.Unrouteable;
+    if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
     const cwd = std.fs.cwd();
     // FIXME user data flows into system
     const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
