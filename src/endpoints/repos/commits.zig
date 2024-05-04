@@ -162,10 +162,10 @@ pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: b
         try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
     ));
     cd_dom.push(HTML.br());
-    cd_dom.push(HTML.text(c.title));
+    cd_dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable));
     if (c.body.len > 0) {
         cd_dom.push(HTML.br());
-        cd_dom.push(HTML.text(c.body));
+        cd_dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable));
     }
     cd_dom = cd_dom.close();
     const cdata = cd_dom.done();
