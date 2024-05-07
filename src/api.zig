@@ -4,7 +4,12 @@ const routes = @import("routes.zig");
 const ROUTE = routes.ROUTE;
 const Context = @import("context.zig");
 
-const endpoints = [_]routes.MatchRouter{};
+const endpoints = [_]routes.MatchRouter{
+    ROUTE("v0", router),
+    ROUTE("v1", router),
+    ROUTE("network", router),
+    ROUTE("heartbeat", heartbeat),
+};
 
 const APIRouteData = struct {
     alloc: Allocator,
@@ -32,4 +37,19 @@ const HeartBeat = struct {
 
 fn heartbeat(ctx: *Context) routes.Error!void {
     return try ctx.sendJSON(HeartBeat{ .nice = 69 });
+}
+
+/// Likely to be renamed
+const RemotePeer = struct {
+    name: []const u8,
+    uri: []const u8,
+    count: usize,
+};
+
+const Network = struct {
+    networks: []RemotePeer,
+};
+
+fn network(ctx: *Context) routes.Error!void {
+    return try ctx.sendJSON(Network{ .networks = [0].{} });
 }
