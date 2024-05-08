@@ -7,8 +7,9 @@ const Context = @import("context.zig");
 const endpoints = [_]routes.MatchRouter{
     ROUTE("v0", router),
     ROUTE("v1", router),
-    ROUTE("network", router),
     ROUTE("heartbeat", heartbeat),
+    ROUTE("network", router),
+    ROUTE("repo", repo),
 };
 
 const APIRouteData = struct {
@@ -52,4 +53,14 @@ const Network = struct {
 
 fn network(ctx: *Context) routes.Error!void {
     return try ctx.sendJSON(Network{ .networks = [0].{} });
+}
+
+const Repo = struct {
+    name: []const u8,
+    head: []const u8,
+    updated: []const u8,
+};
+
+fn repo(ctx: *Context) routes.Error!void {
+    return try ctx.sendJson([0]Repo{});
 }
