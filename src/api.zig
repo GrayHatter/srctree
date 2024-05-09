@@ -64,3 +64,15 @@ const Repo = struct {
 fn repo(ctx: *Context) routes.Error!void {
     return try ctx.sendJSON([0]Repo{});
 }
+
+const Flex = struct {
+    days: []const Day,
+
+    pub const Day = struct {
+        epoch: usize = 0,
+    };
+};
+
+fn flex(ctx: *Context) routes.Error!void {
+    return try ctx.sendJSON([0]Flex{});
+}
