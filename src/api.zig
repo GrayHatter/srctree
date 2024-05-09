@@ -62,5 +62,5 @@ const Repo = struct {
 };
 
 fn repo(ctx: *Context) routes.Error!void {
-    return try ctx.sendJson([0]Repo{});
+    return try ctx.sendJSON([0]Repo{});
 }
