@@ -45,6 +45,10 @@ const RemotePeer = struct {
     name: []const u8,
     uri: []const u8,
     count: usize,
+    /// The last time this peer was was sync'd
+    updated: usize,
+    /// The last time this peer changed
+    changed: usize,
 };
 
 const Network = struct {
