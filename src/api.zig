@@ -7,7 +7,10 @@ const Context = @import("context.zig");
 const endpoints = [_]routes.MatchRouter{
     ROUTE("v0", router),
     ROUTE("v1", router),
+
+    ROUTE("diff", diff),
     ROUTE("heartbeat", heartbeat),
+    ROUTE("issue", issue),
     ROUTE("network", router),
     ROUTE("repo", repo),
 };
@@ -32,12 +35,28 @@ pub fn router(ctx: *Context) routes.Error!routes.Callable {
     return heartbeat;
 }
 
+const Diff = struct {
+    sha: []const u8,
+};
+
+fn diff(ctx: *Context) routes.Error!void {
+    return try ctx.sendJSON([0]Diff{});
+}
+
 const HeartBeat = struct {
     nice: usize = 0,
 };
 
 fn heartbeat(ctx: *Context) routes.Error!void {
     return try ctx.sendJSON(HeartBeat{ .nice = 69 });
+}
+
+const Issue = struct {
+    index: usize,
+};
+
+fn issue(ctx: *Context) routes.Error!void {
+    return try ctx.sendJSON([0]Issue{});
 }
 
 /// Likely to be renamed
