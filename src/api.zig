@@ -13,6 +13,7 @@ const endpoints = [_]routes.MatchRouter{
     ROUTE("issue", issue),
     ROUTE("network", router),
     ROUTE("repo", repo),
+    ROUTE("user", user),
 };
 
 const APIRouteData = struct {
@@ -98,4 +99,13 @@ const Flex = struct {
 
 fn flex(ctx: *Context) routes.Error!void {
     return try ctx.sendJSON([0]Flex{});
+}
+
+const User = struct {
+    name: []const u8,
+    email: []const u8,
+};
+
+fn user(ctx: *Context) routes.Error!void {
+    return try ctx.sendJSON([0]user{});
 }
