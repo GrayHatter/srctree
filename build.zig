@@ -15,9 +15,7 @@ pub fn build(b: *std.Build) void {
 
     const exe = b.addExecutable(.{
         .name = "srctree",
-        .root_source_file = .{
-            .path = "src/main.zig",
-        },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -33,7 +31,7 @@ pub fn build(b: *std.Build) void {
     run_step.dependOn(&run_cmd.step);
 
     const unit_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -56,9 +54,7 @@ pub fn build(b: *std.Build) void {
 
 fn compileTemplates(b: *std.Build) !*std.Build.Module {
     const compiled = b.addModule("templates-compiled", .{
-        .root_source_file = .{
-            .path = "src/template-compiled.zig",
-        },
+        .root_source_file = b.path("src/template-compiled.zig"),
     });
 
     const list = buildSrcTemplates(b) catch @panic("unable to build src files");
@@ -72,7 +68,7 @@ fn compileTemplates(b: *std.Build) !*std.Build.Module {
 
     for (list) |file| {
         _ = compiled.addAnonymousImport(file, .{
-            .root_source_file = .{ .path = file },
+            .root_source_file = b.path(file),
         });
     }
 
