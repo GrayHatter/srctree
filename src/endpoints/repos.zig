@@ -38,7 +38,7 @@ const endpoints = [_]MatchRouter{
     .{ .name = "blob", .match = .{ .call = treeBlob } },
     ROUTE("commit", &Commits.router),
     ROUTE("commits", &Commits.router),
-    .{ .name = "tree", .match = .{ .call = treeBlob } },
+    ROUTE("tree", treeBlob),
     .{ .name = "diffs", .match = .{ .route = &Diffs.router } },
     .{ .name = "issues", .match = .{ .route = &Issues.router } },
     ROUTE("blame", blame),
