@@ -14,6 +14,7 @@ const EndpointErr = Endpoint.Error;
 const HTTP = @import("http.zig");
 const zWSGI = @import("zwsgi.zig");
 const Ini = @import("ini.zig");
+const Cache = @import("cache.zig");
 
 const HOST = "127.0.0.1";
 const PORT = 2000;
@@ -109,6 +110,9 @@ pub fn main() !void {
 
     try Database.init(.{});
     defer Database.raze();
+
+    _ = try Cache.init(a);
+    defer Cache.raze();
 
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{});
     defer thread.join();

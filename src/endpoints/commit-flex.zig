@@ -42,6 +42,17 @@ const Scribe = struct {
     thing: Option,
 };
 
+pub const CACHED_MAP = std.StringHashMap(HeatMapArray);
+var cached_map: CACHED_MAP = undefined;
+
+pub fn initCache(a: Allocator) void {
+    cached_map = CACHED_MAP.init(a);
+}
+
+pub fn razeCache() void {
+    cached_map.deinit();
+}
+
 /// we might add up to 6 days to align the grid
 const HeatMapArray = [366 + 6]u16;
 
@@ -190,7 +201,9 @@ pub fn commitFlex(ctx: *Context) Error!void {
     }
     const until = date.timestamp;
 
-    var hits: HeatMapArray = .{0} ** (366 + 6);
+    const gop = try cached_map.getOrPut("all");
+    var hits: *HeatMapArray = gop.value_ptr;
+    if (!gop.found_existing) @memset(hits[0..], 0);
     var seen = std.BufSet.init(ctx.alloc);
     var repo_count: usize = 0;
     var dir = std.fs.cwd().openDir("./repos", .{ .iterate = true }) catch {
@@ -205,7 +218,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
         switch (file.kind) {
             .directory, .sym_link => {
                 const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                _ = findCommits(ctx.alloc, &hits, &seen, until, repo, email) catch unreachable;
+                if (!gop.found_existing) _ = findCommits(ctx.alloc, hits, &seen, until, repo, email) catch unreachable;
                 buildJournal(ctx.alloc, &scribe_list, email, repo) catch {
                     return error.Unknown;
                 };
