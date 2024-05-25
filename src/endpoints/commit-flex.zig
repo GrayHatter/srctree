@@ -44,6 +44,7 @@ const Scribe = struct {
 
 pub const CACHED_MAP = std.StringHashMap(HeatMapArray);
 var cached_map: CACHED_MAP = undefined;
+var cached_time: i64 = 0; // TODO figure out how to comptime this
 
 pub fn initCache(a: Allocator) void {
     cached_map = CACHED_MAP.init(a);
@@ -204,6 +205,9 @@ pub fn commitFlex(ctx: *Context) Error!void {
     const gop = try cached_map.getOrPut("all");
     var hits: *HeatMapArray = gop.value_ptr;
     if (!gop.found_existing) @memset(hits[0..], 0);
+
+    if (cached_time < (std.time.timestamp() - 60 * 60 * 2)) @memset(hits[0..], 0);
+
     var seen = std.BufSet.init(ctx.alloc);
     var repo_count: usize = 0;
     var dir = std.fs.cwd().openDir("./repos", .{ .iterate = true }) catch {
@@ -218,7 +222,10 @@ pub fn commitFlex(ctx: *Context) Error!void {
         switch (file.kind) {
             .directory, .sym_link => {
                 const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                if (!gop.found_existing) _ = findCommits(ctx.alloc, hits, &seen, until, repo, email) catch unreachable;
+                if (!gop.found_existing) {
+                    _ = findCommits(ctx.alloc, hits, &seen, until, repo, email) catch unreachable;
+                    cached_time = std.time.timestamp();
+                }
                 buildJournal(ctx.alloc, &scribe_list, email, repo) catch {
                     return error.Unknown;
                 };
