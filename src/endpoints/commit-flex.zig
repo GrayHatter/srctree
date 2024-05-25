@@ -42,20 +42,28 @@ const Scribe = struct {
     thing: Option,
 };
 
-pub const CACHED_MAP = std.StringHashMap(HeatMapArray);
-var cached_map: CACHED_MAP = undefined;
+const Day = struct {
+    //prev: ?*Day,
+    //next: ?*Day,
+    events: []Scribe,
+};
+
+/// we might add up to 6 days to align the grid
+const HeatMapSize = 366 + 6;
+const HeatMapArray = [HeatMapSize]u16;
+
+pub const CACHED_COMMITS = std.StringHashMap(HeatMapArray);
+pub const CACHED_EMAIL = std.StringHashMap(CACHED_COMMITS);
+var cached_email: CACHED_EMAIL = undefined;
 var cached_time: i64 = 0; // TODO figure out how to comptime this
 
 pub fn initCache(a: Allocator) void {
-    cached_map = CACHED_MAP.init(a);
+    cached_email = CACHED_EMAIL.init(a);
 }
 
 pub fn razeCache() void {
-    cached_map.deinit();
+    cached_email.deinit();
 }
-
-/// we might add up to 6 days to align the grid
-const HeatMapArray = [366 + 6]u16;
 
 fn countAll(
     a: Allocator,
@@ -63,7 +71,7 @@ fn countAll(
     seen: *std.BufSet,
     until: i64,
     root_cmt: Git.Commit,
-    email: ?[]const u8,
+    email: []const u8,
 ) !*HeatMapArray {
     var commit = root_cmt;
     while (true) {
@@ -75,11 +83,9 @@ fn countAll(
 
         if (commit_time < until and commit.committer.timestamp < until) return hits;
         const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
-        if (email) |email_| {
-            if (std.mem.eql(u8, email_, commit.author.email)) {
-                hits[day_off] += 1;
-            }
-        } else hits[day_off] += 1;
+        if (std.mem.eql(u8, email, commit.author.email)) {
+            hits[day_off] += 1;
+        }
         for (commit.parent[1..], 1..) |par, pidx| {
             if (par) |_| {
                 seen.insert(par.?) catch unreachable;
@@ -155,7 +161,22 @@ fn buildJournal(
     }
 }
 
-fn findCommits(a: Allocator, hits: *HeatMapArray, seen: *std.BufSet, until: i64, gitdir: []const u8, email: ?[]const u8) !*HeatMapArray {
+fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, email: []const u8) !*HeatMapArray {
+    const email_gop = try cached_email.getOrPut(email);
+    if (!email_gop.found_existing) {
+        email_gop.value_ptr.* = CACHED_COMMITS.init(cached_email.allocator);
+    }
+    var email_cache: CACHED_COMMITS = email_gop.value_ptr.*;
+
+    const repo_gop = try email_cache.getOrPut(gitdir);
+
+    var hits: *HeatMapArray = repo_gop.value_ptr;
+    if (repo_gop.found_existing and cached_time >= (std.time.timestamp() - 60 * 60 * 2)) {
+        return hits;
+    }
+
+    @memset(hits[0..], 0);
+
     const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
     try repo.loadData(a);
@@ -173,7 +194,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
     const monthAtt = HTML.Attr.class("month");
 
     var nowish = DateTime.now();
-    var email: ?[]const u8 = null;
+    var email: []const u8 = undefined;
     var tz_offset: ?i32 = null;
     var query = ctx.req_data.query_data.validator();
     const user = query.optional("user");
@@ -185,7 +206,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
             if (ini.get("owner")) |ns| {
                 if (ns.get("email")) |c_email| {
                     email = c_email;
-                }
+                } else @panic("no email configured");
                 if (ns.get("tz")) |ts| {
                     if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
                         tz_offset = tzs;
@@ -202,12 +223,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
     }
     const until = date.timestamp;
 
-    const gop = try cached_map.getOrPut("all");
-    var hits: *HeatMapArray = gop.value_ptr;
-    if (!gop.found_existing) @memset(hits[0..], 0);
-
-    if (cached_time < (std.time.timestamp() - 60 * 60 * 2)) @memset(hits[0..], 0);
-
     var seen = std.BufSet.init(ctx.alloc);
     var repo_count: usize = 0;
     var dir = std.fs.cwd().openDir("./repos", .{ .iterate = true }) catch {
@@ -216,20 +231,21 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     var scribe_list = std.ArrayList(Scribe.Commit).init(ctx.alloc);
 
+    var count_all: HeatMapArray = .{0} ** (366 + 6);
+
     var itr = dir.iterate();
     while (itr.next() catch return Error.Unknown) |file| {
         var buf: [1024]u8 = undefined;
         switch (file.kind) {
             .directory, .sym_link => {
                 const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                if (!gop.found_existing) {
-                    _ = findCommits(ctx.alloc, hits, &seen, until, repo, email) catch unreachable;
-                    cached_time = std.time.timestamp();
-                }
+                const count_repo = findCommits(ctx.alloc, &seen, until, repo, email) catch unreachable;
                 buildJournal(ctx.alloc, &scribe_list, email, repo) catch {
                     return error.Unknown;
                 };
                 repo_count +|= 1;
+                for (&count_all, count_repo) |*a, r| a.* += r;
+                cached_time = std.time.timestamp();
             },
             else => {},
         }
@@ -237,7 +253,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     var dom = DOM.new(ctx.alloc);
     var tcount: u16 = 0;
-    for (hits) |h| tcount +|= h;
+    for (count_all) |h| tcount +|= h;
 
     var printed_month: usize = (date.months + 10) % 12;
     var day_off: usize = 0;
@@ -261,7 +277,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
             const rows = try ctx.alloc.alloc(HTML.Attribute, 2);
             const class = if (date.timestamp >= nowish.timestamp - 1)
                 "day-hide"
-            else switch (16 - @clz(hits[day_off])) {
+            else switch (16 - @clz(count_all[day_off])) {
                 0 => "day",
                 1 => "day day-commits day-pwr-1",
                 2 => "day day-commits day-pwr-2",
@@ -277,7 +293,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
                     .value = try std.fmt.allocPrint(
                         ctx.alloc,
                         "{} commits on {}",
-                        .{ hits[day_off], date },
+                        .{ count_all[day_off], date },
                     ),
                 },
             });
