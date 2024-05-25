@@ -165,16 +165,17 @@ fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, 
     const email_gop = try cached_email.getOrPut(email);
     if (!email_gop.found_existing) {
         email_gop.value_ptr.* = CACHED_COMMITS.init(cached_email.allocator);
+        email_gop.key_ptr.* = try cached_email.allocator.dupe(u8, email);
     }
-    var email_cache: CACHED_COMMITS = email_gop.value_ptr.*;
-
-    const repo_gop = try email_cache.getOrPut(gitdir);
+    const email_cache: *CACHED_COMMITS = email_gop.value_ptr;
+    const repo_gop = try email_cache.*.getOrPut(gitdir);
 
     var hits: *HeatMapArray = repo_gop.value_ptr;
     if (repo_gop.found_existing and cached_time >= (std.time.timestamp() - 60 * 60 * 2)) {
         return hits;
     }
 
+    repo_gop.key_ptr.* = try cached_email.allocator.dupe(u8, gitdir);
     @memset(hits[0..], 0);
 
     const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
