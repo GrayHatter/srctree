@@ -13,6 +13,7 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 const RouteData = Repos.RouteData;
+const ROUTE = Endpoint.Router.ROUTE;
 
 const git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
@@ -24,7 +25,7 @@ const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "", .methods = GET, .match = .{ .call = commits } },
+    ROUTE("", commits),
     .{ .name = "before", .methods = GET, .match = .{ .call = commitsBefore } },
 };
 
