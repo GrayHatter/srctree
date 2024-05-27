@@ -14,6 +14,7 @@ const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 const RouteData = Repos.RouteData;
 const ROUTE = Endpoint.Router.ROUTE;
+const GET = Endpoint.Router.GET;
 
 const git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
@@ -21,12 +22,11 @@ const Patch = @import("../../patch.zig");
 const CmmtMap = Endpoint.Types.CommitMap;
 const Comment = Endpoint.Types.Comment;
 
-const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     ROUTE("", commits),
-    .{ .name = "before", .methods = GET, .match = .{ .call = commitsBefore } },
+    GET("before", commitsBefore),
 };
 
 pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
