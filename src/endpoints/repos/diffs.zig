@@ -10,13 +10,12 @@ const Response = Endpoint.Response;
 const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
+const ROUTE = Endpoint.Router.ROUTE;
+const POST = Endpoint.Router.POST;
 
 const UserData = @import("../../request_data.zig").UserData;
 
 const Repo = @import("../repos.zig");
-
-const GET = Endpoint.Router.Methods.GET;
-const POST = Endpoint.Router.Methods.POST;
 
 const Thread = Endpoint.Types.Thread;
 const Delta = Endpoint.Types.Delta;
@@ -31,7 +30,7 @@ pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .match = .{ .call = list } },
     .{ .name = "new", .match = .{ .call = new } },
     .{ .name = "new", .methods = .{ .POST = true }, .match = .{ .call = newPost } },
-    .{ .name = "add-comment", .methods = .{ .POST = true }, .match = .{ .call = newComment } },
+    POST("add-comment", newComment),
 };
 
 fn isHex(input: []const u8) ?usize {
