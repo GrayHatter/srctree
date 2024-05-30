@@ -29,7 +29,7 @@ const Bleach = @import("../../bleach.zig");
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .match = .{ .call = list } },
     .{ .name = "new", .match = .{ .call = new } },
-    .{ .name = "new", .methods = .{ .POST = true }, .match = .{ .call = newPost } },
+    POST("new", newPost),
     POST("add-comment", newComment),
 };
 
