@@ -12,6 +12,7 @@ const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 const ROUTE = Endpoint.Router.ROUTE;
 const POST = Endpoint.Router.POST;
+const GET = Endpoint.Router.GET;
 
 const UserData = @import("../../request_data.zig").UserData;
 
@@ -28,7 +29,7 @@ const Bleach = @import("../../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
     .{ .name = "", .match = .{ .call = list } },
-    .{ .name = "new", .match = .{ .call = new } },
+    GET("new", new),
     POST("new", newPost),
     POST("add-comment", newComment),
 };
