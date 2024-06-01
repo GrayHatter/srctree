@@ -56,6 +56,7 @@ pub const CACHED_COMMITS = std.StringHashMap(HeatMapArray);
 pub const CACHED_EMAIL = std.StringHashMap(CACHED_COMMITS);
 var cached_email: CACHED_EMAIL = undefined;
 var cached_time: i64 = 0; // TODO figure out how to comptime this
+const CACHE_DELAY: usize = 180;
 
 pub fn initCache(a: Allocator) void {
     cached_email = CACHED_EMAIL.init(a);
@@ -171,9 +172,10 @@ fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, 
     const repo_gop = try email_cache.*.getOrPut(gitdir);
 
     var hits: *HeatMapArray = repo_gop.value_ptr;
-    if (repo_gop.found_existing and cached_time >= (std.time.timestamp() - 60 * 60 * 2)) {
+    if (repo_gop.found_existing and cached_time <= (std.time.timestamp() - CACHE_DELAY)) {
         return hits;
     }
+    cached_time = std.time.timestamp();
 
     repo_gop.key_ptr.* = try cached_email.allocator.dupe(u8, gitdir);
     @memset(hits[0..], 0);
