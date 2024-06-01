@@ -28,7 +28,7 @@ const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
 
 pub const routes = [_]Endpoint.Router.MatchRouter{
-    .{ .name = "", .match = .{ .call = list } },
+    ROUTE("", list),
     GET("new", new),
     POST("new", newPost),
     POST("add-comment", newComment),
