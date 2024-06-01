@@ -251,7 +251,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
             else => {},
         }
     }
-    if (cached_time >= std.time.timestamp() - CACHE_DELAY)
+    if (cached_time < std.time.timestamp() - CACHE_DELAY)
         cached_time = std.time.timestamp();
 
     var dom = DOM.new(ctx.alloc);
