@@ -172,10 +172,9 @@ fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, 
     const repo_gop = try email_cache.*.getOrPut(gitdir);
 
     var hits: *HeatMapArray = repo_gop.value_ptr;
-    if (repo_gop.found_existing and cached_time <= (std.time.timestamp() - CACHE_DELAY)) {
+    if (repo_gop.found_existing and cached_time >= (std.time.timestamp() - CACHE_DELAY)) {
         return hits;
     }
-    cached_time = std.time.timestamp();
 
     repo_gop.key_ptr.* = try cached_email.allocator.dupe(u8, gitdir);
     @memset(hits[0..], 0);
@@ -248,11 +247,12 @@ pub fn commitFlex(ctx: *Context) Error!void {
                 };
                 repo_count +|= 1;
                 for (&count_all, count_repo) |*a, r| a.* += r;
-                cached_time = std.time.timestamp();
             },
             else => {},
         }
     }
+    if (cached_time >= std.time.timestamp() - CACHE_DELAY)
+        cached_time = std.time.timestamp();
 
     var dom = DOM.new(ctx.alloc);
     var tcount: u16 = 0;
