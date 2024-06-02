@@ -35,7 +35,7 @@ const gitweb = @import("../gitweb.zig");
 
 const endpoints = [_]MatchRouter{
     .{ .name = "", .match = .{ .call = treeBlob } },
-    .{ .name = "blob", .match = .{ .call = treeBlob } },
+    ROUTE("blob", treeBlob),
     ROUTE("commit", &Commits.router),
     ROUTE("commits", &Commits.router),
     ROUTE("tree", treeBlob),
