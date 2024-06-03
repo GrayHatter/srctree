@@ -39,7 +39,7 @@ const endpoints = [_]MatchRouter{
     ROUTE("commit", &Commits.router),
     ROUTE("commits", &Commits.router),
     ROUTE("tree", treeBlob),
-    .{ .name = "diffs", .match = .{ .route = &Diffs.router } },
+    ROUTE("diffs", &Diffs.router),
     .{ .name = "issues", .match = .{ .route = &Issues.router } },
     ROUTE("blame", blame),
 } ++ gitweb.endpoints;
