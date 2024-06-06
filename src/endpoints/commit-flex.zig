@@ -52,7 +52,11 @@ const Day = struct {
 const HeatMapSize = 366 + 6;
 const HeatMapArray = [HeatMapSize]u16;
 
-pub const CACHED_COMMITS = std.StringHashMap(HeatMapArray);
+pub const CACHED_COMMITS = struct {
+    sha: [40]u8,
+    heatmap: std.StringHashMap(HeatMapArray),
+};
+
 pub const CACHED_EMAIL = std.StringHashMap(CACHED_COMMITS);
 var cached_email: CACHED_EMAIL = undefined;
 var cached_time: i64 = 0; // TODO figure out how to comptime this
@@ -163,13 +167,25 @@ fn buildJournal(
 }
 
 fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, email: []const u8) !*HeatMapArray {
+    const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
+    var repo = try Git.Repo.init(repo_dir);
+    try repo.loadData(a);
+    defer repo.raze(a);
+
+    // TODO return empty hits here
+    const commit = repo.commit(a) catch unreachable;
+
     const email_gop = try cached_email.getOrPut(email);
     if (!email_gop.found_existing) {
-        email_gop.value_ptr.* = CACHED_COMMITS.init(cached_email.allocator);
+        email_gop.value_ptr.* = .{
+            .heatmap = std.StringHashMap(HeatMapArray).init(cached_email.allocator),
+            .sha = commit.sha[0..40].*,
+        };
+
         email_gop.key_ptr.* = try cached_email.allocator.dupe(u8, email);
     }
     const email_cache: *CACHED_COMMITS = email_gop.value_ptr;
-    const repo_gop = try email_cache.*.getOrPut(gitdir);
+    const repo_gop = try email_cache.*.heatmap.getOrPut(gitdir);
 
     var hits: *HeatMapArray = repo_gop.value_ptr;
     if (repo_gop.found_existing and cached_time >= (std.time.timestamp() - CACHE_DELAY)) {
@@ -179,12 +195,6 @@ fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, 
     repo_gop.key_ptr.* = try cached_email.allocator.dupe(u8, gitdir);
     @memset(hits[0..], 0);
 
-    const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
-    var repo = try Git.Repo.init(repo_dir);
-    try repo.loadData(a);
-    defer repo.raze(a);
-
-    const commit = repo.commit(a) catch return hits;
     return try countAll(a, hits, seen, until, commit, email);
 }
 
