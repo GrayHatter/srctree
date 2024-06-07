@@ -188,6 +188,8 @@ fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, 
     const repo_gop = try email_cache.*.heatmap.getOrPut(gitdir);
 
     var hits: *HeatMapArray = repo_gop.value_ptr;
+    if (std.mem.eql(u8, email_cache.sha[0..], commit.sha[0..40])) return hits;
+
     if (repo_gop.found_existing and cached_time >= (std.time.timestamp() - CACHE_DELAY)) {
         return hits;
     }
