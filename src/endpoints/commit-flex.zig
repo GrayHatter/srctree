@@ -188,16 +188,17 @@ fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, 
     const repo_gop = try email_cache.*.heatmap.getOrPut(gitdir);
 
     var hits: *HeatMapArray = repo_gop.value_ptr;
-    if (std.mem.eql(u8, email_cache.sha[0..], commit.sha[0..40])) return hits;
 
-    if (repo_gop.found_existing and cached_time >= (std.time.timestamp() - CACHE_DELAY)) {
-        return hits;
+    if (!repo_gop.found_existing) {
+        repo_gop.key_ptr.* = try cached_email.allocator.dupe(u8, gitdir);
+        @memset(hits[0..], 0);
+    }
+    if (!std.mem.eql(u8, email_cache.sha[0..], commit.sha[0..40]) or cached_time < (std.time.timestamp() - CACHE_DELAY)) {
+        @memset(hits[0..], 0);
+        _ = try countAll(a, hits, seen, until, commit, email);
     }
 
-    repo_gop.key_ptr.* = try cached_email.allocator.dupe(u8, gitdir);
-    @memset(hits[0..], 0);
-
-    return try countAll(a, hits, seen, until, commit, email);
+    return hits;
 }
 
 const DAY = 60 * 60 * 24;
