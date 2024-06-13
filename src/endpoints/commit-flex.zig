@@ -151,14 +151,6 @@ fn buildJournal(
             });
         }
 
-        //for (commit.parent[1..], 1..) |par, pidx| {
-        //    if (par) |_| {
-        //        lseen.insert(par.?) catch break;
-        //        const parent = try commit.toParent(a, @truncate(pidx));
-        //        //defer parent.raze(a);
-        //        _ = try countAll(a, hits, seen, until, parent, email);
-        //    }
-        //}
         commit = commit.toParent(a, 0) catch |err| switch (err) {
             error.NoParent => break,
             else => |e| return e,
