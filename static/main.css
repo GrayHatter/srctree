@@ -578,7 +578,7 @@ blob {
 journal {
 	display: flex;
 	justify-content: space-between;
-
+	span { padding: 0 0.3rem; }
 }
 
 .commit-flex {

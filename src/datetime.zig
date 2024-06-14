@@ -1,4 +1,5 @@
 const std = @import("std");
+const eql = std.mem.eql;
 
 const DateTime = @This();
 
@@ -166,23 +167,22 @@ pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
 }
 
 pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    if (comptime std.mem.eql(u8, fstr, "dtime")) {
-        return out.print("{s} {:0>2}:{:0>2}:{:0>2}", .{
-            WEEKDAYS[self.weekday],
-            self.hours,
-            self.minutes,
-            self.seconds,
-        });
+    if (comptime eql(u8, fstr, "dtime")) {
+        return out.print(
+            "{s} {:0>2}:{:0>2}:{:0>2}",
+            .{ WEEKDAYS[self.weekday], self.hours, self.minutes, self.seconds },
+        );
+    } else if (comptime eql(u8, fstr, "day")) {
+        return out.print("{s}", .{WEEKDAYS[self.weekday]});
+    } else if (comptime eql(u8, fstr, "time") or eql(u8, fstr, "HH:mm:ss")) {
+        return out.print("{:0>2}:{:0>2}:{:0>2}", .{ self.hours, self.minutes, self.seconds });
+    } else if (comptime eql(u8, fstr, "Y-m-d")) {
+        return out.print("{}-{}-{}", .{ self.years, self.months, self.days });
     }
-    return out.print("{}-{}-{} {s} {:0>2}:{:0>2}:{:0>2}", .{
-        self.years,
-        self.months,
-        self.days,
-        WEEKDAYS[self.weekday],
-        self.hours,
-        self.minutes,
-        self.seconds,
-    });
+    return out.print(
+        "{}-{}-{} {s} {:0>2}:{:0>2}:{:0>2}",
+        .{ self.years, self.months, self.days, WEEKDAYS[self.weekday], self.hours, self.minutes, self.seconds },
+    );
 }
 
 test "now" {

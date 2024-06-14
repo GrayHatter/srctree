@@ -28,7 +28,11 @@ const Scribe = struct {
             try jctx.put("Name", self.name);
             try jctx.put("Repo", self.repo);
             try jctx.put("Title", self.title);
-            try jctx.put("Date", try std.fmt.allocPrint(a, "{}", .{self.date}));
+            try jctx.put("Date", try std.fmt.allocPrint(
+                a,
+                "<span>{Y-m-d}</span><span>{day}</span><span>{time}</span>",
+                .{ self.date, self.date, self.date },
+            ));
             try jctx.put("ShaLong", self.sha);
             try jctx.put("Sha", self.sha[0..8]);
             return jctx;
