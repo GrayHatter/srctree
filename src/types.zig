@@ -6,6 +6,7 @@ pub const Delta = @import("types/delta.zig");
 pub const Diff = @import("types/diff.zig");
 pub const Issue = @import("types/issue.zig");
 pub const Network = @import("types/network.zig");
+pub const Read = @import("types/read.zig");
 pub const Thread = @import("types/thread.zig");
 pub const User = @import("types/user.zig");
 
@@ -21,6 +22,7 @@ pub fn init(dir: []const u8) !void {
         Diff,
         Issue,
         Network,
+        Read,
         Thread,
         User,
     }) |inc| {
