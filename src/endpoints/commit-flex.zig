@@ -162,7 +162,7 @@ fn buildJournal(
     }
 }
 
-fn findCommits(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, email: []const u8) !*HeatMapArray {
+fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, email: []const u8) !*HeatMapArray {
     const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
     try repo.loadData(a);
@@ -250,7 +250,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
         switch (file.kind) {
             .directory, .sym_link => {
                 const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                const count_repo = findCommits(ctx.alloc, &seen, until, repo, email) catch unreachable;
+                const count_repo = buildCommitList(ctx.alloc, &seen, until, repo, email) catch unreachable;
                 buildJournal(ctx.alloc, &scribe_list, email, repo) catch {
                     return error.Unknown;
                 };
