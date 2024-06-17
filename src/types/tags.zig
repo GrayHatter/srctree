@@ -22,7 +22,7 @@ pub fn readVersioned(a: Allocator, file: std.fs.File, _: [20]u8) !Tag {
             local.username = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
             return Tag{
                 .src = local.src,
-                .username = local.username,
+                .name = local.username,
                 .time = try reader.readInt(i64, endian),
             };
         },
@@ -31,7 +31,7 @@ pub fn readVersioned(a: Allocator, file: std.fs.File, _: [20]u8) !Tag {
 }
 
 src: [20]u8 = .{0} ** 20,
-username: []u8,
+name: []u8,
 time: i64,
 
 pub fn readFile(a: Allocator, file: std.fs.File) !Tag {
