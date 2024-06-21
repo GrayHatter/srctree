@@ -7,6 +7,7 @@ pub const Diff = @import("types/diff.zig");
 pub const Issue = @import("types/issue.zig");
 pub const Network = @import("types/network.zig");
 pub const Read = @import("types/read.zig");
+pub const Tags = @import("types/tags.zig");
 pub const Thread = @import("types/thread.zig");
 pub const User = @import("types/user.zig");
 
