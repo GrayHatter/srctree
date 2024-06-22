@@ -10,6 +10,7 @@ pub const Read = @import("types/read.zig");
 pub const Tags = @import("types/tags.zig");
 pub const Thread = @import("types/thread.zig");
 pub const User = @import("types/user.zig");
+pub const Viewers = @import("types/viewers.zig");
 
 pub const Writer = std.fs.File.Writer;
 
