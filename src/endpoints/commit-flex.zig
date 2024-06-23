@@ -56,22 +56,24 @@ const Day = struct {
 const HeatMapSize = 366 + 6;
 const HeatMapArray = [HeatMapSize]u16;
 
-pub const CACHED_COMMITS = struct {
+pub const HeatMap = struct {
     sha: [40]u8,
-    heatmap: std.StringHashMap(HeatMapArray),
+    hits: HeatMapArray,
 };
 
-pub const CACHED_EMAIL = std.StringHashMap(CACHED_COMMITS);
-var cached_email: CACHED_EMAIL = undefined;
+pub const CachedRepo = std.StringHashMap(HeatMap);
+
+pub const CACHED_EMAIL = std.StringHashMap(CachedRepo);
+var cached_emails: CACHED_EMAIL = undefined;
 var cached_time: i64 = 0; // TODO figure out how to comptime this
 const CACHE_DELAY: usize = 180;
 
 pub fn initCache(a: Allocator) void {
-    cached_email = CACHED_EMAIL.init(a);
+    cached_emails = CACHED_EMAIL.init(a);
 }
 
 pub fn razeCache() void {
-    cached_email.deinit();
+    cached_emails.deinit();
 }
 
 fn countAll(
@@ -171,27 +173,29 @@ fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const 
     // TODO return empty hits here
     const commit = repo.commit(a) catch unreachable;
 
-    const email_gop = try cached_email.getOrPut(email);
+    const email_gop = try cached_emails.getOrPut(email);
     if (!email_gop.found_existing) {
-        email_gop.value_ptr.* = .{
-            .heatmap = std.StringHashMap(HeatMapArray).init(cached_email.allocator),
-            .sha = commit.sha[0..40].*,
-        };
-
-        email_gop.key_ptr.* = try cached_email.allocator.dupe(u8, email);
+        email_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, email);
+        email_gop.value_ptr.* = CachedRepo.init(cached_emails.allocator);
     }
-    const email_cache: *CACHED_COMMITS = email_gop.value_ptr;
-    const repo_gop = try email_cache.*.heatmap.getOrPut(gitdir);
 
-    var hits: *HeatMapArray = repo_gop.value_ptr;
+    const repo_gop = try email_gop.value_ptr.*.getOrPut(gitdir);
+    var heatmap: *HeatMap = repo_gop.value_ptr;
+
+    var hits: *HeatMapArray = &heatmap.hits;
 
     if (!repo_gop.found_existing) {
-        repo_gop.key_ptr.* = try cached_email.allocator.dupe(u8, gitdir);
+        repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, gitdir);
         @memset(hits[0..], 0);
     }
-    if (!std.mem.eql(u8, email_cache.sha[0..], commit.sha[0..40]) or cached_time < (std.time.timestamp() - CACHE_DELAY)) {
+
+    std.debug.print("sha: {any}\n     {any}\n", .{ commit.sha[0..40], heatmap.sha[0..] });
+
+    if (!std.mem.eql(u8, heatmap.sha[0..], commit.sha[0..40]) or cached_time < (std.time.timestamp() - CACHE_DELAY)) {
         @memset(hits[0..], 0);
+        std.debug.print("building {s}\n", .{gitdir});
         _ = try countAll(a, hits, seen, until, commit, email);
+        @memcpy(heatmap.sha[0..], commit.sha[0..40]);
     }
 
     return hits;
