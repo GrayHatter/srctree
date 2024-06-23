@@ -65,8 +65,6 @@ pub const CachedRepo = std.StringHashMap(HeatMap);
 
 pub const CACHED_EMAIL = std.StringHashMap(CachedRepo);
 var cached_emails: CACHED_EMAIL = undefined;
-var cached_time: i64 = 0; // TODO figure out how to comptime this
-const CACHE_DELAY: usize = 180;
 
 pub fn initCache(a: Allocator) void {
     cached_emails = CACHED_EMAIL.init(a);
@@ -191,7 +189,7 @@ fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const 
 
     std.debug.print("sha: {any}\n     {any}\n", .{ commit.sha[0..40], heatmap.sha[0..] });
 
-    if (!std.mem.eql(u8, heatmap.sha[0..], commit.sha[0..40]) or cached_time < (std.time.timestamp() - CACHE_DELAY)) {
+    if (!std.mem.eql(u8, heatmap.sha[0..], commit.sha[0..40])) {
         @memset(hits[0..], 0);
         std.debug.print("building {s}\n", .{gitdir});
         _ = try countAll(a, hits, seen, until, commit, email);
@@ -264,8 +262,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
             else => {},
         }
     }
-    if (cached_time < std.time.timestamp() - CACHE_DELAY)
-        cached_time = std.time.timestamp();
 
     var dom = DOM.new(ctx.alloc);
     var tcount: u16 = 0;
