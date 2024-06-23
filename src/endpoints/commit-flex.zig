@@ -187,13 +187,10 @@ fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const 
         @memset(hits[0..], 0);
     }
 
-    std.debug.print("sha: {any}\n     {any}\n", .{ commit.sha[0..40], heatmap.sha[0..] });
-
     if (!std.mem.eql(u8, heatmap.sha[0..], commit.sha[0..40])) {
-        @memset(hits[0..], 0);
-        std.debug.print("building {s}\n", .{gitdir});
-        _ = try countAll(a, hits, seen, until, commit, email);
         @memcpy(heatmap.sha[0..], commit.sha[0..40]);
+        @memset(hits[0..], 0);
+        _ = try countAll(a, hits, seen, until, commit, email);
     }
 
     return hits;
