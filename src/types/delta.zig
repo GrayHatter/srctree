@@ -292,7 +292,7 @@ pub fn SearchList(T: type) type {
                         return self.next(a);
                     };
 
-                    if (!self.evalAll(self.current.?)) {
+                    if (!self.evalRules(self.current.?)) {
                         file.close();
                         return self.next(a);
                     }
@@ -303,7 +303,7 @@ pub fn SearchList(T: type) type {
             return self.next(a);
         }
 
-        fn evalAll(self: Self, target: T) bool {
+        fn evalRules(self: Self, target: T) bool {
             for (self.rules) |rule| {
                 if (!self.eval(rule, target)) return false;
             } else return true;
