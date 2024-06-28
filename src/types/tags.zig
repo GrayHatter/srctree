@@ -12,6 +12,11 @@ pub var datad: std.fs.Dir = undefined;
 pub fn init(_: []const u8) !void {}
 pub fn initType() !void {}
 
+pub const Kind = enum {
+    str,
+    owner,
+};
+
 pub fn readVersioned(a: Allocator, file: std.fs.File, _: [20]u8) !Tag {
     var reader = file.reader();
     const ver: usize = try reader.readInt(usize, endian);
@@ -30,9 +35,8 @@ pub fn readVersioned(a: Allocator, file: std.fs.File, _: [20]u8) !Tag {
     }
 }
 
-src: [20]u8 = .{0} ** 20,
+type: []u8,
 name: []u8,
-time: i64,
 
 pub fn readFile(a: Allocator, file: std.fs.File) !Tag {
     defer file.close();
