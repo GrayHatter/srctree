@@ -17,6 +17,12 @@ pub const Kind = enum {
     owner,
 };
 
+pub const Set = struct {
+    // TODO decide if a sha hash is actually sane source id
+    src: [40]u8,
+    tags: []Tag,
+};
+
 pub fn readVersioned(a: Allocator, file: std.fs.File, _: [20]u8) !Tag {
     var reader = file.reader();
     const ver: usize = try reader.readInt(usize, endian);
