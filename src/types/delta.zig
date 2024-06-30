@@ -40,6 +40,7 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
                 .commit => .{ .issue = try reader.readInt(usize, endian) },
                 .line => .{ .issue = try reader.readInt(usize, endian) },
             },
+            .tags_id = try reader.readInt(usize, endian),
         },
         else => return error.UnsupportedVersion,
     };
@@ -72,6 +73,7 @@ title: []const u8,
 message: []const u8,
 author: []const u8 = "",
 thread_id: usize = 0,
+tags_id: usize = 0,
 
 attach: union(Attach) {
     nos: usize,
@@ -109,6 +111,7 @@ pub fn writeOut(self: Delta) !void {
         .commit => |att| try writer.writeInt(usize, att, endian),
         .line => |att| try writer.writeInt(usize, att, endian),
     }
+    try writer.writeInt(usize, self.tags_id, endian);
     // FIXME write 32 not a maybe
     if (self.thread) |thread| {
         try writer.writeAll(&thread.hash);
