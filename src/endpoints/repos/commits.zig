@@ -106,6 +106,9 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
 
     _ = try tmpl.addElements(ctx.alloc, "Comments", comments.done());
 
+    try tmpl.ctx.?.put("OGTitle", repo_name);
+    try tmpl.ctx.?.put("OGDesc", current.title);
+
     ctx.response.status = .ok;
     return ctx.sendTemplate(&tmpl) catch unreachable;
 }
