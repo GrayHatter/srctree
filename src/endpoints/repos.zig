@@ -721,5 +721,14 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
         }
     }
 
+    try tmpl.ctx.?.put("OGTitle", rd.name);
+    const desc = repo.description(ctx.alloc) catch return error.Unknown;
+    if (std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
+        const defdesc = try aPrint(ctx.alloc, "An Indescribable with {s} commits", .{"[todo count commits]"});
+        try tmpl.ctx.?.put("OGDesc", defdesc);
+    } else {
+        try tmpl.ctx.?.put("OGDesc", desc);
+    }
+
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
 }
