@@ -1,6 +1,7 @@
 const std = @import("std");
 const build_mode = @import("builtin").mode;
 const compiled = @import("templates-compiled");
+const isWhitespace = std.ascii.isWhitespace;
 
 const Allocator = std.mem.Allocator;
 
@@ -174,8 +175,9 @@ pub const Template = struct {
 
     fn directiveVerb(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive {
         if (std.mem.eql(u8, noun, "For")) {
-            const start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
+            var start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
             const end = 6 + (std.mem.lastIndexOf(u8, blob, "</For>") orelse return null);
+            while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
 
             var width: usize = 1;
             while (width < verb.len and validChar(verb[width])) {
@@ -193,8 +195,9 @@ pub const Template = struct {
                 },
             };
         } else if (std.mem.eql(u8, noun, "With")) {
-            const start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
+            var start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
             const end = 7 + (std.mem.lastIndexOf(u8, blob, "</With>") orelse return null);
+            while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
 
             var width: usize = 1;
             while (width < verb.len and validChar(verb[width])) {
@@ -695,23 +698,15 @@ test "directive For & For" {
 
     const expected: []const u8 =
         \\<div>
-        \\  
-        \\    <span>Alice</span>
+        \\  <span>Alice</span>
+        \\    A0
+        \\    A1
+        \\    A2
         \\    
-        \\      A0
-        \\    
-        \\      A1
-        \\    
-        \\      A2
-        \\    
-        \\  
-        \\    <span>Bob</span>
-        \\    
-        \\      B0
-        \\    
-        \\      B1
-        \\    
-        \\      B2
+        \\  <span>Bob</span>
+        \\    B0
+        \\    B1
+        \\    B2
         \\    
         \\  
         \\</div>
@@ -808,8 +803,7 @@ test "directive With" {
 
     const expected_thing: []const u8 =
         \\<div>
-        \\  
-        \\    <span>THING</span>
+        \\  <span>THING</span>
         \\  
         \\</div>
     ;
