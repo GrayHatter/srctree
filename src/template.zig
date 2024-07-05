@@ -23,10 +23,12 @@ fn validChar(c: u8) bool {
 const DEBUG = false;
 
 pub const Context = struct {
-    pub const HashMap = std.StringHashMap([]const u8);
-    pub const HashMapSlice = std.StringHashMap([]const Context);
+    pub const Data = union(enum) {
+        simple: []const u8,
+        block: []Context,
+    };
+    pub const HashMap = std.StringHashMap(Data);
     ctx: HashMap,
-    ctx_slice: HashMapSlice,
 
     pub fn Builder(comptime T: type) type {
         return struct {
@@ -69,34 +71,61 @@ pub const Context = struct {
     pub fn init(a: Allocator) Context {
         return Context{
             .ctx = HashMap.init(a),
-            .ctx_slice = HashMapSlice.init(a),
         };
     }
 
     pub fn raze(self: *Context) void {
+        var itr = self.ctx.iterator();
+        while (itr.next()) |*n| {
+            switch (n.value_ptr.*) {
+                .simple => continue,
+                .block => |*block| for (block.*) |*b| b.raze(),
+            }
+        }
         self.ctx.deinit();
-        self.ctx_slice.deinit();
     }
 
-    pub fn put(self: *Context, name: []const u8, value: []const u8) !void {
-        if (comptime build_mode == .Debug)
-            if (!std.ascii.isUpper(name[0]))
-                std.debug.print("Warning Template can't resolve {s}\n", .{name});
+    pub fn putNext(self: *Context, name: []const u8, value: Data) !void {
         try self.ctx.put(name, value);
     }
 
-    pub fn get(self: Context, name: []const u8) ?[]const u8 {
+    pub fn getNext(self: Context, name: []const u8) ?Data {
         return self.ctx.get(name);
+    }
+
+    pub fn putSimple(self: *Context, name: []const u8, value: []const u8) !void {
+        if (comptime build_mode == .Debug)
+            if (!std.ascii.isUpper(name[0]))
+                std.debug.print("Warning Template can't resolve {s}\n", .{name});
+        try self.putNext(name, .{ .simple = value });
+    }
+
+    pub fn getSimple(self: Context, name: []const u8) ?[]const u8 {
+        return switch (self.getNext(name) orelse return null) {
+            .simple => |s| s,
+            .block => unreachable,
+        };
+    }
+
+    pub fn put(self: *Context, name: []const u8, value: []const u8) !void {
+        try self.putSimple(name, value);
+    }
+
+    pub fn get(self: Context, name: []const u8) ?[]const u8 {
+        return self.getSimple(name);
     }
 
     /// Memory of block is managed by the caller. Calling raze will not free the
     /// memory from within.
-    pub fn putBlock(self: *Context, name: []const u8, block: []const Context) !void {
-        try self.ctx_slice.put(name, block);
+    pub fn putBlock(self: *Context, name: []const u8, block: []Context) !void {
+        try self.putNext(name, .{ .block = block });
     }
 
     pub fn getBlock(self: Context, name: []const u8) ?[]const Context {
-        return self.ctx_slice.get(name);
+        return switch (self.getNext(name) orelse return null) {
+            .simple => unreachable,
+            .block => |b| b,
+        };
     }
 };
 
@@ -110,8 +139,17 @@ pub const Template = struct {
 
     /// This init takes a 'self' to support creation at comptime
     pub fn init(self: *Template, a: Allocator) void {
+        std.debug.assert(self.alloc == null);
+        std.debug.assert(self.ctx == null);
         self.alloc = a;
         self.ctx = Context.init(a);
+    }
+
+    pub fn initWith(self: *Template, a: Allocator, data: []struct { name: []const u8, val: []const u8 }) !void {
+        self.init(a);
+        for (data) |d| {
+            try self.ctx.putSimple(d.name, d.value);
+        }
     }
 
     pub fn raze(self: *Template) void {
@@ -163,7 +201,7 @@ pub const Template = struct {
         if (template.ctx) |_| {
             var itr = ctx.ctx.iterator();
             while (itr.next()) |n| {
-                try template.ctx.?.put(n.key_ptr.*, n.value_ptr.*);
+                try template.ctx.?.putNext(n.key_ptr.*, n.value_ptr.*);
             }
         } else {
             template.ctx = ctx;
@@ -665,13 +703,14 @@ test "directive For" {
     };
 
     var ctx = Context.init(a);
+    defer ctx.raze();
     var blocks: [1]Context = [1]Context{
         Context.init(a),
     };
     try blocks[0].put("Name", "not that");
+    // We have to raze because it will be over written
     defer blocks[0].raze();
     try ctx.putBlock("Loop", &blocks);
-    defer ctx.ctx_slice.deinit();
 
     const page = try t.buildFor(a, ctx);
     defer a.free(page);
@@ -693,8 +732,8 @@ test "directive For" {
     defer a.free(dbl_page);
     try std.testing.expectEqualStrings(dbl_expected, dbl_page);
 
-    many_blocks[0].raze();
-    many_blocks[1].raze();
+    //many_blocks[0].raze();
+    //many_blocks[1].raze();
 }
 
 test "directive For & For" {
@@ -735,13 +774,14 @@ test "directive For & For" {
     };
 
     var ctx = Context.init(a);
+    defer ctx.raze();
     var outer = [2]Context{
         Context.init(a),
         Context.init(a),
     };
 
     try outer[0].put("Name", "Alice");
-    defer outer[0].raze();
+    //defer outer[0].raze();
 
     var arena = std.heap.ArenaAllocator.init(a);
     defer arena.deinit();
@@ -749,31 +789,30 @@ test "directive For & For" {
 
     const lput = "Number";
 
-    var in0: [3]Context = undefined;
-    try outer[0].putBlock("Numbers", &in0);
+    var alice_inner: [3]Context = undefined;
+    try outer[0].putBlock("Numbers", &alice_inner);
     for (0..3) |i| {
-        in0[i] = Context.init(aa);
-        try in0[i].put(
+        alice_inner[i] = Context.init(a);
+        try alice_inner[i].put(
             lput,
             try std.fmt.allocPrint(aa, "A{}", .{i}),
         );
     }
 
     try outer[1].put("Name", "Bob");
-    defer outer[1].raze();
+    //defer outer[1].raze();
 
-    var in1: [3]Context = undefined;
-    try outer[1].putBlock("Numbers", &in1);
+    var bob_inner: [3]Context = undefined;
+    try outer[1].putBlock("Numbers", &bob_inner);
     for (0..3) |i| {
-        in1[i] = Context.init(aa);
-        try in1[i].put(
+        bob_inner[i] = Context.init(a);
+        try bob_inner[i].put(
             lput,
             try std.fmt.allocPrint(aa, "B{}", .{i}),
         );
     }
 
     try ctx.putBlock("Loop", &outer);
-    defer ctx.ctx_slice.deinit();
 
     const page = try t.buildFor(a, ctx);
     defer a.free(page);
@@ -804,6 +843,7 @@ test "directive With" {
     };
 
     var ctx = Context.init(a);
+    defer ctx.raze();
     const page = try t.buildFor(a, ctx);
     defer a.free(page);
     try std.testing.expectEqualStrings(expected_empty, page);
@@ -812,9 +852,7 @@ test "directive With" {
         Context.init(a),
     };
     try thing[0].put("Thing", "THING");
-    defer thing[0].ctx.deinit();
     try ctx.putBlock("Thing", &thing);
-    defer ctx.ctx_slice.deinit();
 
     const expected_thing: []const u8 =
         \\<div>

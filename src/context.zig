@@ -46,9 +46,13 @@ pub fn init(a: Allocator, req: Request, res: Response, req_data: RequestData) !C
     };
 }
 
-/// TODO rename plz
-pub fn addRouteVar(ctx: *Context, name: []const u8, val: []const u8) !void {
+pub fn putContext(ctx: *Context, name: []const u8, val: []const u8) !void {
     try ctx.template_ctx.put(name, val);
+}
+
+/// Kept for compat, please use putContext
+pub fn addRouteVar(ctx: *Context, name: []const u8, val: []const u8) !void {
+    try ctx.putContext(name, val);
 }
 
 /// TODO fix these unreachable, currently debugging
