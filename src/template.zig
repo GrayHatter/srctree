@@ -188,9 +188,30 @@ pub const Template = struct {
                     .verb = .{
                         .vari = verb[1..width],
                         .blob = blob[start .. end - 6],
+                        .word = .foreach,
                     },
                 },
             };
+        } else if (std.mem.eql(u8, noun, "With")) {
+            const start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
+            const end = 7 + (std.mem.lastIndexOf(u8, blob, "</With>") orelse return null);
+
+            var width: usize = 1;
+            while (width < verb.len and validChar(verb[width])) {
+                width += 1;
+            }
+            std.debug.assert(width > 1);
+            return .{
+                .end = end,
+                .kind = .{
+                    .verb = .{
+                        .vari = verb[1..width],
+                        .blob = blob[start .. end - 7],
+                        .word = .with,
+                    },
+                },
+            };
+            // pass
         }
         return null;
     }
@@ -297,14 +318,7 @@ pub const Template = struct {
                             }
                         },
                         .verb => |verb| {
-                            if (ctx.getBlock(verb.vari)) |block| {
-                                for (block) |s| {
-                                    verb.loop(&s, out) catch unreachable;
-                                }
-                            } else {
-                                std.debug.print("block missing [{s}]\n", .{verb.vari});
-                                try out.writeAll(blob[0..end]);
-                            }
+                            verb.do(&ctx, out) catch unreachable;
                             blob = blob[end..];
                         },
                     }
@@ -338,8 +352,44 @@ pub const Directive = struct {
         pub const Verb = struct {
             vari: []const u8,
             blob: []const u8,
+            word: enum {
+                foreach,
+                with,
+            },
 
-            pub fn loop(self: Verb, block: *const Context, out: anytype) anyerror!void {
+            pub fn do(self: Verb, ctx: *const Context, out: anytype) anyerror!void {
+                if (ctx.getBlock(self.vari)) |block| {
+                    switch (self.word) {
+                        .foreach => {
+                            for (block) |s| {
+                                try self.foreach(&s, out);
+                            }
+                            return;
+                        },
+                        .with => {
+                            std.debug.assert(block.len == 1);
+                            try self.with(&block[0], out);
+                            return;
+                        },
+                    }
+                } else {
+                    std.debug.print("block missing [{s}]\n", .{self.vari});
+                    //try out.writeAll(blob[0..end]);
+                }
+            }
+
+            pub fn foreach(self: Verb, block: *const Context, out: anytype) anyerror!void {
+                var t = Template{
+                    .name = self.vari,
+                    //.path = "/dev/null",
+                    // would be nice not to have to do a mov here
+                    .ctx = block.*,
+                    .blob = self.blob,
+                };
+                try t.format("", .{}, out);
+            }
+
+            pub fn with(self: Verb, block: *const Context, out: anytype) anyerror!void {
                 var t = Template{
                     .name = self.vari,
                     //.path = "/dev/null",
@@ -718,4 +768,53 @@ test "directive For & For" {
     const page = try t.buildFor(a, ctx);
     defer a.free(page);
     try std.testing.expectEqualStrings(expected, page);
+}
+
+test "directive With" {
+    const a = std.testing.allocator;
+
+    const blob =
+        \\<div>
+        \\  <With Thing>
+        \\    <span><Thing></span>
+        \\  </With>
+        \\</div>
+    ;
+
+    const expected_empty: []const u8 =
+        \\<div>
+        \\  
+        \\</div>
+    ;
+    var t = Template{
+        .alloc = null,
+        //.path = "/dev/null",
+        .name = "test",
+        .blob = blob,
+    };
+
+    var ctx = Context.init(a);
+    const page = try t.buildFor(a, ctx);
+    defer a.free(page);
+    try std.testing.expectEqualStrings(expected_empty, page);
+
+    var thing = [1]Context{
+        Context.init(a),
+    };
+    try thing[0].put("Thing", "THING");
+    defer thing[0].ctx.deinit();
+    try ctx.putBlock("Thing", &thing);
+    defer ctx.ctx_slice.deinit();
+
+    const expected_thing: []const u8 =
+        \\<div>
+        \\  
+        \\    <span>THING</span>
+        \\  
+        \\</div>
+    ;
+
+    const page_thing = try t.buildFor(a, ctx);
+    defer a.free(page_thing);
+    try std.testing.expectEqualStrings(expected_thing, page_thing);
 }
