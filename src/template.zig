@@ -2,6 +2,8 @@ const std = @import("std");
 const build_mode = @import("builtin").mode;
 const compiled = @import("templates-compiled");
 const isWhitespace = std.ascii.isWhitespace;
+const indexOf = std.mem.indexOf;
+const lastIndexOf = std.mem.lastIndexOf;
 
 const Allocator = std.mem.Allocator;
 
@@ -173,43 +175,56 @@ pub const Template = struct {
         return false;
     }
 
+    fn calcPos(comptime keyword: []const u8, blob: []const u8, verb: []const u8) ?struct {
+        start: usize,
+        end: usize,
+        endws: usize,
+        width: usize,
+    } {
+        const close: *const [keyword.len + 3]u8 = "</" ++ keyword ++ ">";
+        var start = 1 + (indexOf(u8, blob, ">") orelse return null);
+        const end = close.len + (lastIndexOf(u8, blob, close) orelse return null);
+        while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
+        const endws = end - close.len;
+
+        //while (endws > start and isWhitespace(blob[endws])) : (endws -|= 1) {}
+        //endws += 1;
+
+        var width: usize = 1;
+        while (width < verb.len and validChar(verb[width])) {
+            width += 1;
+        }
+        return .{
+            .start = start,
+            .width = width,
+            .end = end,
+            .endws = endws,
+        };
+    }
+
     fn directiveVerb(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive {
         if (std.mem.eql(u8, noun, "For")) {
-            var start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
-            const end = 6 + (std.mem.lastIndexOf(u8, blob, "</For>") orelse return null);
-            while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
-
-            var width: usize = 1;
-            while (width < verb.len and validChar(verb[width])) {
-                width += 1;
-            }
-            std.debug.assert(width > 1);
+            const pos = calcPos("For", blob, verb) orelse return null;
+            std.debug.assert(pos.width > 1);
             return .{
-                .end = end,
+                .end = pos.end,
                 .kind = .{
                     .verb = .{
-                        .vari = verb[1..width],
-                        .blob = blob[start .. end - 6],
+                        .vari = verb[1..pos.width],
+                        .blob = blob[pos.start..pos.endws],
                         .word = .foreach,
                     },
                 },
             };
         } else if (std.mem.eql(u8, noun, "With")) {
-            var start = 1 + (std.mem.indexOf(u8, blob, ">") orelse return null);
-            const end = 7 + (std.mem.lastIndexOf(u8, blob, "</With>") orelse return null);
-            while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
-
-            var width: usize = 1;
-            while (width < verb.len and validChar(verb[width])) {
-                width += 1;
-            }
-            std.debug.assert(width > 1);
+            const pos = calcPos("With", blob, verb) orelse return null;
+            std.debug.assert(pos.width > 1);
             return .{
-                .end = end,
+                .end = pos.end,
                 .kind = .{
                     .verb = .{
-                        .vari = verb[1..width],
-                        .blob = blob[start .. end - 7],
+                        .vari = verb[1..pos.width],
+                        .blob = blob[pos.start..pos.endws],
                         .word = .with,
                     },
                 },
