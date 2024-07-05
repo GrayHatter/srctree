@@ -264,6 +264,26 @@ fn treeBlob(ctx: *Context) Error!void {
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze(ctx.alloc);
 
+    if (Repos.hasUpstream(ctx.alloc, repo) catch return error.Unknown) |up| {
+        var upstream = [_]Template.Context{
+            Template.Context.init(ctx.alloc),
+        };
+        upstream[0].putSimple("URI", up) catch return error.Unknown;
+        ctx.putContext("Upstream", .{ .block = upstream[0..] }) catch return error.Unknown;
+    }
+
+    var opengraph = [_]Template.Context{
+        Template.Context.init(ctx.alloc),
+    };
+
+    opengraph[0].putSimple("Title", rd.name) catch return error.Unknown;
+    var desc = repo.description(ctx.alloc) catch return error.Unknown;
+    if (std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
+        desc = try aPrint(ctx.alloc, "An Indescribable with {s} commits", .{"[todo count commits]"});
+    }
+    try opengraph[0].putSimple("Desc", desc);
+    try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
+
     const cmt = repo.commit(ctx.alloc) catch return newRepo(ctx);
     var files: git.Tree = cmt.mkTree(ctx.alloc) catch return error.Unknown;
     if (rd.verb) |blb| {
@@ -719,15 +739,6 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
             _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Readme", readme) catch return error.Unknown;
             break;
         }
-    }
-
-    try tmpl.ctx.?.put("OGTitle", rd.name);
-    const desc = repo.description(ctx.alloc) catch return error.Unknown;
-    if (std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-        const defdesc = try aPrint(ctx.alloc, "An Indescribable with {s} commits", .{"[todo count commits]"});
-        try tmpl.ctx.?.put("OGDesc", defdesc);
-    } else {
-        try tmpl.ctx.?.put("OGDesc", desc);
     }
 
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
