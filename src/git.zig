@@ -465,29 +465,16 @@ pub const Repo = struct {
         };
     }
 
-    fn findObj(self: Repo, a: Allocator, in_sha: SHA) !Object {
-        const data = try self.findBlob(a, in_sha);
-        return Object.init(data);
-    }
-
-    /// TODO binary search lol
-    fn findBlob(self: Repo, a: Allocator, in_sha: SHA) ![]u8 {
-        var shabuf: [20]u8 = undefined;
-        var sha: []const u8 = &shabuf;
-        if (in_sha.len == 40) {
-            for (&shabuf, 0..) |*s, i| {
-                s.* = try std.fmt.parseInt(u8, in_sha[i * 2 .. (i + 1) * 2], 16);
-            }
-            sha.len = 20;
-        } else {
-            sha = in_sha;
-        }
-
+    fn findBlobPack(self: Repo, a: Allocator, sha: SHA) !?[]u8 {
         for (self.packs) |pack| {
             if (pack.contains(sha)) |offset| {
                 return try pack.loadObj(a, offset, self);
             }
         }
+        return null;
+    }
+
+    fn findBlobFile(self: Repo, a: Allocator, sha: SHA) !?[]u8 {
         if (self.loadFileObj(sha)) |fd| {
             defer fd.close();
 
@@ -495,6 +482,30 @@ pub const Repo = struct {
             var reader = decom.reader();
             return try reader.readAllAlloc(a, 0xffff);
         } else |_| {}
+        return null;
+    }
+
+    fn findBlob(self: Repo, a: Allocator, sha: SHA) ![]u8 {
+        std.debug.assert(sha.len == 20);
+        if (try self.findBlobPack(a, sha)) |pack| return pack;
+        if (try self.findBlobFile(a, sha)) |file| return file;
+
+        return error.ObjectMissing;
+    }
+
+    /// TODO binary search lol
+    fn findObj(self: Repo, a: Allocator, in_sha: SHA) !Object {
+        var shabin: [20]u8 = in_sha[0..20].*;
+        if (in_sha.len == 40) {
+            for (&shabin, 0..) |*s, i| {
+                s.* = try std.fmt.parseInt(u8, in_sha[i * 2 .. (i + 1) * 2], 16);
+            }
+        }
+
+        if (try self.findBlobPack(a, &shabin)) |pack| return Object.init(pack);
+
+        if (try self.findBlobFile(a, &shabin)) |file| return Object.init(file);
+
         return error.ObjectMissing;
     }
 
@@ -615,9 +626,7 @@ pub const Repo = struct {
         return self.head.?;
     }
 
-    pub fn resolvePartial(self: *const Repo, find: SHA) !SHA {
-        _ = self;
-        _ = find;
+    pub fn resolvePartial(_: *const Repo, _: SHA) !SHA {
         return error.NotImplemented;
     }
 

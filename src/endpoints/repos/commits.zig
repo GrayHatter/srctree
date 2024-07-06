@@ -67,10 +67,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     }
 
     var dom = DOM.new(ctx.alloc);
-    var current: git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
-    while (!std.mem.startsWith(u8, current.sha, sha)) {
-        current = current.toParent(ctx.alloc, 0) catch return error.Unknown;
-    }
+    const current: git.Commit = repo.commit(ctx.alloc, sha) catch return error.Unknown;
     dom.pushSlice(try htmlCommit(ctx.alloc, current, repo_name, true));
 
     var acts = repo.getActions(ctx.alloc);
