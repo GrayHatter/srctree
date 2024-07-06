@@ -101,15 +101,25 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
         }
 
         try ctx.addRouteVar("Repo_name", rd.name);
-        const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
-        try ctx.addRouteVar("Issueurl", issueurl);
 
+        const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
         const issuecnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{i_count});
-        try ctx.addRouteVar("Issuecount", issuecnt);
         const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
-        try ctx.addRouteVar("Diffcount", diffcnt);
         const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
-        try ctx.addRouteVar("Diffurl", diffurl);
+        const header_nav = try ctx.alloc.dupe(Template.Context, &[2]Template.Context{
+            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Simple{
+                .{ .name = "Name", .value = "issues" },
+                .{ .name = "Url", .value = issueurl },
+                .{ .name = "Extra", .value = issuecnt },
+            }) catch return error.OutOfMemory,
+            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Simple{
+                .{ .name = "Name", .value = "diffs" },
+                .{ .name = "Url", .value = diffurl },
+                .{ .name = "Extra", .value = diffcnt },
+            }) catch return error.OutOfMemory,
+        });
+        try ctx.putContext("Header.Nav", .{ .block = header_nav });
+
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();

@@ -104,18 +104,6 @@ pub fn POST(comptime name: []const u8, comptime match: Callable) Match {
     return mr;
 }
 
-const root = [_]MatchRouter{
-    ROUTE("admin", endpoint.admin),
-    ROUTE("api", api.router),
-    ROUTE("diffs", endpoint.USERS.diffs),
-    ROUTE("network", endpoint.network),
-    ROUTE("repo", endpoint.repo),
-    ROUTE("repos", endpoint.repo),
-    ROUTE("search", endpoint.search),
-    ROUTE("todo", endpoint.USERS.todo),
-    ROUTE("user", endpoint.commitFlex),
-};
-
 fn notfound(ctx: *Context) Error!void {
     ctx.response.status = .not_found;
     var tmpl = Template.find("4XX.html");

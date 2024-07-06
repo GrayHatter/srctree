@@ -9,6 +9,8 @@ const Response = @import("response.zig");
 const Router = @import("routes.zig");
 const RequestData = @import("request_data.zig");
 
+const Srctree = @import("srctree.zig");
+
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
     size: u16 = 0,
@@ -159,7 +161,7 @@ pub fn serve(alloc_: Allocator, srv: *Server) !void {
 
         var ctx = try Context.init(a, request, response, req_data);
 
-        Router.baseRouter(&ctx) catch |err| {
+        Srctree.router(&ctx)(&ctx) catch |err| {
             switch (err) {
                 error.NetworkCrash => std.debug.print("client disconnect'\n", .{}),
                 error.Unrouteable => {

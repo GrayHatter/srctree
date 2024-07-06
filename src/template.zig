@@ -23,11 +23,18 @@ fn validChar(c: u8) bool {
 const DEBUG = false;
 
 pub const Context = struct {
+    pub const Simple = struct {
+        name: []const u8,
+        value: []const u8,
+    };
+
     pub const Data = union(enum) {
         simple: []const u8,
         block: []Context,
     };
+
     pub const HashMap = std.StringHashMap(Data);
+
     ctx: HashMap,
 
     pub fn Builder(comptime T: type) type {
@@ -72,6 +79,17 @@ pub const Context = struct {
         return Context{
             .ctx = HashMap.init(a),
         };
+    }
+
+    pub fn initWith(a: Allocator, data: []const Simple) !Context {
+        var ctx = Context.init(a);
+        for (data) |d| {
+            ctx.putSimple(d.name, d.value) catch |err| switch (err) {
+                error.OutOfMemory => return err,
+                else => unreachable,
+            };
+        }
+        return ctx;
     }
 
     pub fn raze(self: *Context) void {
