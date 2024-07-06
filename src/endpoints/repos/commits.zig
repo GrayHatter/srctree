@@ -67,7 +67,10 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     }
 
     var dom = DOM.new(ctx.alloc);
-    const current: git.Commit = repo.commit(ctx.alloc, sha) catch return error.Unknown;
+    const current: git.Commit = repo.commit(ctx.alloc, sha) catch {
+        // TODO return 404
+        return error.Unknown;
+    };
     dom.pushSlice(try htmlCommit(ctx.alloc, current, repo_name, true));
 
     var acts = repo.getActions(ctx.alloc);

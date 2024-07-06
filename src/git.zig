@@ -474,6 +474,15 @@ pub const Repo = struct {
         return null;
     }
 
+    fn findBlobPackPartial(self: Repo, a: Allocator, sha: SHA) !?[]u8 {
+        for (self.packs) |pack| {
+            if (try pack.containsPrefix(sha)) |offset| {
+                return try pack.loadObj(a, offset, self);
+            }
+        }
+        return null;
+    }
+
     fn findBlobFile(self: Repo, a: Allocator, sha: SHA) !?[]u8 {
         if (self.loadFileObj(sha)) |fd| {
             defer fd.close();
@@ -485,11 +494,32 @@ pub const Repo = struct {
         return null;
     }
 
+    fn findBlobPartial(self: Repo, a: Allocator, sha: SHA) ![]u8 {
+        if (try self.findBlobPackPartial(a, sha)) |pack| return pack;
+        //if (try self.findBlobFile(a, sha)) |file| return file;
+        return error.ObjectMissing;
+    }
+
     fn findBlob(self: Repo, a: Allocator, sha: SHA) ![]u8 {
         std.debug.assert(sha.len == 20);
         if (try self.findBlobPack(a, sha)) |pack| return pack;
         if (try self.findBlobFile(a, sha)) |file| return file;
 
+        return error.ObjectMissing;
+    }
+
+    fn findObjPartial(self: Repo, a: Allocator, sha: SHA) !Object {
+        std.debug.assert(sha.len % 2 == 0);
+        std.debug.assert(sha.len <= 40);
+
+        var shabuffer: [20]u8 = undefined;
+
+        for (shabuffer[0 .. sha.len / 2], 0..sha.len / 2) |*s, i| {
+            s.* = try std.fmt.parseInt(u8, sha[i * 2 ..][0..2], 16);
+        }
+        const shabin = shabuffer[0 .. sha.len / 2];
+        if (try self.findBlobPackPartial(a, shabin)) |pack| return Object.init(pack);
+        //if (try self.findBlobFile(a, shabin)) |file| return Object.init(file);
         return error.ObjectMissing;
     }
 
@@ -503,9 +533,7 @@ pub const Repo = struct {
         }
 
         if (try self.findBlobPack(a, &shabin)) |pack| return Object.init(pack);
-
         if (try self.findBlobFile(a, &shabin)) |file| return Object.init(file);
-
         return error.ObjectMissing;
     }
 
@@ -631,8 +659,11 @@ pub const Repo = struct {
     }
 
     pub fn commit(self: *const Repo, a: Allocator, request: SHA) !Commit {
-        const target = if (request.len == 40) request else try self.resolvePartial(request);
-        var obj = try self.findObj(a, target);
+        const target = request;
+        var obj = if (request.len == 40)
+            try self.findObj(a, target)
+        else
+            try self.findObjPartial(a, target);
         defer obj.raze(a);
         var cmt = try Commit.fromReader(a, target, obj.reader());
         cmt.repo = self;
