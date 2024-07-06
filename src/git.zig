@@ -149,15 +149,23 @@ const Pack = struct {
     }
 
     pub fn contains(self: Pack, sha: SHA) ?u32 {
+        std.debug.assert(sha.len == 20);
+        return self.containsPrefix(sha) catch unreachable;
+    }
+
+    pub fn containsPrefix(self: Pack, sha: SHA) !?u32 {
         const count: usize = self.fanOutCount(sha[0]);
         if (count == 0) return null;
 
         const start: usize = if (sha[0] > 0) self.fanOut(sha[0] - 1) else 0;
 
-        const objnames = self.objnames[start * 20 ..];
+        const objnames = self.objnames[start * 20 ..][0 .. count * 20];
         for (0..count) |i| {
             const objname = objnames[i * 20 ..][0..20];
-            if (std.mem.eql(u8, sha, objname)) {
+            if (std.mem.eql(u8, sha, objname[0..sha.len])) {
+                if (objnames.len > i * 20 + 20 and std.mem.eql(u8, sha, objnames[i * 20 + 20 ..][0..sha.len])) {
+                    return error.AmbiguousRef;
+                }
                 return @byteSwap(self.offsets[i + start]);
             }
         }
@@ -1490,6 +1498,40 @@ test "read pack" {
     const commit = try Commit.fromReader(a, lol, obj.reader());
     defer commit.raze(a);
     if (false) std.debug.print("{}\n", .{commit});
+}
+
+test "pack contains" {
+    const a = std.testing.allocator;
+    var cwd = std.fs.cwd();
+    const dir = try cwd.openDir("repos/srctree", .{});
+    var repo = try Repo.init(dir);
+    try repo.loadPacks(a);
+    defer repo.raze(a);
+
+    const sha = "7d4786ded56e1ee6cfe72c7986218e234961d03c";
+    var shabin: [20]u8 = undefined;
+    for (&shabin, 0..) |*s, i| {
+        s.* = try std.fmt.parseInt(u8, sha[i * 2 ..][0..2], 16);
+    }
+
+    var found: bool = false;
+    for (repo.packs) |pack| {
+        found = pack.contains(shabin[0..20]) != null;
+        if (found) break;
+    }
+    try std.testing.expect(found);
+
+    found = false;
+    for (repo.packs) |pack| {
+        found = try pack.containsPrefix(shabin[0..10]) != null;
+        if (found) break;
+    }
+    try std.testing.expect(found);
+
+    const err = repo.packs[0].containsPrefix(shabin[0..1]);
+    try std.testing.expectError(error.AmbiguousRef, err);
+
+    //var long_obj = try repo.findObj(a, lol);
 }
 
 test "hopefully a delta" {
