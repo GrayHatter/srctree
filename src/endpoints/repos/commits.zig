@@ -110,8 +110,13 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
 
     _ = try tmpl.addElements(ctx.alloc, "Comments", comments.done());
 
-    try tmpl.ctx.?.put("OGTitle", repo_name);
-    try tmpl.ctx.?.put("OGDesc", current.title);
+    var opengraph = [_]Template.Context{
+        Template.Context.init(ctx.alloc),
+    };
+
+    opengraph[0].putSimple("Title", "Commit") catch return error.Unknown;
+    try opengraph[0].putSimple("Desc", Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable);
+    try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
     ctx.response.status = .ok;
     return ctx.sendTemplate(&tmpl) catch unreachable;
