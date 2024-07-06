@@ -15,7 +15,7 @@ const UriIter = Endpoint.Router.UriIter;
 
 const git = @import("../git.zig");
 
-pub const endpoints = [_]Route.MatchRouter{
+pub const endpoints = [_]Route.Match{
     Route.ROUTE("", view),
     Route.POST("post", view),
     Route.ROUTE("new-repo", newRepo),

@@ -19,9 +19,9 @@ const Ini = @import("ini.zig");
 const Humanize = @import("humanize.zig");
 const Bleach = @import("bleach.zig");
 
-pub const endpoints = [_]Endpoint.Router.MatchRouter{
+pub const endpoints = [_]Endpoint.Router.Match{
     .{ .name = "objects", .match = .{ .call = gitUploadPack } },
-    .{ .name = "info", .match = .{ .simple = &[_]Endpoint.Router.MatchRouter{
+    .{ .name = "info", .match = .{ .simple = &[_]Endpoint.Router.Match{
         .{ .name = "", .match = .{ .call = gitUploadPack } },
         .{ .name = "refs", .match = .{ .call = gitUploadPack } },
     } } },

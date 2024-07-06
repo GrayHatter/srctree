@@ -14,7 +14,7 @@ const Ini = @import("../ini.zig");
 const GET = Endpoint.Router.Methods.GET;
 const POST = Endpoint.Router.Methods.POST;
 
-pub const endpoints = [_]Endpoint.Router.MatchRouter{
+pub const endpoints = [_]Endpoint.Router.Match{
     .{ .name = "", .methods = .{ .GET = true }, .match = .{ .call = default } },
 };
 

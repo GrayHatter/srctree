@@ -52,18 +52,18 @@ pub const _Endpoint = struct {
     methods: Methods = .{ .GET = true },
 };
 
-pub const MatchRouter = struct {
+pub const Match = struct {
     name: []const u8,
     match: union(enum) {
         call: Callable,
         route: Router,
-        simple: []const MatchRouter,
+        simple: []const Match,
     },
     methods: Methods = .{ .GET = true },
 };
 
-pub fn ROUTE(comptime name: []const u8, comptime match: anytype) MatchRouter {
-    return comptime MatchRouter{
+pub fn ROUTE(comptime name: []const u8, comptime match: anytype) Match {
+    return comptime Match{
         .name = name,
         .match = switch (@typeInfo(@TypeOf(match))) {
             .Pointer => |ptr| switch (@typeInfo(ptr.child)) {
@@ -86,19 +86,19 @@ pub fn ROUTE(comptime name: []const u8, comptime match: anytype) MatchRouter {
     };
 }
 
-pub fn any(comptime name: []const u8, comptime match: Callable) MatchRouter {
+pub fn any(comptime name: []const u8, comptime match: Callable) Match {
     var mr = ROUTE(name, match);
     mr.methods = .{ .GET = true, .POST = true };
     return mr;
 }
 
-pub fn GET(comptime name: []const u8, comptime match: Callable) MatchRouter {
+pub fn GET(comptime name: []const u8, comptime match: Callable) Match {
     var mr = ROUTE(name, match);
     mr.methods = .{ .GET = true };
     return mr;
 }
 
-pub fn POST(comptime name: []const u8, comptime match: Callable) MatchRouter {
+pub fn POST(comptime name: []const u8, comptime match: Callable) Match {
     var mr = ROUTE(name, match);
     mr.methods = .{ .POST = true };
     return mr;
@@ -133,7 +133,7 @@ fn eql(a: []const u8, b: []const u8) bool {
     return std.mem.eql(u8, a, b);
 }
 
-pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Callable {
+pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
     const search = ctx.uri.peek() orelse return notfound;
     inline for (routes) |ep| {
         if (eql(search, ep.name)) {
@@ -162,6 +162,10 @@ pub fn router(ctx: *Context, comptime routes: []const MatchRouter) Callable {
     return notfound;
 }
 
+const root = [_]Match{
+    ROUTE("", default),
+};
+
 pub fn baseRouter(ctx: *Context) Error!void {
     //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
@@ -174,7 +178,7 @@ pub fn baseRouter(ctx: *Context) Error!void {
 }
 
 const root_with_static = root ++
-    [_]MatchRouter{.{ .name = "static", .match = .{ .call = StaticFile.file } }};
+    [_]Match{.{ .name = "static", .match = .{ .call = StaticFile.file } }};
 
 pub fn baseRouterHtml(ctx: *Context) Error!void {
     //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});

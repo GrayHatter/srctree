@@ -8,6 +8,7 @@ pub const Context = @import("context.zig");
 pub const Template = @import("template.zig");
 pub const Router = @import("routes.zig");
 pub const Types = @import("types.zig");
+pub const Callable = Router.Callable;
 
 pub const Errors = @import("errors.zig");
 

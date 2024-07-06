@@ -12,7 +12,7 @@ const ROUTE = Endpoint.Router.ROUTE;
 const UserData = @import("../request_data.zig").UserData;
 const Bleach = @import("../bleach.zig");
 
-pub const routes = [_]Endpoint.Router.MatchRouter{
+pub const routes = [_]Endpoint.Router.Match{
     ROUTE("", search),
     ROUTE("search", search),
 };

@@ -20,7 +20,7 @@ const Comment = Endpoint.Types.Comment;
 const Delta = Endpoint.Types.Delta;
 const Humanize = @import("../../humanize.zig");
 
-pub const routes = [_]Endpoint.Router.MatchRouter{
+pub const routes = [_]Endpoint.Router.Match{
     ROUTE("", list),
     ROUTE("new", new),
     POST("new", newPost),

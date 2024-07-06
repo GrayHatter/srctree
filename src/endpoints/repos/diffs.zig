@@ -27,7 +27,7 @@ const Humanize = @import("../../humanize.zig");
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
 
-pub const routes = [_]Endpoint.Router.MatchRouter{
+pub const routes = [_]Endpoint.Router.Match{
     ROUTE("", list),
     GET("new", new),
     POST("new", newPost),

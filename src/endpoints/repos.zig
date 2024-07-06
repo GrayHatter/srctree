@@ -15,7 +15,6 @@ const Template = Endpoint.Template;
 const Error = Endpoint.Error;
 const UriIter = Endpoint.Router.UriIter;
 const ROUTE = Endpoint.Router.ROUTE;
-const MatchRouter = Endpoint.Router.MatchRouter;
 
 const Bleach = @import("../bleach.zig");
 const Humanize = @import("../humanize.zig");
@@ -33,7 +32,7 @@ const Types = @import("../types.zig");
 
 const gitweb = @import("../gitweb.zig");
 
-const endpoints = [_]MatchRouter{
+const endpoints = [_]Endpoint.Router.Match{
     ROUTE("", treeBlob),
     ROUTE("blob", treeBlob),
     ROUTE("commit", &Commits.router),
