@@ -19,6 +19,7 @@ pub const Error = error{
     EndOfStream,
     PackCorrupt,
     PackRef,
+    AmbiguousRef,
 };
 
 const Types = enum {
@@ -89,6 +90,7 @@ const Pack = struct {
 
     /// assumes name ownership
     pub fn init(dir: std.fs.Dir, name: []u8) !Pack {
+        std.debug.assert(name.len <= 45);
         var filename: [50]u8 = undefined;
         const ifd = try dir.openFile(try std.fmt.bufPrint(&filename, "{s}.idx", .{name}), .{});
         const pfd = try dir.openFile(try std.fmt.bufPrint(&filename, "{s}.pack", .{name}), .{});
@@ -99,16 +101,16 @@ const Pack = struct {
             .pack_fd = pfd,
             .idx_fd = ifd,
         };
-        try pack.verify();
+        try pack.prepare();
         return pack;
     }
 
-    fn verify(self: *Pack) !void {
-        try self.verifyIdx();
-        try self.verifyPack();
+    fn prepare(self: *Pack) !void {
+        try self.prepareIdx();
+        try self.preparePack();
     }
 
-    fn verifyIdx(self: *Pack) !void {
+    fn prepareIdx(self: *Pack) !void {
         self.idx_header = @alignCast(@ptrCast(self.idx.ptr));
         const count = @byteSwap(self.idx_header.fanout[255]);
         self.objnames = self.idx[258 * 4 ..][0 .. 20 * count];
@@ -120,7 +122,7 @@ const Pack = struct {
         self.hugeoffsets = null;
     }
 
-    fn verifyPack(self: *Pack) !void {
+    fn preparePack(self: *Pack) !void {
         self.idx_header = @alignCast(@ptrCast(self.idx.ptr));
     }
 
@@ -135,6 +137,8 @@ const Pack = struct {
         std.posix.munmap(mem);
     }
 
+    /// the packidx fanout is a 0xFF count table of u32 the sum count for that
+    /// byte which translates the start position for that byte in the main table
     pub fn fanOut(self: Pack, i: u8) u32 {
         return @byteSwap(self.idx_header.fanout[i]);
     }
@@ -145,20 +149,16 @@ const Pack = struct {
     }
 
     pub fn contains(self: Pack, sha: SHA) ?u32 {
-        var start: usize = 0;
-        var count: usize = 0;
-        if (sha[0] == 0) {
-            if (self.fanOut(0) == 0) return null;
-            count = self.fanOut(0);
-        } else if (self.fanOutCount(sha[0]) > 0) {
-            start = self.fanOut(sha[0] - 1);
-            count = self.fanOutCount(sha[0]);
-        } else return null;
+        const count: usize = self.fanOutCount(sha[0]);
+        if (count == 0) return null;
 
-        for (start..start + count) |i| {
-            const objname = self.objnames[i * 20 .. (i + 1) * 20];
+        const start: usize = if (sha[0] > 0) self.fanOut(sha[0] - 1) else 0;
+
+        const objnames = self.objnames[start * 20 ..];
+        for (0..count) |i| {
+            const objname = objnames[i * 20 ..][0..20];
             if (std.mem.eql(u8, sha, objname)) {
-                return @byteSwap(self.offsets[i]);
+                return @byteSwap(self.offsets[i + start]);
             }
         }
         return null;
@@ -607,6 +607,21 @@ pub const Repo = struct {
         return self.head.?;
     }
 
+    pub fn resolvePartial(self: *const Repo, find: SHA) !SHA {
+        _ = self;
+        _ = find;
+        return error.NotImplemented;
+    }
+
+    pub fn commit(self: *const Repo, a: Allocator, request: SHA) !Commit {
+        const target = if (request.len == 40) request else try self.resolvePartial(request);
+        var obj = try self.findObj(a, target);
+        defer obj.raze(a);
+        var cmt = try Commit.fromReader(a, target, obj.reader());
+        cmt.repo = self;
+        return cmt;
+    }
+
     pub fn headCommit(self: *const Repo, a: Allocator) !Commit {
         const resolv = switch (self.head.?) {
             .sha => |s| s,
@@ -614,11 +629,7 @@ pub const Repo = struct {
             .tag => return error.CommitMissing,
             .missing => return error.CommitMissing,
         };
-        var obj = try self.findObj(a, resolv);
-        defer obj.raze(a);
-        var cmt = try Commit.fromReader(a, resolv, obj.reader());
-        cmt.repo = self;
-        return cmt;
+        return try self.commit(a, resolv);
     }
 
     pub fn blob(self: Repo, a: Allocator, sha: SHA) !Object {
