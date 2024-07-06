@@ -136,7 +136,7 @@ fn buildJournal(
 
     var lseen = std.BufSet.init(a);
     const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
-    var commit = try repo.commit(a);
+    var commit = try repo.headCommit(a);
 
     while (true) {
         if (lseen.contains(commit.sha)) break;
@@ -169,7 +169,7 @@ fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const 
     defer repo.raze(a);
 
     // TODO return empty hits here
-    const commit = repo.commit(a) catch unreachable;
+    const commit = repo.headCommit(a) catch unreachable;
 
     const email_gop = try cached_emails.getOrPut(email);
     if (!email_gop.found_existing) {

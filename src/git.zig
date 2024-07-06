@@ -607,7 +607,7 @@ pub const Repo = struct {
         return self.head.?;
     }
 
-    pub fn commit(self: *const Repo, a: Allocator) !Commit {
+    pub fn headCommit(self: *const Repo, a: Allocator) !Commit {
         const resolv = switch (self.head.?) {
             .sha => |s| s,
             .branch => |b| try self.ref(b.name["refs/heads/".len..]),
@@ -1081,7 +1081,7 @@ pub const Tree = struct {
     }
 
     pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]ChangeSet {
-        const cmtt = try repo.commit(a);
+        const cmtt = try repo.headCommit(a);
         defer cmtt.raze(a);
         const search_list: []?Blob = try a.alloc(?Blob, self.objects.len);
         for (self.objects, search_list) |src, *dst| {
@@ -1089,7 +1089,7 @@ pub const Tree = struct {
         }
         defer a.free(search_list);
 
-        var par = try repo.commit(a);
+        var par = try repo.headCommit(a);
         var ptree = try par.mkSubTree(a, self.path);
 
         var changed = try a.alloc(ChangeSet, self.objects.len);
@@ -1389,7 +1389,7 @@ test "toParent" {
     var repo = try Repo.init(cwd);
     defer repo.raze(a);
     try repo.loadData(a);
-    var commit = try repo.commit(a);
+    var commit = try repo.headCommit(a);
 
     var count: usize = 0;
     while (true) {
@@ -1490,7 +1490,7 @@ test "hopefully a delta" {
 
     try repo.loadData(a);
 
-    var head = try repo.commit(a);
+    var head = try repo.headCommit(a);
     defer head.raze(a);
     //std.debug.print("{}\n", .{head});
 
@@ -1509,7 +1509,7 @@ test "commit to tree" {
 
     try repo.loadData(a);
 
-    const cmt = try repo.commit(a);
+    const cmt = try repo.headCommit(a);
     defer cmt.raze(a);
     const tree = try cmt.mkTree(a);
     defer tree.raze(a);
@@ -1526,7 +1526,7 @@ test "blob to commit" {
 
     try repo.loadData(a);
 
-    const cmtt = try repo.commit(a);
+    const cmtt = try repo.headCommit(a);
     defer cmtt.raze(a);
 
     const tree = try cmtt.mkTree(a);
@@ -1551,7 +1551,7 @@ test "mk sub tree" {
 
     try repo.loadData(a);
 
-    const cmtt = try repo.commit(a);
+    const cmtt = try repo.headCommit(a);
     defer cmtt.raze(a);
 
     const tree = try cmtt.mkTree(a);
@@ -1578,7 +1578,7 @@ test "commit mk sub tree" {
 
     try repo.loadData(a);
 
-    const cmtt = try repo.commit(a);
+    const cmtt = try repo.headCommit(a);
     defer cmtt.raze(a);
 
     const tree = try cmtt.mkTree(a);
@@ -1624,7 +1624,7 @@ test "considering optimizing blob to commit" {
 
     //try repo.loadPacks(a);
 
-    //const cmtt = try repo.commit(a);
+    //const cmtt = try repo.headCommit(a);
     //defer cmtt.raze(a);
 
     //const tree = try cmtt.mkTree(a);
@@ -1635,7 +1635,7 @@ test "considering optimizing blob to commit" {
     //}
     //defer a.free(search_list);
 
-    //var par = try repo.commit(a);
+    //var par = try repo.headCommit(a);
     //var ptree = try par.mkTree(a);
 
     //var old = par;
@@ -1671,7 +1671,7 @@ test "considering optimizing blob to commit" {
 
     //par.raze(a);
     //ptree.raze(a);
-    //par = try repo.commit(a);
+    //par = try repo.headCommit(a);
     //ptree = try par.mkTree(a);
 
     //var set = std.BufSet.init(a);
@@ -1731,7 +1731,7 @@ test "ref delta" {
 
     try repo.loadData(a);
 
-    const cmtt = try repo.commit(a);
+    const cmtt = try repo.headCommit(a);
     defer cmtt.raze(a);
 
     const tree = try cmtt.mkTree(a);

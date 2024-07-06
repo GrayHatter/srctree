@@ -145,9 +145,9 @@ fn repoSorterNew(ctx: repoctx, l: git.Repo, r: git.Repo) bool {
 }
 
 fn repoSorter(ctx: repoctx, l: git.Repo, r: git.Repo) bool {
-    var lc = l.commit(ctx.alloc) catch return true;
+    var lc = l.headCommit(ctx.alloc) catch return true;
     defer lc.raze(ctx.alloc);
-    var rc = r.commit(ctx.alloc) catch return false;
+    var rc = r.headCommit(ctx.alloc) catch return false;
     defer rc.raze(ctx.alloc);
     return sorter({}, lc.committer.timestr, rc.committer.timestr);
 }
@@ -179,7 +179,7 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
             dom = dom.close();
         }
 
-        if (repo.commit(a)) |cmt| {
+        if (repo.headCommit(a)) |cmt| {
             defer cmt.raze(a);
             const committer = cmt.committer;
             const updated_str = try aPrint(
@@ -293,7 +293,7 @@ fn treeBlob(ctx: *Context) Error!void {
     try opengraph[0].putSimple("Desc", desc);
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
-    const cmt = repo.commit(ctx.alloc) catch return newRepo(ctx);
+    const cmt = repo.headCommit(ctx.alloc) catch return newRepo(ctx);
     var files: git.Tree = cmt.mkTree(ctx.alloc) catch return error.Unknown;
     if (rd.verb) |blb| {
         if (std.mem.eql(u8, blb, "blob")) {
@@ -691,7 +691,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     const branches = try aPrint(ctx.alloc, "{} branches", .{repo.refs.len});
     dom.push(HTML.span(branches, null));
 
-    const c = repo.commit(ctx.alloc) catch return error.Unknown;
+    const c = repo.headCommit(ctx.alloc) catch return error.Unknown;
     dom.push(HTML.span(c.title[0..@min(c.title.len, 50)], null));
     const commit_time = try aPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
     dom = dom.open(HTML.span(null, &HTML.Attr.class("muted")));

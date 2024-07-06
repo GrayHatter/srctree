@@ -67,7 +67,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     }
 
     var dom = DOM.new(ctx.alloc);
-    var current: git.Commit = repo.commit(ctx.alloc) catch return error.Unknown;
+    var current: git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
     while (!std.mem.startsWith(u8, current.sha, sha)) {
         current = current.toParent(ctx.alloc, 0) catch return error.Unknown;
     }
@@ -114,7 +114,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
 }
 
 pub fn commitPatch(ctx: *Context, sha: []const u8, repo: git.Repo) Error!void {
-    var current: git.Commit = repo.commit(ctx.alloc) catch return error.Unknown;
+    var current: git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
     var acts = repo.getActions(ctx.alloc);
     if (std.mem.indexOf(u8, sha, ".patch")) |tail| {
         while (!std.mem.startsWith(u8, current.sha, sha[0..tail])) {
@@ -233,7 +233,7 @@ fn buildListBetween(
     elms: []Template.Context,
     sha: []u8,
 ) ![]Template.Context {
-    var current: git.Commit = repo.commit(a) catch return error.Unknown;
+    var current: git.Commit = repo.headCommit(a) catch return error.Unknown;
     if (right) |r| {
         std.debug.assert(r.len <= 40);
         const min = @min(r.len, current.sha.len);
