@@ -446,9 +446,8 @@ pub const Directive = struct {
                             return;
                         },
                     }
-                } else {
-                    std.debug.print("block missing [{s}]\n", .{self.vari});
-                    //try out.writeAll(blob[0..end]);
+                } else if (self.word == .foreach) {
+                    std.debug.print("<For {s}> ctx block missing.\n", .{self.vari});
                 }
             }
 
