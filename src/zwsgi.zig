@@ -175,7 +175,10 @@ pub fn serve(alloc_: Allocator, srv: *Server) !void {
                 error.AndExit,
                 error.InvalidURI,
                 error.NoSpaceLeft,
-                => return err,
+                => {
+                    std.debug.print("Unexpected error '{}'\n", .{err});
+                    return err;
+                },
                 error.OutOfMemory => {
                     std.debug.print("Out of memory at '{}'\n", .{arena.queryCapacity()});
                     return err;
