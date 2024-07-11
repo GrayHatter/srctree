@@ -50,6 +50,8 @@ fn usage(long: bool) noreturn {
         \\ -s [directory] : directory to look for repos
         \\      (not yet implemented)
         \\
+        \\ -c [config.file] : use this config file instead of trying to guess.
+        \\
     , .{arg0}) catch std.process.exit(255);
     if (long) {}
     std.process.exit(0);
@@ -64,7 +66,12 @@ const RunMode = enum {
 
 var runmode: RunMode = .unix;
 
+fn findConfig(target: []const u8) ?[]const u8 {
+    return if (target.len > 0) target else null;
+}
+
 const Options = struct {
+    config_path: []const u8,
     source_path: []const u8,
 };
 
@@ -77,7 +84,7 @@ pub fn main() !void {
     defer Template.raze(a);
 
     var args = std.process.args();
-    arg0 = args.next() orelse "tree";
+    arg0 = args.next() orelse "srctree";
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "-h") or
             std.mem.eql(u8, arg, "--help") or
@@ -92,6 +99,11 @@ pub fn main() !void {
         } else {
             try print("unknown arg '{s}'", .{arg});
         }
+    }
+
+    if (findConfig("")) |cfg| {
+        std.debug.print("config not implemented\n", .{});
+        std.debug.print("should read '{s}'\n", .{cfg});
     }
 
     var cwd = std.fs.cwd();
