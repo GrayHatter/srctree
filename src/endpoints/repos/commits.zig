@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
 
 const Repos = @import("../repos.zig");
 const Endpoint = @import("../../endpoint.zig");
@@ -101,7 +102,6 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
         return error.Abusive;
     }
 
-    var dom = DOM.new(ctx.alloc);
     const current: git.Commit = repo.commit(ctx.alloc, sha) catch cmt: {
         // TODO return 404
         var fallback: git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
@@ -110,15 +110,20 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
         }
         break :cmt fallback;
     };
-    dom.pushSlice(try htmlCommit(ctx.alloc, current, repo_name, true));
+
+    var commit_ctx = [1]Template.Context{
+        try commitCtx(ctx.alloc, current, repo_name),
+    };
+    try ctx.putContext("Commit", .{
+        .block = &commit_ctx,
+    });
 
     var acts = repo.getActions(ctx.alloc);
     var diff = acts.show(sha) catch return error.Unknown;
+
     if (std.mem.indexOf(u8, diff, "diff")) |i| {
         diff = diff[i..];
     }
-    _ = tmpl.addElements(ctx.alloc, "Commits", dom.done()) catch return error.Unknown;
-
     var diff_dom = DOM.new(ctx.alloc);
     diff_dom = diff_dom.open(HTML.element("diff", null, null));
     diff_dom = diff_dom.open(HTML.element("patch", null, null));
@@ -196,6 +201,22 @@ pub fn commit(ctx: *Context) Error!void {
     else
         return commitHtml(ctx, sha, rd.name, repo);
     return error.Unrouteable;
+}
+
+pub fn commitCtx(a: Allocator, c: git.Commit, repo: []const u8) !Template.Context {
+    var ctx = Template.Context.init(a);
+
+    try ctx.putSimple("Author", try a.dupe(u8, c.author.name));
+    // TODO construct parent list
+    const prnt = c.parent[0] orelse "00000000";
+    try ctx.putSimple("Parent_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, prnt[0..8] }));
+    try ctx.putSimple("Parent_Sha_Short", try a.dupe(u8, prnt[0..8]));
+    try ctx.putSimple("Sha_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
+    try ctx.putSimple("Sha", try a.dupe(u8, c.sha));
+    try ctx.putSimple("Sha_Short", try a.dupe(u8, c.sha[0..8]));
+    try ctx.putSimple("Title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
+    try ctx.putSimple("Body", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
+    return ctx;
 }
 
 pub fn htmlCommit(a: Allocator, c: git.Commit, repo: []const u8, comptime top: bool) ![]HTML.E {
@@ -360,7 +381,7 @@ pub fn commitsBefore(ctx: *Context) Error!void {
 }
 
 fn sendCommits(ctx: *Context, list: []Template.Context, before_txt: []const u8) Error!void {
-    var tmpl = Template.find("commits.html");
+    var tmpl = Template.find("commit-list.html");
     tmpl.init(ctx.alloc);
 
     try tmpl.ctx.?.putBlock("Commits", list);

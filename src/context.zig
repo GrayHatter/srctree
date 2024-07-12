@@ -51,7 +51,9 @@ pub fn init(a: Allocator, cfg: ?Config, req: Request, res: Response, req_data: R
 }
 
 pub fn putContext(ctx: *Context, name: []const u8, val: Template.Context.Data) !void {
-    try ctx.template_ctx.putNext(name, val);
+    ctx.template_ctx.putNext(name, val) catch |err| switch (err) {
+        error.OutOfMemory => return err,
+    };
 }
 
 /// Kept for compat, please use putContext

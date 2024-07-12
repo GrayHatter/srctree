@@ -141,7 +141,10 @@ pub const Context = struct {
 
     pub fn getBlock(self: Context, name: []const u8) ?[]const Context {
         return switch (self.getNext(name) orelse return null) {
-            .simple => unreachable,
+            .simple => {
+                std.debug.print("Error: get [{s}] required Block, found simple\n", .{name});
+                unreachable;
+            },
             .block => |b| b,
         };
     }
