@@ -11,7 +11,14 @@ const HTML = Endpoint.HTML;
 const DOM = Endpoint.DOM;
 
 pub const Patch = struct {
+    // TODO reduce namespace
     patch: []const u8,
+
+    pub fn init(patch: []const u8) Patch {
+        return .{
+            .patch = patch,
+        };
+    }
 
     pub fn isValid(_: Patch) bool {
         return true; // lol, you thought this did something :D
@@ -35,6 +42,22 @@ pub const Patch = struct {
             fidx += 1;
         }
         return files;
+    }
+
+    pub const DiffStat = struct {
+        additions: usize,
+        deletions: usize,
+        total: isize,
+    };
+
+    pub fn diffstat(p: Patch) DiffStat {
+        const a = std.mem.count(u8, p.patch, "\n+");
+        const d = std.mem.count(u8, p.patch, "\n-");
+        return .{
+            .additions = a,
+            .deletions = d,
+            .total = @intCast(a -| d),
+        };
     }
 };
 
@@ -119,14 +142,14 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
 
 // TODO move this function, I tried it, and now I hate it!
 pub fn patchHtml(a: Allocator, patch: []const u8) ![]HTML.Element {
-    var p = Patch{ .patch = patch };
-    const diffs = p.filesSlice(a) catch return &[0]HTML.Element{};
-    defer a.free(diffs);
+    var p = Patch.init(patch);
+    const files = p.filesSlice(a) catch return &[0]HTML.Element{};
+    defer a.free(files);
 
     var dom = DOM.new(a);
 
     dom = dom.open(HTML.patch());
-    for (diffs) |diff| {
+    for (files) |diff| {
         var h = Header{ .data = diff };
         h.parse() catch |e| {
             std.debug.print("error {}\n", .{e});
@@ -135,6 +158,13 @@ pub fn patchHtml(a: Allocator, patch: []const u8) ![]HTML.Element {
         };
         const body = h.changes orelse continue;
 
+        const dstat = p.diffstat();
+        const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
+            dstat.additions,
+            dstat.deletions,
+            dstat.total,
+        });
+        dom.push(HTML.element("diffstat", stat, null));
         dom = dom.open(HTML.diff());
         dom.push(HTML.element("filename", h.filename.right orelse "File Deleted", null));
         dom = dom.open(HTML.element("changes", null, null));
