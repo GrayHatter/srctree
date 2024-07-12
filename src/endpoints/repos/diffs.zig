@@ -208,8 +208,9 @@ fn view(ctx: *Context) Error!void {
     const file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
-        const patch = try Commits.patchHtml(ctx.alloc, fdata);
-        _ = try tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Patch", patch);
+        const patch = Patch.Patch.init(fdata);
+        const patch_html = try Commits.patchHtml(ctx.alloc, patch);
+        _ = try tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Patch", patch_html);
         f.close();
     } else try tmpl.addString("Patch", "Patch not found");
 

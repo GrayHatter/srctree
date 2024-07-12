@@ -1,6 +1,7 @@
 const std = @import("std");
 
 const mem = std.mem;
+const count = mem.count;
 const Allocator = mem.Allocator;
 
 const CURL = @import("curl.zig");
@@ -25,10 +26,10 @@ pub const Patch = struct {
     }
 
     pub fn filesSlice(self: Patch, a: Allocator) ![][]const u8 {
-        const count = mem.count(u8, self.patch, "\ndiff --git a/") +
+        const fcount = count(u8, self.patch, "\ndiff --git a/") +
             @as(usize, if (mem.startsWith(u8, self.patch, "diff --git a/")) 1 else 0);
-        if (count == 0) return error.PatchInvalid;
-        var files = try a.alloc([]const u8, count);
+        if (fcount == 0) return error.PatchInvalid;
+        var files = try a.alloc([]const u8, fcount);
         errdefer a.free(files);
         var fidx: usize = 0;
         var start: usize = mem.indexOfPos(u8, self.patch, 0, "diff --git a/") orelse {
@@ -45,15 +46,18 @@ pub const Patch = struct {
     }
 
     pub const DiffStat = struct {
+        files: usize,
         additions: usize,
         deletions: usize,
         total: isize,
     };
 
     pub fn diffstat(p: Patch) DiffStat {
-        const a = std.mem.count(u8, p.patch, "\n+");
-        const d = std.mem.count(u8, p.patch, "\n-");
+        const a = count(u8, p.patch, "\n+");
+        const d = count(u8, p.patch, "\n-");
+        const files = count(u8, p.patch, "\ndiff --git a/");
         return .{
+            .files = files,
             .additions = a,
             .deletions = d,
             .total = @intCast(a -| d),
@@ -143,9 +147,9 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
 pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
 
-    const count = std.mem.count(u8, diff, "\n");
+    const line_count = std.mem.count(u8, diff, "\n");
     var litr = std.mem.split(u8, diff, "\n");
-    for (0..count + 1) |_| {
+    for (0..line_count + 1) |_| {
         const a_add = &HTML.Attr.class("add");
         const a_del = &HTML.Attr.class("del");
         const dirty = litr.next().?;
