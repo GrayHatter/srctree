@@ -12,6 +12,7 @@ pub const Response = @import("response.zig");
 pub const RequestData = @import("request_data.zig").RequestData;
 pub const Template = @import("template.zig");
 pub const UriIter = @import("endpoint.zig").Router.UriIter;
+const Config = @import("ini.zig").Config;
 
 const Error = @import("errors.zig").Error;
 
@@ -22,8 +23,10 @@ request: Request,
 response: Response,
 req_data: RequestData,
 uri: UriIter,
+cfg: ?Config,
+
+// TODO fix this unstable API
 auth: Auth,
-// TODO fix this API
 template_ctx: Template.Context,
 route_ctx: ?*const anyopaque = null,
 
@@ -32,7 +35,7 @@ const VarPair = struct {
     []const u8,
 };
 
-pub fn init(a: Allocator, req: Request, res: Response, req_data: RequestData) !Context {
+pub fn init(a: Allocator, cfg: ?Config, req: Request, res: Response, req_data: RequestData) !Context {
     std.debug.assert(req.uri[0] == '/');
     //const reqheader = req.headers
     return Context{
@@ -41,6 +44,7 @@ pub fn init(a: Allocator, req: Request, res: Response, req_data: RequestData) !C
         .response = res,
         .req_data = req_data,
         .uri = std.mem.split(u8, req.uri[1..], "/"),
+        .cfg = cfg,
         .auth = Auth.init(req.headers),
         .template_ctx = Template.Context.init(a),
     };

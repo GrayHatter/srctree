@@ -67,7 +67,16 @@ const RunMode = enum {
 var runmode: RunMode = .unix;
 
 fn findConfig(target: []const u8) ?[]const u8 {
-    return if (target.len > 0) target else null;
+    if (target.len > 0) return target;
+
+    if (std.os.linux.getuid() < 1000) {
+        // TODO and uid shell not in /etc/shells
+        // search in /etc/srctree/
+    } else {
+        // search in cwd, then home dir
+    }
+
+    return null;
 }
 
 const Options = struct {
@@ -101,20 +110,22 @@ pub fn main() !void {
         }
     }
 
-    if (findConfig("")) |cfg| {
+    var cwd = std.fs.cwd();
+    var cfg_file: ?std.fs.File = null;
+    if (findConfig("./config.ini")) |cfg| {
         std.debug.print("config not implemented\n", .{});
         std.debug.print("should read '{s}'\n", .{cfg});
+        cfg_file = try cwd.openFile("./config.ini", .{});
     }
 
-    var cwd = std.fs.cwd();
-    var ini: Ini.Config = Ini.default(a) catch |e| switch (e) {
-        error.FileNotFound => Ini.Config.empty(),
+    var config: Ini.Config = Ini.init(a, cfg_file.?) catch |e| switch (e) {
+        //error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
 
-    defer ini.raze(a);
+    defer config.raze(a);
 
-    if (ini.get("owner")) |ns| {
+    if (config.get("owner")) |ns| {
         if (ns.get("email")) |email| {
             if (false) std.log.info("{s}\n", .{email});
         }
@@ -147,7 +158,8 @@ pub fn main() !void {
             if (false) std.debug.print("mode {o}\n", .{mode});
             try print("Unix server listening\n", .{});
 
-            zWSGI.serve(a, &server) catch {
+            var z = zWSGI.init(a, config);
+            z.serve(&server) catch {
                 if (@errorReturnTrace()) |trace| {
                     std.debug.dumpStackTrace(trace.*);
                 }

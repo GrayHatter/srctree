@@ -6,7 +6,6 @@ const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
 const Endpoint = @import("../endpoint.zig");
 const Git = @import("../git.zig");
-const Ini = @import("../ini.zig");
 
 const DOM = Endpoint.DOM;
 const HTML = Endpoint.HTML;
@@ -212,7 +211,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
     if (user) |u| {
         email = u.value;
     } else {
-        if (Ini.default(ctx.alloc)) |ini| {
+        if (ctx.cfg) |ini| {
             if (ini.get("owner")) |ns| {
                 if (ns.get("email")) |c_email| {
                     email = c_email;
@@ -224,7 +223,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
                     }
                 }
             }
-        } else |_| {}
+        }
     }
     var date = nowish.removeTime();
     date = DateTime.fromEpoch(date.timestamp + DAY - YEAR);

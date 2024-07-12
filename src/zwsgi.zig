@@ -8,8 +8,14 @@ const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
 const RequestData = @import("request_data.zig");
+const Config = @import("ini.zig").Config;
 
 const Srctree = @import("srctree.zig");
+
+const ZWSGI = @This();
+
+alloc: Allocator,
+config: Config,
 
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
@@ -112,9 +118,16 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
     return find(list, search) orelse "[missing]";
 }
 
-pub fn serve(alloc_: Allocator, srv: *Server) !void {
+pub fn init(a: Allocator, config: Config) ZWSGI {
+    return .{
+        .alloc = a,
+        .config = config,
+    };
+}
+
+pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
     while (true) {
-        var arena = std.heap.ArenaAllocator.init(alloc_);
+        var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
         defer arena.deinit();
         const a = arena.allocator();
 
@@ -159,7 +172,7 @@ pub fn serve(alloc_: Allocator, srv: *Server) !void {
             .query_data = query,
         };
 
-        var ctx = try Context.init(a, request, response, req_data);
+        var ctx = try Context.init(a, zwsgi.config, request, response, req_data);
 
         Srctree.router(&ctx)(&ctx) catch |err| {
             switch (err) {

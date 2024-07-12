@@ -121,16 +121,3 @@ pub fn init(a: Allocator, file: std.fs.File) !Config {
         .ns = try list.toOwnedSlice(),
     };
 }
-
-var _default: ?Config = null;
-
-pub fn default(a: Allocator) !Config {
-    if (_default) |d| return d;
-
-    var cwd = std.fs.cwd();
-    var file = try cwd.openFile("./config.ini", .{});
-    defer file.close();
-
-    _default = try init(a, file);
-    return _default.?;
-}
