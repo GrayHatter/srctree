@@ -140,42 +140,6 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .patch = try fetch(a, uri) };
 }
 
-// TODO move this function, I tried it, and now I hate it!
-pub fn patchHtml(a: Allocator, patch: []const u8) ![]HTML.Element {
-    var p = Patch.init(patch);
-    const files = p.filesSlice(a) catch return &[0]HTML.Element{};
-    defer a.free(files);
-
-    var dom = DOM.new(a);
-
-    dom = dom.open(HTML.patch());
-    for (files) |diff| {
-        var h = Header{ .data = diff };
-        h.parse() catch |e| {
-            std.debug.print("error {}\n", .{e});
-            std.debug.print("patch {s}\n", .{diff});
-            continue;
-        };
-        const body = h.changes orelse continue;
-
-        const dstat = p.diffstat();
-        const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
-            dstat.additions,
-            dstat.deletions,
-            dstat.total,
-        });
-        dom.push(HTML.element("diffstat", stat, null));
-        dom = dom.open(HTML.diff());
-        dom.push(HTML.element("filename", h.filename.right orelse "File Deleted", null));
-        dom = dom.open(HTML.element("changes", null, null));
-        dom.pushSlice(diffLine(a, body));
-        dom = dom.close();
-        dom = dom.close();
-    }
-    dom = dom.close();
-    return dom.done();
-}
-
 pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
 

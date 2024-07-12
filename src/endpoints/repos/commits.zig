@@ -57,6 +57,41 @@ fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
     return dom.done();
 }
 
+pub fn patchHtml(a: Allocator, patch: []const u8) ![]HTML.Element {
+    var p = Patch.Patch.init(patch);
+    const files = p.filesSlice(a) catch return &[0]HTML.Element{};
+    defer a.free(files);
+
+    var dom = DOM.new(a);
+
+    dom = dom.open(HTML.patch());
+    for (files) |diff| {
+        var h = Patch.Header{ .data = diff };
+        h.parse() catch |e| {
+            std.debug.print("error {}\n", .{e});
+            std.debug.print("patch {s}\n", .{diff});
+            continue;
+        };
+        const body = h.changes orelse continue;
+
+        const dstat = p.diffstat();
+        const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
+            dstat.additions,
+            dstat.deletions,
+            dstat.total,
+        });
+        dom.push(HTML.element("diffstat", stat, null));
+        dom = dom.open(HTML.diff());
+        dom.push(HTML.element("filename", h.filename.right orelse "File Deleted", null));
+        dom = dom.open(HTML.element("changes", null, null));
+        dom.pushSlice(Patch.diffLine(a, body));
+        dom = dom.close();
+        dom = dom.close();
+    }
+    dom = dom.close();
+    return dom.done();
+}
+
 fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.Repo) Error!void {
     var tmpl = Template.find("commit.html");
     tmpl.init(ctx.alloc);
@@ -87,7 +122,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: git.R
     var diff_dom = DOM.new(ctx.alloc);
     diff_dom = diff_dom.open(HTML.element("diff", null, null));
     diff_dom = diff_dom.open(HTML.element("patch", null, null));
-    diff_dom.pushSlice(try Patch.patchHtml(ctx.alloc, diff));
+    diff_dom.pushSlice(try patchHtml(ctx.alloc, diff));
     diff_dom = diff_dom.close();
     diff_dom = diff_dom.close();
     _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Diff", diff_dom.done()) catch return error.Unknown;
