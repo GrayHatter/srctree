@@ -1,8 +1,10 @@
 const std = @import("std");
 
 const mem = std.mem;
-const count = mem.count;
 const Allocator = mem.Allocator;
+const count = mem.count;
+const startsWith = mem.startsWith;
+const assert = std.debug.assert;
 
 const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
@@ -11,9 +13,15 @@ const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
 const DOM = Endpoint.DOM;
 
+pub const Diff = struct {
+    header: Header,
+    changes: ?[]const u8 = null,
+};
+
 pub const Patch = struct {
     // TODO reduce namespace
     patch: []const u8,
+    diffs: ?[]Diff = null,
 
     pub fn init(patch: []const u8) Patch {
         return .{
@@ -29,18 +37,17 @@ pub const Patch = struct {
         const fcount = count(u8, self.patch, "\ndiff --git a/") +
             @as(usize, if (mem.startsWith(u8, self.patch, "diff --git a/")) 1 else 0);
         if (fcount == 0) return error.PatchInvalid;
-        var files = try a.alloc([]const u8, fcount);
+        const files = try a.alloc([]const u8, fcount);
         errdefer a.free(files);
-        var fidx: usize = 0;
         var start: usize = mem.indexOfPos(u8, self.patch, 0, "diff --git a/") orelse {
             return error.PatchInvalid;
         };
         var end: usize = start;
-        while (start < self.patch.len) {
-            end = mem.indexOfPos(u8, self.patch, start + 1, "\ndiff --git a/") orelse self.patch.len;
-            files[fidx] = self.patch[start..end];
+        for (files) |*file| {
+            assert(self.patch[start] != '\n');
+            end = if (mem.indexOfPos(u8, self.patch, start + 1, "\ndiff --git a/")) |s| s + 1 else self.patch.len;
+            file.* = self.patch[start..end];
             start = end;
-            fidx += 1;
         }
         return files;
     }
@@ -76,6 +83,8 @@ pub const Header = struct {
     pub fn parse(self: *Header) !void {
         var d = self.data orelse return error.NoData;
         var pos: usize = 0;
+        assert(startsWith(u8, d, "diff --git a/"));
+        // TODO rewrite imperatively
         if (mem.indexOfPos(u8, d, pos, "\n--- a/")) |i| {
             if (mem.indexOfPos(u8, d, i + 7, "\n")) |end| {
                 self.filename.left = d[i + 7 .. end];
@@ -109,8 +118,6 @@ pub const Header = struct {
         } else return error.BlockHeaderMissing;
     }
 };
-
-fn parseHeader() void {}
 
 fn fetch(a: Allocator, uri: []const u8) ![]u8 {
     // Disabled until TLS1.2 is supported
@@ -166,6 +173,20 @@ pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
     }
 
     return dom.done();
+}
+
+test "simple rename" {
+    var a = std.testing.allocator;
+    const rn_patch =
+        \\diff --git a/src/zir_sema.zig b/src/Sema.zig
+        \\similarity index 100%
+        \\rename from src/zir_sema.zig
+        \\rename to src/Sema.zig
+        \\
+    ;
+    const patch = Patch.init(rn_patch);
+    const files = try patch.filesSlice(a);
+    defer a.free(files);
 }
 
 test "filesSlice" {
