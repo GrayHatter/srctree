@@ -5,7 +5,6 @@ pub const Bleach = @This();
 pub const Error = error{
     NoSpaceLeft,
     OutOfMemory,
-    NotImplemented,
 };
 
 pub const Rules = enum {
