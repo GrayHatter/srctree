@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub const Comment = @import("types/comment.zig");
-pub const CommitMap = @import("types/commit-note.zig");
+pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
 pub const Diff = @import("types/diff.zig");
 pub const Issue = @import("types/issue.zig");
