@@ -12,6 +12,7 @@ const endpoints = [_]routes.MatchRouter{
     ROUTE("heartbeat", heartbeat),
     ROUTE("issue", issue),
     ROUTE("network", router),
+    ROUTE("patch", diff),
     ROUTE("repo", repo),
     ROUTE("user", user),
 };
@@ -77,6 +78,14 @@ const Network = struct {
 
 fn network(ctx: *Context) routes.Error!void {
     return try ctx.sendJSON(Network{ .networks = [0].{} });
+}
+
+const Patch = struct {
+    patch: []const u8,
+};
+
+fn patch(ctx: *Context) routes.Error!void {
+    return try ctx.sendJSON(Patch{ .patch = [0].{} });
 }
 
 const Repo = struct {
