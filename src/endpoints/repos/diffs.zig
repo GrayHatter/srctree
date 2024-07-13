@@ -184,19 +184,10 @@ fn view(ctx: *Context) Error!void {
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
 
-    if (delta.getComments(ctx.alloc)) |cmts| {
-        const comments: []Template.Context = try ctx.alloc.alloc(Template.Context, cmts.len);
-
-        for (cmts, comments) |comment, *cctx| {
-            cctx.* = Template.Context.init(ctx.alloc);
-            const builder = comment.builder();
-            builder.build(ctx.alloc, cctx) catch unreachable;
-            try cctx.put(
-                "Date",
-                try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
-            );
-        }
-        try tmpl.ctx.?.putBlock("Comments", comments);
+    if (delta.getComments(ctx.alloc)) |comments| {
+        const contexts: []Template.Context = try ctx.alloc.alloc(Template.Context, comments.len);
+        for (comments, contexts) |*comment, *c_ctx| c_ctx.* = try comment.toContext(ctx.alloc);
+        try ctx.putContext("Comments", .{ .block = contexts });
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
         @panic("oops");

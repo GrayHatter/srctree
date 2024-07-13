@@ -92,6 +92,13 @@ pub const Context = struct {
         return ctx;
     }
 
+    pub fn initBuildable(a: Allocator, buildable: anytype) !Context {
+        var ctx = Context.init(a);
+        const builder = buildable.builder();
+        try builder.build(a, &ctx);
+        return ctx;
+    }
+
     pub fn raze(self: *Context) void {
         var itr = self.ctx.iterator();
         while (itr.next()) |*n| {

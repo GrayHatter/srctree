@@ -17,6 +17,23 @@ pub var datad: Types.TypeStorage = undefined;
 
 pub fn initType() !void {}
 
+/// while Zig specifies that the logical order of fields is little endian, I'm
+/// not sure that's the layout I want to go use. So don't depend on that yet.
+pub const State = packed struct {
+    closed: bool = false,
+    locked: bool = false,
+    padding: u62 = 0,
+};
+
+test State {
+    try std.testing.expectEqual(@sizeOf(State), @sizeOf(usize));
+
+    const state = State{};
+    const zero: usize = 0;
+    const ptr: *const usize = @ptrCast(&state);
+    try std.testing.expectEqual(zero, ptr.*);
+}
+
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
     var reader = file.reader();
     const ver: usize = try reader.readInt(usize, endian);
@@ -24,14 +41,14 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
         0 => Delta{
             .index = idx,
             .file = file,
-            .state = try reader.readStruct(Thread.State),
+            .state = try reader.readStruct(State),
             .created = try reader.readInt(i64, endian),
             .updated = try reader.readInt(i64, endian),
             .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .message = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             //.author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .author = "",
+            .author = null,
             .thread_id = try reader.readInt(usize, endian),
             .attach = switch (Attach.fromInt(try reader.readInt(u8, endian))) {
                 .nos => .{ .nos = try reader.readInt(usize, endian) },
@@ -65,13 +82,13 @@ pub const Attach = enum(u8) {
 };
 
 index: usize,
-state: Thread.State = .{},
+state: State = .{},
 created: i64 = 0,
 updated: i64 = 0,
 repo: []const u8,
 title: []const u8,
 message: []const u8,
-author: []const u8 = "",
+author: ?[]const u8 = null,
 thread_id: usize = 0,
 tags_id: usize = 0,
 
@@ -150,6 +167,10 @@ pub fn addComment(self: *Delta, a: Allocator, c: Comment) !void {
     return error.ThreadNotLoaded;
 }
 
+pub fn toContext(self: Delta, a: Allocator) !Template.Context {
+    return Template.Context.initBuildable(a, self);
+}
+
 pub fn builder(self: Delta) Template.Context.Builder(Delta) {
     return Template.Context.Builder(Delta).init(self);
 }
@@ -159,15 +180,11 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
     try ctx.put("Desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
 
     try ctx.put("Index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
-    try ctx.put("Title_uri", try std.fmt.allocPrint(
-        a,
-        "/repo/{s}/{s}/{x}",
-        .{
-            self.repo,
-            if (self.attach == .issue) "issues" else "diffs",
-            self.index,
-        },
-    ));
+    try ctx.put("Title_uri", try std.fmt.allocPrint(a, "/repo/{s}/{s}/{x}", .{
+        self.repo,
+        if (self.attach == .issue) "issues" else "diffs",
+        self.index,
+    }));
 }
 
 pub fn raze(self: Delta, _: std.mem.Allocator) void {

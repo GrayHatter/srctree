@@ -5,6 +5,7 @@ const endian = builtin.cpu.arch.endian();
 
 const Comment = @import("comment.zig");
 const Delta = @import("delta.zig");
+const State = Delta.State;
 
 pub const Thread = @This();
 
@@ -14,22 +15,6 @@ pub var datad: std.fs.Dir = undefined;
 
 pub fn init(_: []const u8) !void {}
 pub fn initType() !void {}
-
-/// while Zig specifies that the logical order of fields is little endian, I'm
-/// not sure that's the layout I want to go use. So don't depend on that yet.
-pub const State = packed struct {
-    closed: bool = false,
-    padding: u63 = 0,
-};
-
-test State {
-    try std.testing.expectEqual(@sizeOf(State), @sizeOf(usize));
-
-    const state = State{};
-    const zero: usize = 0;
-    const ptr: *const usize = @ptrCast(&state);
-    try std.testing.expectEqual(zero, ptr.*);
-}
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
     var reader = file.reader();

@@ -20,7 +20,8 @@ const GET = Endpoint.Router.GET;
 const Git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
 const Patch = @import("../../patch.zig");
-const CmmtMap = Endpoint.Types.CommitMap;
+const Delta = Endpoint.Types.Delta;
+const CommitMap = Endpoint.Types.CommitMap;
 const Comment = Endpoint.Types.Comment;
 
 const POST = Endpoint.Router.Methods.POST;
@@ -35,27 +36,6 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return commit;
     return commits;
-}
-
-fn addComment(a: Allocator, c: Comment) ![]HTML.Element {
-    var dom = DOM.new(a);
-    dom = dom.open(HTML.element("comment", null, null));
-
-    dom = dom.open(HTML.element("context", null, null));
-    dom.dupe(HTML.element(
-        "author",
-        &[_]HTML.E{HTML.text(Bleach.sanitizeAlloc(a, c.author, .{}) catch unreachable)},
-        null,
-    ));
-    dom.push(HTML.element("date", "now", null));
-    dom = dom.close();
-
-    dom = dom.open(HTML.element("message", null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.message, .{}) catch unreachable));
-    dom = dom.close();
-
-    dom = dom.close();
-    return dom.done();
 }
 
 pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
@@ -132,7 +112,6 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     diff_dom = diff_dom.close();
     _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Diff", diff_dom.done()) catch return error.Unknown;
 
-    var comments = DOM.new(ctx.alloc);
     //for ([_]Comment{ .{
     //    .author = "robinli",
     //    .message = "Woah, I didn't know srctree had the ability to comment on commits!",
@@ -143,12 +122,28 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     //}
 
-    const map = CmmtMap.open(ctx.alloc, sha) catch unreachable;
-    for (map.comments) |cm| {
-        comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
-    }
+    var ctx_comments: Template.Context.Data = .{ .block = &[0]Template.Context{} };
 
-    _ = try tmpl.addElements(ctx.alloc, "Comments", comments.done());
+    const cmap: ?CommitMap = CommitMap.open(ctx.alloc, repo_name, sha) catch null;
+
+    if (cmap) |map| {
+        var dlt = map.delta(ctx.alloc) catch |err| n: {
+            std.debug.print("error generating delta {}\n", .{err});
+            break :n @as(?Delta, null);
+        };
+        if (dlt) |*delta| {
+            _ = delta.loadThread(ctx.alloc) catch unreachable;
+            if (delta.getComments(ctx.alloc)) |comments| {
+                const contexts: []Template.Context = try ctx.alloc.alloc(Template.Context, comments.len);
+                for (comments, contexts) |*comment, *c_ctx| c_ctx.* = try comment.toContext(ctx.alloc);
+                ctx_comments = .{ .block = contexts };
+            } else |err| {
+                std.debug.print("Unable to load comments for thread {} {}\n", .{ map.attach.delta, err });
+                @panic("oops");
+            }
+        }
+    }
+    try ctx.putContext("Comments", ctx_comments);
 
     var opengraph = [_]Template.Context{
         Template.Context.init(ctx.alloc),

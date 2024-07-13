@@ -3,6 +3,8 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
+const allocPrint = std.fmt.allocPrint;
+const Humanize = @import("../humanize.zig");
 
 const Types = @import("../types.zig");
 
@@ -173,6 +175,11 @@ fn writeStruct(self: Comment, w: Writer) !void {
 pub fn readFile(a: std.mem.Allocator, file: std.fs.File) !Comment {
     return readVersioned(a, file);
 }
+
+pub fn toContext(self: Comment, a: Allocator) !Template.Context {
+    return Template.Context.initBuildable(a, self);
+}
+
 pub fn builder(self: Comment) Template.Context.Builder(Comment) {
     return Template.Context.Builder(Comment).init(self);
 }
@@ -180,6 +187,7 @@ pub fn builder(self: Comment) Template.Context.Builder(Comment) {
 pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void {
     try ctx.put("Author", try Bleach.sanitizeAlloc(a, self.author, .{}));
     try ctx.put("Message", try Bleach.sanitizeAlloc(a, self.message, .{}));
+    try ctx.putSimple("Date", try allocPrint(a, "{}", .{Humanize.unix(self.updated)}));
 }
 
 pub fn open(a: Allocator, hash: []const u8) !Comment {
