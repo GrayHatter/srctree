@@ -39,20 +39,17 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
 }
 
 pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
-    const files = patch.filesSlice(a) catch return &[0]HTML.Element{};
-    defer a.free(files);
+    const diffs = patch.diffsSlice(a) catch |err| {
+        std.debug.print("Unable to parse diff {}\n", .{err});
+        return &[0]HTML.Element{};
+    };
+    defer a.free(diffs);
 
     var dom = DOM.new(a);
 
     dom = dom.open(HTML.patch());
-    for (files) |diff| {
-        var h = Patch.Header{ .data = diff };
-        h.parse() catch |e| {
-            std.debug.print("error {}\n", .{e});
-            std.debug.print("patch {s}\n", .{diff});
-            continue;
-        };
-        const body = h.changes orelse continue;
+    for (diffs) |diff| {
+        const body = diff.changes orelse continue;
 
         const dstat = patch.diffstat();
         const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
@@ -62,7 +59,7 @@ pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
         });
         dom.push(HTML.element("diffstat", stat, null));
         dom = dom.open(HTML.diff());
-        dom.push(HTML.element("filename", h.filename.right orelse "File Deleted", null));
+        dom.push(HTML.element("filename", diff.header.filename.right orelse "File Deleted", null));
         dom = dom.open(HTML.element("changes", null, null));
         dom.pushSlice(Patch.diffLine(a, body));
         dom = dom.close();

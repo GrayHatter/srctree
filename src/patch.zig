@@ -5,6 +5,7 @@ const Allocator = mem.Allocator;
 const count = mem.count;
 const startsWith = mem.startsWith;
 const assert = std.debug.assert;
+const eql = std.mem.eql;
 
 const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
@@ -13,115 +14,171 @@ const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
 const DOM = Endpoint.DOM;
 
+pub const Patch = @This();
+
+blob: []const u8,
+diffs: ?[]Diff = null,
+
 pub const Diff = struct {
     header: Header,
     changes: ?[]const u8 = null,
-};
 
-pub const Patch = struct {
-    // TODO reduce namespace
-    patch: []const u8,
-    diffs: ?[]Diff = null,
+    pub const Header = struct {
+        data: []const u8,
+        preamble: []const u8,
+        index: ?[]const u8 = null,
+        filename: struct {
+            left: ?[]const u8 = null,
+            right: ?[]const u8 = null,
+        } = .{},
 
-    pub fn init(patch: []const u8) Patch {
-        return .{
-            .patch = patch,
-        };
-    }
+        /// returns the input line if it's a valid extended header
+        fn parseHeader(line: []const u8) ?[]const u8 {
+            // TODO
+            // old mode <mode>
+            // new mode <mode>
+            // deleted file mode <mode>
+            // new file mode <mode>
+            // copy from <path>
+            // copy to <path>
+            // rename from <path>
+            // rename to <path>
+            // similarity index <number>
+            // dissimilarity index <number>
+            // index <hash>..<hash> <mode>
+            if (startsWith(u8, line, "index ")) {
+                // TODO parse index correctly
+                return line;
+            } else if (startsWith(u8, line, "similarity index")) {
+                // TODO parse similarity correctly
+                return line;
+            }
 
-    pub fn isValid(_: Patch) bool {
-        return true; // lol, you thought this did something :D
-    }
-
-    pub fn filesSlice(self: Patch, a: Allocator) ![][]const u8 {
-        const fcount = count(u8, self.patch, "\ndiff --git a/") +
-            @as(usize, if (mem.startsWith(u8, self.patch, "diff --git a/")) 1 else 0);
-        if (fcount == 0) return error.PatchInvalid;
-        const files = try a.alloc([]const u8, fcount);
-        errdefer a.free(files);
-        var start: usize = mem.indexOfPos(u8, self.patch, 0, "diff --git a/") orelse {
-            return error.PatchInvalid;
-        };
-        var end: usize = start;
-        for (files) |*file| {
-            assert(self.patch[start] != '\n');
-            end = if (mem.indexOfPos(u8, self.patch, start + 1, "\ndiff --git a/")) |s| s + 1 else self.patch.len;
-            file.* = self.patch[start..end];
-            start = end;
+            return null;
         }
-        return files;
-    }
 
-    pub const DiffStat = struct {
-        files: usize,
-        additions: usize,
-        deletions: usize,
-        total: isize,
+        fn parseFilename(_: []const u8) ?[]const u8 {
+            return null;
+        }
+
+        pub fn parse(self: *Header) !void {
+            var d = self.data;
+            assert(startsWith(u8, d, "diff --git a/"));
+            var i: usize = 0;
+            while (d[i] != '\n' and i < d.len) i += 1;
+            self.preamble = d[0..i];
+            d = d[i + 1 ..];
+
+            i = 0;
+            while (d[i] != '\n' and i < d.len) i += 1;
+            self.index = parseHeader(d[0 .. i + 1]) orelse return error.UnableToParsePatchHeader;
+            if (startsWith(u8, self.index.?, "index ")) {
+                d = d[i + 1 ..];
+
+                // Left Filename
+                if (d.len < 6 or !eql(u8, d[0..4], "--- ")) return error.UnableToParsePatchHeader;
+                d = d[4..];
+
+                i = 0;
+                while (d[i] != '\n' and i < d.len) i += 1;
+                self.filename.left = d[2..i];
+
+                if (d.len < 4 or !eql(u8, d[0..2], "a/")) {
+                    if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
+                    self.filename.left = null;
+                }
+                d = d[i + 1 ..];
+
+                // Right Filename
+                if (d.len < 6 or !eql(u8, d[0..4], "+++ ")) return error.UnableToParsePatchHeader;
+                d = d[4..];
+
+                i = 0;
+                while (d[i] != '\n' and i < d.len) i += 1;
+                self.filename.right = d[2..i];
+
+                if (d.len < 4 or !eql(u8, d[0..2], "b/")) {
+                    if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
+                    self.filename.right = null;
+                }
+                d = d[i + 1 ..];
+
+                // Block headers
+                if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
+                if (mem.indexOfPos(u8, d[4..], 0, " @@") == null) return error.BlockHeaderInvalid;
+            } else if (startsWith(u8, self.index.?, "similarity index ")) {
+                // TODO
+            } else return error.UnableToParsePatchHeader;
+        }
     };
 
-    pub fn diffstat(p: Patch) DiffStat {
-        const a = count(u8, p.patch, "\n+");
-        const d = count(u8, p.patch, "\n-");
-        const files = count(u8, p.patch, "\ndiff --git a/");
-        return .{
-            .files = files,
-            .additions = a,
-            .deletions = d,
-            .total = @intCast(a -| d),
+    pub fn init(blob: []const u8) !Diff {
+        var d: Diff = .{
+            .header = Header{
+                .data = blob,
+                .preamble = undefined,
+            },
         };
+        try d.parse();
+        return d;
+    }
+
+    pub fn parse(d: *Diff) !void {
+        try d.header.parse();
     }
 };
 
-pub const Header = struct {
-    data: ?[]const u8 = null,
-    filename: struct {
-        left: ?[]const u8 = null,
-        right: ?[]const u8 = null,
-    } = .{},
-    changes: ?[]const u8 = null,
+pub fn init(patch: []const u8) Patch {
+    return .{
+        .blob = patch,
+    };
+}
 
-    pub fn parse(self: *Header) !void {
-        var d = self.data orelse return error.NoData;
-        var pos: usize = 0;
-        assert(startsWith(u8, d, "diff --git a/"));
-        // TODO rewrite imperatively
-        if (mem.indexOfPos(u8, d, pos, "\n--- a/")) |i| {
-            if (mem.indexOfPos(u8, d, i + 7, "\n")) |end| {
-                self.filename.left = d[i + 7 .. end];
-                pos = end;
-            } else return error.UnableToParsePatchHeader;
-        } else if (mem.indexOfPos(u8, d, pos, "\n--- /dev/null")) |i| {
-            if (mem.indexOfPos(u8, d, i + 5, "\n")) |end| {
-                self.filename.left = d[i + 5 .. end];
-                pos = end;
-            } else return error.UnableToParsePatchHeader;
-        } else {
-            return error.UnableToParsePatchHeader;
-        }
+pub fn isValid(_: Patch) bool {
+    return true; // lol, you thought this did something :D
+}
 
-        if (mem.indexOfPos(u8, d, pos, "\n+++ b/")) |i| {
-            if (mem.indexOfPos(u8, d, i + 7, "\n")) |end| {
-                self.filename.right = d[i + 7 .. end];
-                pos = end;
-            } else return error.UnableToParsePatchHeader;
-        } else {
-            return error.UnableToParsePatchHeader;
-        }
-
-        // Block headers
-        if (mem.indexOfPos(u8, d, pos, "\n@@ ")) |i| {
-            if (mem.indexOfPos(u8, d, i, " @@")) |end| {
-                if (mem.indexOfPos(u8, d, end, "\n")) |change_start| {
-                    if (d.len > change_start) self.changes = d[change_start + 1 ..];
-                } else return error.BlockHeaderInvalid;
-            } else return error.BlockHeaderMissing;
-        } else return error.BlockHeaderMissing;
+pub fn diffsSlice(self: Patch, a: Allocator) ![]Diff {
+    const diff_count = count(u8, self.blob, "\ndiff --git a/") +
+        @as(usize, if (mem.startsWith(u8, self.blob, "diff --git a/")) 1 else 0);
+    if (diff_count == 0) return error.PatchInvalid;
+    const diffs = try a.alloc(Diff, diff_count);
+    errdefer a.free(diffs);
+    var start: usize = mem.indexOfPos(u8, self.blob, 0, "diff --git a/") orelse {
+        return error.PatchInvalid;
+    };
+    var end: usize = start;
+    for (diffs) |*diff| {
+        assert(self.blob[start] != '\n');
+        end = if (mem.indexOfPos(u8, self.blob, start + 1, "\ndiff --git a/")) |s| s + 1 else self.blob.len;
+        diff.* = try Diff.init(self.blob[start..end]);
+        start = end;
     }
+    return diffs;
+}
+
+pub const DiffStat = struct {
+    files: usize,
+    additions: usize,
+    deletions: usize,
+    total: isize,
 };
+
+pub fn diffstat(p: Patch) DiffStat {
+    const a = count(u8, p.blob, "\n+");
+    const d = count(u8, p.blob, "\n-");
+    const files = count(u8, p.blob, "\ndiff --git a/");
+    return .{
+        .files = files,
+        .additions = a,
+        .deletions = d,
+        .total = @intCast(a -| d),
+    };
+}
 
 fn fetch(a: Allocator, uri: []const u8) ![]u8 {
-    // Disabled until TLS1.2 is supported
-    // var client = std.http.Client{
+    // disabled until tls1.2 is supported
+    // var client = std.http.client{
     //     .allocator = a,
     // };
     // defer client.deinit();
@@ -148,7 +205,7 @@ fn fetch(a: Allocator, uri: []const u8) ![]u8 {
 }
 
 pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
-    return Patch{ .patch = try fetch(a, uri) };
+    return Patch{ .blob = try fetch(a, uri) };
 }
 
 pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
@@ -185,11 +242,12 @@ test "simple rename" {
         \\
     ;
     const patch = Patch.init(rn_patch);
-    const files = try patch.filesSlice(a);
-    defer a.free(files);
+    const diffs: []Diff = try patch.diffsSlice(a);
+    defer a.free(diffs);
+    try std.testing.expectEqual(1, diffs.len);
 }
 
-test "filesSlice" {
+test diffsSlice {
     var a = std.testing.allocator;
 
     const s_patch =
@@ -222,18 +280,12 @@ test "filesSlice" {
     const a_patch = try a.dupe(u8, s_patch);
     defer a.free(a_patch);
     var p = Patch{
-        .patch = a_patch,
+        .blob = a_patch,
     };
-    const files = try p.filesSlice(a);
-    defer a.free(files);
-    try std.testing.expect(files.len == 2);
-    var h: Header = undefined;
-    for (files) |f| {
-        h = Header{
-            .data = @constCast(f),
-        };
-        try h.parse();
-    }
+    const diffs = try p.diffsSlice(a);
+    defer a.free(diffs);
+    try std.testing.expect(diffs.len == 2);
+    const h = diffs[1].header;
     try std.testing.expectEqualStrings(h.filename.left.?, "build.zig");
     try std.testing.expectEqualStrings(h.filename.left.?, h.filename.right.?);
 }

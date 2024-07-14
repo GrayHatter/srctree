@@ -103,7 +103,7 @@ fn newPost(ctx: *Context) Error!void {
             ) catch unreachable;
             var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
             defer file.close();
-            file.writer().writeAll(data.patch) catch unreachable;
+            file.writer().writeAll(data.blob) catch unreachable;
         }
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
