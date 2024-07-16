@@ -15,6 +15,7 @@ const Bleach = @import("../bleach.zig");
 pub const routes = [_]Endpoint.Router.Match{
     ROUTE("", search),
     ROUTE("search", search),
+    ROUTE("inbox", inbox),
 };
 
 pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
@@ -22,19 +23,29 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
 }
 
 const SearchReq = struct {
-    q: []const u8,
+    q: ?[]const u8,
 };
 
+fn inbox(ctx: *Context) Error!void {
+    return custom(ctx, "owner:me");
+}
+
 fn search(ctx: *Context) Error!void {
+    const udata = UserData(SearchReq).init(ctx.req_data.query_data) catch return error.BadData;
+
+    const query_str = udata.q orelse "null";
+    std.debug.print("query {s}\n", .{query_str});
+
+    return custom(ctx, query_str);
+}
+
+fn custom(ctx: *Context, search_str: []const u8) Error!void {
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
 
-    const udata = UserData(SearchReq).init(ctx.req_data.query_data) catch return error.BadData;
-
-    std.debug.print("query {s}\n", .{udata.q});
     var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
-    var itr = std.mem.split(u8, udata.q, " ");
+    var itr = std.mem.split(u8, search_str, " ");
     while (itr.next()) |r_line| {
         var line = r_line;
         line = std.mem.trim(u8, line, " ");
@@ -73,10 +84,10 @@ fn search(ctx: *Context) Error!void {
         } else break;
     } else |_| return error.Unknown;
 
-    try tmpl.ctx.?.putBlock("List", list.items);
-    try tmpl.ctx.?.put(
+    try ctx.putContext("List", .{ .block = list.items });
+    try ctx.putContext(
         "Search",
-        Bleach.sanitizeAlloc(ctx.alloc, udata.q, .{}) catch unreachable,
+        .{ .simple = Bleach.sanitizeAlloc(ctx.alloc, search_str, .{}) catch unreachable },
     );
     try ctx.sendTemplate(&tmpl);
 }

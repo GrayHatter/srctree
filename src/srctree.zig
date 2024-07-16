@@ -14,6 +14,7 @@ pub const routes = [_]Match{
     ROUTE("admin", Endpoint.admin),
     ROUTE("api", Api.router),
     ROUTE("diffs", Endpoint.USERS.diffs),
+    ROUTE("inbox", Endpoint.search),
     ROUTE("network", Endpoint.network),
     ROUTE("repo", Endpoint.repo),
     ROUTE("repos", Endpoint.repo),
