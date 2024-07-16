@@ -16,8 +16,7 @@ pub var datad: std.fs.Dir = undefined;
 pub fn init(_: []const u8) !void {}
 pub fn initType() !void {}
 
-fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
-    var reader = file.reader();
+fn readVersioned(a: Allocator, idx: usize, reader: *std.io.AnyReader) !Thread {
     const int: usize = try reader.readInt(usize, endian);
     return switch (int) {
         0 => {
@@ -26,7 +25,6 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Thread {
                 .state = try reader.readStruct(State),
                 .created = try reader.readInt(i64, endian),
                 .updated = try reader.readInt(i64, endian),
-                .file = file,
             };
             _ = try reader.read(&t.delta_hash);
             t.comment_data = try reader.readAllAlloc(a, 0xFFFF);
@@ -46,11 +44,11 @@ hash: [32]u8 = [_]u8{0} ** 32,
 
 comment_data: ?[]const u8 = null,
 comments: ?[]Comment = null,
-file: std.fs.File,
 
 pub fn writeOut(self: Thread) !void {
-    try self.file.seekTo(0);
-    var writer = self.file.writer();
+    const file = try openFile(self.index);
+    defer file.close();
+    const writer = file.writer().any();
     try writer.writeInt(usize, THREADS_VERSION, endian);
     try writer.writeStruct(self.state);
     try writer.writeInt(i64, self.created, endian);
@@ -63,14 +61,12 @@ pub fn writeOut(self: Thread) !void {
         }
     }
     try writer.writeAll("\x00");
-    try self.file.setEndPos(self.file.getPos() catch unreachable);
 }
 
 // TODO mmap
-pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Thread {
+pub fn readFile(a: std.mem.Allocator, idx: usize, reader: *std.io.AnyReader) !Thread {
     // TODO I hate this, but I'm prototyping, plz rewrite
-    file.seekTo(0) catch return error.InputOutput;
-    var thread: Thread = readVersioned(a, idx, file) catch return error.InputOutput;
+    var thread: Thread = readVersioned(a, idx, reader) catch return error.InputOutput;
     try thread.loadComments(a);
     return thread;
 }
@@ -167,10 +163,10 @@ pub fn new(delta: Delta) !Thread {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{max + 1});
     const file = try datad.createFile(filename, .{});
+    defer file.close();
     try currMaxSet(max + 1);
     const thread = Thread{
         .index = max + 1,
-        .file = file,
         .delta_hash = delta.hash,
         .created = std.time.timestamp(),
         .updated = std.time.timestamp(),
@@ -179,12 +175,18 @@ pub fn new(delta: Delta) !Thread {
     return thread;
 }
 
+fn openFile(index: usize) !std.fs.File {
+    var buf: [2048]u8 = undefined;
+    const filename = std.fmt.bufPrint(&buf, "{x}.thread", .{index}) catch return error.InvalidTarget;
+    return try datad.openFile(filename, .{ .mode = .read_write });
+}
+
 pub fn open(a: std.mem.Allocator, index: usize) !?Thread {
     const max = currMax() catch 0;
     if (index > max) return null;
 
-    var buf: [2048]u8 = undefined;
-    const filename = std.fmt.bufPrint(&buf, "{x}.thread", .{index}) catch return error.InvalidTarget;
-    const file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
-    return try Thread.readFile(a, index, file);
+    var file = openFile(index) catch return error.Other;
+    defer file.close();
+    var reader = file.reader().any();
+    return try Thread.readFile(a, index, &reader);
 }
