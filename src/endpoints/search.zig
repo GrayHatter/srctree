@@ -75,14 +75,14 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
 
     var list = std.ArrayList(Template.Context).init(ctx.alloc);
     var search_results = Delta.search(ctx.alloc, rules.items);
-    while (search_results.next(ctx.alloc)) |next_| {
-        if (next_) |next| {
-            var c = Template.Context.init(ctx.alloc);
-            const builder = next.builder();
-            builder.build(ctx.alloc, &c) catch unreachable;
-            try list.append(c);
-        } else break;
-    } else |_| return error.Unknown;
+    while (search_results.next(ctx.alloc) catch return error.Unknown) |next_| {
+        var next: Delta = next_;
+
+        if (next.loadThread(ctx.alloc)) |*thread| {
+            _ = thread.*.loadComments(ctx.alloc) catch return error.Unknown;
+        } else |_| continue;
+        try list.append(try next.toContext(ctx.alloc));
+    }
 
     try ctx.putContext("List", .{ .block = list.items });
     try ctx.putContext(

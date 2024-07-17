@@ -71,19 +71,15 @@ pub fn readFile(a: std.mem.Allocator, idx: usize, reader: *std.io.AnyReader) !Th
     return thread;
 }
 
-fn loadComments(self: *Thread, a: Allocator) !void {
+pub fn loadComments(self: *Thread, a: Allocator) !void {
     if (self.comment_data) |cd| {
         self.comments = try Comment.loadFromData(a, cd);
     }
 }
 
-pub fn getComments(self: *Thread, a: Allocator) ![]Comment {
-    if (self.comments) |_| return self.comments.?;
-    self.loadComments(a) catch |err| {
-        std.debug.print("WARN: no comment data found ({})\n", .{err});
-        return &[0]Comment{};
-    };
-    return self.comments.?;
+pub fn getComments(self: *Thread) ![]Comment {
+    if (self.comments) |c| return c;
+    return error.NotLoaded;
 }
 
 pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {

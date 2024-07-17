@@ -145,7 +145,7 @@ pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Delta {
     return delta;
 }
 
-pub fn loadThread(self: *Delta, a: Allocator) !*const Thread {
+pub fn loadThread(self: *Delta, a: Allocator) !*Thread {
     if (self.thread != null) return error.MemoryAlreadyLoaded;
     const t = try a.create(Thread);
     t.* = try Thread.open(a, self.thread_id) orelse return error.UnableToLoadThread;
@@ -155,7 +155,12 @@ pub fn loadThread(self: *Delta, a: Allocator) !*const Thread {
 
 pub fn getComments(self: *Delta, a: Allocator) ![]Comment {
     if (self.thread) |thread| {
-        return thread.getComments(a);
+        if (thread.getComments()) |c| {
+            return c;
+        } else |_| {
+            try thread.loadComments(a);
+            return try thread.getComments();
+        }
     }
     return error.ThreadNotLoaded;
 }
@@ -185,6 +190,13 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
         if (self.attach == .issue) "issues" else "diffs",
         self.index,
     }));
+
+    if (self.thread) |thread| if (thread.getComments()) |comments| {
+        try ctx.putSimple(
+            "Comments_icon",
+            try std.fmt.allocPrint(a, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{comments.len}),
+        );
+    } else |_| {};
 }
 
 pub fn raze(self: Delta, _: std.mem.Allocator) void {
@@ -289,7 +301,6 @@ pub const SearchRule = struct {
 
 pub fn SearchList(T: type) type {
     return struct {
-        current: ?T = null,
         rules: []const SearchRule,
 
         // TODO better ABI
@@ -307,17 +318,17 @@ pub fn SearchList(T: type) type {
                         16,
                     ) catch return self.next(a);
                     const file = try datad.openFile(line.name, .{});
-                    self.current = Delta.readFile(a, num, file) catch {
+                    const current: T = Delta.readFile(a, num, file) catch {
                         file.close();
                         return self.next(a);
                     };
 
-                    if (!self.evalRules(self.current.?)) {
+                    if (!self.evalRules(current)) {
                         file.close();
                         return self.next(a);
                     }
 
-                    return self.current;
+                    return current;
                 } else {}
             }
             return self.next(a);
