@@ -200,9 +200,6 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
 }
 
 pub fn raze(self: Delta, _: std.mem.Allocator) void {
-    //if (self.alloc_data) |data| {
-    //    a.free(data);
-    //}
     self.file.close();
 }
 
