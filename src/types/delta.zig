@@ -34,13 +34,11 @@ test State {
     try std.testing.expectEqual(zero, ptr.*);
 }
 
-fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Delta {
-    var reader = file.reader();
+fn readVersioned(a: Allocator, idx: usize, reader: *std.io.AnyReader) !Delta {
     const ver: usize = try reader.readInt(usize, endian);
     return switch (ver) {
         0 => Delta{
             .index = idx,
-            .file = file,
             .state = try reader.readStruct(State),
             .created = try reader.readInt(i64, endian),
             .updated = try reader.readInt(i64, endian),
@@ -101,7 +99,6 @@ attach: union(Attach) {
 } = .{ .nos = 0 },
 hash: [32]u8 = [_]u8{0} ** 32,
 thread: ?*Thread = null,
-file: std.fs.File,
 
 pub fn commit(self: Delta) !void {
     const file = try openFile(self.repo);
@@ -111,7 +108,6 @@ pub fn commit(self: Delta) !void {
 }
 
 pub fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
-    try self.file.seekTo(0);
     try writer.writeInt(usize, DELTA_VERSION, endian);
     try writer.writeStruct(self.state);
     try writer.writeInt(i64, self.created, endian);
@@ -141,13 +137,13 @@ pub fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
     }
 
     try writer.writeAll("\x00");
-    try self.file.setEndPos(self.file.getPos() catch unreachable);
 
     if (self.thread) |t| try t.writeOut();
 }
 
 pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Delta {
-    const delta: Delta = try readVersioned(a, idx, file);
+    var reader = file.reader().any();
+    const delta: Delta = try readVersioned(a, idx, &reader);
     return delta;
 }
 
@@ -205,8 +201,8 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
     } else |_| {};
 }
 
-pub fn raze(self: Delta, _: std.mem.Allocator) void {
-    self.file.close();
+pub fn raze(_: Delta, _: std.mem.Allocator) void {
+    // TODO implement raze
 }
 
 fn currMaxSet(repo: []const u8, count: usize) !void {
@@ -240,6 +236,7 @@ pub const Iterator = struct {
             defer self.index +|= 1;
             const filename = std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ self.repo, self.index }) catch unreachable;
             const file = datad.openFile(filename, .{ .mode = .read_only }) catch continue;
+            defer file.close();
             return Delta.readFile(self.alloc, self.index, file) catch continue;
         }
         return null;
@@ -268,7 +265,6 @@ fn openFile(repo: []const u8) !std.fs.File {
 pub fn new(repo: []const u8) !Delta {
     // TODO this is probably a bug
     const max: usize = currMax(repo) catch 0;
-    const file = try openFile(repo);
 
     var d = Delta{
         .index = max + 1,
@@ -278,7 +274,6 @@ pub fn new(repo: []const u8) !Delta {
         .title = "",
         .message = "",
         .author = "",
-        .file = file,
     };
 
     var thread = try Thread.new(d);
