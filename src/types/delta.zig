@@ -104,8 +104,14 @@ thread: ?*Thread = null,
 file: std.fs.File,
 
 pub fn writeOut(self: Delta) !void {
+    const file = try openFile(self.repo);
+    defer file.close();
+    var writer = file.writer().any();
+    return self.writeOut2(&writer);
+}
+
+pub fn writeOut2(self: Delta, writer: *std.io.AnyWriter) !void {
     try self.file.seekTo(0);
-    var writer = self.file.writer();
     try writer.writeInt(usize, DELTA_VERSION, endian);
     try writer.writeStruct(self.state);
     try writer.writeInt(i64, self.created, endian);
@@ -252,13 +258,17 @@ pub fn last(repo: []const u8) usize {
     return currMax(repo) catch 0;
 }
 
-pub fn new(repo: []const u8) !Delta {
-    // TODO this is probably a bug
+fn openFile(repo: []const u8) !std.fs.File {
     const max: usize = currMax(repo) catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, max + 1 });
-    const file = try datad.createFile(filename, .{});
-    try currMaxSet(repo, max + 1);
+    return try datad.createFile(filename, .{ .read = true });
+}
+
+pub fn new(repo: []const u8) !Delta {
+    // TODO this is probably a bug
+    const max: usize = currMax(repo) catch 0;
+    const file = try openFile(repo);
 
     var d = Delta{
         .index = max + 1,
@@ -272,6 +282,7 @@ pub fn new(repo: []const u8) !Delta {
     };
 
     var thread = try Thread.new(d);
+    try currMaxSet(repo, max + 1);
     try thread.writeOut();
     d.thread_id = thread.index;
 
