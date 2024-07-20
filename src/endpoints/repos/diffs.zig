@@ -86,7 +86,7 @@ fn newPost(ctx: *Context) Error!void {
         delta.title = udata.title;
         delta.message = udata.desc;
         delta.attach = .{ .diff = 0 };
-        delta.writeOut() catch unreachable;
+        delta.commit() catch unreachable;
 
         if (inNetwork(udata.patch_uri)) {
             std.debug.print("src {s}\ntitle {s}\ndesc {s}\naction {s}\n", .{
@@ -136,7 +136,7 @@ fn newComment(ctx: *Context) Error!void {
         const c = Comment.new(username, msg.value) catch unreachable;
         _ = delta.loadThread(ctx.alloc) catch unreachable;
         delta.addComment(ctx.alloc, c) catch unreachable;
-        delta.writeOut() catch unreachable;
+        delta.commit() catch unreachable;
         return ctx.response.redirect(loc, true) catch unreachable;
     }
     return error.Unknown;

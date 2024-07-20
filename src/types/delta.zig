@@ -103,14 +103,14 @@ hash: [32]u8 = [_]u8{0} ** 32,
 thread: ?*Thread = null,
 file: std.fs.File,
 
-pub fn writeOut(self: Delta) !void {
+pub fn commit(self: Delta) !void {
     const file = try openFile(self.repo);
     defer file.close();
     var writer = file.writer().any();
-    return self.writeOut2(&writer);
+    return self.writeOut(&writer);
 }
 
-pub fn writeOut2(self: Delta, writer: *std.io.AnyWriter) !void {
+pub fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
     try self.file.seekTo(0);
     try writer.writeInt(usize, DELTA_VERSION, endian);
     try writer.writeStruct(self.state);

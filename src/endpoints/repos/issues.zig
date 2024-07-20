@@ -62,7 +62,7 @@ fn newPost(ctx: *Context) Error!void {
         delta.title = title.value;
         delta.message = msg.value;
         delta.attach = .{ .issue = 0 };
-        delta.writeOut() catch unreachable;
+        delta.commit() catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
         return ctx.response.redirect(loc, true) catch unreachable;
@@ -93,7 +93,7 @@ fn newComment(ctx: *Context) Error!void {
         const c = Comment.new(username, msg.value) catch unreachable;
 
         delta.addComment(ctx.alloc, c) catch {};
-        delta.writeOut() catch unreachable;
+        delta.commit() catch unreachable;
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
         ctx.response.redirect(loc, true) catch unreachable;
