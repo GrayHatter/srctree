@@ -40,7 +40,12 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
 
 pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
     const diffs = patch.diffsSlice(a) catch |err| {
-        std.debug.print("Unable to parse diff {}\n", .{err});
+        if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
+            std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
+        } else {
+            std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
+        }
+
         return &[0]HTML.Element{};
     };
     defer a.free(diffs);
