@@ -29,6 +29,15 @@ fn unroutable(ctx: *Context) Routes.Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
+fn notFound(ctx: *Context) Routes.Error!void {
+    // TODO fix this
+    @import("std").debug.print("404 for route\n", .{});
+    ctx.response.status = .not_found;
+    var tmpl = Template.find("4XX.html");
+    tmpl.init(ctx.alloc);
+    ctx.sendTemplate(&tmpl) catch unreachable;
+}
+
 pub fn router(ctx: *Context) Callable {
     var i_count: usize = 0;
     var itr = Types.Delta.iterator(ctx.alloc, "");
@@ -48,4 +57,12 @@ pub fn router(ctx: *Context) Callable {
 
     ctx.putContext("Header.Nav", .{ .block = header_nav }) catch return unroutable;
     return Routes.router(ctx, &routes);
+}
+
+// TODO replace with better API
+pub fn build(ctx: *Context, call: Callable) Routes.Error!void {
+    return call(ctx) catch |err| switch (err) {
+        error.InvalidURI => notFound(ctx),
+        else => return err,
+    };
 }

@@ -174,7 +174,8 @@ pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
 
         var ctx = try Context.init(a, zwsgi.config, request, response, req_data);
 
-        Srctree.router(&ctx)(&ctx) catch |err| {
+        const callable = Srctree.router(&ctx);
+        Srctree.build(&ctx, callable) catch |err| {
             switch (err) {
                 error.NetworkCrash => std.debug.print("client disconnect'\n", .{}),
                 error.Unrouteable => {
@@ -186,12 +187,12 @@ pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
                 error.Unknown,
                 error.ReqResInvalid,
                 error.AndExit,
-                error.InvalidURI,
                 error.NoSpaceLeft,
                 => {
                     std.debug.print("Unexpected error '{}'\n", .{err});
                     return err;
                 },
+                error.InvalidURI => unreachable,
                 error.OutOfMemory => {
                     std.debug.print("Out of memory at '{}'\n", .{arena.queryCapacity()});
                     return err;
