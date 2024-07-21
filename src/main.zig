@@ -118,12 +118,12 @@ pub fn main() !void {
         cfg_file = try cwd.openFile("./config.ini", .{});
     }
 
-    var config: Ini.Config = Ini.init(a, cfg_file.?) catch |e| switch (e) {
+    var config: Ini.Config = Ini.fromFile(a, cfg_file.?) catch |e| switch (e) {
         //error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
 
-    defer config.raze(a);
+    defer config.raze();
 
     if (config.get("owner")) |ns| {
         if (ns.get("email")) |email| {

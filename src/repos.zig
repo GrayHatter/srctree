@@ -46,8 +46,8 @@ pub fn parseGitRemoteUrl(a: Allocator, url: []const u8) ![]u8 {
 pub fn hasUpstream(a: Allocator, r: Git.Repo) !?[]u8 {
     var conffd = try r.dir.openFile("config", .{});
     defer conffd.close();
-    const conf = try Ini.init(a, conffd);
-    defer conf.raze(a);
+    const conf = try Ini.fromFile(a, conffd);
+    defer conf.raze();
     if (conf.get("remote \"upstream\"")) |ns| {
         if (ns.get("url")) |url| {
             return try a.dupe(u8, url);
@@ -59,8 +59,8 @@ pub fn hasUpstream(a: Allocator, r: Git.Repo) !?[]u8 {
 pub fn hasDownstream(a: Allocator, r: Git.Repo) !?[]u8 {
     var conffd = try r.dir.openFile("config", .{});
     defer conffd.close();
-    const conf = try Ini.init(a, conffd);
-    defer conf.raze(a);
+    const conf = try Ini.fromFile(a, conffd);
+    defer conf.raze();
     if (conf.get("remote \"downstream\"")) |ns| {
         if (ns.get("url")) |url| {
             return try a.dupe(u8, url);

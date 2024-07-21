@@ -11,11 +11,10 @@ const HTML = @import("../html.zig");
 const Repos = @import("../repos.zig");
 const Ini = @import("../ini.zig");
 
-const GET = Endpoint.Router.Methods.GET;
-const POST = Endpoint.Router.Methods.POST;
+const ROUTE = Endpoint.Router.ROUTE;
 
 pub const endpoints = [_]Endpoint.Router.Match{
-    .{ .name = "", .methods = .{ .GET = true }, .match = .{ .call = default } },
+    ROUTE("", default),
 };
 
 fn default(ctx: *Context) Error!void {
@@ -30,7 +29,7 @@ fn default(ctx: *Context) Error!void {
         defer rdir.close();
         const cffd = rdir.openFile("config", .{}) catch rdir.openFile(".git/config", .{}) catch continue;
         defer cffd.close();
-        const conf = Ini.init(ctx.alloc, cffd) catch unreachable;
+        const conf = Ini.fromFile(ctx.alloc, cffd) catch unreachable;
         if (conf.get("remote \"upstream\"")) |ns| {
             if (ns.get("url")) |url| {
                 const purl = try Repos.parseGitRemoteUrl(ctx.alloc, url);

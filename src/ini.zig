@@ -15,11 +15,45 @@ const Setting = struct {
         }
         unreachable;
     }
+
+    fn raze(s: Setting, a: Allocator) void {
+        a.free(s.name);
+        a.free(s.val);
+    }
 };
 
 pub const Namespace = struct {
     name: []u8,
     settings: []Setting,
+
+    pub fn init(
+        a: Allocator,
+        name: []const u8,
+        itr: *std.mem.SplitIterator(u8, .sequence),
+    ) !Namespace {
+        var list = std.ArrayList(Setting).init(a);
+
+        while (itr.peek()) |peek| {
+            const line = std.mem.trim(u8, peek, " \n\t");
+            if (line.len == 0) {
+                _ = itr.next();
+                continue;
+            }
+            if (line[0] == '[') break;
+            if (std.mem.count(u8, line, "=") == 0) {
+                _ = itr.next();
+                continue;
+            }
+
+            try list.append(try Setting.pair(a, line));
+            _ = itr.next();
+        }
+
+        return .{
+            .name = try a.dupe(u8, name[1 .. name.len - 1]),
+            .settings = try list.toOwnedSlice(),
+        };
+    }
 
     pub fn get(self: Namespace, name: []const u8) ?[]const u8 {
         for (self.settings) |st| {
@@ -33,15 +67,16 @@ pub const Namespace = struct {
     pub fn raze(self: Namespace, a: Allocator) void {
         a.free(self.name);
         for (self.settings) |set| {
-            a.free(set.name);
-            a.free(set.val);
+            set.raze(a);
         }
         a.free(self.settings);
     }
 };
 
 pub const Config = struct {
+    alloc: Allocator,
     ns: []Namespace,
+    data: []u8,
 
     pub fn empty() Config {
         return .{
@@ -68,43 +103,23 @@ pub const Config = struct {
         return null;
     }
 
-    pub fn raze(self: Config, a: Allocator) void {
+    pub fn raze(self: Config) void {
         for (self.ns) |ns| {
-            ns.raze(a);
+            ns.raze(self.alloc);
         }
-        a.free(self.ns);
+        self.alloc.free(self.ns);
+        self.alloc.free(self.data);
     }
 };
 
-fn namespace(a: Allocator, name: []const u8, itr: *std.mem.SplitIterator(u8, .sequence)) !Namespace {
-    var list = std.ArrayList(Setting).init(a);
-
-    while (itr.peek()) |peek| {
-        const line = std.mem.trim(u8, peek, " \n\t");
-        if (line.len == 0) {
-            _ = itr.next();
-            continue;
-        }
-        if (line[0] == '[') break;
-        if (std.mem.count(u8, line, "=") == 0) {
-            _ = itr.next();
-            continue;
-        }
-
-        try list.append(try Setting.pair(a, line));
-        _ = itr.next();
-    }
-
-    return .{
-        .name = try a.dupe(u8, name[1 .. name.len - 1]),
-        .settings = try list.toOwnedSlice(),
-    };
+pub fn initDupe(a: Allocator, ini: []const u8) !Config {
+    const owned = try a.dupe(u8, ini);
+    return try init(a, owned);
 }
 
-pub fn init(a: Allocator, file: std.fs.File) !Config {
-    const data = try file.readToEndAlloc(a, 1 <<| 18);
-    defer a.free(data);
-    var itr = std.mem.split(u8, data, "\n");
+/// `ini` becomes owned by returned Config, use initDupe otherwise
+pub fn init(a: Allocator, ini: []u8) !Config {
+    var itr = std.mem.split(u8, ini, "\n");
 
     var list = std.ArrayList(Namespace).init(a);
 
@@ -113,11 +128,42 @@ pub fn init(a: Allocator, file: std.fs.File) !Config {
         if (line.len == 0) continue;
 
         if (line[0] == '[' and line[line.len - 1] == ']') {
-            try list.append(try namespace(a, line, &itr));
+            try list.append(try Namespace.init(a, line, &itr));
         }
     }
 
     return Config{
+        .alloc = a,
         .ns = try list.toOwnedSlice(),
+        .data = ini,
     };
+}
+
+pub fn fromFile(a: Allocator, file: std.fs.File) !Config {
+    const data = try file.readToEndAlloc(a, 1 <<| 18);
+    return try init(a, data);
+}
+
+test "default" {
+    const a = std.testing.allocator;
+    const expected = Config{
+        .alloc = a,
+        .ns = @constCast(&[1]Namespace{
+            Namespace{
+                .name = @as([]u8, @constCast("one")),
+                .settings = @constCast(&[1]Setting{
+                    .{
+                        .name = "left",
+                        .val = "right",
+                    },
+                }),
+            },
+        }),
+        .data = @constCast("[one]\nleft = right"),
+    };
+
+    const vtest = try initDupe(a, "[one]\nleft = right");
+    defer vtest.raze();
+
+    try std.testing.expectEqualDeep(expected, vtest);
 }
