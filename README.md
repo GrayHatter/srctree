@@ -26,6 +26,8 @@ In an unsorted order
   - [ ] fold repo .files by default
   - [ ] comment on commits
   - [ ] email support
+    - [ ] outgoing email
+    - [ ] incoming email
   - [-] submit diffs (works with special build step)
   - [x] open issues
   - [x] clone repo from remote
@@ -43,11 +45,12 @@ In an unsorted order
   - [ ] user accounts
   - [ ] new account setup
   - [ ] git via ssh support
-  - [-] basic logic for template system
+  - [x] basic logic for template system
     - [x] For
     - [x] ORNULL
     - [x] ORELSE "default"
-    - [ ] if/with
+    - [x] With
+  - [ ] 
   - [ ] 
   - [ ] docs for everything
   - [ ] docs for template engine
