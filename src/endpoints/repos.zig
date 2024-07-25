@@ -481,18 +481,18 @@ fn wrapLineNumbersBlame(
     const count = std.mem.count(u8, text, "\n");
     var litr = std.mem.split(u8, text, "\n");
     var tctx = try a.alloc(Template.Context, count + 1);
-    for (0..count + 1) |i| {
+    for (0..count) |i| {
         var ctx = &tctx[i];
         ctx.* = Template.Context.init(a);
-        if (i < count) {
-            try ctx.put("Sha", blames[i].commit.sha[0..8]);
-            try ctx.put("Author", blames[i].commit.author.name);
-            try ctx.put("Time", try Humanize.unix(blames[i].commit.author.time).printAlloc(a));
-        } else {
-            try ctx.put("Sha", blames[i - 1].commit.sha[0..8]);
-            try ctx.put("Author", blames[i - 1].commit.author.name);
-            try ctx.put("Time", try Humanize.unix(blames[i - 1].commit.author.time).printAlloc(a));
-        }
+        //if (i < count) {
+        try ctx.put("Sha", blames[i].commit.sha[0..8]);
+        try ctx.put("Author", blames[i].commit.author.name);
+        try ctx.put("Time", try Humanize.unix(blames[i].commit.author.time).printAlloc(a));
+        //} else {
+        //    try ctx.put("Sha", blames[i - 1].commit.sha[0..8]);
+        //    try ctx.put("Author", blames[i - 1].commit.author.name);
+        //    try ctx.put("Time", try Humanize.unix(blames[i - 1].commit.author.time).printAlloc(a));
+        //}
         const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
         try ctx.put("Num", b[2..]);
         try ctx.put("Id", b[1..]);
