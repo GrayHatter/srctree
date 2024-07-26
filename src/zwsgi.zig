@@ -125,6 +125,48 @@ pub fn init(a: Allocator, config: Config) ZWSGI {
     };
 }
 
+fn buildContext(a: Allocator, conn: *Server.Connection, zwsgi: ZWSGI) !Context {
+    var request = try readHeader(a, conn.*);
+
+    std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
+        findOr(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
+        findOr(request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
+        findOr(request.raw_request.zwsgi.vars, "REQUEST_URI"),
+        findOr(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
+    });
+
+    const response = Response.init(a, &request);
+
+    var post_data: ?RequestData.PostData = null;
+    if (find(request.raw_request.zwsgi.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
+        const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
+
+        const post_size = try std.fmt.parseInt(usize, h_len, 10);
+        if (post_size > 0) {
+            post_data = try RequestData.readBody(a, conn.*, post_size, h_type);
+            if (dump_vars) std.log.info(
+                "post data \"{s}\" {{{any}}}",
+                .{ post_data.rawdata, post_data.rawdata },
+            );
+
+            for (post_data.?.items) |itm| {
+                if (dump_vars) std.log.info("{}", .{itm});
+            }
+        }
+    }
+    var query: RequestData.QueryData = undefined;
+    if (find(request.raw_request.zwsgi.vars, "QUERY_STRING")) |qs| {
+        query = try RequestData.readQuery(a, qs);
+    }
+
+    const req_data = RequestData.RequestData{
+        .post_data = post_data,
+        .query_data = query,
+    };
+
+    return Context.init(a, zwsgi.config, request, response, req_data);
+}
+
 pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
     while (true) {
         var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
@@ -134,45 +176,7 @@ pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
         var acpt = try srv.accept();
         defer acpt.stream.close();
 
-        var request = try readHeader(a, acpt);
-
-        std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
-            findOr(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
-            findOr(request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
-            findOr(request.raw_request.zwsgi.vars, "REQUEST_URI"),
-            findOr(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
-        });
-
-        var response = Response.init(a, &request);
-
-        var post_data: ?RequestData.PostData = null;
-        if (find(request.raw_request.zwsgi.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
-            const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
-
-            const post_size = try std.fmt.parseInt(usize, h_len, 10);
-            if (post_size > 0) {
-                post_data = try RequestData.readBody(a, acpt, post_size, h_type);
-                if (dump_vars) std.log.info(
-                    "post data \"{s}\" {{{any}}}",
-                    .{ post_data.rawdata, post_data.rawdata },
-                );
-
-                for (post_data.?.items) |itm| {
-                    if (dump_vars) std.log.info("{}", .{itm});
-                }
-            }
-        }
-        var query: RequestData.QueryData = undefined;
-        if (find(request.raw_request.zwsgi.vars, "QUERY_STRING")) |qs| {
-            query = try RequestData.readQuery(a, qs);
-        }
-
-        const req_data = RequestData.RequestData{
-            .post_data = post_data,
-            .query_data = query,
-        };
-
-        var ctx = try Context.init(a, zwsgi.config, request, response, req_data);
+        var ctx = try buildContext(a, &acpt, zwsgi);
 
         const callable = Srctree.router(&ctx);
         Srctree.build(&ctx, callable) catch |err| {
@@ -202,14 +206,14 @@ pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
                 error.BadData,
                 error.DataMissing,
                 => {
-                    std.debug.print("Abusive {} because {}\n", .{ request, err });
-                    for (request.raw_request.zwsgi.vars) |vars| {
+                    std.debug.print("Abusive {} because {}\n", .{ ctx.request, err });
+                    for (ctx.request.raw_request.zwsgi.vars) |vars| {
                         std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
                     }
                 },
             }
         };
 
-        if (response.phase != .closed) try response.finish();
+        if (ctx.response.phase != .closed) try ctx.response.finish();
     }
 }
