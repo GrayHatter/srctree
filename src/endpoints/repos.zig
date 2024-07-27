@@ -507,9 +507,9 @@ fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
     dom = dom.open(HTML.element("code", null, null));
     // TODO
 
-    const count = std.mem.count(u8, text, "\n");
+    var i: usize = 0;
     var litr = std.mem.split(u8, text, "\n");
-    for (0..count + 1) |i| {
+    while (litr.next()) |line| {
         var pbuf: [12]u8 = undefined;
         const b = std.fmt.bufPrint(&pbuf, "#L{}", .{i + 1}) catch unreachable;
         const attrs = try HTML.Attribute.alloc(
@@ -517,8 +517,8 @@ fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
             &[_][]const u8{ "num", "id", "href" },
             &[_]?[]const u8{ b[2..], b[1..], b },
         );
-        const line = litr.next().?;
         dom.push(HTML.element("ln", line, attrs));
+        i += 1;
     }
 
     return dom.close();
