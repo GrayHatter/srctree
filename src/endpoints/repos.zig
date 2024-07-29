@@ -405,6 +405,7 @@ fn blame(ctx: *Context) Error!void {
     defer repo.raze(ctx.alloc);
 
     var actions = repo.getActions(ctx.alloc);
+    actions.cwd = cwd.openDir(fname, .{}) catch unreachable;
     const git_blame = actions.blame(blame_file) catch unreachable;
 
     const parsed = parseBlame(ctx.alloc, git_blame) catch unreachable;
@@ -419,7 +420,16 @@ fn blame(ctx: *Context) Error!void {
         break :fmt pre[28..][0 .. pre.len - 38];
     } else Bleach.sanitizeAlloc(ctx.alloc, source_lines.items, .{}) catch return error.Unknown;
 
-    const tctx = try wrapLineNumbersBlame(ctx.alloc, formatted, parsed.lines);
+    var litr = std.mem.split(u8, formatted, "\n");
+    for (parsed.lines) |*line| {
+        if (litr.next()) |n| {
+            line.line = n;
+        } else {
+            break;
+        }
+    }
+
+    const tctx = try wrapLineNumbersBlame(ctx.alloc, parsed.lines);
     for (tctx) |*c| {
         try c.put("Repo_name", rd.name);
     }
@@ -427,9 +437,9 @@ fn blame(ctx: *Context) Error!void {
     var tmpl = Template.find("blame.html");
     tmpl.init(ctx.alloc);
 
-    try tmpl.ctx.?.putBlock("Blame_lines", tctx);
+    try ctx.putContext("Blame_lines", .{ .block = tctx[0..1] });
 
-    tmpl.addVar("Filename", blame_file) catch return error.Unknown;
+    //tmpl.addVar("Filename", blame_file) catch return error.Unknown;
     ctx.response.status = .ok;
 
     try ctx.sendTemplate(&tmpl);
@@ -478,16 +488,14 @@ fn wrapLineNumbersBlame(
     text: []const u8,
     blames: []BlameLine,
 ) ![]Template.Context {
-    const count = std.mem.count(u8, text, "\n");
-    var litr = std.mem.split(u8, text, "\n");
-    var tctx = try a.alloc(Template.Context, count + 1);
-    for (0..count) |i| {
+    var tctx = try a.alloc(Template.Context, blames.len + 1);
+    for (blames, 0..) |blame_, i| {
         var ctx = &tctx[i];
         ctx.* = Template.Context.init(a);
         //if (i < count) {
-        try ctx.put("Sha", blames[i].commit.sha[0..8]);
-        try ctx.put("Author", blames[i].commit.author.name);
-        try ctx.put("Time", try Humanize.unix(blames[i].commit.author.time).printAlloc(a));
+        try ctx.put("Sha", blame_.commit.sha[0..8]);
+        try ctx.put("Author", blame_.commit.author.name);
+        try ctx.put("Time", try Humanize.unix(blame_.commit.author.time).printAlloc(a));
         //} else {
         //    try ctx.put("Sha", blames[i - 1].commit.sha[0..8]);
         //    try ctx.put("Author", blames[i - 1].commit.author.name);
@@ -497,8 +505,10 @@ fn wrapLineNumbersBlame(
         try ctx.put("Num", b[2..]);
         try ctx.put("Id", b[1..]);
         try ctx.put("Href", b);
-        try ctx.put("Line", litr.next().?);
+        try ctx.put("Line", blame_.line);
+        std.debug.print("{} {s}\n", .{ i, blame_.line });
     }
+    tctx[tctx.len - 1] = Template.Context.init(a);
     return tctx;
 }
 
