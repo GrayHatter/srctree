@@ -336,7 +336,7 @@ const BlameCommit = struct {
 };
 
 const BlameLine = struct {
-    commit: BlameCommit,
+    commit: *BlameCommit,
     line: []const u8,
 };
 
@@ -383,7 +383,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
         } else {
             blm.line = in_lines.next().?[1..];
         }
-        blm.commit = cmt.*;
+        blm.commit = cmt;
     }
 
     return .{
@@ -485,7 +485,6 @@ fn highlight(a: Allocator, lang: []const u8, text: []const u8) ![]u8 {
 
 fn wrapLineNumbersBlame(
     a: Allocator,
-    text: []const u8,
     blames: []BlameLine,
 ) ![]Template.Context {
     var tctx = try a.alloc(Template.Context, blames.len + 1);
