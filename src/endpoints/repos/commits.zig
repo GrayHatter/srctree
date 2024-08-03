@@ -16,6 +16,7 @@ const UriIter = Endpoint.Router.UriIter;
 const RouteData = Repos.RouteData;
 const ROUTE = Endpoint.Router.ROUTE;
 const GET = Endpoint.Router.GET;
+const UserData = @import("../../request_data.zig").UserData;
 
 const Git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
@@ -30,6 +31,17 @@ pub const routes = [_]Endpoint.Router.MatchRouter{
     ROUTE("", commits),
     GET("before", commitsBefore),
 };
+
+const AddComment = struct {
+    text: []const u8,
+};
+
+fn newComment(ctx: *Context) Error!void {
+    if (ctx.req_data.post_data) |post| {
+        _ = UserData(AddComment).init(post) catch return error.BadData;
+    }
+    return error.BadData;
+}
 
 pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return commits;
