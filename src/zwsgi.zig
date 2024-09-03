@@ -50,6 +50,66 @@ pub const zWSGIRequest = struct {
     body: ?[]u8 = null,
 };
 
+pub fn init(a: Allocator, config: Config, route_fn: RouterFn, build_fn: BuildFn) ZWSGI {
+    return .{
+        .alloc = a,
+        .config = config,
+        .routefn = route_fn,
+        .buildfn = build_fn,
+    };
+}
+
+pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
+    while (true) {
+        var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
+        defer arena.deinit();
+        const a = arena.allocator();
+
+        var acpt = try srv.accept();
+        defer acpt.stream.close();
+
+        var ctx = try buildContext(a, &acpt, zwsgi);
+
+        const callable = zwsgi.routefn(&ctx);
+        zwsgi.buildfn(&ctx, callable) catch |err| {
+            switch (err) {
+                error.NetworkCrash => std.debug.print("client disconnect'\n", .{}),
+                error.Unrouteable => {
+                    std.debug.print("Unrouteable'\n", .{});
+                    if (@errorReturnTrace()) |trace| {
+                        std.debug.dumpStackTrace(trace.*);
+                    }
+                },
+                error.Unknown,
+                error.ReqResInvalid,
+                error.AndExit,
+                error.NoSpaceLeft,
+                => {
+                    std.debug.print("Unexpected error '{}'\n", .{err});
+                    return err;
+                },
+                error.InvalidURI => unreachable,
+                error.OutOfMemory => {
+                    std.debug.print("Out of memory at '{}'\n", .{arena.queryCapacity()});
+                    return err;
+                },
+                error.Abusive,
+                error.Unauthenticated,
+                error.BadData,
+                error.DataMissing,
+                => {
+                    std.debug.print("Abusive {} because {}\n", .{ ctx.request, err });
+                    for (ctx.request.raw_request.zwsgi.vars) |vars| {
+                        std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
+                    }
+                },
+            }
+        };
+
+        if (ctx.response.phase != .closed) try ctx.response.finish();
+    }
+}
+
 fn readU16(b: *const [2]u8) u16 {
     std.debug.assert(b.len >= 2);
     return @as(u16, @bitCast(b[0..2].*));
@@ -122,15 +182,6 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
     return find(list, search) orelse "[missing]";
 }
 
-pub fn init(a: Allocator, config: Config, route_fn: RouterFn, build_fn: BuildFn) ZWSGI {
-    return .{
-        .alloc = a,
-        .config = config,
-        .routefn = route_fn,
-        .buildfn = build_fn,
-    };
-}
-
 fn buildContext(a: Allocator, conn: *Server.Connection, zwsgi: ZWSGI) !Context {
     var request = try readHeader(a, conn.*);
 
@@ -171,55 +222,4 @@ fn buildContext(a: Allocator, conn: *Server.Connection, zwsgi: ZWSGI) !Context {
     };
 
     return Context.init(a, zwsgi.config, request, response, req_data);
-}
-
-pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
-    while (true) {
-        var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
-        defer arena.deinit();
-        const a = arena.allocator();
-
-        var acpt = try srv.accept();
-        defer acpt.stream.close();
-
-        var ctx = try buildContext(a, &acpt, zwsgi);
-
-        const callable = zwsgi.routefn(&ctx);
-        zwsgi.buildfn(&ctx, callable) catch |err| {
-            switch (err) {
-                error.NetworkCrash => std.debug.print("client disconnect'\n", .{}),
-                error.Unrouteable => {
-                    std.debug.print("Unrouteable'\n", .{});
-                    if (@errorReturnTrace()) |trace| {
-                        std.debug.dumpStackTrace(trace.*);
-                    }
-                },
-                error.Unknown,
-                error.ReqResInvalid,
-                error.AndExit,
-                error.NoSpaceLeft,
-                => {
-                    std.debug.print("Unexpected error '{}'\n", .{err});
-                    return err;
-                },
-                error.InvalidURI => unreachable,
-                error.OutOfMemory => {
-                    std.debug.print("Out of memory at '{}'\n", .{arena.queryCapacity()});
-                    return err;
-                },
-                error.Abusive,
-                error.Unauthenticated,
-                error.BadData,
-                error.DataMissing,
-                => {
-                    std.debug.print("Abusive {} because {}\n", .{ ctx.request, err });
-                    for (ctx.request.raw_request.zwsgi.vars) |vars| {
-                        std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
-                    }
-                },
-            }
-        };
-
-        if (ctx.response.phase != .closed) try ctx.response.finish();
-    }
 }
