@@ -18,25 +18,14 @@ const Cache = @import("cache.zig");
 
 const Srctree = @import("srctree.zig");
 
-const HOST = "127.0.0.1";
-const PORT = 2000;
-const FILE = "./srctree.sock";
-
 test "main" {
     std.testing.refAllDecls(@This());
     _ = HTML.html(&[0]HTML.Element{});
     std.testing.refAllDecls(@import("git.zig"));
 }
 
-var print_mutex = Thread.Mutex{};
-
-pub fn print(comptime format: []const u8, args: anytype) !void {
-    print_mutex.lock();
-    defer print_mutex.unlock();
-
-    const out = std.io.getStdOut().writer();
-    try out.print(format, args);
-}
+// TODO make thread safe
+const print = std.debug.print;
 
 var arg0: []const u8 = undefined;
 
@@ -54,19 +43,10 @@ fn usage(long: bool) noreturn {
         \\
         \\ -c [config.file] : use this config file instead of trying to guess.
         \\
-    , .{arg0}) catch std.process.exit(255);
+    , .{arg0});
     if (long) {}
     std.process.exit(0);
 }
-
-const RunMode = enum {
-    unix,
-    http,
-    other,
-    stop,
-};
-
-var runmode: RunMode = .unix;
 
 fn findConfig(target: []const u8) ?[]const u8 {
     if (target.len > 0) return target;
@@ -85,6 +65,9 @@ const Options = struct {
     config_path: []const u8,
     source_path: []const u8,
 };
+
+// TODO delete me
+var runmode: zWSGI.RunMode = .unix;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
@@ -108,7 +91,7 @@ pub fn main() !void {
         } else if (std.mem.eql(u8, arg, "http")) {
             runmode = .http;
         } else {
-            try print("unknown arg '{s}'", .{arg});
+            print("unknown arg '{s}'", .{arg});
         }
     }
 
@@ -142,51 +125,19 @@ pub fn main() !void {
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{});
     defer thread.join();
 
-    switch (runmode) {
-        .unix => {
-            if (cwd.access(FILE, .{})) {
-                try cwd.deleteFile(FILE);
-            } else |_| {}
+    var zwsgi: zWSGI = .{
+        .alloc = a,
+        .config = config,
+        .routefn = Srctree.router,
+        .buildfn = Srctree.build,
+    };
 
-            const uaddr = try std.net.Address.initUnix(FILE);
-            var server = try uaddr.listen(.{});
-            defer server.deinit();
-
-            const path = try std.fs.cwd().realpathAlloc(a, FILE);
-            defer a.free(path);
-            const zpath = try a.dupeZ(u8, path);
-            defer a.free(zpath);
-            const mode = std.os.linux.chmod(zpath, 0o777);
-            if (false) std.debug.print("mode {o}\n", .{mode});
-            try print("Unix server listening\n", .{});
-
-            var z = zWSGI.init(a, config, Srctree.router, Srctree.build);
-            z.serve(&server) catch {
-                if (@errorReturnTrace()) |trace| {
-                    std.debug.dumpStackTrace(trace.*);
-                }
-                std.posix.exit(1);
-            };
-        },
-        .http => {
-            unreachable;
-            // I don't have time to read through the whole update before I know
-            // it's not gonna change again real soon... fucking zig...
-            //var srv = Server.init(a, .{ .reuse_address = true });
-
-            //const addr = std.net.Address.parseIp(HOST, PORT) catch unreachable;
-            //try srv.listen(addr);
-            //try print("HTTP Server listening\n", .{});
-
-            //HTTP.serve(a, &srv) catch {
-            //    if (@errorReturnTrace()) |trace| {
-            //        std.debug.dumpStackTrace(trace.*);
-            //    }
-            //    std.os.exit(1);
-            //};
-        },
-        else => {},
-    }
+    zwsgi.serve() catch {
+        if (@errorReturnTrace()) |trace| {
+            std.debug.dumpStackTrace(trace.*);
+        }
+        std.posix.exit(1);
+    };
 }
 
 test "simple test" {

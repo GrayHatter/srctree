@@ -59,16 +59,37 @@ pub fn init(a: Allocator, config: Config, route_fn: RouterFn, build_fn: BuildFn)
     };
 }
 
-pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
+const HOST = "127.0.0.1";
+const PORT = 2000;
+const FILE = "./srctree.sock";
+
+fn serveUnix(zwsgi: *ZWSGI) !void {
+    var cwd = std.fs.cwd();
+    if (cwd.access(FILE, .{})) {
+        try cwd.deleteFile(FILE);
+    } else |_| {}
+
+    const uaddr = try std.net.Address.initUnix(FILE);
+    var server = try uaddr.listen(.{});
+    defer server.deinit();
+
+    const path = try std.fs.cwd().realpathAlloc(zwsgi.alloc, FILE);
+    defer zwsgi.alloc.free(path);
+    const zpath = try zwsgi.alloc.dupeZ(u8, path);
+    defer zwsgi.alloc.free(zpath);
+    const mode = std.os.linux.chmod(zpath, 0o777);
+    if (false) std.debug.print("mode {o}\n", .{mode});
+    std.debug.print("Unix server listening\n", .{});
+
     while (true) {
         var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
         defer arena.deinit();
         const a = arena.allocator();
 
-        var acpt = try srv.accept();
+        var acpt = try server.accept();
         defer acpt.stream.close();
 
-        var ctx = try buildContext(a, &acpt, zwsgi);
+        var ctx = try buildContext(a, &acpt, zwsgi.*);
 
         const callable = zwsgi.routefn(&ctx);
         zwsgi.buildfn(&ctx, callable) catch |err| {
@@ -107,6 +128,43 @@ pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
         };
 
         if (ctx.response.phase != .closed) try ctx.response.finish();
+    }
+}
+
+fn serveHttp(zwsgi: *ZWSGI) !void {
+    _ = zwsgi;
+    unreachable;
+    // I don't have time to read through the whole update before I know
+    // it's not gonna change again real soon... fucking zig...
+    //var srv = Server.init(a, .{ .reuse_address = true });
+
+    //const addr = std.net.Address.parseIp(HOST, PORT) catch unreachable;
+    //try srv.listen(addr);
+    //try print("HTTP Server listening\n", .{});
+
+    //HTTP.serve(a, &srv) catch {
+    //    if (@errorReturnTrace()) |trace| {
+    //        std.debug.dumpStackTrace(trace.*);
+    //    }
+    //    std.os.exit(1);
+    //};
+
+}
+
+pub const RunMode = enum {
+    unix,
+    http,
+    other,
+    stop,
+};
+
+var runmode: RunMode = .unix;
+
+pub fn serve(zwsgi: *ZWSGI) !void {
+    switch (runmode) {
+        .unix => try zwsgi.serveUnix(),
+        .http => try zwsgi.serveHttp(),
+        else => {},
     }
 }
 
