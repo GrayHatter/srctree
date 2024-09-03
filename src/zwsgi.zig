@@ -10,12 +10,16 @@ const Router = @import("routes.zig");
 const RequestData = @import("request_data.zig");
 const Config = @import("ini.zig").Config;
 
-const Srctree = @import("srctree.zig");
-
 const ZWSGI = @This();
 
 alloc: Allocator,
 config: Config,
+routefn: RouterFn,
+buildfn: BuildFn,
+
+pub const RouterFn = *const fn (*Context) Router.Callable;
+// TODO provide default for this?
+pub const BuildFn = *const fn (*Context, Router.Callable) Router.Error!void;
 
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
@@ -118,10 +122,12 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
     return find(list, search) orelse "[missing]";
 }
 
-pub fn init(a: Allocator, config: Config) ZWSGI {
+pub fn init(a: Allocator, config: Config, route_fn: RouterFn, build_fn: BuildFn) ZWSGI {
     return .{
         .alloc = a,
         .config = config,
+        .routefn = route_fn,
+        .buildfn = build_fn,
     };
 }
 
@@ -178,8 +184,8 @@ pub fn serve(zwsgi: ZWSGI, srv: *Server) !void {
 
         var ctx = try buildContext(a, &acpt, zwsgi);
 
-        const callable = Srctree.router(&ctx);
-        Srctree.build(&ctx, callable) catch |err| {
+        const callable = zwsgi.routefn(&ctx);
+        zwsgi.buildfn(&ctx, callable) catch |err| {
             switch (err) {
                 error.NetworkCrash => std.debug.print("client disconnect'\n", .{}),
                 error.Unrouteable => {

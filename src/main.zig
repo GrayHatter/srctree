@@ -16,6 +16,8 @@ const zWSGI = @import("zwsgi.zig");
 const Ini = @import("ini.zig");
 const Cache = @import("cache.zig");
 
+const Srctree = @import("srctree.zig");
+
 const HOST = "127.0.0.1";
 const PORT = 2000;
 const FILE = "./srctree.sock";
@@ -158,7 +160,7 @@ pub fn main() !void {
             if (false) std.debug.print("mode {o}\n", .{mode});
             try print("Unix server listening\n", .{});
 
-            var z = zWSGI.init(a, config);
+            var z = zWSGI.init(a, config, Srctree.router, Srctree.build);
             z.serve(&server) catch {
                 if (@errorReturnTrace()) |trace| {
                     std.debug.dumpStackTrace(trace.*);
