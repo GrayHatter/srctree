@@ -336,7 +336,7 @@ const BlameCommit = struct {
 };
 
 const BlameLine = struct {
-    commit: *BlameCommit,
+    sha: []const u8,
     line: []const u8,
 };
 
@@ -351,9 +351,9 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
     var in_lines = std.mem.split(u8, blame_txt, "\n");
     for (lines) |*blm| {
         const line = in_lines.next() orelse break;
-        if (line.len < 40) break;
+        if (line.len < 40) unreachable;
         const gp = try map.getOrPut(line[0..40]);
-        const cmt = gp.value_ptr;
+        const cmt: *BlameCommit = gp.value_ptr;
         if (!gp.found_existing) {
             cmt.*.sha = line[0..40];
             cmt.*.parent = null;
@@ -377,13 +377,14 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
                 } else if (std.mem.startsWith(u8, next, "filename ")) {
                     cmt.*.filename = next["filename ".len..];
                 } else {
+                    std.debug.print("unexpected blame data {s}\n", .{next});
                     continue;
                 }
             }
         } else {
             blm.line = in_lines.next().?[1..];
         }
-        blm.commit = cmt;
+        blm.sha = cmt.*.sha;
     }
 
     return .{
@@ -429,7 +430,7 @@ fn blame(ctx: *Context) Error!void {
         }
     }
 
-    const tctx = try wrapLineNumbersBlame(ctx.alloc, parsed.lines);
+    const tctx = try wrapLineNumbersBlame(ctx.alloc, parsed.lines, parsed.map);
     for (tctx) |*c| {
         try c.put("Repo_name", rd.name);
     }
@@ -437,7 +438,7 @@ fn blame(ctx: *Context) Error!void {
     var tmpl = Template.find("blame.html");
     tmpl.init(ctx.alloc);
 
-    try ctx.putContext("Blame_lines", .{ .block = tctx[0..1] });
+    try ctx.putContext("Blame_lines", .{ .block = tctx[0..] });
 
     //tmpl.addVar("Filename", blame_file) catch return error.Unknown;
     ctx.response.status = .ok;
@@ -486,28 +487,22 @@ fn highlight(a: Allocator, lang: []const u8, text: []const u8) ![]u8 {
 fn wrapLineNumbersBlame(
     a: Allocator,
     blames: []BlameLine,
+    map: std.StringHashMap(BlameCommit),
 ) ![]Template.Context {
-    var tctx = try a.alloc(Template.Context, blames.len + 1);
-    for (blames, 0..) |blame_, i| {
-        var ctx = &tctx[i];
-        ctx.* = Template.Context.init(a);
-        //if (i < count) {
-        try ctx.put("Sha", blame_.commit.sha[0..8]);
-        try ctx.put("Author", blame_.commit.author.name);
-        try ctx.put("Time", try Humanize.unix(blame_.commit.author.time).printAlloc(a));
-        //} else {
-        //    try ctx.put("Sha", blames[i - 1].commit.sha[0..8]);
-        //    try ctx.put("Author", blames[i - 1].commit.author.name);
-        //    try ctx.put("Time", try Humanize.unix(blames[i - 1].commit.author.time).printAlloc(a));
-        //}
+    var tctx = try a.alloc(Template.Context, blames.len);
+    for (blames, 0..) |line, i| {
+        var ctx = Template.Context.init(a);
+        const bcommit = map.get(line.sha) orelse unreachable;
+        try ctx.put("Sha", bcommit.sha[0..8]);
+        try ctx.put("Author", bcommit.author.name);
+        try ctx.put("Time", try Humanize.unix(bcommit.author.time).printAlloc(a));
         const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
         try ctx.put("Num", b[2..]);
         try ctx.put("Id", b[1..]);
         try ctx.put("Href", b);
-        try ctx.put("Line", blame_.line);
-        std.debug.print("{} {s}\n", .{ i, blame_.line });
+        try ctx.put("Line", line.line);
+        tctx[i] = ctx;
     }
-    tctx[tctx.len - 1] = Template.Context.init(a);
     return tctx;
 }
 
