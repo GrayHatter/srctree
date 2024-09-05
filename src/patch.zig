@@ -13,6 +13,7 @@ const Endpoint = @import("endpoint.zig");
 const Response = Endpoint.Response;
 const HTML = Endpoint.HTML;
 const DOM = Endpoint.DOM;
+const Context = @import("template.zig").Context;
 
 pub const Patch = @This();
 
@@ -22,6 +23,13 @@ diffs: ?[]Diff = null,
 pub const Diff = struct {
     header: Header,
     changes: ?[]const u8 = null,
+    stat: Diff.Stat,
+
+    pub const Stat = struct {
+        additions: usize,
+        deletions: usize,
+        total: isize,
+    };
 
     pub const Header = struct {
         data: []const u8,
@@ -61,7 +69,9 @@ pub const Diff = struct {
             return null;
         }
 
-        pub fn parse(self: *Header) !void {
+        /// I'm so sorry for these crimes... in my defense, I got distracted
+        /// while refactoring :<
+        pub fn parse(self: *Header) !?[]const u8 {
             var d = self.data;
             assert(startsWith(u8, d, "diff --git a/"));
             var i: usize = 0;
@@ -105,10 +115,13 @@ pub const Diff = struct {
 
                 // Block headers
                 if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
-                if (mem.indexOfPos(u8, d[4..], 0, " @@") == null) return error.BlockHeaderInvalid;
+                d = d[4 + (mem.indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid) ..];
+                d = d[(mem.indexOf(u8, d[0..], "\n") orelse return error.BlockContentInvalid)..];
+                return d;
             } else if (startsWith(u8, self.index.?, "similarity index ")) {
                 // TODO
             } else return error.UnableToParsePatchHeader;
+            return null;
         }
     };
 
@@ -118,13 +131,18 @@ pub const Diff = struct {
                 .data = blob,
                 .preamble = undefined,
             },
+            .stat = .{
+                .additions = count(u8, blob, "\n+"),
+                .deletions = count(u8, blob, "\n-"),
+                .total = @intCast(count(u8, blob, "\n+") -| count(u8, blob, "\n-")),
+            },
         };
         try d.parse();
         return d;
     }
 
     pub fn parse(d: *Diff) !void {
-        try d.header.parse();
+        d.changes = try d.header.parse();
     }
 };
 
@@ -138,33 +156,49 @@ pub fn isValid(_: Patch) bool {
     return true; // lol, you thought this did something :D
 }
 
-pub fn diffsSlice(self: Patch, a: Allocator) ![]Diff {
+pub fn parse(self: *Patch, a: Allocator) !void {
+    if (self.diffs != null) return; // Assume successful parsing
     const diff_count = count(u8, self.blob, "\ndiff --git a/") +
         @as(usize, if (mem.startsWith(u8, self.blob, "diff --git a/")) 1 else 0);
     if (diff_count == 0) return error.PatchInvalid;
-    const diffs = try a.alloc(Diff, diff_count);
-    errdefer a.free(diffs);
+    self.diffs = try a.alloc(Diff, diff_count);
+    errdefer a.free(self.diffs.?);
+    errdefer self.diffs = null;
     var start: usize = mem.indexOfPos(u8, self.blob, 0, "diff --git a/") orelse {
         return error.PatchInvalid;
     };
     var end: usize = start;
-    for (diffs) |*diff| {
+    for (self.diffs.?) |*diff| {
         assert(self.blob[start] != '\n');
         end = if (mem.indexOfPos(u8, self.blob, start + 1, "\ndiff --git a/")) |s| s + 1 else self.blob.len;
         diff.* = try Diff.init(self.blob[start..end]);
         start = end;
     }
-    return diffs;
 }
 
-pub const DiffStat = struct {
+pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
+    if (self.diffs) |diffs| {
+        const diffs_ctx: []Context = try a.alloc(Context, diffs.len);
+        for (diffs, diffs_ctx) |diff, *dctx| {
+            var ctx: Context = Context.init(a);
+            try ctx.putSimple("Filename", diff.header.filename.right orelse "File Deleted");
+            try ctx.putSimple("Additions", try std.fmt.allocPrint(a, "{}", .{diff.stat.additions}));
+            try ctx.putSimple("Deletions", try std.fmt.allocPrint(a, "{}", .{diff.stat.deletions}));
+            try ctx.putSimple("Diff", try diffLineSlice(a, diff.changes.?));
+            dctx.* = ctx;
+        }
+        return diffs_ctx;
+    } else return error.PatchInvalid;
+}
+
+pub const Stat = struct {
     files: usize,
     additions: usize,
     deletions: usize,
     total: isize,
 };
 
-pub fn diffstat(p: Patch) DiffStat {
+pub fn patchStat(p: Patch) Stat {
     const a = count(u8, p.blob, "\n+");
     const d = count(u8, p.blob, "\n-");
     const files = count(u8, p.blob, "\ndiff --git a/") +
@@ -209,7 +243,7 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .blob = try fetch(a, uri) };
 }
 
-pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
+pub fn diffLineHtml(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
 
     const line_count = std.mem.count(u8, diff, "\n");
@@ -218,11 +252,7 @@ pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
         const a_add = &HTML.Attr.class("add");
         const a_del = &HTML.Attr.class("del");
         const dirty = litr.next().?;
-        var clean = a.alloc(u8, @max(64, dirty.len * 2)) catch unreachable;
-        clean = Bleach.sanitize(dirty, clean, .{}) catch bigger: {
-            const big = a.realloc(clean, clean.len * 2) catch unreachable;
-            break :bigger Bleach.sanitize(dirty, big, .{}) catch unreachable;
-        };
+        const clean = Bleach.sanitizeAlloc(a, dirty, .{}) catch unreachable;
         const attr: ?[]const HTML.Attr = if (clean.len > 0 and (clean[0] == '-' or clean[0] == '+'))
             if (clean[0] == '-') a_del else a_add
         else
@@ -231,6 +261,17 @@ pub fn diffLine(a: Allocator, diff: []const u8) []HTML.Element {
     }
 
     return dom.done();
+}
+
+pub fn diffLineSlice(a: Allocator, diffs: []const u8) ![]u8 {
+    const elms = diffLineHtml(a, diffs);
+    const list = try a.alloc([]u8, elms.len);
+    defer a.free(list);
+    for (list, elms) |*l, e| {
+        l.* = try std.fmt.allocPrint(a, "{pretty}", .{e});
+    }
+    defer for (list) |l| a.free(l);
+    return try std.mem.join(a, "\n", list);
 }
 
 test "simple rename" {
@@ -242,13 +283,14 @@ test "simple rename" {
         \\rename to src/Sema.zig
         \\
     ;
-    const patch = Patch.init(rn_patch);
-    const diffs: []Diff = try patch.diffsSlice(a);
+    var patch = Patch.init(rn_patch);
+    try patch.parse(a);
+    const diffs: []Diff = patch.diffs.?;
     defer a.free(diffs);
     try std.testing.expectEqual(1, diffs.len);
 }
 
-test diffsSlice {
+test "diffsSlice" {
     var a = std.testing.allocator;
 
     const s_patch =
@@ -283,7 +325,8 @@ test diffsSlice {
     var p = Patch{
         .blob = a_patch,
     };
-    const diffs = try p.diffsSlice(a);
+    try p.parse(a);
+    const diffs = p.diffs.?;
     defer a.free(diffs);
     try std.testing.expect(diffs.len == 2);
     const h = diffs[1].header;

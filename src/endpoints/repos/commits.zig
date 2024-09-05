@@ -50,8 +50,51 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
     return commits;
 }
 
-pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
-    const diffs = patch.diffsSlice(a) catch |err| {
+pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
+    patch.parse(a) catch |err| {
+        if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
+            std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
+        } else {
+            std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
+        }
+
+        return error.PatchInvalid;
+    };
+    //const dstat = patch.patchStat();
+    //const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
+    //    dstat.additions,
+    //    dstat.deletions,
+    //    dstat.total,
+    //});
+
+    const patch_ctx = try patch.diffsContextSlice(a);
+
+    //for (diffs, files) |diff, *file| {
+    //    const body = diff.changes orelse {
+    //        file.* = Template.Context.init(a);
+    //        continue;
+    //    };
+    //    var ctx: Template.Context = Template.Context.init(a);
+    //    try ctx.putSimple("DiffStat", stat);
+    //    {
+    //        const changes = Patch.diffLine(a, body);
+    //        const list = try a.alloc([]u8, changes.len);
+    //        defer a.free(list);
+    //        for (list, changes) |*l, e| {
+    //            l.* = try std.fmt.allocPrint(a, "{pretty}", .{e});
+    //        }
+    //        defer for (list) |l| a.free(l);
+    //        const value = try std.mem.join(a, "", list);
+    //        try ctx.putSimple("Diff", value);
+    //    }
+    //    file.* = ctx;
+    //}
+
+    return patch_ctx;
+}
+
+pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
+    patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
         } else {
@@ -60,7 +103,8 @@ pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
 
         return &[0]HTML.Element{};
     };
-    defer a.free(diffs);
+
+    const diffs = patch.diffs orelse unreachable;
 
     var dom = DOM.new(a);
 
@@ -68,7 +112,7 @@ pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
     for (diffs) |diff| {
         const body = diff.changes orelse continue;
 
-        const dstat = patch.diffstat();
+        const dstat = patch.patchStat();
         const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
             dstat.additions,
             dstat.deletions,
@@ -78,7 +122,7 @@ pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
         dom = dom.open(HTML.diff());
         dom.push(HTML.element("filename", diff.header.filename.right orelse "File Deleted", null));
         dom = dom.open(HTML.element("changes", null, null));
-        dom.pushSlice(Patch.diffLine(a, body));
+        dom.pushSlice(Patch.diffLineHtml(a, body));
         dom = dom.close();
         dom = dom.close();
     }
@@ -87,9 +131,6 @@ pub fn patchHtml(a: Allocator, patch: Patch.Patch) ![]HTML.Element {
 }
 
 fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
-    var tmpl = Template.find("commit.html");
-    tmpl.init(ctx.alloc);
-
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});
         return error.Abusive;
@@ -107,9 +148,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     var commit_ctx = [1]Template.Context{
         try commitCtx(ctx.alloc, current, repo_name),
     };
-    try ctx.putContext("Commit", .{
-        .block = &commit_ctx,
-    });
+    try ctx.putContext("Commit", .{ .block = &commit_ctx });
 
     var git = repo.getActions(ctx.alloc);
     var diff = git.show(sha) catch return error.Unknown;
@@ -117,15 +156,11 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     if (std.mem.indexOf(u8, diff, "diff")) |i| {
         diff = diff[i..];
     }
-    const patch = Patch.Patch.init(diff);
-    var diff_dom = DOM.new(ctx.alloc);
-    diff_dom = diff_dom.open(HTML.element("diff", null, null));
-    diff_dom = diff_dom.open(HTML.element("patch", null, null));
-    diff_dom.pushSlice(try patchHtml(ctx.alloc, patch));
-    diff_dom = diff_dom.close();
-    diff_dom = diff_dom.close();
-    _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Diff", diff_dom.done()) catch return error.Unknown;
+    var patch = Patch.Patch.init(diff);
 
+    const files_ctx: []Template.Context = patchContext(ctx.alloc, &patch) catch unreachable;
+
+    try ctx.putContext("Files", .{ .block = files_ctx });
     //for ([_]Comment{ .{
     //    .author = "robinli",
     //    .message = "Woah, I didn't know srctree had the ability to comment on commits!",
@@ -163,7 +198,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         Template.Context.init(ctx.alloc),
     };
 
-    const diffstat = patch.diffstat();
+    const diffstat = patch.patchStat();
     try opengraph[0].putSimple("Title", try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
         Bleach.sanitizeAlloc(ctx.alloc, current.author.name, .{}) catch unreachable,
         diffstat.files,
@@ -174,6 +209,8 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     try opengraph[0].putSimple("Desc", Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable);
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
+    var tmpl = Template.find("commit.html");
+    tmpl.init(ctx.alloc);
     ctx.response.status = .ok;
     return ctx.sendTemplate(&tmpl) catch unreachable;
 }
