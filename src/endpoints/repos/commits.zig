@@ -164,9 +164,10 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     };
 
     const diffstat = patch.diffstat();
-    try opengraph[0].putSimple("Title", try allocPrint(ctx.alloc, "Commit by {s}: {} files changed +{} -{}", .{
+    try opengraph[0].putSimple("Title", try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
         Bleach.sanitizeAlloc(ctx.alloc, current.author.name, .{}) catch unreachable,
         diffstat.files,
+        if (diffstat.files > 1) "s" else "",
         diffstat.additions,
         diffstat.deletions,
     }));

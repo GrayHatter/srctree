@@ -167,7 +167,8 @@ pub const DiffStat = struct {
 pub fn diffstat(p: Patch) DiffStat {
     const a = count(u8, p.blob, "\n+");
     const d = count(u8, p.blob, "\n-");
-    const files = count(u8, p.blob, "\ndiff --git a/");
+    const files = count(u8, p.blob, "\ndiff --git a/") +
+        @as(usize, if (mem.startsWith(u8, p.blob, "diff --git a/")) 1 else 0);
     return .{
         .files = files,
         .additions = a,
