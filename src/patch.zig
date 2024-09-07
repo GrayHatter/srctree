@@ -162,8 +162,10 @@ pub fn parse(self: *Patch, a: Allocator) !void {
         @as(usize, if (mem.startsWith(u8, self.blob, "diff --git a/")) 1 else 0);
     if (diff_count == 0) return error.PatchInvalid;
     self.diffs = try a.alloc(Diff, diff_count);
-    errdefer self.diffs = null;
-    errdefer a.free(self.diffs.?);
+    errdefer {
+        a.free(self.diffs.?);
+        self.diffs = null;
+    }
     var start: usize = mem.indexOfPos(u8, self.blob, 0, "diff --git a/") orelse {
         return error.PatchInvalid;
     };
