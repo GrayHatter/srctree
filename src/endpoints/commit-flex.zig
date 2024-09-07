@@ -264,7 +264,9 @@ pub fn commitFlex(ctx: *Context) Error!void {
     for (count_all) |h| tcount +|= h;
 
     var printed_month: usize = (date.months + 10) % 12;
-    var day_off: usize = 0;
+    var day_offset: usize = 0;
+    var streak: usize = 0;
+    var committed_today: bool = false;
     for (0..53) |_| {
         var column: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
         if ((printed_month % 12) != date.months - 1) {
@@ -281,11 +283,23 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
         for (column[1..]) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
-            defer day_off += 1;
+            defer day_offset += 1;
             const rows = try ctx.alloc.alloc(HTML.Attribute, 2);
-            const class = if (date.timestamp >= nowish.timestamp - 1)
+            const count = 16 - @clz(count_all[day_offset]);
+            const future_date = date.timestamp >= nowish.timestamp - 1;
+            if (!future_date) {
+                if (count > 0) {
+                    streak +|= 1;
+                    committed_today = true;
+                } else if (date.timestamp + 86400 <= nowish.timestamp - 1) {
+                    streak = 0;
+                } else {
+                    committed_today = false;
+                }
+            }
+            const class = if (future_date)
                 "day-hide"
-            else switch (16 - @clz(count_all[day_off])) {
+            else switch (count) {
                 0 => "day",
                 1 => "day day-commits day-pwr-1",
                 2 => "day day-commits day-pwr-2",
@@ -301,7 +315,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
                     .value = try std.fmt.allocPrint(
                         ctx.alloc,
                         "{} commits on {}",
-                        .{ count_all[day_off], date },
+                        .{ count_all[day_offset], date },
                     ),
                 },
             });
@@ -315,8 +329,19 @@ pub fn commitFlex(ctx: *Context) Error!void {
     var tmpl = Template.find("user_commits.html");
     tmpl.init(ctx.alloc);
 
-    try tmpl.ctx.?.put("Total_hits", try std.fmt.allocPrint(ctx.alloc, "{}", .{tcount}));
-    try tmpl.ctx.?.put("Checked_repos", try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}));
+    try ctx.putContext("CurrentStreak", .{
+        .simple = switch (streak) {
+            0 => "One Day? Or Day One!",
+            1 => "Day One!",
+            else => try std.fmt.allocPrint(ctx.alloc, "{} Days{s}", .{
+                streak,
+                if (!committed_today) "?" else "",
+            }),
+        },
+    });
+
+    try ctx.putContext("TotalHits", .{ .simple = try std.fmt.allocPrint(ctx.alloc, "{}", .{tcount}) });
+    try ctx.putContext("CheckedRepos", .{ .simple = try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}) });
     _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
 
     std.sort.pdq(Scribe.Commit, scribe_list.items, {}, journalSorted);
