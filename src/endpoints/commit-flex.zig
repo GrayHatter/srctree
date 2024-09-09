@@ -89,7 +89,7 @@ fn countAll(
             commit_time += tzs;
         }
 
-        if (commit_time < until and commit.committer.timestamp < until) return hits;
+        if (commit_time < until or commit.committer.timestamp < until) return hits;
         const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
         if (std.mem.eql(u8, email, commit.author.email)) {
             hits[day_off] += 1;
