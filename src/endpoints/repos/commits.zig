@@ -120,7 +120,7 @@ pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
         });
         dom.push(HTML.element("diffstat", stat, null));
         dom = dom.open(HTML.diff());
-        dom.push(HTML.element("filename", diff.header.filename.right orelse "File Deleted", null));
+        dom.push(HTML.element("filename", diff.filename.right orelse "File Deleted", null));
         dom = dom.open(HTML.element("changes", null, null));
         dom.pushSlice(Patch.diffLineHtml(a, body));
         dom = dom.close();

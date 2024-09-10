@@ -21,9 +21,13 @@ blob: []const u8,
 diffs: ?[]Diff = null,
 
 pub const Diff = struct {
-    header: Header,
+    blob: []const u8,
     changes: ?[]const u8 = null,
     stat: Diff.Stat,
+    filename: struct {
+        left: ?[]const u8 = null,
+        right: ?[]const u8 = null,
+    } = .{},
 
     pub const Stat = struct {
         additions: usize,
@@ -31,17 +35,21 @@ pub const Diff = struct {
         total: isize,
     };
 
-    pub const Header = struct {
-        data: []const u8,
-        preamble: []const u8,
-        index: ?[]const u8 = null,
-        filename: struct {
-            left: ?[]const u8 = null,
-            right: ?[]const u8 = null,
-        } = .{},
+    pub const Header = union(enum) {
+        index: []const u8,
+        mode_old: []const u8,
+        mode_new: []const u8,
+        deleted_mode: []const u8,
+        newfile_mode: []const u8,
+        copy_from: []const u8,
+        copy_to: []const u8,
+        rename_from: []const u8,
+        rename_to: []const u8,
+        similarity: []const u8,
+        dissimilarity: []const u8,
 
         /// returns the input line if it's a valid extended header
-        fn parseHeader(line: []const u8) ?[]const u8 {
+        fn parse(line: []const u8) ?Header {
             // TODO
             // old mode <mode>
             // new mode <mode>
@@ -54,95 +62,115 @@ pub const Diff = struct {
             // similarity index <number>
             // dissimilarity index <number>
             // index <hash>..<hash> <mode>
-            if (startsWith(u8, line, "index ")) {
-                // TODO parse index correctly
-                return line;
-            } else if (startsWith(u8, line, "similarity index")) {
-                // TODO parse similarity correctly
-                return line;
+            while (true) {
+                if (startsWith(u8, line, "index ")) {
+                    // TODO parse index correctly
+                    return .{ .index = line };
+                } else if (startsWith(u8, line, "similarity index")) {
+                    // TODO parse similarity correctly
+                    return .{ .similarity = line };
+                } else if (startsWith(u8, line, "deleted file mode ")) {
+                    return .{ .deleted_mode = line };
+                } else if (startsWith(u8, line, "old mode ")) {
+                    return .{ .mode_old = line };
+                } else if (startsWith(u8, line, "new mode ")) {
+                    return .{ .mode_new = line };
+                } else if (startsWith(u8, line, "deleted file mode ")) {
+                    return .{ .deleted_mode = line };
+                } else if (startsWith(u8, line, "new file mode ")) {
+                    return .{ .newfile_mode = line };
+                } else if (startsWith(u8, line, "copy from ")) {
+                    return .{ .copy_from = line };
+                } else if (startsWith(u8, line, "copy to ")) {
+                    return .{ .copy_to = line };
+                } else if (startsWith(u8, line, "rename from ")) {
+                    return .{ .rename_from = line };
+                } else if (startsWith(u8, line, "rename to ")) {
+                    return .{ .rename_to = line };
+                } else if (startsWith(u8, line, "dissimilarity index ")) {
+                    return .{ .dissimilarity = line };
+                } else {
+                    std.debug.print("ERROR: unsupported header {s}", .{line});
+                }
             }
-
-            return null;
-        }
-
-        fn parseFilename(_: []const u8) ?[]const u8 {
-            return null;
-        }
-
-        /// I'm so sorry for these crimes... in my defense, I got distracted
-        /// while refactoring :<
-        pub fn parse(self: *Header) !?[]const u8 {
-            var d = self.data;
-            assert(startsWith(u8, d, "diff --git a/"));
-            var i: usize = 0;
-            while (d[i] != '\n' and i < d.len) i += 1;
-            self.preamble = d[0..i];
-            d = d[i + 1 ..];
-
-            i = 0;
-            while (d[i] != '\n' and i < d.len) i += 1;
-            self.index = parseHeader(d[0 .. i + 1]) orelse return error.UnableToParsePatchHeader;
-            if (startsWith(u8, self.index.?, "index ")) {
-                d = d[i + 1 ..];
-
-                // Left Filename
-                if (d.len < 6 or !eql(u8, d[0..4], "--- ")) return error.UnableToParsePatchHeader;
-                d = d[4..];
-
-                i = 0;
-                while (d[i] != '\n' and i < d.len) i += 1;
-                self.filename.left = d[2..i];
-
-                if (d.len < 4 or !eql(u8, d[0..2], "a/")) {
-                    if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                    self.filename.left = null;
-                }
-                d = d[i + 1 ..];
-
-                // Right Filename
-                if (d.len < 6 or !eql(u8, d[0..4], "+++ ")) return error.UnableToParsePatchHeader;
-                d = d[4..];
-
-                i = 0;
-                while (d[i] != '\n' and i < d.len) i += 1;
-                self.filename.right = d[2..i];
-
-                if (d.len < 4 or !eql(u8, d[0..2], "b/")) {
-                    if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                    self.filename.right = null;
-                }
-                d = d[i + 1 ..];
-
-                // Block headers
-                if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
-                d = d[4 + (mem.indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid) ..];
-                d = d[(mem.indexOf(u8, d[0..], "\n") orelse return error.BlockContentInvalid)..];
-                return d;
-            } else if (startsWith(u8, self.index.?, "similarity index ")) {
-                // TODO
-            } else return error.UnableToParsePatchHeader;
             return null;
         }
     };
 
+    fn parseFilename(_: []const u8) ?[]const u8 {
+        return null;
+    }
+
+    /// I'm so sorry for these crimes... in my defense, I got distracted
+    /// while refactoring :<
+    pub fn parse(self: *Diff) !?[]const u8 {
+        var d = self.blob;
+        assert(startsWith(u8, d, "diff --git a/"));
+        var i: usize = 0;
+        while (d[i] != '\n' and i < d.len) i += 1;
+        d = d[i + 1 ..];
+        while (true) {
+            i = 0;
+            while (i < d.len and d[i] != '\n') i += 1;
+            if (i == d.len) return null;
+            const header = Header.parse(d[0 .. i + 1]) orelse return error.UnableToParsePatchHeader;
+            switch (header) {
+                .index => {
+                    d = d[i + 1 ..];
+
+                    // Left Filename
+                    if (d.len < 6 or !eql(u8, d[0..4], "--- ")) return error.UnableToParsePatchHeader;
+                    d = d[4..];
+
+                    i = 0;
+                    while (d[i] != '\n' and i < d.len) i += 1;
+                    self.filename.left = d[2..i];
+
+                    if (d.len < 4 or !eql(u8, d[0..2], "a/")) {
+                        if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
+                        self.filename.left = null;
+                    }
+                    d = d[i + 1 ..];
+
+                    // Right Filename
+                    if (d.len < 6 or !eql(u8, d[0..4], "+++ ")) return error.UnableToParsePatchHeader;
+                    d = d[4..];
+
+                    i = 0;
+                    while (d[i] != '\n' and i < d.len) i += 1;
+                    self.filename.right = d[2..i];
+
+                    if (d.len < 4 or !eql(u8, d[0..2], "b/")) {
+                        if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
+                        self.filename.right = null;
+                    }
+                    d = d[i + 1 ..];
+
+                    // Block headers
+                    if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
+                    d = d[4 + (mem.indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid) ..];
+                    d = d[(mem.indexOf(u8, d[0..], "\n") orelse return error.BlockContentInvalid)..];
+                    return d;
+                },
+                else => {
+                    d = d[i + 1 ..];
+                },
+            }
+        }
+        return null;
+    }
+
     pub fn init(blob: []const u8) !Diff {
         var d: Diff = .{
-            .header = Header{
-                .data = blob,
-                .preamble = undefined,
-            },
+            .blob = blob,
             .stat = .{
                 .additions = count(u8, blob, "\n+"),
                 .deletions = count(u8, blob, "\n-"),
                 .total = @intCast(count(u8, blob, "\n+") -| count(u8, blob, "\n-")),
             },
         };
-        try d.parse();
+        d.changes = try d.parse();
         return d;
-    }
-
-    pub fn parse(d: *Diff) !void {
-        d.changes = try d.header.parse();
     }
 };
 
@@ -183,7 +211,7 @@ pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
         const diffs_ctx: []Context = try a.alloc(Context, diffs.len);
         for (diffs, diffs_ctx) |diff, *dctx| {
             var ctx: Context = Context.init(a);
-            try ctx.putSimple("Filename", diff.header.filename.right orelse "File Deleted");
+            try ctx.putSimple("Filename", diff.filename.right orelse "File Deleted");
             try ctx.putSimple("Additions", try std.fmt.allocPrint(a, "{}", .{diff.stat.additions}));
             try ctx.putSimple("Deletions", try std.fmt.allocPrint(a, "{}", .{diff.stat.deletions}));
             try ctx.putSimple("Diff", try diffLineSlice(a, diff.changes.?));
@@ -331,7 +359,7 @@ test "diffsSlice" {
     const diffs = p.diffs.?;
     defer a.free(diffs);
     try std.testing.expect(diffs.len == 2);
-    const h = diffs[1].header;
+    const h = diffs[1];
     try std.testing.expectEqualStrings(h.filename.left.?, "build.zig");
     try std.testing.expectEqualStrings(h.filename.left.?, h.filename.right.?);
 }
