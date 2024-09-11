@@ -48,6 +48,11 @@ pub const Diff = struct {
         similarity: []const u8,
         dissimilarity: []const u8,
 
+        fn parseMode(str: []const u8) ![4]u8 {
+            _ = str;
+            return error.NotImplemented;
+        }
+
         /// returns the input line if it's a valid extended header
         fn parse(line: []const u8) ?Header {
             // TODO
