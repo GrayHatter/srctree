@@ -35,25 +35,38 @@ pub const Diff = struct {
         total: isize,
     };
 
-    pub const Header = union(enum) {
-        index: []const u8,
-        mode_old: []const u8,
-        mode_new: []const u8,
-        deleted_mode: []const u8,
-        newfile_mode: []const u8,
-        copy_from: []const u8,
-        copy_to: []const u8,
-        rename_from: []const u8,
-        rename_to: []const u8,
-        similarity: []const u8,
-        dissimilarity: []const u8,
+    const Mode = [4]u8;
 
-        fn parseMode(str: []const u8) ![4]u8 {
+    /// I haven't seen enough patches to know this is correct, but ideally
+    /// (assumably) for non merge commits a single change type should be
+    /// exhaustive? TODO find counter example and create test.
+    pub const Header = struct {
+        blob: []const u8,
+        index: ?[]const u8,
+        change: Change,
+
+        const Change = union(enum) {
+            none: void,
+            newfile: Mode,
+            deletion: Mode,
+            copy: SrcDst,
+            rename: SrcDst,
+            mode: SrcDst,
+            similarity: []const u8,
+            dissimilarity: []const u8,
+        };
+
+        const SrcDst = struct {
+            src: []const u8,
+            dst: []const u8,
+        };
+
+        fn parseMode(str: []const u8) !Mode {
             std.debug.assert(str.len == 6);
             std.debug.assert(str[0] == '1');
             std.debug.assert(str[1] == '0');
             std.debug.assert(str[2] == '0');
-            var mode: [4]u8 = .{ 0, 0, 0, 0 };
+            var mode: Mode = .{ 0, 0, 0, 0 };
             for (str[3..6], mode[1..4]) |s, *m| switch (s) {
                 '0' => m.* = 0,
                 '1' => m.* = 1,
@@ -72,52 +85,74 @@ pub const Diff = struct {
             return mode;
         }
 
-        /// returns the input line if it's a valid extended header
-        fn parse(line: []const u8) ?Header {
-            // TODO
-            // old mode <mode>
-            // new mode <mode>
-            // deleted file mode <mode>
-            // new file mode <mode>
-            // copy from <path>
-            // copy to <path>
-            // rename from <path>
-            // rename to <path>
-            // similarity index <number>
-            // dissimilarity index <number>
-            // index <hash>..<hash> <mode>
+        fn parse(src: []const u8) !Header {
+            var pos: usize = 0;
+            var current = src[0..];
+            var blob: []const u8 = src[0..];
+            var change: Change = .{ .none = {} };
+            var index: ?[]const u8 = null;
             while (true) {
-                if (startsWith(u8, line, "index ")) {
+                if (startsWith(u8, current, "index ")) {
                     // TODO parse index correctly
-                    return .{ .index = line };
-                } else if (startsWith(u8, line, "similarity index")) {
-                    // TODO parse similarity correctly
-                    return .{ .similarity = line };
-                } else if (startsWith(u8, line, "deleted file mode ")) {
-                    return .{ .deleted_mode = line };
-                } else if (startsWith(u8, line, "old mode ")) {
-                    return .{ .mode_old = line };
-                } else if (startsWith(u8, line, "new mode ")) {
-                    return .{ .mode_new = line };
-                } else if (startsWith(u8, line, "deleted file mode ")) {
-                    return .{ .deleted_mode = line };
-                } else if (startsWith(u8, line, "new file mode ")) {
-                    return .{ .newfile_mode = line };
-                } else if (startsWith(u8, line, "copy from ")) {
-                    return .{ .copy_from = line };
-                } else if (startsWith(u8, line, "copy to ")) {
-                    return .{ .copy_to = line };
-                } else if (startsWith(u8, line, "rename from ")) {
-                    return .{ .rename_from = line };
-                } else if (startsWith(u8, line, "rename to ")) {
-                    return .{ .rename_to = line };
-                } else if (startsWith(u8, line, "dissimilarity index ")) {
-                    return .{ .dissimilarity = line };
+                    const nl = std.mem.indexOf(u8, src, "\n") orelse return error.InvalidHeader;
+                    index = current[0..nl];
                 } else {
-                    std.debug.print("ERROR: unsupported header {s}", .{line});
+                    if (startsWith(u8, current, "similarity index")) {
+                        // TODO parse similarity correctly
+                        change = .{ .similarity = current };
+                    } else if (startsWith(u8, current, "old mode ")) {
+                        change = .{ .mode = undefined };
+                    } else if (startsWith(u8, current, "new mode ")) {
+                        change = .{ .mode = undefined };
+                    } else if (startsWith(u8, current, "deleted file mode ")) {
+                        change = .{ .deletion = try parseMode(current) };
+                    } else if (startsWith(u8, current, "new file mode ")) {
+                        change = .{ .newfile = try parseMode(current) };
+                    } else if (startsWith(u8, current, "copy from ")) {
+                        change = .{ .copy = .{
+                            .src = current,
+                            .dst = undefined,
+                        } };
+                    } else if (startsWith(u8, current, "copy to ")) {
+                        change = .{ .copy = .{
+                            .src = change.copy.src,
+                            .dst = current,
+                        } };
+                    } else if (startsWith(u8, current, "rename from ")) {
+                        change = .{ .rename = .{
+                            .src = current,
+                            .dst = undefined,
+                        } };
+                    } else if (startsWith(u8, current, "rename to ")) {
+                        change = .{ .rename = .{
+                            .src = change.rename.src,
+                            .dst = current,
+                        } };
+                    } else if (startsWith(u8, current, "dissimilarity index ")) {
+                        change = .{ .dissimilarity = current };
+                    } else {
+                        // TODO search for '\n[^+- ]' and return change body
+                        // size to caller
+                        if (startsWith(u8, current, "--- ") or
+                            startsWith(u8, current, "+++ ") or
+                            startsWith(u8, current, "@@"))
+                        {
+                            break;
+                        } else if (current.len > 1) {
+                            std.debug.print("ERROR: unsupported header {s}\n", .{current});
+                        }
+                    }
                 }
+                pos = std.mem.indexOfPos(u8, src, pos + 1, "\n") orelse break;
+                blob = src[0 .. pos + 1];
+                current = src[pos + 1 ..];
             }
-            return null;
+            if (index == null and change == .none) return error.IncompleteHeader;
+            return .{
+                .blob = blob,
+                .index = index,
+                .change = change,
+            };
         }
     };
 
@@ -133,55 +168,48 @@ pub const Diff = struct {
         var i: usize = 0;
         while (d[i] != '\n' and i < d.len) i += 1;
         d = d[i + 1 ..];
-        while (true) {
+
+        i = 0;
+        //while (i < d.len and d[i] != '\n') i += 1;
+        //if (i == d.len) return null;
+        const header = try Header.parse(d[0..]);
+        d = d[header.blob.len..];
+
+        if (header.index != null) {
+            // Left Filename
+            if (d.len < 6 or !eql(u8, d[0..4], "--- ")) return error.UnableToParsePatchHeader;
+            d = d[4..];
+
             i = 0;
-            while (i < d.len and d[i] != '\n') i += 1;
-            if (i == d.len) return null;
-            const header = Header.parse(d[0 .. i + 1]) orelse return error.UnableToParsePatchHeader;
-            switch (header) {
-                .index => {
-                    d = d[i + 1 ..];
+            while (d[i] != '\n' and i < d.len) i += 1;
+            self.filename.left = d[2..i];
 
-                    // Left Filename
-                    if (d.len < 6 or !eql(u8, d[0..4], "--- ")) return error.UnableToParsePatchHeader;
-                    d = d[4..];
-
-                    i = 0;
-                    while (d[i] != '\n' and i < d.len) i += 1;
-                    self.filename.left = d[2..i];
-
-                    if (d.len < 4 or !eql(u8, d[0..2], "a/")) {
-                        if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                        self.filename.left = null;
-                    }
-                    d = d[i + 1 ..];
-
-                    // Right Filename
-                    if (d.len < 6 or !eql(u8, d[0..4], "+++ ")) return error.UnableToParsePatchHeader;
-                    d = d[4..];
-
-                    i = 0;
-                    while (d[i] != '\n' and i < d.len) i += 1;
-                    self.filename.right = d[2..i];
-
-                    if (d.len < 4 or !eql(u8, d[0..2], "b/")) {
-                        if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                        self.filename.right = null;
-                    }
-                    d = d[i + 1 ..];
-
-                    // Block headers
-                    if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
-                    d = d[4 + (mem.indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid) ..];
-                    d = d[(mem.indexOf(u8, d[0..], "\n") orelse return error.BlockContentInvalid)..];
-                    return d;
-                },
-                else => {
-                    d = d[i + 1 ..];
-                },
+            if (d.len < 4 or !eql(u8, d[0..2], "a/")) {
+                if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
+                self.filename.left = null;
             }
+            d = d[i + 1 ..];
+
+            // Right Filename
+            if (d.len < 6 or !eql(u8, d[0..4], "+++ ")) return error.UnableToParsePatchHeader;
+            d = d[4..];
+
+            i = 0;
+            while (d[i] != '\n' and i < d.len) i += 1;
+            self.filename.right = d[2..i];
+
+            if (d.len < 4 or !eql(u8, d[0..2], "b/")) {
+                if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
+                self.filename.right = null;
+            }
+            d = d[i + 1 ..];
+
+            // Block headers
+            if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
+            d = d[4 + (mem.indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid) ..];
+            d = d[(mem.indexOf(u8, d[0..], "\n") orelse return error.BlockContentInvalid)..];
         }
-        return null;
+        return d;
     }
 
     pub fn init(blob: []const u8) !Diff {
