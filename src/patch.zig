@@ -49,8 +49,27 @@ pub const Diff = struct {
         dissimilarity: []const u8,
 
         fn parseMode(str: []const u8) ![4]u8 {
-            _ = str;
-            return error.NotImplemented;
+            std.debug.assert(str.len == 6);
+            std.debug.assert(str[0] == '1');
+            std.debug.assert(str[1] == '0');
+            std.debug.assert(str[2] == '0');
+            var mode: [4]u8 = .{ 0, 0, 0, 0 };
+            for (str[3..6], mode[1..4]) |s, *m| switch (s) {
+                '0' => m.* = 0,
+                '1' => m.* = 1,
+                '2' => m.* = 2,
+                '3' => m.* = 3,
+                '4' => m.* = 4,
+                '5' => m.* = 5,
+                '6' => m.* = 6,
+                '7' => m.* = 7,
+                else => {
+                    std.debug.print("invalid mode string found {s}\n", .{str});
+                    return error.InvalidMode;
+                },
+            };
+
+            return mode;
         }
 
         /// returns the input line if it's a valid extended header
@@ -367,4 +386,8 @@ test "diffsSlice" {
     const h = diffs[1];
     try std.testing.expectEqualStrings(h.filename.left.?, "build.zig");
     try std.testing.expectEqualStrings(h.filename.left.?, h.filename.right.?);
+}
+
+test "parseMode" {
+    try std.testing.expectEqual([4]u8{ 0, 4, 4, 4 }, Diff.Header.parseMode("100444"));
 }
