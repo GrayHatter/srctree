@@ -805,6 +805,7 @@ pub const Actor = struct {
 };
 
 pub const Commit = struct {
+    // TODO not currently implemented
     const GPGSig = struct {};
 
     blob: []const u8,
@@ -818,7 +819,7 @@ pub const Commit = struct {
     title: []const u8,
     body: []const u8,
     repo: ?*const Repo = null,
-    gpgsig: GPGSig,
+    gpgsig: ?GPGSig,
 
     ptr_parent: ?*Commit = null, // TOOO multiple parents
 
