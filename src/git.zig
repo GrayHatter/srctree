@@ -773,12 +773,14 @@ pub const Ref = union(enum) {
     missing: void,
 };
 
-const Actor = struct {
+pub const Actor = struct {
     name: []const u8,
     email: []const u8,
     timestr: []const u8,
     tzstr: []const u8,
     timestamp: i64 = 0,
+    /// TODO: This will not remain i64
+    tz: i64 = 0,
 
     pub fn make(data: []const u8) !Actor {
         var itr = std.mem.splitBackwards(u8, data, " ");

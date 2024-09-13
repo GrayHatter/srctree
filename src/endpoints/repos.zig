@@ -20,7 +20,7 @@ const Bleach = @import("../bleach.zig");
 const Humanize = @import("../humanize.zig");
 const Ini = @import("../ini.zig");
 const Repos = @import("../repos.zig");
-const git = @import("../git.zig");
+const Git = @import("../git.zig");
 
 const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
@@ -130,7 +130,7 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
 }
 
 const dirs_first = true;
-fn typeSorter(_: void, l: git.Blob, r: git.Blob) bool {
+fn typeSorter(_: void, l: Git.Blob, r: Git.Blob) bool {
     if (l.isFile() == r.isFile()) return sorter({}, l.name, r.name);
     if (l.isFile() and !r.isFile()) return !dirs_first;
     return dirs_first;
@@ -140,11 +140,11 @@ const repoctx = struct {
     alloc: Allocator,
 };
 
-fn repoSorterNew(ctx: repoctx, l: git.Repo, r: git.Repo) bool {
+fn repoSorterNew(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     return !repoSorter(ctx, l, r);
 }
 
-fn repoSorter(ctx: repoctx, l: git.Repo, r: git.Repo) bool {
+fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     var lc = l.headCommit(ctx.alloc) catch return true;
     defer lc.raze(ctx.alloc);
     var rc = r.headCommit(ctx.alloc) catch return false;
@@ -156,7 +156,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) !*DOM {
+fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: Git.Repo) !*DOM {
     var dom = pre_dom.open(HTML.repo());
     dom = dom.open(HTML.element("name", name, null));
     dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
@@ -200,18 +200,18 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: git.Repo) 
 fn list(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
-        var repos = std.ArrayList(git.Repo).init(ctx.alloc);
+        var repos = std.ArrayList(Git.Repo).init(ctx.alloc);
         var itr = idir.iterate();
         while (itr.next() catch return Error.Unknown) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
             const rdir = idir.openDir(file.name, .{}) catch continue;
-            var rpo = git.Repo.init(rdir) catch continue;
+            var rpo = Git.Repo.init(rdir) catch continue;
             rpo.loadData(ctx.alloc) catch return error.Unknown;
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
             try repos.append(rpo);
         }
-        std.sort.heap(git.Repo, repos.items, repoctx{ .alloc = ctx.alloc }, repoSorterNew);
+        std.sort.heap(Git.Repo, repos.items, repoctx{ .alloc = ctx.alloc }, repoSorterNew);
 
         var dom = DOM.new(ctx.alloc);
 
@@ -269,7 +269,7 @@ fn treeBlob(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
     const filename = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = git.Repo.init(dir) catch return error.Unknown;
+    var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze(ctx.alloc);
 
@@ -294,7 +294,7 @@ fn treeBlob(ctx: *Context) Error!void {
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
     const cmt = repo.headCommit(ctx.alloc) catch return newRepo(ctx);
-    var files: git.Tree = cmt.mkTree(ctx.alloc) catch return error.Unknown;
+    var files: Git.Tree = cmt.mkTree(ctx.alloc) catch return error.Unknown;
     if (rd.verb) |blb| {
         if (std.mem.eql(u8, blb, "blob")) {
             return blob(ctx, &repo, files);
@@ -328,11 +328,8 @@ const BlameCommit = struct {
     parent: ?[]const u8 = null,
     title: []const u8,
     filename: []const u8,
-    author: struct {
-        name: []const u8,
-        time: i64,
-        tz: i32,
-    },
+    author: Git.Actor,
+    committer: Git.Actor,
 };
 
 const BlameLine = struct {
@@ -366,8 +363,10 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
 
                 if (std.mem.startsWith(u8, next, "author ")) {
                     cmt.*.author.name = next["author ".len..];
+                } else if (std.mem.startsWith(u8, next, "author-mail ")) {
+                    cmt.*.author.email = next["author-mail ".len..];
                 } else if (std.mem.startsWith(u8, next, "author-time ")) {
-                    cmt.*.author.time = try std.fmt.parseInt(i64, next["author-time ".len..], 10);
+                    cmt.*.author.timestamp = try std.fmt.parseInt(i64, next["author-time ".len..], 10);
                 } else if (std.mem.startsWith(u8, next, "author-tz ")) {
                     cmt.*.author.tz = try std.fmt.parseInt(i32, next["author-tz ".len..], 10);
                 } else if (std.mem.startsWith(u8, next, "summary ")) {
@@ -376,6 +375,14 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
                     cmt.*.parent = next["previous ".len..][0..40];
                 } else if (std.mem.startsWith(u8, next, "filename ")) {
                     cmt.*.filename = next["filename ".len..];
+                } else if (std.mem.startsWith(u8, next, "committer ")) {
+                    cmt.*.committer.name = next["committer ".len..];
+                } else if (std.mem.startsWith(u8, next, "committer-mail ")) {
+                    cmt.*.committer.email = next["committer-mail ".len..];
+                } else if (std.mem.startsWith(u8, next, "committer-time ")) {
+                    cmt.*.committer.timestamp = try std.fmt.parseInt(i64, next["committer-time ".len..], 10);
+                } else if (std.mem.startsWith(u8, next, "committer-tz ")) {
+                    cmt.*.committer.tz = try std.fmt.parseInt(i32, next["committer-tz ".len..], 10);
                 } else {
                     std.debug.print("unexpected blame data {s}\n", .{next});
                     continue;
@@ -402,7 +409,7 @@ fn blame(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
     const fname = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(fname, .{}) catch return error.Unknown;
-    var repo = git.Repo.init(dir) catch return error.Unknown;
+    var repo = Git.Repo.init(dir) catch return error.Unknown;
     defer repo.raze(ctx.alloc);
 
     var actions = repo.getActions(ctx.alloc);
@@ -495,7 +502,7 @@ fn wrapLineNumbersBlame(
         const bcommit = map.get(line.sha) orelse unreachable;
         try ctx.put("Sha", bcommit.sha[0..8]);
         try ctx.put("Author", bcommit.author.name);
-        try ctx.put("Time", try Humanize.unix(bcommit.author.time).printAlloc(a));
+        try ctx.put("Time", try Humanize.unix(bcommit.author.timestamp).printAlloc(a));
         const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
         try ctx.put("Num", b[2..]);
         try ctx.put("Id", b[1..]);
@@ -528,11 +535,11 @@ fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
     return dom.close();
 }
 
-fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
+fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var tmpl = Template.find("blob.html");
     tmpl.init(ctx.alloc);
 
-    var blb: git.Blob = undefined;
+    var blb: Git.Blob = undefined;
 
     var files = pfiles;
     search: while (ctx.uri.next()) |bname| {
@@ -543,7 +550,7 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
                     if (ctx.uri.next()) |_| return error.InvalidURI;
                     break :search;
                 }
-                files = git.Tree.fromRepo(ctx.alloc, repo.*, &obj.hash) catch return error.Unknown;
+                files = Git.Tree.fromRepo(ctx.alloc, repo.*, &obj.hash) catch return error.Unknown;
                 continue :search;
             }
         } else return error.InvalidURI;
@@ -585,11 +592,11 @@ fn blob(ctx: *Context, repo: *git.Repo, pfiles: git.Tree) Error!void {
     try ctx.sendTemplate(&tmpl);
 }
 
-fn mkTree(a: Allocator, repo: git.Repo, uri: *UriIter, pfiles: git.Tree) !git.Tree {
-    var files: git.Tree = pfiles;
+fn mkTree(a: Allocator, repo: Git.Repo, uri: *UriIter, pfiles: Git.Tree) !Git.Tree {
+    var files: Git.Tree = pfiles;
     if (uri.next()) |udir| for (files.objects) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
-            files = try git.Tree.fromRepo(a, repo, &obj.hash);
+            files = try Git.Tree.fromRepo(a, repo, &obj.hash);
             return try mkTree(a, repo, uri, files);
         }
     };
@@ -624,8 +631,8 @@ fn drawFileLine(
     ddom: *DOM,
     rname: []const u8,
     base: []const u8,
-    obj: git.Blob,
-    ch: git.ChangeSet,
+    obj: Git.Blob,
+    ch: Git.ChangeSet,
 ) !*DOM {
     var dom = ddom;
     if (obj.isFile()) {
@@ -643,7 +650,7 @@ fn drawFileLine(
     return dom.close();
 }
 
-fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: git.Blob) !*DOM {
+fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
     var dom = ddom.open(HTML.element("file", null, null));
     const file_link = try aPrint(a, "/repo/{s}/blob/{s}{s}", .{ rname, base, obj.name });
 
@@ -656,7 +663,7 @@ fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
     return dom;
 }
 
-fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: git.Blob) !*DOM {
+fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
     var dom = ddom.open(HTML.element("tree", null, null));
     const file_link = try aPrint(a, "/repo/{s}/tree/{s}{s}/", .{ rname, base, obj.name });
 
@@ -668,7 +675,7 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
     return dom;
 }
 
-fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
+fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     var tmpl = Template.find("tree.html");
     tmpl.init(ctx.alloc);
 
@@ -722,7 +729,7 @@ fn tree(ctx: *Context, repo: *git.Repo, files: *git.Tree) Error!void {
     }
     try files.pushPath(ctx.alloc, uri_base);
     if (files.changedSet(ctx.alloc, repo)) |changed| {
-        std.sort.pdq(git.Blob, files.objects, {}, typeSorter);
+        std.sort.pdq(Git.Blob, files.objects, {}, typeSorter);
         for (files.objects) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
