@@ -1348,6 +1348,8 @@ pub const Actions = struct {
         return try self.exec(&[_][]const u8{
             "git",
             "show",
+            "--diff-merges=1",
+            "-p",
             sha,
         });
     }
