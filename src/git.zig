@@ -727,7 +727,7 @@ pub const Repo = struct {
             switch (r) {
                 .branch => |br| {
                     const cmt = try br.toCommit(a);
-                    defer cmt.raze(a);
+                    defer cmt.raze();
                     if (cmt.committer.timestamp > oldest) oldest = cmt.committer.timestamp;
                 },
                 else => unreachable, // not implemented... sorry :/
@@ -808,6 +808,7 @@ pub const Commit = struct {
     // TODO not currently implemented
     const GPGSig = struct {};
 
+    alloc: ?Allocator = null,
     blob: []const u8,
     sha: SHA,
     tree: SHA,
@@ -860,7 +861,19 @@ pub const Commit = struct {
         return error.InvalidGpgsig;
     }
 
-    /// sha must be freeable by the allocator used when calling raze
+    pub fn initAlloc(a: Allocator, sha_in: SHA, data: []const u8) !Commit {
+        const sha = try a.dupe(u8, sha_in);
+        const blob = try a.dupe(u8, data);
+
+        var self = try make(sha, blob);
+        self.alloc = a;
+        return self;
+    }
+
+    pub fn init(sha: SHA, data: []const u8) !Commit {
+        return make(sha, data);
+    }
+
     pub fn make(sha: SHA, data: []const u8) !Commit {
         var lines = std.mem.split(u8, data, "\n");
         var self: Commit = undefined;
@@ -899,9 +912,9 @@ pub const Commit = struct {
     }
 
     pub fn fromReader(a: Allocator, sha: SHA, reader: Reader) !Commit {
-        const buf = try reader.readAllAlloc(a, 0xFFFF);
-        const dsha = try a.dupe(u8, sha);
-        return try make(dsha, buf);
+        var buffer: [0xFFFF]u8 = undefined;
+        const len = try reader.readAll(&buffer);
+        return try initAlloc(a, sha, buffer[0..len]);
     }
 
     pub fn toParent(self: Commit, a: Allocator, idx: u8) !Commit {
@@ -953,9 +966,11 @@ pub const Commit = struct {
     }
 
     /// Warning; this function is probably unsafe
-    pub fn raze(self: Commit, a: Allocator) void {
-        a.free(self.sha);
-        a.free(self.blob);
+    pub fn raze(self: Commit) void {
+        if (self.alloc) |a| {
+            a.free(self.sha);
+            a.free(self.blob);
+        }
     }
 
     pub fn format(
@@ -1144,7 +1159,7 @@ pub const Tree = struct {
 
     pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]ChangeSet {
         const cmtt = try repo.headCommit(a);
-        defer cmtt.raze(a);
+        defer cmtt.raze();
         const search_list: []?Blob = try a.alloc(?Blob, self.objects.len);
         for (self.objects, search_list) |src, *dst| {
             dst.* = src;
@@ -1175,7 +1190,7 @@ pub const Tree = struct {
                             );
                         }
                     }
-                    old.raze(a);
+                    old.raze();
                     oldtree.raze(a);
                     break;
                 },
@@ -1195,7 +1210,7 @@ pub const Tree = struct {
                             );
                         }
                     }
-                    old.raze(a);
+                    old.raze();
                     oldtree.raze(a);
                     break;
                 },
@@ -1219,11 +1234,11 @@ pub const Tree = struct {
                     continue;
                 }
             }
-            old.raze(a);
+            old.raze();
             oldtree.raze(a);
         }
 
-        par.raze(a);
+        par.raze();
         ptree.raze(a);
         return changed;
     }
@@ -1418,7 +1433,7 @@ test "file" {
     var buffer = Object.init(dz);
     defer buffer.raze(a);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
-    defer commit.raze(a);
+    defer commit.raze();
     //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree);
     try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha);
@@ -1458,11 +1473,11 @@ test "toParent" {
         count += 1;
         if (commit.parent[0]) |_| {
             const parent = try commit.toParent(a, 0);
-            commit.raze(a);
+            commit.raze();
             commit = parent;
         } else break;
     }
-    commit.raze(a);
+    commit.raze();
     try std.testing.expect(count >= 31); // LOL SORRY!
 }
 
@@ -1477,7 +1492,7 @@ test "tree" {
     defer a.free(data);
     var buffer = Object.init(data);
     const commit = try Commit.fromReader(a, "370303630b3fc631a0cb3942860fb6f77446e9c1", buffer.reader());
-    defer commit.raze(a);
+    defer commit.raze();
     //std.debug.print("tree {s}\n", .{commit.sha});
 }
 
@@ -1539,7 +1554,7 @@ test "read pack" {
     var obj = try repo.findObj(a, lol);
     defer obj.raze(a);
     const commit = try Commit.fromReader(a, lol, obj.reader());
-    defer commit.raze(a);
+    defer commit.raze();
     if (false) std.debug.print("{}\n", .{commit});
 }
 
@@ -1587,7 +1602,7 @@ test "hopefully a delta" {
     try repo.loadData(a);
 
     var head = try repo.headCommit(a);
-    defer head.raze(a);
+    defer head.raze();
     //std.debug.print("{}\n", .{head});
 
     var obj = try repo.findObj(a, head.tree);
@@ -1606,7 +1621,7 @@ test "commit to tree" {
     try repo.loadData(a);
 
     const cmt = try repo.headCommit(a);
-    defer cmt.raze(a);
+    defer cmt.raze();
     const tree = try cmt.mkTree(a);
     defer tree.raze(a);
     if (false) std.debug.print("tree {}\n", .{tree});
@@ -1623,7 +1638,7 @@ test "blob to commit" {
     try repo.loadData(a);
 
     const cmtt = try repo.headCommit(a);
-    defer cmtt.raze(a);
+    defer cmtt.raze();
 
     const tree = try cmtt.mkTree(a);
     defer tree.raze(a);
@@ -1648,7 +1663,7 @@ test "mk sub tree" {
     try repo.loadData(a);
 
     const cmtt = try repo.headCommit(a);
-    defer cmtt.raze(a);
+    defer cmtt.raze();
 
     const tree = try cmtt.mkTree(a);
     defer tree.raze(a);
@@ -1675,7 +1690,7 @@ test "commit mk sub tree" {
     try repo.loadData(a);
 
     const cmtt = try repo.headCommit(a);
-    defer cmtt.raze(a);
+    defer cmtt.raze();
 
     const tree = try cmtt.mkTree(a);
     defer tree.raze(a);
@@ -1721,7 +1736,7 @@ test "considering optimizing blob to commit" {
     //try repo.loadPacks(a);
 
     //const cmtt = try repo.headCommit(a);
-    //defer cmtt.raze(a);
+    //defer cmtt.raze();
 
     //const tree = try cmtt.mkTree(a);
     //defer tree.raze(a);
@@ -1759,7 +1774,7 @@ test "considering optimizing blob to commit" {
     //            continue;
     //        }
     //    }
-    //    old.raze(a);
+    //    old.raze();
     //    oldtree.raze(a);
     //}
     //lap = timer.lap();
@@ -1807,7 +1822,7 @@ test "considering optimizing blob to commit" {
     //            }
     //        }
     //    }
-    //    old.raze(a);
+    //    old.raze();
     //    oldtree.raze(a);
     //}
     //lap = timer.lap();
@@ -1828,7 +1843,7 @@ test "ref delta" {
     try repo.loadData(a);
 
     const cmtt = try repo.headCommit(a);
-    defer cmtt.raze(a);
+    defer cmtt.raze();
 
     const tree = try cmtt.mkTree(a);
     defer tree.raze(a);

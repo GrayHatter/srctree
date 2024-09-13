@@ -146,9 +146,9 @@ fn repoSorterNew(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
 
 fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     var lc = l.headCommit(ctx.alloc) catch return true;
-    defer lc.raze(ctx.alloc);
+    defer lc.raze();
     var rc = r.headCommit(ctx.alloc) catch return false;
-    defer rc.raze(ctx.alloc);
+    defer rc.raze();
     return sorter({}, lc.committer.timestr, rc.committer.timestr);
 }
 
@@ -180,7 +180,7 @@ fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: Git.Repo) 
         }
 
         if (repo.headCommit(a)) |cmt| {
-            defer cmt.raze(a);
+            defer cmt.raze();
             const committer = cmt.committer;
             const updated_str = try aPrint(
                 a,
