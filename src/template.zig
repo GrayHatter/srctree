@@ -146,12 +146,12 @@ pub const Context = struct {
         try self.putNext(name, .{ .block = block });
     }
 
-    pub fn getBlock(self: Context, name: []const u8) ?[]const Context {
+    pub fn getBlock(self: Context, name: []const u8) !?[]const Context {
         return switch (self.getNext(name) orelse return null) {
-            .simple => {
-                std.debug.print("Error: get [{s}] required Block, found simple\n", .{name});
-                unreachable;
-            },
+            // I'm sure this hack will live forever, I'm abusing With to be
+            // an IF here, without actually implementing IF... sorry!
+            //std.debug.print("Error: get [{s}] required Block, found simple\n", .{name});
+            .simple => return error.NotABlock,
             .block => |b| b,
         };
     }
@@ -442,7 +442,10 @@ pub const Directive = struct {
             },
 
             pub fn do(self: Verb, ctx: *const Context, out: anytype) anyerror!void {
-                if (ctx.getBlock(self.vari)) |block| {
+                if (ctx.getBlock(self.vari) catch |err| switch (err) {
+                    error.NotABlock => ctx[0..1],
+                    else => return err,
+                }) |block| {
                     switch (self.word) {
                         .foreach => {
                             for (block) |s| {
