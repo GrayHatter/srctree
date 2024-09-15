@@ -6,6 +6,7 @@ const count = mem.count;
 const startsWith = mem.startsWith;
 const assert = std.debug.assert;
 const eql = std.mem.eql;
+const indexOf = std.mem.indexOf;
 
 const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
@@ -22,12 +23,10 @@ diffs: ?[]Diff = null,
 
 pub const Diff = struct {
     blob: []const u8,
+    header: Header,
     changes: ?[]const u8 = null,
     stat: Diff.Stat,
-    filename: struct {
-        left: ?[]const u8 = null,
-        right: ?[]const u8 = null,
-    } = .{},
+    filename: ?[]const u8 = null,
 
     pub const Stat = struct {
         additions: usize,
@@ -94,9 +93,10 @@ pub const Diff = struct {
             while (true) {
                 if (startsWith(u8, current, "index ")) {
                     // TODO parse index correctly
-                    const nl = std.mem.indexOf(u8, src, "\n") orelse return error.InvalidHeader;
+                    const nl = indexOf(u8, src, "\n") orelse return error.InvalidHeader;
                     index = current[0..nl];
                 } else {
+                    const nl = indexOf(u8, current, "\n") orelse break;
                     if (startsWith(u8, current, "similarity index")) {
                         // TODO parse similarity correctly
                         change = .{ .similarity = current };
@@ -110,23 +110,23 @@ pub const Diff = struct {
                         change = .{ .newfile = try parseMode(current) };
                     } else if (startsWith(u8, current, "copy from ")) {
                         change = .{ .copy = .{
-                            .src = current,
+                            .src = current["copy from ".len..nl],
                             .dst = undefined,
                         } };
                     } else if (startsWith(u8, current, "copy to ")) {
                         change = .{ .copy = .{
                             .src = change.copy.src,
-                            .dst = current,
+                            .dst = current["copy to ".len..nl],
                         } };
                     } else if (startsWith(u8, current, "rename from ")) {
                         change = .{ .rename = .{
-                            .src = current,
+                            .src = current["rename from ".len..nl],
                             .dst = undefined,
                         } };
                     } else if (startsWith(u8, current, "rename to ")) {
                         change = .{ .rename = .{
                             .src = change.rename.src,
-                            .dst = current,
+                            .dst = current["rename to ".len..nl],
                         } };
                     } else if (startsWith(u8, current, "dissimilarity index ")) {
                         change = .{ .dissimilarity = current };
@@ -176,17 +176,18 @@ pub const Diff = struct {
         d = d[header.blob.len..];
 
         if (header.index != null) {
+            // TODO redact and user headers
             // Left Filename
             if (d.len < 6 or !eql(u8, d[0..4], "--- ")) return error.UnableToParsePatchHeader;
             d = d[4..];
 
             i = 0;
             while (d[i] != '\n' and i < d.len) i += 1;
-            self.filename.left = d[2..i];
+            self.filename = d[2..i];
 
             if (d.len < 4 or !eql(u8, d[0..2], "a/")) {
                 if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                self.filename.left = null;
+                self.filename = null;
             }
             d = d[i + 1 ..];
 
@@ -196,11 +197,11 @@ pub const Diff = struct {
 
             i = 0;
             while (d[i] != '\n' and i < d.len) i += 1;
-            self.filename.right = d[2..i];
+            const right_name = d[2..i];
 
             if (d.len < 4 or !eql(u8, d[0..2], "b/")) {
                 if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                self.filename.right = null;
+                self.filename = right_name;
             }
             d = d[i + 1 ..];
 
@@ -209,12 +210,14 @@ pub const Diff = struct {
             d = d[4 + (mem.indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid) ..];
             d = d[(mem.indexOf(u8, d[0..], "\n") orelse return error.BlockContentInvalid)..];
         }
+        self.header = header;
         return d;
     }
 
     pub fn init(blob: []const u8) !Diff {
         var d: Diff = .{
             .blob = blob,
+            .header = undefined,
             .stat = .{
                 .additions = count(u8, blob, "\n+"),
                 .deletions = count(u8, blob, "\n-"),
@@ -263,9 +266,30 @@ pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
         const diffs_ctx: []Context = try a.alloc(Context, diffs.len);
         for (diffs, diffs_ctx) |diff, *dctx| {
             var ctx: Context = Context.init(a);
-            try ctx.putSimple("Filename", diff.filename.right orelse "File Deleted");
+            switch (diff.header.change) {
+                .none => try ctx.putSimple("Filename", diff.filename orelse "Malformed Patch"),
+                .newfile => {
+                    try ctx.putSimple("Filename", "file was added");
+                },
+                .deletion => {
+                    try ctx.putSimple("Filename", try std.fmt.allocPrint(a, "{s} was Deleted", .{diff.filename.?}));
+                },
+                .copy => |copy| {
+                    try ctx.putSimple("Filename", try std.fmt.allocPrint(a, "{s} was copied to {s}", .{ copy.src, copy.dst }));
+                },
+                .rename => |rename| {
+                    try ctx.putSimple("Filename", try std.fmt.allocPrint(a, "{s} was renamed to {s}", .{ rename.src, rename.dst }));
+                },
+                .mode => try ctx.putSimple("Filename", "file mode change"),
+                .similarity => try ctx.putSimple("Filename", "similarity"),
+                .dissimilarity => try ctx.putSimple("Filename", "dissimilarity"),
+            }
             try ctx.putSimple("Additions", try std.fmt.allocPrint(a, "{}", .{diff.stat.additions}));
             try ctx.putSimple("Deletions", try std.fmt.allocPrint(a, "{}", .{diff.stat.deletions}));
+            try ctx.putSimple(
+                "DiffStat",
+                try std.fmt.allocPrint(a, "+{} -{}", .{ diff.stat.additions, diff.stat.deletions }),
+            );
             try ctx.putSimple("Diff", try diffLineSlice(a, diff.changes.?));
             dctx.* = ctx;
         }
@@ -412,8 +436,7 @@ test "diffsSlice" {
     defer a.free(diffs);
     try std.testing.expect(diffs.len == 2);
     const h = diffs[1];
-    try std.testing.expectEqualStrings(h.filename.left.?, "build.zig");
-    try std.testing.expectEqualStrings(h.filename.left.?, h.filename.right.?);
+    try std.testing.expectEqualStrings(h.filename.?, "build.zig");
 }
 
 test "parseMode" {
