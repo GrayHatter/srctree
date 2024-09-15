@@ -500,14 +500,15 @@ fn wrapLineNumbersBlame(
     for (blames, 0..) |line, i| {
         var ctx = Template.Context.init(a);
         const bcommit = map.get(line.sha) orelse unreachable;
-        try ctx.put("Sha", bcommit.sha[0..8]);
-        try ctx.put("Author", bcommit.author.name);
-        try ctx.put("Time", try Humanize.unix(bcommit.author.timestamp).printAlloc(a));
+        try ctx.putSimple("Sha", bcommit.sha[0..8]);
+        try ctx.putSimple("Author", Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable);
+        try ctx.putSimple("AuthorEmail", Bleach.sanitizeAlloc(a, bcommit.author.email, .{}) catch unreachable);
+        try ctx.putSimple("Time", try Humanize.unix(bcommit.author.timestamp).printAlloc(a));
         const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
-        try ctx.put("Num", b[2..]);
-        try ctx.put("Id", b[1..]);
-        try ctx.put("Href", b);
-        try ctx.put("Line", line.line);
+        try ctx.putSimple("Num", b[2..]);
+        try ctx.putSimple("Id", b[1..]);
+        try ctx.putSimple("Href", b);
+        try ctx.putSimple("Line", line.line);
         tctx[i] = ctx;
     }
     return tctx;
