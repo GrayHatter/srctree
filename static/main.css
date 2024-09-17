@@ -381,6 +381,28 @@ delta.issue {
 	}
 }
 
+patchheader {
+	display: block;
+	width: 100%;
+	margin: auto;
+}
+
+patch {
+	& > header {
+		border-radius: 3px 3px 0 0;
+		border-top: #7a003f solid 1px;
+		background-color: #686868;
+		padding: 4px;
+		width: auto;
+	}
+	margin: 2rem 0 10rem;
+	border-radius: 4px 4px 0 0;
+	padding: 8px;
+
+	.del { background: #5b0000 }
+	.add { background: #003e00 }
+}
+
 patchrequest {
 	border: 1px solid gray;
 	display: block;
@@ -446,27 +468,6 @@ diff {
 		height: 25px;
 		padding: 4px 0 4px 12px;
 	}
-}
-
-patchheader {
-	display: block;
-	width: 100%;
-	margin: auto;
-}
-
-patch {
-	/* margin: 2rem 0 10rem; * /
-	border: 1px solid gray;
-	border-radius: 4px 4px 0 0;
-	white-space: pre;
-	text-align: left;
-	display: block;
-	background: #333;
-	padding: 8px;
-	font-family: monospace;
-
-	.del { background: #5b0000 }
-	.add { background: #003e00 } /* */
 }
 
 form.pretty {
