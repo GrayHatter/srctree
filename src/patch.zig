@@ -61,10 +61,10 @@ pub const Diff = struct {
         };
 
         fn parseMode(str: []const u8) !Mode {
-            std.debug.assert(str.len == 6);
-            std.debug.assert(str[0] == '1');
-            std.debug.assert(str[1] == '0');
-            std.debug.assert(str[2] == '0');
+            if (str.len < 6 or str[0] != '1' or str[1] != '0' or str[2] != '0') {
+                std.debug.print("invalid mode string found {s}\n", .{str});
+                return error.InvalidMode;
+            }
             var mode: Mode = .{ 0, 0, 0, 0 };
             for (str[3..6], mode[1..4]) |s, *m| switch (s) {
                 '0' => m.* = 0,
@@ -105,9 +105,9 @@ pub const Diff = struct {
                     } else if (startsWith(u8, current, "new mode ")) {
                         change = .{ .mode = undefined };
                     } else if (startsWith(u8, current, "deleted file mode ")) {
-                        change = .{ .deletion = try parseMode(current) };
+                        change = .{ .deletion = try parseMode(current["deleted file mode ".len..]) };
                     } else if (startsWith(u8, current, "new file mode ")) {
-                        change = .{ .newfile = try parseMode(current) };
+                        change = .{ .newfile = try parseMode(current["new file mode ".len..]) };
                     } else if (startsWith(u8, current, "copy from ")) {
                         change = .{ .copy = .{
                             .src = current["copy from ".len..nl],
