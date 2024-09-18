@@ -21,6 +21,32 @@ pub const Patch = @This();
 blob: []const u8,
 diffs: ?[]Diff = null,
 
+pub const FSPerm = packed struct(u8) {
+    read: bool,
+    write: bool,
+    execute: bool,
+    sticky: bool,
+    padding: u4,
+
+    pub const default: FSPerm = .{
+        .read = false,
+        .write = false,
+        .execute = false,
+        .stick = false,
+        .padding = 0,
+    };
+};
+
+test FSPerm {
+    var target: FSPerm = undefined;
+    const modify: *u8 = @ptrCast(&target);
+    modify.* = 7;
+    try std.testing.expectEqual(true, target.read);
+    try std.testing.expectEqual(true, target.write);
+    try std.testing.expectEqual(true, target.execute);
+    try std.testing.expectEqual(false, target.sticky);
+}
+
 pub const Diff = struct {
     blob: []const u8,
     header: Header,
@@ -46,6 +72,7 @@ pub const Diff = struct {
 
         const Change = union(enum) {
             none: void,
+            binary: void,
             newfile: Mode,
             deletion: Mode,
             copy: SrcDst,
@@ -283,6 +310,7 @@ pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
                 .mode => try ctx.putSimple("Filename", "file mode change"),
                 .similarity => try ctx.putSimple("Filename", "similarity"),
                 .dissimilarity => try ctx.putSimple("Filename", "dissimilarity"),
+                .binary => unreachable,
             }
             try ctx.putSimple("Additions", try std.fmt.allocPrint(a, "{}", .{diff.stat.additions}));
             try ctx.putSimple("Deletions", try std.fmt.allocPrint(a, "{}", .{diff.stat.deletions}));
