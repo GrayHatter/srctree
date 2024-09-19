@@ -187,7 +187,7 @@ pub fn builder(self: Comment) Template.Context.Builder(Comment) {
 pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void {
     try ctx.put("Author", try Bleach.sanitizeAlloc(a, self.author, .{}));
     try ctx.put("Message", try Bleach.sanitizeAlloc(a, self.message, .{}));
-    try ctx.putSimple("Date", try allocPrint(a, "{}", .{Humanize.unix(self.updated)}));
+    try ctx.putSlice("Date", try allocPrint(a, "{}", .{Humanize.unix(self.updated)}));
 }
 
 pub fn open(a: Allocator, hash: []const u8) !Comment {

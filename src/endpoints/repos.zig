@@ -107,12 +107,12 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
         const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
         const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
         const header_nav = try ctx.alloc.dupe(Template.Context, &[2]Template.Context{
-            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Simple{
+            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
                 .{ .name = "Name", .value = "issues" },
                 .{ .name = "Url", .value = issueurl },
                 .{ .name = "Extra", .value = issuecnt },
             }) catch return error.OutOfMemory,
-            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Simple{
+            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
                 .{ .name = "Name", .value = "diffs" },
                 .{ .name = "Url", .value = diffurl },
                 .{ .name = "Extra", .value = diffcnt },
@@ -277,7 +277,7 @@ fn treeBlob(ctx: *Context) Error!void {
         var upstream = [_]Template.Context{
             Template.Context.init(ctx.alloc),
         };
-        upstream[0].putSimple("URI", up) catch return error.Unknown;
+        upstream[0].putSlice("URI", up) catch return error.Unknown;
         ctx.putContext("Upstream", .{ .block = upstream[0..] }) catch return error.Unknown;
     }
 
@@ -285,12 +285,12 @@ fn treeBlob(ctx: *Context) Error!void {
         Template.Context.init(ctx.alloc),
     };
 
-    opengraph[0].putSimple("Title", rd.name) catch return error.Unknown;
+    opengraph[0].putSlice("Title", rd.name) catch return error.Unknown;
     var desc = repo.description(ctx.alloc) catch return error.Unknown;
     if (std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
         desc = try aPrint(ctx.alloc, "An Indescribable with {s} commits", .{"[todo count commits]"});
     }
-    try opengraph[0].putSimple("Desc", desc);
+    try opengraph[0].putSlice("Desc", desc);
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
     const cmt = repo.headCommit(ctx.alloc) catch return newRepo(ctx);
@@ -500,15 +500,15 @@ fn wrapLineNumbersBlame(
     for (blames, 0..) |line, i| {
         var ctx = Template.Context.init(a);
         const bcommit = map.get(line.sha) orelse unreachable;
-        try ctx.putSimple("Sha", bcommit.sha[0..8]);
-        try ctx.putSimple("Author", Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable);
-        try ctx.putSimple("AuthorEmail", Bleach.sanitizeAlloc(a, bcommit.author.email, .{}) catch unreachable);
-        try ctx.putSimple("Time", try Humanize.unix(bcommit.author.timestamp).printAlloc(a));
+        try ctx.putSlice("Sha", bcommit.sha[0..8]);
+        try ctx.putSlice("Author", Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable);
+        try ctx.putSlice("AuthorEmail", Bleach.sanitizeAlloc(a, bcommit.author.email, .{}) catch unreachable);
+        try ctx.putSlice("Time", try Humanize.unix(bcommit.author.timestamp).printAlloc(a));
         const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
-        try ctx.putSimple("Num", b[2..]);
-        try ctx.putSimple("Id", b[1..]);
-        try ctx.putSimple("Href", b);
-        try ctx.putSimple("Line", line.line);
+        try ctx.putSlice("Num", b[2..]);
+        try ctx.putSlice("Id", b[1..]);
+        try ctx.putSlice("Href", b);
+        try ctx.putSlice("Line", line.line);
         tctx[i] = ctx;
     }
     return tctx;

@@ -48,7 +48,7 @@ pub fn router(ctx: *Context) Callable {
 
     const inboxcnt = allocPrint(ctx.alloc, "{}", .{i_count}) catch unreachable;
     const header_nav = ctx.alloc.dupe(Template.Context, &[1]Template.Context{
-        Template.Context.initWith(ctx.alloc, &[3]Template.Context.Simple{
+        Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
             .{ .name = "Name", .value = "inbox" },
             .{ .name = "Url", .value = "/inbox" },
             .{ .name = "Extra", .value = inboxcnt },

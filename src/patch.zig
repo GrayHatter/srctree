@@ -294,31 +294,31 @@ pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
         for (diffs, diffs_ctx) |diff, *dctx| {
             var ctx: Context = Context.init(a);
             switch (diff.header.change) {
-                .none => try ctx.putSimple("Filename", diff.filename orelse "Malformed Patch"),
+                .none => try ctx.putSlice("Filename", diff.filename orelse "Malformed Patch"),
                 .newfile => {
-                    try ctx.putSimple("Filename", "file was added");
+                    try ctx.putSlice("Filename", "file was added");
                 },
                 .deletion => {
-                    try ctx.putSimple("Filename", try std.fmt.allocPrint(a, "{s} was Deleted", .{diff.filename.?}));
+                    try ctx.putSlice("Filename", try std.fmt.allocPrint(a, "{s} was Deleted", .{diff.filename.?}));
                 },
                 .copy => |copy| {
-                    try ctx.putSimple("Filename", try std.fmt.allocPrint(a, "{s} was copied to {s}", .{ copy.src, copy.dst }));
+                    try ctx.putSlice("Filename", try std.fmt.allocPrint(a, "{s} was copied to {s}", .{ copy.src, copy.dst }));
                 },
                 .rename => |rename| {
-                    try ctx.putSimple("Filename", try std.fmt.allocPrint(a, "{s} was renamed to {s}", .{ rename.src, rename.dst }));
+                    try ctx.putSlice("Filename", try std.fmt.allocPrint(a, "{s} was renamed to {s}", .{ rename.src, rename.dst }));
                 },
-                .mode => try ctx.putSimple("Filename", "file mode change"),
-                .similarity => try ctx.putSimple("Filename", "similarity"),
-                .dissimilarity => try ctx.putSimple("Filename", "dissimilarity"),
+                .mode => try ctx.putSlice("Filename", "file mode change"),
+                .similarity => try ctx.putSlice("Filename", "similarity"),
+                .dissimilarity => try ctx.putSlice("Filename", "dissimilarity"),
                 .binary => unreachable,
             }
-            try ctx.putSimple("Additions", try std.fmt.allocPrint(a, "{}", .{diff.stat.additions}));
-            try ctx.putSimple("Deletions", try std.fmt.allocPrint(a, "{}", .{diff.stat.deletions}));
-            try ctx.putSimple(
+            try ctx.putSlice("Additions", try std.fmt.allocPrint(a, "{}", .{diff.stat.additions}));
+            try ctx.putSlice("Deletions", try std.fmt.allocPrint(a, "{}", .{diff.stat.deletions}));
+            try ctx.putSlice(
                 "DiffStat",
                 try std.fmt.allocPrint(a, "+{} -{}", .{ diff.stat.additions, diff.stat.deletions }),
             );
-            try ctx.putSimple("Diff", try diffLineSlice(a, diff.changes.?));
+            try ctx.putSlice("Diff", try diffLineSlice(a, diff.changes.?));
             dctx.* = ctx;
         }
         return diffs_ctx;

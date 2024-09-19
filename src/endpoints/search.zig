@@ -87,7 +87,7 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
     try ctx.putContext("List", .{ .block = list.items });
     try ctx.putContext(
         "Search",
-        .{ .simple = Bleach.sanitizeAlloc(ctx.alloc, search_str, .{}) catch unreachable },
+        .{ .slice = Bleach.sanitizeAlloc(ctx.alloc, search_str, .{}) catch unreachable },
     );
     try ctx.sendTemplate(&tmpl);
 }

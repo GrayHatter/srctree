@@ -330,7 +330,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
     tmpl.init(ctx.alloc);
 
     try ctx.putContext("CurrentStreak", .{
-        .simple = switch (streak) {
+        .slice = switch (streak) {
             0 => "One Day? Or Day One!",
             1 => "Day One!",
             else => try std.fmt.allocPrint(ctx.alloc, "{} Days{s}", .{
@@ -340,8 +340,8 @@ pub fn commitFlex(ctx: *Context) Error!void {
         },
     });
 
-    try ctx.putContext("TotalHits", .{ .simple = try std.fmt.allocPrint(ctx.alloc, "{}", .{tcount}) });
-    try ctx.putContext("CheckedRepos", .{ .simple = try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}) });
+    try ctx.putContext("TotalHits", .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{tcount}) });
+    try ctx.putContext("CheckedRepos", .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}) });
     _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
 
     std.sort.pdq(Scribe.Commit, scribe_list.items, {}, journalSorted);

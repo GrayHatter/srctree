@@ -22,15 +22,18 @@ fn validChar(c: u8) bool {
 
 const DEBUG = false;
 
+// TODO rename this to... uhhh Map maybe?
+//
 pub const Context = struct {
-    pub const Simple = struct {
+    pub const Pair = struct {
         name: []const u8,
         value: []const u8,
     };
 
     pub const Data = union(enum) {
-        simple: []const u8,
+        slice: []const u8,
         block: []Context,
+        reader: std.io.AnyReader,
     };
 
     pub const HashMap = std.StringHashMap(Data);
@@ -81,10 +84,10 @@ pub const Context = struct {
         };
     }
 
-    pub fn initWith(a: Allocator, data: []const Simple) !Context {
+    pub fn initWith(a: Allocator, data: []const Pair) !Context {
         var ctx = Context.init(a);
         for (data) |d| {
-            ctx.putSimple(d.name, d.value) catch |err| switch (err) {
+            ctx.putSlice(d.name, d.value) catch |err| switch (err) {
                 error.OutOfMemory => return err,
                 else => unreachable,
             };
@@ -103,7 +106,7 @@ pub const Context = struct {
         var itr = self.ctx.iterator();
         while (itr.next()) |*n| {
             switch (n.value_ptr.*) {
-                .simple => continue,
+                .slice, .reader => continue,
                 .block => |*block| for (block.*) |*b| b.raze(),
             }
         }
@@ -118,26 +121,27 @@ pub const Context = struct {
         return self.ctx.get(name);
     }
 
-    pub fn putSimple(self: *Context, name: []const u8, value: []const u8) !void {
+    pub fn putSlice(self: *Context, name: []const u8, value: []const u8) !void {
         if (comptime build_mode == .Debug)
             if (!std.ascii.isUpper(name[0]))
                 std.debug.print("Warning Template can't resolve {s}\n", .{name});
-        try self.putNext(name, .{ .simple = value });
+        try self.putNext(name, .{ .slice = value });
     }
 
-    pub fn getSimple(self: Context, name: []const u8) ?[]const u8 {
+    pub fn getSlice(self: Context, name: []const u8) ?[]const u8 {
         return switch (self.getNext(name) orelse return null) {
-            .simple => |s| s,
+            .slice => |s| s,
             .block => unreachable,
+            .reader => unreachable,
         };
     }
 
     pub fn put(self: *Context, name: []const u8, value: []const u8) !void {
-        try self.putSimple(name, value);
+        try self.putSlice(name, value);
     }
 
     pub fn get(self: Context, name: []const u8) ?[]const u8 {
-        return self.getSimple(name);
+        return self.getSlice(name);
     }
 
     /// Memory of block is managed by the caller. Calling raze will not free the
@@ -150,8 +154,8 @@ pub const Context = struct {
         return switch (self.getNext(name) orelse return null) {
             // I'm sure this hack will live forever, I'm abusing With to be
             // an IF here, without actually implementing IF... sorry!
-            //std.debug.print("Error: get [{s}] required Block, found simple\n", .{name});
-            .simple => return error.NotABlock,
+            //std.debug.print("Error: get [{s}] required Block, found slice\n", .{name});
+            .slice, .reader => return error.NotABlock,
             .block => |b| b,
         };
     }
@@ -176,7 +180,7 @@ pub const Template = struct {
     pub fn initWith(self: *Template, a: Allocator, data: []struct { name: []const u8, val: []const u8 }) !void {
         self.init(a);
         for (data) |d| {
-            try self.ctx.putSimple(d.name, d.value);
+            try self.ctx.putSlice(d.name, d.value);
         }
     }
 

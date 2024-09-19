@@ -75,7 +75,7 @@ pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     //        continue;
     //    };
     //    var ctx: Template.Context = Template.Context.init(a);
-    //    try ctx.putSimple("DiffStat", stat);
+    //    try ctx.putSlice("DiffStat", stat);
     //    {
     //        const changes = Patch.diffLine(a, body);
     //        const list = try a.alloc([]u8, changes.len);
@@ -85,7 +85,7 @@ pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     //        }
     //        defer for (list) |l| a.free(l);
     //        const value = try std.mem.join(a, "", list);
-    //        try ctx.putSimple("Diff", value);
+    //        try ctx.putSlice("Diff", value);
     //    }
     //    file.* = ctx;
     //}
@@ -207,14 +207,14 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     };
 
     const diffstat = patch.patchStat();
-    try opengraph[0].putSimple("Title", try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
+    try opengraph[0].putSlice("Title", try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
         Bleach.sanitizeAlloc(ctx.alloc, current.author.name, .{}) catch unreachable,
         diffstat.files,
         if (diffstat.files > 1) "s" else "",
         diffstat.additions,
         diffstat.deletions,
     }));
-    try opengraph[0].putSimple("Desc", Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable);
+    try opengraph[0].putSlice("Desc", Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable);
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
     var tmpl = Template.find("commit.html");
@@ -267,16 +267,16 @@ pub fn commit(ctx: *Context) Error!void {
 pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Context {
     var ctx = Template.Context.init(a);
 
-    try ctx.putSimple("Author", Bleach.sanitizeAlloc(a, c.author.name, .{}) catch unreachable);
+    try ctx.putSlice("Author", Bleach.sanitizeAlloc(a, c.author.name, .{}) catch unreachable);
     // TODO construct parent list
     const prnt = c.parent[0] orelse "00000000";
-    try ctx.putSimple("Parent_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, prnt[0..8] }));
-    try ctx.putSimple("Parent_Sha_Short", try a.dupe(u8, prnt[0..8]));
-    try ctx.putSimple("Sha_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
-    try ctx.putSimple("Sha", try a.dupe(u8, c.sha));
-    try ctx.putSimple("Sha_Short", try a.dupe(u8, c.sha[0..8]));
-    try ctx.putSimple("Title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
-    try ctx.putSimple("Body", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
+    try ctx.putSlice("Parent_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, prnt[0..8] }));
+    try ctx.putSlice("Parent_Sha_Short", try a.dupe(u8, prnt[0..8]));
+    try ctx.putSlice("Sha_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
+    try ctx.putSlice("Sha", try a.dupe(u8, c.sha));
+    try ctx.putSlice("Sha_Short", try a.dupe(u8, c.sha[0..8]));
+    try ctx.putSlice("Title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
+    try ctx.putSlice("Body", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
     return ctx;
 }
 

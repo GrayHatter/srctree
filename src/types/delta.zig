@@ -194,7 +194,7 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
     }));
 
     if (self.thread) |thread| if (thread.getComments()) |comments| {
-        try ctx.putSimple(
+        try ctx.putSlice(
             "Comments_icon",
             try std.fmt.allocPrint(a, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{comments.len}),
         );

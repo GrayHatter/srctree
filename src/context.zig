@@ -58,7 +58,7 @@ pub fn putContext(ctx: *Context, name: []const u8, val: Template.Context.Data) !
 
 /// Kept for compat, please use putContext
 pub fn addRouteVar(ctx: *Context, name: []const u8, val: []const u8) !void {
-    try ctx.putContext(name, .{ .simple = val });
+    try ctx.putContext(name, .{ .slice = val });
 }
 
 /// TODO fix these unreachable, currently debugging
