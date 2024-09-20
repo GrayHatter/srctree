@@ -39,6 +39,10 @@ pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8, opts: Options) Error!
     return try sanitize(in, out, opts);
 }
 
+pub fn streamSanitizer(a: std.mem.Allocator, src: anytype, opts: Options) StreamSanitizer {
+    return StreamSanitizer(@TypeOf(src)).init(a, src, opts);
+}
+
 /// if an error is encountered, `out` is undefined
 pub fn sanitize(in: []const u8, out: []u8, opts: Options) Error![]u8 {
     const func = opts.rules.func();
@@ -51,21 +55,20 @@ pub fn sanitize(in: []const u8, out: []u8, opts: Options) Error![]u8 {
     return out[0..pos];
 }
 
-pub fn StreamSanitizer(comptime Context: type) type {
+pub fn StreamSanitizer(comptime Source: type) type {
     return struct {
         const Self = @This();
 
-        pub const StreamError = Context.Error || Error;
-
         alloc: std.mem.Allocator,
-        context: Context,
+        context: Source,
+        index: usize,
         src_opts: Options,
         sanitizer: RuleFn,
 
-        fn init(a: std.mem.Allocator, reader: Context, opts: Options) Self {
+        fn init(a: std.mem.Allocator, src: Source, opts: Options) Self {
             return Self{
                 .alloc = a,
-                .src_reader = reader,
+                .src = src,
                 .src_opts = opts,
                 .sanitizer = opts.rules.func(),
             };
@@ -81,20 +84,16 @@ pub fn StreamSanitizer(comptime Context: type) type {
         }
 
         pub fn typeErasedReadFn(context: *const anyopaque, buffer: []u8) anyerror!usize {
-            const ptr: *const Context = @alignCast(@ptrCast(context));
+            const ptr: *const Source = @alignCast(@ptrCast(context));
             return read(ptr.*, buffer);
         }
 
-        pub fn read(self: *Self, buffer: []u8) StreamError!usize {
-            _ = self;
-            _ = buffer;
-            return error.NotImplemented;
+        pub fn read(self: *Self, buffer: []u8) Error!usize {
+            const count = try self.sanitizer(self.src[self.index..], buffer);
+            self.index += count;
+            return count;
         }
     };
-}
-
-pub fn streamSanitizer(a: std.mem.Allocator, reader: anytype, opts: Options) StreamSanitizer {
-    return StreamSanitizer(@TypeOf(reader)).init(a, reader, opts);
 }
 
 fn bleachFilename(in: u8, out: ?[]u8) Error!usize {
