@@ -39,8 +39,8 @@ pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8, opts: Options) Error!
     return try sanitize(in, out, opts);
 }
 
-pub fn streamSanitizer(a: std.mem.Allocator, src: anytype, opts: Options) StreamSanitizer {
-    return StreamSanitizer(@TypeOf(src)).init(a, src, opts);
+pub fn streamSanitizer(src: anytype, opts: Options) StreamSanitizer(@TypeOf(src)) {
+    return StreamSanitizer(@TypeOf(src)).init(src, opts);
 }
 
 /// if an error is encountered, `out` is undefined
@@ -59,15 +59,14 @@ pub fn StreamSanitizer(comptime Source: type) type {
     return struct {
         const Self = @This();
 
-        alloc: std.mem.Allocator,
-        context: Source,
         index: usize,
+        src: Source,
         src_opts: Options,
         sanitizer: RuleFn,
 
-        fn init(a: std.mem.Allocator, src: Source, opts: Options) Self {
+        fn init(src: Source, opts: Options) Self {
             return Self{
-                .alloc = a,
+                .index = 0,
                 .src = src,
                 .src_opts = opts,
                 .sanitizer = opts.rules.func(),
