@@ -24,16 +24,16 @@ const Scribe = struct {
 
         pub fn toContext(self: Commit, a: Allocator) !Template.Context {
             var jctx = Template.Context.init(a);
-            try jctx.put("Name", self.name);
-            try jctx.put("Repo", self.repo);
-            try jctx.put("Title", self.title);
-            try jctx.put("Date", try std.fmt.allocPrint(
+            try jctx.putSlice("Name", self.name);
+            try jctx.putSlice("Repo", self.repo);
+            try jctx.putSlice("Title", self.title);
+            try jctx.putSlice("Date", try std.fmt.allocPrint(
                 a,
                 "<span>{Y-m-d}</span><span>{day}</span><span>{time}</span>",
                 .{ self.date, self.date, self.date },
             ));
-            try jctx.put("ShaLong", self.sha);
-            try jctx.put("Sha", self.sha[0..8]);
+            try jctx.putSlice("ShaLong", self.sha);
+            try jctx.putSlice("Sha", self.sha[0..8]);
             return jctx;
         }
     };
@@ -342,7 +342,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     try ctx.putContext("TotalHits", .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{tcount}) });
     try ctx.putContext("CheckedRepos", .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}) });
-    _ = tmpl.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
+    _ = ctx.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
 
     std.sort.pdq(Scribe.Commit, scribe_list.items, {}, journalSorted);
 
@@ -374,9 +374,9 @@ pub fn commitFlex(ctx: *Context) Error!void {
         }
 
         var today_grp = Template.Context.init(ctx.alloc);
-        try today_grp.put("Group", "Today");
+        try today_grp.putSlice("Group", "Today");
         if (todays.items.len > 1) {
-            try today_grp.put("Lead", try std.fmt.allocPrint(
+            try today_grp.putSlice("Lead", try std.fmt.allocPrint(
                 ctx.alloc,
                 "{} commits today",
                 .{todays.items.len},
@@ -386,9 +386,9 @@ pub fn commitFlex(ctx: *Context) Error!void {
         try today_grp.putBlock("Rows", todays.items);
         try groups.append(today_grp);
         var yesterday_grp = Template.Context.init(ctx.alloc);
-        try yesterday_grp.put("Group", "Yesterday");
+        try yesterday_grp.putSlice("Group", "Yesterday");
         if (yesterdays.items.len > 1) {
-            try yesterday_grp.put("Lead", try std.fmt.allocPrint(
+            try yesterday_grp.putSlice("Lead", try std.fmt.allocPrint(
                 ctx.alloc,
                 "{} commits yesterday",
                 .{yesterdays.items.len},
@@ -397,16 +397,16 @@ pub fn commitFlex(ctx: *Context) Error!void {
         try yesterday_grp.putBlock("Rows", yesterdays.items);
         try groups.append(yesterday_grp);
         var last_weeks_grp = Template.Context.init(ctx.alloc);
-        try last_weeks_grp.put("Group", "Last Week");
+        try last_weeks_grp.putSlice("Group", "Last Week");
         try last_weeks_grp.putBlock("Rows", last_weeks.items);
         try groups.append(last_weeks_grp);
         var last_months_grp = Template.Context.init(ctx.alloc);
-        try last_months_grp.put("Group", "Last Month");
+        try last_months_grp.putSlice("Group", "Last Month");
         try last_months_grp.putBlock("Rows", last_months.items);
         try groups.append(last_months_grp);
 
         // TODO sort by date
-        try tmpl.ctx.?.putBlock("Months", groups.items);
+        try ctx.putContext("Months", .{ .block = groups.items });
     }
 
     return ctx.sendTemplate(&tmpl) catch unreachable;

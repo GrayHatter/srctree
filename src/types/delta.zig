@@ -183,11 +183,11 @@ pub fn builder(self: Delta) Template.Context.Builder(Delta) {
 }
 
 pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
-    try ctx.put("Title", try Bleach.sanitizeAlloc(a, self.title, .{}));
-    try ctx.put("Desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
+    try ctx.putSlice("Title", try Bleach.sanitizeAlloc(a, self.title, .{}));
+    try ctx.putSlice("Desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
 
-    try ctx.put("Index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
-    try ctx.put("Title_uri", try std.fmt.allocPrint(a, "/repo/{s}/{s}/{x}", .{
+    try ctx.putSlice("Index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
+    try ctx.putSlice("Title_uri", try std.fmt.allocPrint(a, "/repo/{s}/{s}/{x}", .{
         self.repo,
         if (self.attach == .issue) "issues" else "diffs",
         self.index,

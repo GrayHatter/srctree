@@ -27,7 +27,7 @@ pub fn diffs(ctx: *Context) Error!void {
 
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
-    _ = tmpl.addElements(ctx.alloc, "todos", data) catch unreachable;
+    _ = ctx.addElements(ctx.alloc, "todos", data) catch unreachable;
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 

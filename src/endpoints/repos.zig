@@ -236,7 +236,7 @@ fn list(ctx: *Context) Error!void {
         const data = dom.done();
         var tmpl = Template.find("repos.html");
         tmpl.init(ctx.alloc);
-        _ = tmpl.addElements(ctx.alloc, "Repos", data) catch return Error.Unknown;
+        _ = ctx.addElements(ctx.alloc, "Repos", data) catch return Error.Unknown;
 
         try ctx.sendTemplate(&tmpl);
     } else |err| {
@@ -256,7 +256,7 @@ fn newRepo(ctx: *Context) Error!void {
     var tmpl = Template.find("repo.html");
     tmpl.init(ctx.alloc);
 
-    tmpl.addVar("Files", "<h3>New Repo!</h3><p>Todo, add content here</p>") catch return error.Unknown;
+    ctx.putContext("Files", .{ .slice = "<h3>New Repo!</h3><p>Todo, add content here</p>" }) catch return error.Unknown;
     ctx.response.status = .ok;
 
     try ctx.sendTemplate(&tmpl);
@@ -439,7 +439,7 @@ fn blame(ctx: *Context) Error!void {
 
     const tctx = try wrapLineNumbersBlame(ctx.alloc, parsed.lines, parsed.map);
     for (tctx) |*c| {
-        try c.put("Repo_name", rd.name);
+        try c.putSlice("Repo_name", rd.name);
     }
 
     var tmpl = Template.find("blame.html");
@@ -447,7 +447,6 @@ fn blame(ctx: *Context) Error!void {
 
     try ctx.putContext("Blame_lines", .{ .block = tctx[0..] });
 
-    //tmpl.addVar("Filename", blame_file) catch return error.Unknown;
     ctx.response.status = .ok;
 
     try ctx.sendTemplate(&tmpl);
@@ -580,13 +579,13 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
         "{pretty}",
         .{HTML.div(data, &HTML.Attr.class("code-block"))},
     );
-    tmpl.addVar("Blob", filestr) catch return error.Unknown;
-    tmpl.addVar("Filename", blb.name) catch return error.Unknown;
+    ctx.putContext("Blob", .{ .slice = filestr }) catch return error.Unknown;
+    ctx.putContext("Filename", .{ .slice = blb.name }) catch return error.Unknown;
     ctx.uri.reset();
     _ = ctx.uri.next();
-    tmpl.addVar("Repo", ctx.uri.next() orelse "unknown") catch return error.Unknown;
+    ctx.putContext("Repo", .{ .slice = ctx.uri.next() orelse "unknown" }) catch return error.Unknown;
     _ = ctx.uri.next();
-    tmpl.addVar("Uri_filename", ctx.uri.rest()) catch return error.Unknown;
+    ctx.putContext("Uri_filename", .{ .slice = ctx.uri.rest() }) catch return error.Unknown;
 
     ctx.response.status = .ok;
 
@@ -685,7 +684,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
         .branch => |b| b.name,
         else => "unknown",
     } else "unknown";
-    tmpl.addVar("Branch.default", head) catch return error.Unknown;
+    ctx.putContext("Branch.default", .{ .slice = head }) catch return error.Unknown;
 
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     ctx.uri.reset();
@@ -749,7 +748,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
     dom = dom.close();
     const data = dom.done();
-    _ = tmpl.addElements(ctx.alloc, "Repo", data) catch return error.Unknown;
+    _ = ctx.addElements(ctx.alloc, "Repo", data) catch return error.Unknown;
 
     for (files.objects) |obj| {
         if (isReadme(obj.name)) {
@@ -757,7 +756,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
             var reader = resolve.reader();
             const readme_txt = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
             const readme = htmlReadme(ctx.alloc, readme_txt) catch unreachable;
-            _ = tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Readme", readme) catch return error.Unknown;
+            _ = ctx.addElementsFmt(ctx.alloc, "{pretty}", "Readme", readme) catch return error.Unknown;
             break;
         }
     }

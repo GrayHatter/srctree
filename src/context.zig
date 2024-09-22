@@ -50,8 +50,37 @@ pub fn init(a: Allocator, cfg: ?Config, req: Request, res: Response, req_data: R
     };
 }
 
+const HTML = @import("html.zig");
+
+/// TODO Remove thes    /// caller owns of the returned slice, freeing the data before the final use is undefined
+pub fn addElements(ctx: *Context, a: Allocator, name: []const u8, els: []const HTML.Element) !void {
+    return ctx.addElementsFmt(a, "{}", name, els);
+}
+
+/// caller owns of the returned slice, freeing the data before the final use is undefined
+pub fn addElementsFmt(
+    ctx: *Context,
+    a: Allocator,
+    comptime fmt: []const u8,
+    name: []const u8,
+    els: []const HTML.Element,
+) !void {
+    const list = try a.alloc([]u8, els.len);
+    defer a.free(list);
+    for (list, els) |*l, e| {
+        l.* = try std.fmt.allocPrint(a, fmt, .{e});
+    }
+    defer {
+        for (list) |l| a.free(l);
+    }
+    const value = try std.mem.join(a, "", list);
+
+    // TODO FIXME plz
+    try ctx.template_ctx.put(name, .{ .slice = value });
+}
+
 pub fn putContext(ctx: *Context, name: []const u8, val: Template.Context.Data) !void {
-    ctx.template_ctx.putNext(name, val) catch |err| switch (err) {
+    ctx.template_ctx.put(name, val) catch |err| switch (err) {
         error.OutOfMemory => return err,
     };
 }
@@ -68,9 +97,9 @@ pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
         else => unreachable,
     };
     const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
-    try t.addVar("Header.auth", loggedin);
+    try ctx.putContext("Header.auth", .{ .slice = loggedin });
     if (ctx.request.auth.user(ctx.alloc)) |usr| {
-        try t.addVar("Current_username", usr.username);
+        try ctx.putContext("Current_username", .{ .slice = usr.username });
     } else |_| {}
     //
     const page = try t.buildFor(ctx.alloc, ctx.template_ctx);

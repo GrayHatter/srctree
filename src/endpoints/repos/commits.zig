@@ -326,16 +326,16 @@ pub fn htmlCommit(a: Allocator, c: Git.Commit, repo: []const u8, comptime top: b
 fn commitContext(a: Allocator, c: Git.Commit, repo: []const u8, comptime _: bool) !Template.Context {
     var ctx = Template.Context.init(a);
 
-    try ctx.put("Sha", c.sha[0..8]);
-    try ctx.put("Uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
+    try ctx.putSlice("Sha", c.sha[0..8]);
+    try ctx.putSlice("Uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
     // TODO handle error.NotImplemented
-    try ctx.put("Msg_title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
-    try ctx.put("Msg", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
+    try ctx.putSlice("Msg_title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
+    try ctx.putSlice("Msg", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
     //if (top) "top" else "foot", null, null));
     const parent = c.parent[0] orelse "00000000";
-    try ctx.put("Author", c.author.name);
-    try ctx.put("Parent", parent[0..8]);
-    try ctx.put("Parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, parent[0..8] }));
+    try ctx.putSlice("Author", c.author.name);
+    try ctx.putSlice("Parent", parent[0..8]);
+    try ctx.putSlice("Parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, parent[0..8] }));
     return ctx;
 }
 
@@ -445,9 +445,9 @@ fn sendCommits(ctx: *Context, list: []Template.Context, before_txt: []const u8) 
     var tmpl = Template.find("commit-list.html");
     tmpl.init(ctx.alloc);
 
-    try tmpl.ctx.?.putBlock("Commits", list);
+    try ctx.putContext("Commits", .{ .block = list });
 
-    _ = tmpl.addElements(ctx.alloc, "After", &[_]HTML.E{
+    _ = ctx.addElements(ctx.alloc, "After", &[_]HTML.E{
         try HTML.linkBtnAlloc(ctx.alloc, "More", before_txt),
     }) catch return error.Unknown;
 

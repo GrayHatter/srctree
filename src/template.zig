@@ -113,11 +113,11 @@ pub const Context = struct {
         self.ctx.deinit();
     }
 
-    pub fn putNext(self: *Context, name: []const u8, value: Data) !void {
+    pub fn put(self: *Context, name: []const u8, value: Data) !void {
         try self.ctx.put(name, value);
     }
 
-    pub fn getNext(self: Context, name: []const u8) ?Data {
+    pub fn get(self: Context, name: []const u8) ?Data {
         return self.ctx.get(name);
     }
 
@@ -125,7 +125,7 @@ pub const Context = struct {
         if (comptime build_mode == .Debug)
             if (!std.ascii.isUpper(name[0]))
                 std.debug.print("Warning Template can't resolve {s}\n", .{name});
-        try self.putNext(name, .{ .slice = value });
+        try self.ctx.put(name, .{ .slice = value });
     }
 
     pub fn getSlice(self: Context, name: []const u8) ?[]const u8 {
@@ -136,28 +136,32 @@ pub const Context = struct {
         };
     }
 
-    pub fn put(self: *Context, name: []const u8, value: []const u8) !void {
-        try self.putSlice(name, value);
-    }
-
-    pub fn get(self: Context, name: []const u8) ?[]const u8 {
-        return self.getSlice(name);
-    }
-
     /// Memory of block is managed by the caller. Calling raze will not free the
     /// memory from within.
     pub fn putBlock(self: *Context, name: []const u8, block: []Context) !void {
-        try self.putNext(name, .{ .block = block });
+        try self.ctx.put(name, .{ .block = block });
     }
 
     pub fn getBlock(self: Context, name: []const u8) !?[]const Context {
-        return switch (self.getNext(name) orelse return null) {
+        return switch (self.ctx.get(name) orelse return null) {
             // I'm sure this hack will live forever, I'm abusing With to be
             // an IF here, without actually implementing IF... sorry!
             //std.debug.print("Error: get [{s}] required Block, found slice\n", .{name});
             .slice, .reader => return error.NotABlock,
             .block => |b| b,
         };
+    }
+
+    pub fn putReader(self: *Context, name: []const u8, value: []const u8) !void {
+        try self.putSlice(name, value);
+    }
+
+    pub fn getReader(self: Context, name: []const u8) ?std.io.AnyReader {
+        switch (self.ctx.get(name) orelse return null) {
+            .slice, .block => return error.NotAReader,
+            .reader => |r| return r,
+        }
+        comptime unreachable;
     }
 };
 
@@ -188,57 +192,15 @@ pub const Template = struct {
         self.ctx.raze();
     }
 
-    /// caller owns of the returned slice, freeing the data before the final use is undefined
-    pub fn addElements(self: *Template, a: Allocator, name: []const u8, els: []const HTML.Element) !void {
-        return self.addElementsFmt(a, "{}", name, els);
-    }
-
-    /// caller owns of the returned slice, freeing the data before the final use is undefined
-    pub fn addElementsFmt(
-        self: *Template,
-        a: Allocator,
-        comptime fmt: []const u8,
-        name: []const u8,
-        els: []const HTML.Element,
-    ) !void {
-        const list = try a.alloc([]u8, els.len);
-        defer a.free(list);
-        for (list, els) |*l, e| {
-            l.* = try std.fmt.allocPrint(a, fmt, .{e});
-        }
-        defer {
-            for (list) |l| a.free(l);
-        }
-        const value = try std.mem.join(a, "", list);
-
-        try self.ctx.?.put(name, value);
-    }
-
-    /// Deprecated, use addString
-    pub fn addVar(self: *Template, name: []const u8, value: []const u8) !void {
-        return self.addString(name, value);
-    }
-
     pub fn addString(self: *Template, name: []const u8, value: []const u8) !void {
-        try self.ctx.?.put(name, value);
-    }
-
-    pub fn build(self: *Template, ext_a: ?Allocator) ![]u8 {
-        const a = ext_a orelse self.alloc orelse unreachable; // return error.AllocatorInvalid;
-        return std.fmt.allocPrint(a, "{}", .{self});
+        try self.ctx.?.putSlice(name, value);
     }
 
     pub fn buildFor(self: *Template, a: Allocator, ctx: Context) ![]u8 {
-        var template = self.*;
-        if (template.ctx) |_| {
-            var itr = ctx.ctx.iterator();
-            while (itr.next()) |n| {
-                try template.ctx.?.putNext(n.key_ptr.*, n.value_ptr.*);
-            }
-        } else {
-            template.ctx = ctx;
-        }
-        return try template.build(a);
+        var template: Template = self.*;
+        template.alloc = a;
+        template.ctx = ctx;
+        return std.fmt.allocPrint(a, "{}", .{template});
     }
 
     fn templateSearch() bool {
@@ -380,7 +342,11 @@ pub const Template = struct {
                         .noun => |noun| {
                             const var_name = noun.vari;
                             if (ctx.get(var_name)) |v_blob| {
-                                try out.writeAll(v_blob);
+                                switch (v_blob) {
+                                    .slice => |s_blob| try out.writeAll(s_blob),
+                                    .block => |_| unreachable,
+                                    .reader => |_| unreachable,
+                                }
                                 blob = blob[end..];
                             } else {
                                 if (DEBUG) std.debug.print("[missing var {s}]\n", .{var_name});
@@ -637,7 +603,7 @@ test "directive something" {
     };
 
     var ctx = Context.init(a);
-    try ctx.put("Something", "Some Text Here");
+    try ctx.putSlice("Something", "Some Text Here");
     defer ctx.raze();
     const page = try t.buildFor(a, ctx);
     defer a.free(page);
@@ -741,7 +707,7 @@ test "directive For" {
     var blocks: [1]Context = [1]Context{
         Context.init(a),
     };
-    try blocks[0].put("Name", "not that");
+    try blocks[0].putSlice("Name", "not that");
     // We have to raze because it will be over written
     defer blocks[0].raze();
     try ctx.putBlock("Loop", &blocks);
@@ -757,8 +723,8 @@ test "directive For" {
     };
     // what... 2 is many
 
-    try many_blocks[0].put("Name", "first");
-    try many_blocks[1].put("Name", "second");
+    try many_blocks[0].putSlice("Name", "first");
+    try many_blocks[1].putSlice("Name", "second");
 
     try ctx.putBlock("Loop", &many_blocks);
 
@@ -814,7 +780,7 @@ test "directive For & For" {
         Context.init(a),
     };
 
-    try outer[0].put("Name", "Alice");
+    try outer[0].putSlice("Name", "Alice");
     //defer outer[0].raze();
 
     var arena = std.heap.ArenaAllocator.init(a);
@@ -827,20 +793,20 @@ test "directive For & For" {
     try outer[0].putBlock("Numbers", &alice_inner);
     for (0..3) |i| {
         alice_inner[i] = Context.init(a);
-        try alice_inner[i].put(
+        try alice_inner[i].putSlice(
             lput,
             try std.fmt.allocPrint(aa, "A{}", .{i}),
         );
     }
 
-    try outer[1].put("Name", "Bob");
+    try outer[1].putSlice("Name", "Bob");
     //defer outer[1].raze();
 
     var bob_inner: [3]Context = undefined;
     try outer[1].putBlock("Numbers", &bob_inner);
     for (0..3) |i| {
         bob_inner[i] = Context.init(a);
-        try bob_inner[i].put(
+        try bob_inner[i].putSlice(
             lput,
             try std.fmt.allocPrint(aa, "B{}", .{i}),
         );
@@ -885,7 +851,7 @@ test "directive With" {
     var thing = [1]Context{
         Context.init(a),
     };
-    try thing[0].put("Thing", "THING");
+    try thing[0].putSlice("Thing", "THING");
     try ctx.putBlock("Thing", &thing);
 
     const expected_thing: []const u8 =

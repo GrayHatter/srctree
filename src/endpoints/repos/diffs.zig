@@ -112,7 +112,6 @@ fn newPost(ctx: *Context) Error!void {
 
     var tmpl = Template.find("diff-new.html");
     tmpl.init(ctx.alloc);
-    try tmpl.addVar("diff", "new data attempting");
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -169,7 +168,7 @@ fn view(ctx: *Context) Error!void {
     dom = dom.close();
     dom = dom.close();
 
-    _ = try tmpl.addElements(ctx.alloc, "Patch_header", dom.done());
+    _ = try ctx.addElements(ctx.alloc, "Patch_header", dom.done());
 
     // meme saved to protect history
     //for ([_]Comment{ .{
@@ -193,7 +192,7 @@ fn view(ctx: *Context) Error!void {
         @panic("oops");
     }
 
-    try tmpl.ctx.?.put("Delta_id", delta_id);
+    try ctx.putContext("Delta_id", .{ .slice = delta_id });
 
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     const file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
@@ -201,7 +200,7 @@ fn view(ctx: *Context) Error!void {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         var patch = Patch.Patch.init(fdata);
         const patch_html = try Commits.patchHtml(ctx.alloc, &patch);
-        _ = try tmpl.addElementsFmt(ctx.alloc, "{pretty}", "Patch", patch_html);
+        _ = try ctx.addElementsFmt(ctx.alloc, "{pretty}", "Patch", patch_html);
         f.close();
     } else try tmpl.addString("Patch", "Patch not found");
 
@@ -228,7 +227,7 @@ fn list(ctx: *Context) Error!void {
         builder.build(ctx.alloc, delta_ctx) catch unreachable;
         _ = d.loadThread(ctx.alloc) catch unreachable;
         if (d.getComments(ctx.alloc)) |cmts| {
-            try delta_ctx.put(
+            try delta_ctx.putSlice(
                 "Comments_icon",
                 try std.fmt.allocPrint(ctx.alloc, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{cmts.len}),
             );
@@ -238,6 +237,6 @@ fn list(ctx: *Context) Error!void {
     }
     var tmpl = Template.find("deltalist.html");
     tmpl.init(ctx.alloc);
-    try tmpl.ctx.?.putBlock("List", tmpl_ctx[0..end]);
+    try ctx.putContext("List", .{ .block = tmpl_ctx[0..end] });
     try ctx.sendTemplate(&tmpl);
 }
