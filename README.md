@@ -57,4 +57,20 @@ In an unsorted order
   - [ ] API for dynamic updates
   - [ ] Integration with other web VCS
   - [ ] Improve CSS theme
-  - [ ] git PGP support
+  - [ ] git (native support)
+    - [x] raw blob
+    - [x] packed blob
+    - [-] tree/blob
+      - [x] read
+      - [ ] write
+    - [x] packed delta
+    - [ ] tags
+    - [ ] refs
+    - [ ] remotes
+    - [x] git web (partial)
+    - [ ] PGP support
+    - [ ] commitish (see git.zig)
+    - [ ] .git repo init
+    - [ ] push/pull
+    - [ ] blame
+    - [ ] diff/patch generation
