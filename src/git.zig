@@ -812,7 +812,9 @@ pub const Commit = struct {
     blob: []const u8,
     sha: SHA,
     tree: SHA,
-    parent: [3]?SHA,
+    /// 9 ought to be enough for anyone... or at least robinli ... at least for a while
+    /// TODO fix and make this dynamic
+    parent: [9]?SHA,
     author: Actor,
     committer: Actor,
     /// Raw message including the title and body
@@ -865,20 +867,22 @@ pub const Commit = struct {
         const sha = try a.dupe(u8, sha_in);
         const blob = try a.dupe(u8, data);
 
-        var self = try make(sha, blob);
+        var self = try make(sha, blob, a);
         self.alloc = a;
         return self;
     }
 
     pub fn init(sha: SHA, data: []const u8) !Commit {
-        return make(sha, data);
+        return make(sha, data, null);
     }
 
-    pub fn make(sha: SHA, data: []const u8) !Commit {
+    pub fn make(sha: SHA, data: []const u8, a: ?Allocator) !Commit {
+        _ = a;
         var lines = std.mem.split(u8, data, "\n");
         var self: Commit = undefined;
         self.repo = null;
-        self.parent = .{ null, null, null }; // I don't like it either, but... lazy
+        // I don't like it either, but... lazy
+        self.parent = .{ null, null, null, null, null, null, null, null, null };
         self.blob = data;
         while (lines.next()) |line| {
             if (std.mem.startsWith(u8, line, "gpgsig")) {

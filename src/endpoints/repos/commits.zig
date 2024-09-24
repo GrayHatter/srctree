@@ -268,10 +268,22 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Contex
     var ctx = Template.Context.init(a);
 
     try ctx.putSlice("Author", Bleach.sanitizeAlloc(a, c.author.name, .{}) catch unreachable);
-    // TODO construct parent list
-    const prnt = c.parent[0] orelse "00000000";
-    try ctx.putSlice("Parent_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, prnt[0..8] }));
-    try ctx.putSlice("Parent_Sha_Short", try a.dupe(u8, prnt[0..8]));
+    var plen: usize = 0;
+    for (c.parent) |cp| {
+        if (cp != null) plen += 1;
+    }
+    const parents = try a.alloc(Template.Context, plen);
+    errdefer a.free(parents);
+    for (parents, c.parent[0..plen]) |*par, par_cmt| {
+        // TODO leaks on err
+        var pctx = Template.Context.init(a);
+        if (par_cmt == null) continue;
+
+        try pctx.putSlice("Parent_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?[0..8] }));
+        try pctx.putSlice("Parent_Sha_Short", try a.dupe(u8, par_cmt.?[0..8]));
+        par.* = pctx;
+    }
+    try ctx.putBlock("Parents", parents);
     try ctx.putSlice("Sha_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
     try ctx.putSlice("Sha", try a.dupe(u8, c.sha));
     try ctx.putSlice("Sha_Short", try a.dupe(u8, c.sha[0..8]));
@@ -332,10 +344,19 @@ fn commitContext(a: Allocator, c: Git.Commit, repo: []const u8, comptime _: bool
     try ctx.putSlice("Msg_title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
     try ctx.putSlice("Msg", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
     //if (top) "top" else "foot", null, null));
-    const parent = c.parent[0] orelse "00000000";
     try ctx.putSlice("Author", c.author.name);
-    try ctx.putSlice("Parent", parent[0..8]);
-    try ctx.putSlice("Parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, parent[0..8] }));
+    const parents = try a.alloc(Template.Context, c.parent.len);
+    errdefer a.free(parents);
+    for (parents, c.parent) |*par, par_cmt| {
+        // TODO leaks on err
+        var pctx = Template.Context.init(a);
+        if (par_cmt == null) continue;
+
+        try pctx.putSlice("Parent", par_cmt.?[0..8]);
+        try pctx.putSlice("Parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?[0..8] }));
+        par.* = pctx;
+    }
+    try ctx.putBlock("Parents", parents);
     return ctx;
 }
 
