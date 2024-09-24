@@ -412,7 +412,7 @@ fn blame(ctx: *Context) Error!void {
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     defer repo.raze(ctx.alloc);
 
-    var actions = repo.getActions(ctx.alloc);
+    var actions = repo.getAgent(ctx.alloc);
     actions.cwd = cwd.openDir(fname, .{}) catch unreachable;
     const git_blame = actions.blame(blame_file) catch unreachable;
 

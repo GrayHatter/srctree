@@ -423,12 +423,12 @@ pub const Repo = struct {
 
     /// Dir name must be relative (probably)
     pub fn createNew(a: Allocator, chdir: std.fs.Dir, dir_name: []const u8) !Repo {
-        var acts = Actions{
+        var agent = Agent{
             .alloc = a,
             .cwd = chdir,
         };
 
-        a.free(try acts.initRepo(dir_name, .{}));
+        a.free(try agent.initRepo(dir_name, .{}));
         var dir = try chdir.openDir(dir_name, .{});
         errdefer dir.close();
         return init(dir);
@@ -736,9 +736,9 @@ pub const Repo = struct {
         return oldest;
     }
 
-    pub fn getActions(self: *const Repo, a: Allocator) Actions {
+    pub fn getAgent(self: *const Repo, a: Allocator) Agent {
         // FIXME if (!self.bare) provide_working_dir_to_git
-        return Actions{
+        return .{
             .alloc = a,
             .repo = self,
             .cwd = self.dir,
@@ -1271,12 +1271,12 @@ pub const Tree = struct {
 
 const DEBUG_GIT_ACTIONS = false;
 
-pub const Actions = struct {
+pub const Agent = struct {
     alloc: Allocator,
     repo: ?*const Repo = null,
     cwd: ?std.fs.Dir = null,
 
-    pub fn updateUpstream(self: Actions, branch: []const u8) !bool {
+    pub fn updateUpstream(self: Agent, branch: []const u8) !bool {
         const fetch = try self.exec(&[_][]const u8{
             "git",
             "fetch",
@@ -1314,7 +1314,7 @@ pub const Actions = struct {
         }
     }
 
-    pub fn updateDownstream(self: Actions) !bool {
+    pub fn updateDownstream(self: Agent) !bool {
         const push = try self.exec(&[_][]const u8{
             "git",
             "push",
@@ -1327,7 +1327,7 @@ pub const Actions = struct {
         return true;
     }
 
-    pub fn forkRemote(self: Actions, uri: []const u8, local_dir: []const u8) ![]u8 {
+    pub fn forkRemote(self: Agent, uri: []const u8, local_dir: []const u8) ![]u8 {
         return try self.exec(&[_][]const u8{
             "git",
             "clone",
@@ -1339,7 +1339,7 @@ pub const Actions = struct {
         });
     }
 
-    pub fn initRepo(self: Actions, dir: []const u8, opt: struct { bare: bool = true }) ![]u8 {
+    pub fn initRepo(self: Agent, dir: []const u8, opt: struct { bare: bool = true }) ![]u8 {
         return try self.exec(&[_][]const u8{
             "git",
             "init",
@@ -1348,7 +1348,7 @@ pub const Actions = struct {
         });
     }
 
-    pub fn show(self: Actions, sha: []const u8) ![]u8 {
+    pub fn show(self: Agent, sha: []const u8) ![]u8 {
         return try self.exec(&[_][]const u8{
             "git",
             "show",
@@ -1358,7 +1358,7 @@ pub const Actions = struct {
         });
     }
 
-    pub fn blame(self: Actions, name: []const u8) ![]u8 {
+    pub fn blame(self: Agent, name: []const u8) ![]u8 {
         std.debug.print("{s}\n", .{name});
         return try self.exec(&[_][]const u8{
             "git",
@@ -1368,7 +1368,7 @@ pub const Actions = struct {
         });
     }
 
-    fn execCustom(self: Actions, argv: []const []const u8) !std.ChildProcess.RunResult {
+    fn execCustom(self: Agent, argv: []const []const u8) !std.ChildProcess.RunResult {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
         const cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
         const child = try std.ChildProcess.run(.{
@@ -1380,9 +1380,9 @@ pub const Actions = struct {
         return child;
     }
 
-    fn exec(self: Actions, argv: []const []const u8) ![]u8 {
+    fn exec(self: Agent, argv: []const []const u8) ![]u8 {
         const child = try self.execCustom(argv);
-        if (child.stderr.len > 0) std.debug.print("git Actions error\nstderr {s}\n", .{child.stderr});
+        if (child.stderr.len > 0) std.debug.print("git Agent error\nstderr {s}\n", .{child.stderr});
         self.alloc.free(child.stderr);
 
         if (DEBUG_GIT_ACTIONS) std.debug.print(
@@ -1423,7 +1423,7 @@ test "read" {
     var d = zlib.decompressor(file.reader());
     const count = try d.read(&b);
     //std.debug.print("{s}\n", .{b[0..count]});
-    const commit = try Commit.make("370303630b3fc631a0cb3942860fb6f77446e9c1", b[0..count]);
+    const commit = try Commit.make("370303630b3fc631a0cb3942860fb6f77446e9c1", b[0..count], null);
     //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree);
     try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha);
@@ -1461,7 +1461,7 @@ test "not gpg" {
         \\
         \\commit message
     ;
-    const commit = try Commit.make(null_sha, blob_invalid_0);
+    const commit = try Commit.make(null_sha, blob_invalid_0, null);
     try std.testing.expect(commit.sha.ptr == null_sha.ptr);
 }
 
@@ -1869,11 +1869,11 @@ test "forkRemote" {
     var tdir = std.testing.tmpDir(.{});
     defer tdir.cleanup();
 
-    const act = Actions{
+    const agent = Agent{
         .alloc = a,
         .cwd = tdir.dir,
     };
-    _ = act;
+    _ = agent;
     // TODO don't get banned from github
     //var result = try act.forkRemote("https://github.com/grayhatter/srctree", "srctree_tmp");
     //std.debug.print("{s}\n", .{result});

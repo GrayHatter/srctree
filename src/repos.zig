@@ -109,7 +109,7 @@ pub fn updateThread() void {
             if (hasUpstream(a, repo) catch continue) |up| {
                 repo.dir.writeFile(.{ .sub_path = "srctree_last_update", .data = update }) catch {};
                 a.free(up);
-                var acts = repo.getActions(a);
+                var acts = repo.getAgent(a);
                 const updated = acts.updateUpstream(head) catch er: {
                     std.debug.print("Warning, unable to update repo {s}\n", .{rname});
                     break :er false;
@@ -135,7 +135,7 @@ pub fn updateThread() void {
                 if (hasDownstream(a, repo) catch continue) |down| {
                     repo.dir.writeFile(.{ .sub_path = "srctree_last_downdate", .data = update }) catch {};
                     a.free(down);
-                    var acts = repo.getActions(a);
+                    var acts = repo.getAgent(a);
                     const updated = acts.updateDownstream() catch er: {
                         std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});
                         break :er false;

@@ -28,12 +28,12 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
     var dn_buf: [2048]u8 = undefined;
     const dir = try std.fmt.bufPrint(&dn_buf, "repos/{}", .{reponame});
 
-    var actions = git.Actions{
+    var agent = git.Agent{
         .alloc = a,
         .cwd = null,
     };
 
-    _ = try actions.gitInit(dir, .{});
+    _ = try agent.gitInit(dir, .{});
 }
 
 fn default(ctx: *Context) Error!void {
@@ -95,12 +95,12 @@ fn postCloneUpstream(ctx: *Context) Error!void {
     std.debug.print("repo uri {s}\n", .{name});
 
     const dir = std.fs.cwd().openDir("repos", .{}) catch return error.Unknown;
-    var act = git.Actions{
+    var agent = git.Agent{
         .alloc = ctx.alloc,
         .cwd = dir,
     };
     std.debug.print("fork bare {s}\n", .{
-        act.forkRemote(udata.repo_uri, name) catch return error.Unknown,
+        agent.forkRemote(udata.repo_uri, name) catch return error.Unknown,
     });
 
     var dom = DOM.new(ctx.alloc);

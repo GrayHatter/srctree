@@ -158,7 +158,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     };
     try ctx.putContext("Commit", .{ .block = &commit_ctx });
 
-    var git = repo.getActions(ctx.alloc);
+    var git = repo.getAgent(ctx.alloc);
     var diff = git.show(sha) catch return error.Unknown;
 
     if (std.mem.indexOf(u8, diff, "diff")) |i| {
@@ -225,7 +225,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
 
 pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
     var current: Git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
-    var acts = repo.getActions(ctx.alloc);
+    var acts = repo.getAgent(ctx.alloc);
     if (std.mem.indexOf(u8, sha, ".patch")) |tail| {
         while (!std.mem.startsWith(u8, current.sha, sha[0..tail])) {
             current = current.toParent(ctx.alloc, 0) catch return error.Unknown;
