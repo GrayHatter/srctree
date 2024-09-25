@@ -7,12 +7,11 @@ const Template = @import("template.zig");
 const Context = @import("context.zig");
 const Response = @import("response.zig");
 const Request = @import("request.zig");
-const endpoint = @import("endpoint.zig");
 const HTML = @import("html.zig");
 const StaticFile = @import("static-file.zig");
 
-// TODO relocate this error
-pub const Error = endpoint.Error;
+pub const Errors = @import("errors.zig");
+pub const Error = Errors.ServerError || Errors.ClientError || Errors.NetworkError;
 
 pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 
@@ -47,7 +46,7 @@ pub const Methods = packed struct {
     }
 };
 
-pub const _Endpoint = struct {
+pub const Endpoint = struct {
     callable: Callable,
     methods: Methods = .{ .GET = true },
 };
@@ -79,7 +78,9 @@ pub fn ROUTE(comptime name: []const u8, comptime match: anytype) Match {
                 Error!Callable => .{ .route = match },
                 else => @compileError("unknown function return type"),
             },
-            else => @compileError("match type not supported"),
+            else => |el| @compileError("match type not supported, for provided type [" ++
+                @typeName(@TypeOf(el)) ++
+                "]"),
         },
 
         .methods = .{ .GET = true },

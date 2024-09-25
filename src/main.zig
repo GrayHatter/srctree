@@ -8,9 +8,7 @@ const Database = @import("database.zig");
 const HTML = @import("html.zig");
 const Template = @import("template.zig");
 const Route = @import("routes.zig");
-const Endpoint = @import("endpoint.zig");
 const Repos = @import("repos.zig");
-const EndpointErr = Endpoint.Error;
 const HTTP = @import("http.zig");
 const zWSGI = @import("zwsgi.zig");
 const Ini = @import("ini.zig");
@@ -142,10 +140,4 @@ pub fn main() !void {
         }
         std.posix.exit(1);
     };
-}
-
-test "simple test" {
-    //const a = std.testing.allocator;
-
-    try std.testing.expect(true);
 }

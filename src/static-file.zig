@@ -1,9 +1,9 @@
 const std = @import("std");
 
 const Context = @import("context.zig");
-const Endpoint = @import("endpoint.zig");
+const Route = @import("routes.zig");
 
-pub fn file(ctx: *Context) Endpoint.Error!void {
+pub fn file(ctx: *Context) Route.Error!void {
     _ = ctx.uri.next(); // clear /static
     const fname = ctx.uri.next() orelse return error.Unrouteable;
     for (fname) |c| switch (c) {

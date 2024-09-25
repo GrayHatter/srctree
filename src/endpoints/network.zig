@@ -1,19 +1,19 @@
 const std = @import("std");
 
-const DOM = Endpoint.DOM;
-const Endpoint = @import("../endpoint.zig");
-const Context = Endpoint.Context;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
+const DOM = @import("../dom.zig");
+const Context = @import("../context.zig");
+const Template = @import("../template.zig");
 
+const Route = @import("../routes.zig");
+const Error = Route.Error;
+const UriIter = Route.UriIter;
 const HTML = @import("../html.zig");
 const Repos = @import("../repos.zig");
 const Ini = @import("../ini.zig");
 
-const ROUTE = Endpoint.Router.ROUTE;
+const ROUTE = Route.ROUTE;
 
-pub const endpoints = [_]Endpoint.Router.Match{
+pub const endpoints = [_]Route.Match{
     ROUTE("", default),
 };
 

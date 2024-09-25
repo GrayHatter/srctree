@@ -2,16 +2,18 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Endpoint = @import("endpoint.zig");
 const Context = @import("context.zig");
-const Response = Endpoint.Response;
-const Request = Endpoint.Request;
-const HTML = Endpoint.HTML;
+const Response = @import("response.zig");
+const Request = @import("request.zig");
+const HTML = @import("html.zig");
 const elm = HTML.element;
-const DOM = Endpoint.DOM;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
+const DOM = @import("dom.zig");
+const Template = @import("template.zig");
+
+const Route = @import("routes.zig");
+const Error = Route.Error;
+const UriIter = Route.UriIter;
+
 const POLL = std.posix.POLL;
 
 const git = @import("git.zig");
@@ -19,9 +21,9 @@ const Ini = @import("ini.zig");
 const Humanize = @import("humanize.zig");
 const Bleach = @import("bleach.zig");
 
-pub const endpoints = [_]Endpoint.Router.Match{
+pub const endpoints = [_]Route.Match{
     .{ .name = "objects", .match = .{ .call = gitUploadPack } },
-    .{ .name = "info", .match = .{ .simple = &[_]Endpoint.Router.Match{
+    .{ .name = "info", .match = .{ .simple = &[_]Route.Match{
         .{ .name = "", .match = .{ .call = gitUploadPack } },
         .{ .name = "refs", .match = .{ .call = gitUploadPack } },
     } } },
@@ -29,9 +31,9 @@ pub const endpoints = [_]Endpoint.Router.Match{
     .{ .name = "git-upload-pack", .methods = .{ .POST = true }, .match = .{ .call = gitUploadPack } },
 };
 
-pub fn router(ctx: *Context) Error!Endpoint.Endpoint {
+pub fn router(ctx: *Context) Error!Route.Callable {
     std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
-    return Endpoint.Router.router(ctx, &endpoints);
+    return Route.router(ctx, &endpoints);
 }
 
 fn gitUploadPack(ctx: *Context) Error!void {
@@ -114,7 +116,7 @@ fn gitUploadPack(ctx: *Context) Error!void {
 fn __objects(ctx: *Context) Error!void {
     std.debug.print("gitweb objects\n", .{});
 
-    const rd = Endpoint.REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable;
+    const rd = @import("../../REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable.zig");
 
     var cwd = std.fs.cwd();
     var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
@@ -148,7 +150,7 @@ fn __objects(ctx: *Context) Error!void {
 fn __info(ctx: *Context) Error!void {
     std.debug.print("gitweb info\n", .{});
 
-    const rd = Endpoint.REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable;
+    const rd = @import("../../REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable.zig");
 
     var cwd = std.fs.cwd();
     const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});

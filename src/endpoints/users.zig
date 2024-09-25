@@ -1,13 +1,14 @@
 const std = @import("std");
 
-const DOM = Endpoint.DOM;
-const HTML = Endpoint.HTML;
-const Endpoint = @import("../endpoint.zig");
-const Context = Endpoint.Context;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
-const Deltas = Endpoint.Types.Deltas;
+const DOM = @import("../dom.zig");
+const HTML = @import("../html.zig");
+const Context = @import("../context.zig");
+const Template = @import("../template.zig");
+const Route = @import("../routes.zig");
+const UriIter = Route.UriIter;
+const Types = @import("../types.zig");
+const Deltas = Types.Delta;
+const Error = Route.Error;
 
 pub fn diffs(ctx: *Context) Error!void {
     var dom = DOM.new(ctx.alloc);

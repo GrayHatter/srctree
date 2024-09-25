@@ -10,10 +10,9 @@ const indexOf = std.mem.indexOf;
 
 const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
-const Endpoint = @import("endpoint.zig");
-const Response = Endpoint.Response;
-const HTML = Endpoint.HTML;
-const DOM = Endpoint.DOM;
+const Response = @import("response.zig");
+const HTML = @import("html.zig");
+const DOM = @import("dom.zig");
 const Context = @import("template.zig").Context;
 
 pub const Patch = @This();

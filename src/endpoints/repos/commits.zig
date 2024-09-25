@@ -4,30 +4,30 @@ const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 
 const Repos = @import("../repos.zig");
-const Endpoint = @import("../../endpoint.zig");
 
-const Response = Endpoint.Response;
-const Context = Endpoint.Context;
-const HTML = Endpoint.HTML;
-const DOM = Endpoint.DOM;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
-const RouteData = Repos.RouteData;
-const ROUTE = Endpoint.Router.ROUTE;
-const GET = Endpoint.Router.GET;
+const Route = @import("../../routes.zig");
+const Response = @import("../../response.zig");
+const Context = @import("../../context.zig");
+const HTML = @import("../../html.zig");
+const DOM = @import("../../dom.zig");
+const Template = @import("../../template.zig");
+const UriIter = Route.UriIter;
+const ROUTE = Route.ROUTE;
+const GET = Route.GET;
+const Error = Route.Error;
 const UserData = @import("../../request_data.zig").UserData;
+const RouteData = Repos.RouteData;
 
 const Git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
 const Patch = @import("../../patch.zig");
-const Delta = Endpoint.Types.Delta;
-const CommitMap = Endpoint.Types.CommitMap;
-const Comment = Endpoint.Types.Comment;
+const Types = @import("../../types.zig");
+const Thread = Types.Thread;
+const Delta = Types.Delta;
+const CommitMap = Types.CommitMap;
+const Comment = Types.Comment;
 
-const POST = Endpoint.Router.Methods.POST;
-
-pub const routes = [_]Endpoint.Router.MatchRouter{
+pub const routes = [_]Route.MatchRouter{
     ROUTE("", commits),
     GET("before", commitsBefore),
 };
@@ -43,7 +43,7 @@ fn newComment(ctx: *Context) Error!void {
     return error.BadData;
 }
 
-pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
+pub fn router(ctx: *Context) Error!Route.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return commits;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return commit;

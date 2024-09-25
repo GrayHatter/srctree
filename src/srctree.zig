@@ -1,6 +1,5 @@
 const Routes = @import("routes.zig");
 const Context = @import("context.zig");
-const Endpoint = @import("endpoint.zig");
 const Template = @import("template.zig");
 const Api = @import("api.zig");
 const Types = @import("types.zig");
@@ -8,21 +7,37 @@ const Types = @import("types.zig");
 const ROUTE = Routes.ROUTE;
 const GET = Routes.GET;
 const Match = Routes.Match;
-const Callable = Endpoint.Callable;
+const Callable = Routes.Callable;
 const allocPrint = @import("std").fmt.allocPrint;
 
+const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
+
+const USERS = @import("endpoints/users.zig");
+
+const REPO = @import("endpoints/repos.zig");
+const repo = REPO.router;
+
+const ADMIN = @import("endpoints/admin.zig");
+const admin = &ADMIN.endpoints;
+
+const NETWORK = @import("endpoints/network.zig");
+const network = &NETWORK.endpoints;
+
+const SEARCH = @import("endpoints/search.zig");
+const search = &SEARCH.router;
+
 pub const routes = [_]Match{
-    GET("", Endpoint.commitFlex),
-    ROUTE("admin", Endpoint.admin),
+    GET("", commitFlex),
+    ROUTE("admin", admin),
     ROUTE("api", Api.router),
-    ROUTE("diffs", Endpoint.USERS.diffs),
-    ROUTE("inbox", Endpoint.search),
-    ROUTE("network", Endpoint.network),
-    ROUTE("repo", Endpoint.repo),
-    ROUTE("repos", Endpoint.repo),
-    ROUTE("search", Endpoint.search),
-    ROUTE("todo", Endpoint.USERS.todo),
-    ROUTE("user", Endpoint.commitFlex),
+    ROUTE("diffs", USERS.diffs),
+    ROUTE("inbox", search),
+    ROUTE("network", network),
+    ROUTE("repo", repo),
+    ROUTE("repos", repo),
+    ROUTE("search", search),
+    ROUTE("todo", USERS.todo),
+    ROUTE("user", commitFlex),
 };
 
 fn unroutable(ctx: *Context) Routes.Error!void {

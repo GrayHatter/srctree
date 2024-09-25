@@ -1,25 +1,24 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
-const HTML = Endpoint.HTML;
-const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
 const Delta = @import("../types.zig").Delta;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const ROUTE = Endpoint.Router.ROUTE;
+const Template = @import("../template.zig");
+const Route = @import("../routes.zig");
+const Error = Route.Error;
+const ROUTE = Route.ROUTE;
 
 const UserData = @import("../request_data.zig").UserData;
 const Bleach = @import("../bleach.zig");
 
-pub const routes = [_]Endpoint.Router.Match{
+pub const routes = [_]Route.Match{
     ROUTE("", search),
     ROUTE("search", search),
     ROUTE("inbox", inbox),
 };
 
-pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
-    return Endpoint.Router.router(ctx, &routes);
+pub fn router(ctx: *Context) Error!Route.Callable {
+    return Route.router(ctx, &routes);
 }
 
 const SearchReq = struct {

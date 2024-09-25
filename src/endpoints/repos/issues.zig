@@ -2,25 +2,26 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const DOM = Endpoint.DOM;
-const HTML = Endpoint.HTML;
-const Endpoint = @import("../../endpoint.zig");
+const Route = @import("../../routes.zig");
+const DOM = @import("../../dom.zig");
+const HTML = @import("../../html.zig");
 const Context = @import("../../context.zig");
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
-const ROUTE = Endpoint.Router.ROUTE;
-const POST = Endpoint.Router.POST;
+const Template = @import("../../template.zig");
+const Error = Route.Error;
+const UriIter = Route.Error;
+const ROUTE = Route.ROUTE;
+const POST = Route.POST;
 
 const Repo = @import("../repos.zig");
 
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
-const Comment = Endpoint.Types.Comment;
-const Delta = Endpoint.Types.Delta;
+const Types = @import("../../types.zig");
+const Comment = Types.Comment;
+const Delta = Types.Delta;
 const Humanize = @import("../../humanize.zig");
 
-pub const routes = [_]Endpoint.Router.Match{
+pub const routes = [_]Route.Match{
     ROUTE("", list),
     ROUTE("new", new),
     POST("new", newPost),
@@ -34,15 +35,15 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
+pub fn router(ctx: *Context) Error!Route.Callable {
     std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
-    const verb = ctx.uri.peek() orelse return Endpoint.Router.router(ctx, &routes);
+    const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
 
     if (isHex(verb)) |_| {
         return view;
     }
 
-    return Endpoint.Router.router(ctx, &routes);
+    return Route.router(ctx, &routes);
 }
 
 fn new(ctx: *Context) Error!void {

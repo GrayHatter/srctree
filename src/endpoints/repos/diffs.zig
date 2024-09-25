@@ -2,33 +2,34 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const DOM = Endpoint.DOM;
-const HTML = Endpoint.HTML;
-const Endpoint = @import("../../endpoint.zig");
+const DOM = @import("../../dom.zig");
+const HTML = @import("../../html.zig");
 const Context = @import("../../context.zig");
-const Response = Endpoint.Response;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
-const ROUTE = Endpoint.Router.ROUTE;
-const POST = Endpoint.Router.POST;
-const GET = Endpoint.Router.GET;
+const Response = @import("../../response.zig");
+const Template = @import("../../template.zig");
+const Route = @import("../../routes.zig");
+const Error = Route.Error;
+const UriIter = Route.UriIter;
+const ROUTE = Route.ROUTE;
+const POST = Route.POST;
+const GET = Route.GET;
 
 const UserData = @import("../../request_data.zig").UserData;
 
 const Repo = @import("../repos.zig");
 const Commits = @import("commits.zig");
 
-const Thread = Endpoint.Types.Thread;
-const Delta = Endpoint.Types.Delta;
-const Comment = Endpoint.Types.Comment;
+const Types = @import("../../types.zig");
+const Thread = Types.Thread;
+const Delta = Types.Delta;
+const Comment = Types.Comment;
 
 const Patch = @import("../../patch.zig");
 const Humanize = @import("../../humanize.zig");
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
 
-pub const routes = [_]Endpoint.Router.Match{
+pub const routes = [_]Route.Match{
     ROUTE("", list),
     GET("new", new),
     POST("new", newPost),
@@ -42,15 +43,15 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
+pub fn router(ctx: *Context) Error!Route.Callable {
     std.debug.assert(std.mem.eql(u8, "diffs", ctx.uri.next().?));
-    const verb = ctx.uri.peek() orelse return Endpoint.Router.router(ctx, &routes);
+    const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
 
     if (isHex(verb)) |_| {
         return view;
     }
 
-    return Endpoint.Router.router(ctx, &routes);
+    return Route.router(ctx, &routes);
 }
 
 fn new(ctx: *Context) Error!void {

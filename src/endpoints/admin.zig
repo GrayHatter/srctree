@@ -2,16 +2,15 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
 const Route = @import("../routes.zig");
 const UserData = @import("../request_data.zig").UserData;
-const HTML = Endpoint.HTML;
-//const elm = HTML.element;
-const DOM = Endpoint.DOM;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
+const HTML = @import("../html.zig");
+const DOM = @import("../dom.zig");
+const Template = @import("../template.zig");
+
+const Error = Route.Error;
+const UriIter = Route.UriIter;
 
 const git = @import("../git.zig");
 

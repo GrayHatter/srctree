@@ -4,15 +4,15 @@ const Allocator = std.mem.Allocator;
 
 const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
-const Endpoint = @import("../endpoint.zig");
 const Git = @import("../git.zig");
 
-const DOM = Endpoint.DOM;
-const HTML = Endpoint.HTML;
-const Context = Endpoint.Context;
-const Template = Endpoint.Template;
+const DOM = @import("../dom.zig");
+const HTML = @import("../html.zig");
+const Context = @import("../context.zig");
+const Template = @import("../template.zig");
 
-const Error = Endpoint.Error;
+const Route = @import("../routes.zig");
+const Error = Route.Error;
 
 const Scribe = struct {
     const Commit = struct {

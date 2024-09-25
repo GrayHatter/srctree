@@ -11,7 +11,7 @@ pub const Request = @import("request.zig");
 pub const Response = @import("response.zig");
 pub const RequestData = @import("request_data.zig").RequestData;
 pub const Template = @import("template.zig");
-pub const UriIter = @import("endpoint.zig").Router.UriIter;
+pub const UriIter = @import("routes.zig").UriIter;
 const Config = @import("ini.zig").Config;
 
 const Error = @import("errors.zig").Error;

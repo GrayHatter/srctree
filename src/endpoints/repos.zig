@@ -4,17 +4,19 @@ const Allocator = std.mem.Allocator;
 const aPrint = std.fmt.allocPrint;
 const bPrint = std.fmt.bufPrint;
 
-const Endpoint = @import("../endpoint.zig");
 const Context = @import("../context.zig");
-const Response = Endpoint.Response;
-const Request = Endpoint.Request;
-const HTML = Endpoint.HTML;
+const Response = @import("../response.zig");
+const Request = @import("../request.zig");
+const HTML = @import("../html.zig");
 const elm = HTML.element;
-const DOM = Endpoint.DOM;
-const Template = Endpoint.Template;
-const Error = Endpoint.Error;
-const UriIter = Endpoint.Router.UriIter;
-const ROUTE = Endpoint.Router.ROUTE;
+const DOM = @import("../dom.zig");
+const Template = @import("../template.zig");
+const Route = @import("../routes.zig");
+const Error = Route.Error;
+const UriIter = Route.UriIter;
+const ROUTE = Route.ROUTE;
+const POST = Route.POST;
+const GET = Route.GET;
 
 const Bleach = @import("../bleach.zig");
 const Humanize = @import("../humanize.zig");
@@ -32,7 +34,7 @@ const Types = @import("../types.zig");
 
 const gitweb = @import("../gitweb.zig");
 
-const endpoints = [_]Endpoint.Router.Match{
+const endpoints = [_]Route.Match{
     ROUTE("", treeBlob),
     ROUTE("blob", treeBlob),
     ROUTE("commit", &Commits.router),
@@ -84,7 +86,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
+pub fn router(ctx: *Context) Error!Route.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
@@ -123,7 +125,7 @@ pub fn router(ctx: *Context) Error!Endpoint.Router.Callable {
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();
-            return Endpoint.Router.router(ctx, &endpoints);
+            return Route.router(ctx, &endpoints);
         } else return treeBlob;
     }
     return error.Unrouteable;
