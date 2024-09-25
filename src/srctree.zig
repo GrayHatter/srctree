@@ -26,6 +26,8 @@ const network = &NETWORK.endpoints;
 const SEARCH = @import("endpoints/search.zig");
 const search = &SEARCH.router;
 
+const settings = @import("endpoints/settings.zig");
+
 pub const routes = [_]Match{
     GET("", commitFlex),
     ROUTE("admin", admin),
@@ -38,6 +40,7 @@ pub const routes = [_]Match{
     ROUTE("search", search),
     ROUTE("todo", USERS.todo),
     ROUTE("user", commitFlex),
+    ROUTE("settings", &settings.endpoints),
 };
 
 fn unroutable(ctx: *Context) Routes.Error!void {
