@@ -6,11 +6,13 @@ const Api = @import("api.zig");
 const Types = @import("types.zig");
 
 const ROUTE = Routes.ROUTE;
+const GET = Routes.GET;
 const Match = Routes.Match;
 const Callable = Endpoint.Callable;
 const allocPrint = @import("std").fmt.allocPrint;
 
 pub const routes = [_]Match{
+    GET("", Endpoint.commitFlex),
     ROUTE("admin", Endpoint.admin),
     ROUTE("api", Api.router),
     ROUTE("diffs", Endpoint.USERS.diffs),
