@@ -69,7 +69,39 @@ pub fn hasDownstream(a: Allocator, r: Git.Repo) !?[]u8 {
     return null;
 }
 
-pub fn updateThread() void {
+pub const AgentConfig = struct {
+    running: bool = true,
+    sleep_for: usize = 60 * 60 * 1000 * 1000 * 1000,
+    g_config: *Ini.Config,
+};
+
+fn pushUpstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
+    var update_buffer: [512]u8 = undefined;
+    const update = std.fmt.bufPrint(
+        &update_buffer,
+        "update {}\n",
+        .{std.time.timestamp()},
+    ) catch unreachable;
+
+    const rhead = try repo.*.HEAD(a);
+    const head: []const u8 = switch (rhead) {
+        .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
+        .tag => |t| t.name,
+        else => "main",
+    };
+    if (try hasUpstream(a, repo.*)) |up| {
+        repo.dir.writeFile(.{ .sub_path = "srctree_last_update", .data = update }) catch {};
+        a.free(up);
+        var agent = repo.getAgent(a);
+        const updated = agent.updateUpstream(head) catch er: {
+            std.debug.print("Warning, unable to update repo {s}\n", .{name});
+            break :er false;
+        };
+        if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{name});
+    }
+}
+
+pub fn updateThread(cfg: *AgentConfig) void {
     std.debug.print("Spawning update thread\n", .{});
     const a = std.heap.page_allocator;
     const names = allNames(a) catch unreachable;
@@ -77,13 +109,21 @@ pub fn updateThread() void {
         for (names) |n| a.free(n);
         a.free(names);
     }
-    const sleep_for = 60 * 60 * 1000 * 1000 * 1000;
     var name_buffer: [2048]u8 = undefined;
-    var update_buffer: [512]u8 = undefined;
 
-    std.time.sleep(sleep_for);
+    var should_push: bool = false;
+    if (cfg.g_config.get("agent")) |agent| {
+        if (agent.get("should_push")) |push| {
+            // TODO write truthy fn
+            if (std.mem.eql(u8, "true", push)) {
+                should_push = true;
+            }
+        }
+    }
+
+    std.time.sleep(cfg.sleep_for);
     //std.time.sleep(1000 * 1000 * 1000);
-    while (true) {
+    while (cfg.running) {
         for (names) |rname| {
             const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
             const dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
@@ -93,29 +133,13 @@ pub fn updateThread() void {
                 std.debug.print("Warning, unable to load data for repo {s}\n", .{rname});
             };
 
-            const rhead = repo.HEAD(a) catch continue;
-            const head: []const u8 = switch (rhead) {
-                .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
-                .tag => |t| t.name,
-                else => "main",
-            };
-
-            const update = std.fmt.bufPrint(
-                &update_buffer,
-                "update {}\n",
-                .{std.time.timestamp()},
-            ) catch unreachable;
-
-            if (hasUpstream(a, repo) catch continue) |up| {
-                repo.dir.writeFile(.{ .sub_path = "srctree_last_update", .data = update }) catch {};
-                a.free(up);
-                var acts = repo.getAgent(a);
-                const updated = acts.updateUpstream(head) catch er: {
-                    std.debug.print("Warning, unable to update repo {s}\n", .{rname});
-                    break :er false;
+            if (should_push) {
+                pushUpstream(a, rname, &repo) catch {
+                    std.debug.print("Error when trying to push on {s}\n", .{rname});
+                    break;
                 };
-                if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
             }
+
             var rbuf: [0xff]u8 = undefined;
             const last_push_str = repo.dir.readFile("srctree_last_downdate", &rbuf) catch |err| switch (err) {
                 error.FileNotFound => for (rbuf[0..9], "update 0\n") |*dst, src| {
@@ -131,12 +155,20 @@ pub fn updateThread() void {
                 continue;
             };
             const repo_update = repo.updatedAt(a) catch 0;
+
+            var update_buffer: [512]u8 = undefined;
+            const update = std.fmt.bufPrint(
+                &update_buffer,
+                "update {}\n",
+                .{std.time.timestamp()},
+            ) catch unreachable;
+
             if (repo_update > last_push) {
                 if (hasDownstream(a, repo) catch continue) |down| {
                     repo.dir.writeFile(.{ .sub_path = "srctree_last_downdate", .data = update }) catch {};
                     a.free(down);
-                    var acts = repo.getAgent(a);
-                    const updated = acts.updateDownstream() catch er: {
+                    var agent = repo.getAgent(a);
+                    const updated = agent.updateDownstream() catch er: {
                         std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});
                         break :er false;
                     };
@@ -148,6 +180,6 @@ pub fn updateThread() void {
                 }
             }
         }
-        std.time.sleep(sleep_for);
+        std.time.sleep(cfg.sleep_for);
     }
 }

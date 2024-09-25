@@ -122,7 +122,11 @@ pub fn main() !void {
     _ = try Cache.init(a);
     defer Cache.raze();
 
-    const thread = try Thread.spawn(.{}, Repos.updateThread, .{});
+    var agent_config: Repos.AgentConfig = .{
+        .g_config = &config,
+    };
+
+    const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
     defer thread.join();
 
     var zwsgi: zWSGI = .{
