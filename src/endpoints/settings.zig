@@ -11,6 +11,8 @@ fn default(ctx: *Context) Route.Error!void {
     try ctx.request.auth.validOrError();
     var tmpl = Template.find("settings.html");
     tmpl.init(ctx.alloc);
+    try ctx.putContext("ConfigTxt", .{ .slice = ctx.cfg.?.data });
+
     try ctx.sendTemplate(&tmpl);
 }
 fn post(ctx: *Context) Route.Error!void {
