@@ -64,6 +64,18 @@ pub const Namespace = struct {
         return null;
     }
 
+    pub fn getBool(self: Namespace, name: []const u8) ?bool {
+        const set: []const u8 = self.get(name) orelse return null;
+        if (set.len > 5) return null;
+        var buffer: [6]u8 = undefined;
+        const check = std.ascii.lowerString(buffer[0..], set);
+        if (eql(check, "false") or eql(check, "0") or eql(check, "f")) {
+            return false;
+        } else if (eql(check, "true") or eql(check, "1") or eql(check, "t")) {
+            return true;
+        } else return null;
+    }
+
     pub fn raze(self: Namespace, a: Allocator) void {
         a.free(self.name);
         for (self.settings) |set| {
@@ -76,7 +88,8 @@ pub const Namespace = struct {
 pub const Config = struct {
     alloc: Allocator,
     ns: []Namespace,
-    data: []u8,
+    data: []const u8,
+    owned: ?[]const u8,
 
     pub fn empty() Config {
         return .{
@@ -108,18 +121,22 @@ pub const Config = struct {
             ns.raze(self.alloc);
         }
         self.alloc.free(self.ns);
-        self.alloc.free(self.data);
+        if (self.owned) |owned| {
+            self.alloc.free(owned);
+        }
     }
 };
 
 pub fn initDupe(a: Allocator, ini: []const u8) !Config {
     const owned = try a.dupe(u8, ini);
-    return try init(a, owned);
+    var c = try init(a, owned);
+    c.owned = c.data;
+    return c;
 }
 
-/// `ini` becomes owned by returned Config, use initDupe otherwise
-pub fn init(a: Allocator, ini: []u8) !Config {
-    var itr = std.mem.split(u8, ini, "\n");
+/// `data` must outlive returned Config, use initDupe otherwise
+pub fn init(a: Allocator, data: []const u8) !Config {
+    var itr = std.mem.split(u8, data, "\n");
 
     var list = std.ArrayList(Namespace).init(a);
 
@@ -135,13 +152,18 @@ pub fn init(a: Allocator, ini: []u8) !Config {
     return Config{
         .alloc = a,
         .ns = try list.toOwnedSlice(),
-        .data = ini,
+        .data = data,
+        .owned = null,
     };
 }
 
 pub fn fromFile(a: Allocator, file: std.fs.File) !Config {
     const data = try file.readToEndAlloc(a, 1 <<| 18);
     return try init(a, data);
+}
+
+fn eql(left: []const u8, right: []const u8) bool {
+    return std.mem.eql(u8, left, right);
 }
 
 test "default" {
@@ -160,10 +182,45 @@ test "default" {
             },
         }),
         .data = @constCast("[one]\nleft = right"),
+        .owned = @constCast("[one]\nleft = right"),
     };
 
     const vtest = try initDupe(a, "[one]\nleft = right");
     defer vtest.raze();
 
     try std.testing.expectEqualDeep(expected, vtest);
+}
+
+test "getBool" {
+    const data =
+        \\[test data]
+        \\first = true
+        \\second = t
+        \\third=1
+        \\forth=0
+        \\fifth = false
+        \\sixth = FALSE
+        \\seventh = f
+        \\ eight = 0
+        \\    ninth = F       
+        \\tenth = failure
+        \\
+    ;
+    // eight and ninth are expected to have leading & trailing whitespace
+
+    const a = std.testing.allocator;
+    const c = try init(a, data);
+    defer c.raze();
+    const ns = c.get("test data").?;
+
+    try std.testing.expectEqual(true, ns.getBool("first").?);
+    try std.testing.expectEqual(true, ns.getBool("second").?);
+    try std.testing.expectEqual(true, ns.getBool("third").?);
+    try std.testing.expectEqual(false, ns.getBool("forth").?);
+    try std.testing.expectEqual(false, ns.getBool("fifth").?);
+    try std.testing.expectEqual(false, ns.getBool("sixth").?);
+    try std.testing.expectEqual(false, ns.getBool("seventh").?);
+    try std.testing.expectEqual(false, ns.getBool("eight").?);
+    try std.testing.expectEqual(false, ns.getBool("ninth").?);
+    try std.testing.expectEqual(null, ns.getBool("tenth"));
 }
