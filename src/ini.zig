@@ -25,6 +25,7 @@ const Setting = struct {
 pub const Namespace = struct {
     name: []u8,
     settings: []Setting,
+    block: []const u8,
 
     pub fn init(
         a: Allocator,
@@ -32,6 +33,8 @@ pub const Namespace = struct {
         itr: *std.mem.SplitIterator(u8, .sequence),
     ) !Namespace {
         var list = std.ArrayList(Setting).init(a);
+        const ns_start = itr.index.?;
+        const ns_block = itr.buffer[ns_start..];
 
         while (itr.peek()) |peek| {
             const line = std.mem.trim(u8, peek, " \n\t");
@@ -49,9 +52,11 @@ pub const Namespace = struct {
             _ = itr.next();
         }
 
+        const ns_end = itr.index orelse itr.buffer.len;
         return .{
             .name = try a.dupe(u8, name[1 .. name.len - 1]),
             .settings = try list.toOwnedSlice(),
+            .block = ns_block[0 .. ns_end - ns_start],
         };
     }
 
@@ -179,6 +184,7 @@ test "default" {
                         .val = "right",
                     },
                 }),
+                .block = @constCast("left = right"),
             },
         }),
         .data = @constCast("[one]\nleft = right"),
