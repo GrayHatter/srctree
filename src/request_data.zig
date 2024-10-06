@@ -16,8 +16,30 @@ pub fn Validator(comptime T: type) type {
             };
         }
 
+        pub fn count(v: *Self, name: []const u8) usize {
+            var i: usize = 0;
+            for (v.data.items) |item| {
+                if (std.mem.eql(u8, item.name, name)) i += 1;
+            }
+            return i;
+        }
+
         pub fn require(v: *Self, name: []const u8) !DataItem {
             return v.optional(name) orelse error.DataMissing;
+        }
+
+        pub fn requirePos(v: *Self, name: []const u8, skip: usize) !DataItem {
+            var skipped: usize = skip;
+            for (v.data.items) |item| {
+                if (std.mem.eql(u8, item.name, name)) {
+                    if (skipped > 0) {
+                        skipped -= 1;
+                        continue;
+                    }
+                    return item;
+                }
+            }
+            return error.DataMissing;
         }
 
         pub fn optional(v: *Self, name: []const u8) ?DataItem {
@@ -164,13 +186,21 @@ pub fn UserData(comptime T: type) type {
 
         pub fn init(data: anytype) !T {
             return switch (@TypeOf(data)) {
-                QueryData => initGet(data),
+                QueryData => initQuery(data),
                 PostData => initPost(data),
                 else => comptime unreachable,
             };
         }
 
-        fn initGet(data: QueryData) !T {
+        pub fn initMap(a: Allocator, data: anytype) !T {
+            return switch (@TypeOf(data)) {
+                QueryData => comptime unreachable, // Not implemented
+                PostData => initPostMap(a, data),
+                else => comptime unreachable,
+            };
+        }
+
+        fn initQuery(data: QueryData) !T {
             var valid = data.validator();
 
             var req: T = undefined;
@@ -192,6 +222,31 @@ pub fn UserData(comptime T: type) type {
                 @field(req, field.name) = switch (@typeInfo(field.type)) {
                     .Optional => if (valid.optional(field.name)) |o| o.value else null,
                     .Pointer => (try valid.require(field.name)).value,
+                    else => unreachable,
+                };
+            }
+            return req;
+        }
+
+        fn initPostMap(a: Allocator, data: PostData) !T {
+            var valid = data.validator();
+
+            var req: T = undefined;
+            inline for (std.meta.fields(T)) |field| {
+                @field(req, field.name) = switch (@typeInfo(field.type)) {
+                    .Optional => if (valid.optional(field.name)) |o| o.value else null,
+                    .Pointer => |fptr| switch (fptr.child) {
+                        u8 => (try valid.require(field.name)).value,
+                        []const u8 => arr: {
+                            const count = valid.count(field.name);
+                            var map = try a.alloc([]const u8, count);
+                            for (0..count) |i| {
+                                map[i] = (try valid.requirePos(field.name, i)).value;
+                            }
+                            break :arr map;
+                        },
+                        else => comptime unreachable,
+                    },
                     else => unreachable,
                 };
             }
