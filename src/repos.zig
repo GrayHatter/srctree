@@ -111,13 +111,10 @@ pub fn updateThread(cfg: *AgentConfig) void {
     }
     var name_buffer: [2048]u8 = undefined;
 
-    var should_push: bool = false;
+    var push_upstream: bool = false;
     if (cfg.g_config.get("agent")) |agent| {
-        if (agent.get("should_push")) |push| {
-            // TODO write truthy fn
-            if (std.mem.eql(u8, "true", push)) {
-                should_push = true;
-            }
+        if (agent.getBool("push_upstream") orelse false) {
+            push_upstream = true;
         }
     }
 
@@ -133,7 +130,7 @@ pub fn updateThread(cfg: *AgentConfig) void {
                 std.debug.print("Warning, unable to load data for repo {s}\n", .{rname});
             };
 
-            if (should_push) {
+            if (push_upstream) {
                 pushUpstream(a, rname, &repo) catch {
                     std.debug.print("Error when trying to push on {s}\n", .{rname});
                     break;
