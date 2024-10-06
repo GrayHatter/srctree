@@ -7,12 +7,18 @@
   <body>
     <_body_header.html>
     <content>
-      <form method="POST"> 
-        <label>Test</label>
-        <input name="default" />
+      <form method="POST" class="settings pretty" action="/settings/post">
+        <For ConfigBlocks>
+        <div class="block">
+        <label>Block Name</label>
+        <input name="block_name" value="<ConfigName ORELSE default>"/>
         <br>
-        <label>config.ini</label>
-        <textarea cols="100" rows="50"><ConfigTxt ORNULL></textarea>
+        <textarea name="block_text" cols="100" rows="<Count ORELSE 10>"><ConfigText ORNULL></textarea>
+        </div>
+
+        </For>
+        <button type="submit" name="new_block">Add New Block</button>
+        <button type="submit" name="save">Save</button>
       </form>
 
     </content>

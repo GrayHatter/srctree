@@ -505,7 +505,7 @@ form.pretty {
 	textarea { height: 10em }
 }
 
-input {
+input, textarea {
 	padding: 10px;
 	background: #222;
 	border: 1px solid gray;
