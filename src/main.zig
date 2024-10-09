@@ -65,7 +65,6 @@ const Options = struct {
 };
 
 // TODO delete me
-var runmode: zWSGI.RunMode = .unix;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
@@ -74,6 +73,8 @@ pub fn main() !void {
 
     Template.init(a);
     defer Template.raze(a);
+
+    var runmode: zWSGI.RunMode = .unix;
 
     var args = std.process.args();
     arg0 = args.next() orelse "srctree";
@@ -132,6 +133,7 @@ pub fn main() !void {
         .config = config,
         .routefn = Srctree.router,
         .buildfn = Srctree.build,
+        .runmode = runmode,
     };
 
     zwsgi.serve() catch {

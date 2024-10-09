@@ -217,7 +217,7 @@ fn list(ctx: *Context) Error!void {
 
         var dom = DOM.new(ctx.alloc);
 
-        if (ctx.response.request.auth.valid()) {
+        if (ctx.request.auth.valid()) {
             dom = dom.open(HTML.div(null, &HTML.Attr.class("act-btns")));
             dom.dupe(try HTML.linkBtnAlloc(ctx.alloc, "New Upstream", "/admin/clone-upstream"));
             dom = dom.close();

@@ -16,6 +16,7 @@ alloc: Allocator,
 config: Config,
 routefn: RouterFn,
 buildfn: BuildFn,
+runmode: RunMode = .unix,
 
 pub const RouterFn = *const fn (*Context) Router.Callable;
 // TODO provide default for this?
@@ -89,7 +90,7 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
         var acpt = try server.accept();
         defer acpt.stream.close();
 
-        var ctx = try buildContext(a, &acpt, zwsgi.*);
+        var ctx = try zwsgi.buildContextuWSGI(a, &acpt);
 
         const callable = zwsgi.routefn(&ctx);
         zwsgi.buildfn(&ctx, callable) catch |err| {
@@ -132,23 +133,75 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
 }
 
 fn serveHttp(zwsgi: *ZWSGI) !void {
-    _ = zwsgi;
-    unreachable;
     // I don't have time to read through the whole update before I know
     // it's not gonna change again real soon... fucking zig...
-    //var srv = Server.init(a, .{ .reuse_address = true });
 
-    //const addr = std.net.Address.parseIp(HOST, PORT) catch unreachable;
-    //try srv.listen(addr);
-    //try print("HTTP Server listening\n", .{});
+    const addr = std.net.Address.parseIp(HOST, PORT) catch unreachable;
+    var srv = try addr.listen(.{ .reuse_address = true });
+    defer srv.deinit();
+    std.debug.print("HTTP Server listening\n", .{});
 
-    //HTTP.serve(a, &srv) catch {
-    //    if (@errorReturnTrace()) |trace| {
-    //        std.debug.dumpStackTrace(trace.*);
-    //    }
-    //    std.os.exit(1);
-    //};
+    const path = try std.fs.cwd().realpathAlloc(zwsgi.alloc, FILE);
+    defer zwsgi.alloc.free(path);
+    const zpath = try zwsgi.alloc.dupeZ(u8, path);
+    defer zwsgi.alloc.free(zpath);
 
+    const request_buffer: []u8 = try zwsgi.alloc.alloc(u8, 0xffff);
+    defer zwsgi.alloc.free(request_buffer);
+
+    var conn = try srv.accept();
+    defer conn.stream.close();
+
+    var hsrv = std.http.Server.init(conn, request_buffer);
+
+    while (true) {
+        var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
+        defer arena.deinit();
+        const a = arena.allocator();
+
+        var hreq = try hsrv.receiveHead();
+
+        var ctx = try zwsgi.buildContextHttp(a, &hreq);
+
+        const callable = zwsgi.routefn(&ctx);
+        zwsgi.buildfn(&ctx, callable) catch |err| {
+            switch (err) {
+                error.NetworkCrash => std.debug.print("client disconnect'\n", .{}),
+                error.Unrouteable => {
+                    std.debug.print("Unrouteable'\n", .{});
+                    if (@errorReturnTrace()) |trace| {
+                        std.debug.dumpStackTrace(trace.*);
+                    }
+                },
+                error.Unknown,
+                error.ReqResInvalid,
+                error.AndExit,
+                error.NoSpaceLeft,
+                => {
+                    std.debug.print("Unexpected error '{}'\n", .{err});
+                    return err;
+                },
+                error.InvalidURI => unreachable,
+                error.OutOfMemory => {
+                    std.debug.print("Out of memory at '{}'\n", .{arena.queryCapacity()});
+                    return err;
+                },
+                error.Abusive,
+                error.Unauthenticated,
+                error.BadData,
+                error.DataMissing,
+                => {
+                    std.debug.print("Abusive {} because {}\n", .{ ctx.request, err });
+                    for (ctx.request.raw_request.zwsgi.vars) |vars| {
+                        std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
+                    }
+                },
+            }
+        };
+
+        if (ctx.response.phase != .closed) try ctx.response.finish();
+    }
+    unreachable;
 }
 
 pub const RunMode = enum {
@@ -158,10 +211,8 @@ pub const RunMode = enum {
     stop,
 };
 
-var runmode: RunMode = .unix;
-
 pub fn serve(zwsgi: *ZWSGI) !void {
-    switch (runmode) {
+    switch (zwsgi.runmode) {
         .unix => try zwsgi.serveUnix(),
         .http => try zwsgi.serveHttp(),
         else => {},
@@ -203,7 +254,7 @@ fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
 
 const dump_vars = false;
 
-fn readHeader(a: Allocator, acpt: Server.Connection) !Request {
+fn readuWSGIHeader(a: Allocator, acpt: Server.Connection) !Request {
     var uwsgi_header = uProtoHeader{};
     var ptr: [*]u8 = @ptrCast(&uwsgi_header);
     _ = try acpt.stream.read(@alignCast(ptr[0..4]));
@@ -229,6 +280,20 @@ fn readHeader(a: Allocator, acpt: Server.Connection) !Request {
     );
 }
 
+fn readHTTPHeader(a: Allocator, req: std.http.Server.Request) !Request {
+    //const vars = try readVars(a, buf);
+
+    var itr_headers = req.iterateHeaders();
+    while (itr_headers.next()) |header| {
+        if (dump_vars) std.log.info("{}", .{header});
+    }
+
+    return try Request.init(
+        a,
+        req,
+    );
+}
+
 fn find(list: []uWSGIVar, search: []const u8) ?[]const u8 {
     for (list) |each| {
         if (std.mem.eql(u8, each.key, search)) return each.val;
@@ -240,8 +305,77 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
     return find(list, search) orelse "[missing]";
 }
 
-fn buildContext(a: Allocator, conn: *Server.Connection, zwsgi: ZWSGI) !Context {
-    var request = try readHeader(a, conn.*);
+fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
+    const response = try Response.init(a, request);
+
+    var post_data: ?RequestData.PostData = null;
+    var req_data: RequestData.RequestData = undefined;
+    switch (request.raw_request) {
+        .zwsgi => |zreq| {
+            if (find(zreq.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
+                const h_type = findOr(zreq.vars, "HTTP_CONTENT_TYPE");
+
+                const post_size = try std.fmt.parseInt(usize, h_len, 10);
+                if (post_size > 0) {
+                    post_data = try RequestData.readBody(a, zreq.acpt, post_size, h_type);
+                    if (dump_vars) std.log.info(
+                        "post data \"{s}\" {{{any}}}",
+                        .{ post_data.rawdata, post_data.rawdata },
+                    );
+
+                    for (post_data.?.items) |itm| {
+                        if (dump_vars) std.log.info("{}", .{itm});
+                    }
+                }
+            }
+
+            var query: RequestData.QueryData = undefined;
+            if (find(zreq.vars, "QUERY_STRING")) |qs| {
+                query = try RequestData.readQuery(a, qs);
+            }
+            req_data = RequestData.RequestData{
+                .post_data = post_data,
+                .query_data = query,
+            };
+        },
+        .http => |_| {
+            //if (find(hreq.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
+            //    const h_type = findOr(hreq.vars, "HTTP_CONTENT_TYPE");
+
+            //    const post_size = try std.fmt.parseInt(usize, h_len, 10);
+            //    if (post_size > 0) {
+            //        post_data = try RequestData.readBody(a, request.server.connection.*, post_size, h_type);
+            //        if (dump_vars) std.log.info(
+            //            "post data \"{s}\" {{{any}}}",
+            //            .{ post_data.rawdata, post_data.rawdata },
+            //        );
+
+            //        for (post_data.?.items) |itm| {
+            //            if (dump_vars) std.log.info("{}", .{itm});
+            //        }
+            //    }
+            //}
+
+            //var query: RequestData.QueryData = undefined;
+            //if (find(hreq.vars, "QUERY_STRING")) |qs| {
+            //    query = try RequestData.readQuery(a, qs);
+            //}
+            //req_data = RequestData.RequestData{
+            //    .post_data = post_data,
+            //    .query_data = query,
+            //};
+        },
+    }
+
+    return Context.init(a, z.config, request.*, response, req_data);
+}
+fn buildContextHttp(z: ZWSGI, a: Allocator, req: *std.http.Server.Request) !Context {
+    var request = try Request.init(a, req.*);
+    return z.buildContext(a, &request);
+}
+
+fn buildContextuWSGI(z: ZWSGI, a: Allocator, conn: *Server.Connection) !Context {
+    var request = try readuWSGIHeader(a, conn.*);
 
     std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
         findOr(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
@@ -250,34 +384,5 @@ fn buildContext(a: Allocator, conn: *Server.Connection, zwsgi: ZWSGI) !Context {
         findOr(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
     });
 
-    const response = Response.init(a, &request);
-
-    var post_data: ?RequestData.PostData = null;
-    if (find(request.raw_request.zwsgi.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
-        const h_type = findOr(request.raw_request.zwsgi.vars, "HTTP_CONTENT_TYPE");
-
-        const post_size = try std.fmt.parseInt(usize, h_len, 10);
-        if (post_size > 0) {
-            post_data = try RequestData.readBody(a, conn.*, post_size, h_type);
-            if (dump_vars) std.log.info(
-                "post data \"{s}\" {{{any}}}",
-                .{ post_data.rawdata, post_data.rawdata },
-            );
-
-            for (post_data.?.items) |itm| {
-                if (dump_vars) std.log.info("{}", .{itm});
-            }
-        }
-    }
-    var query: RequestData.QueryData = undefined;
-    if (find(request.raw_request.zwsgi.vars, "QUERY_STRING")) |qs| {
-        query = try RequestData.readQuery(a, qs);
-    }
-
-    const req_data = RequestData.RequestData{
-        .post_data = post_data,
-        .query_data = query,
-    };
-
-    return Context.init(a, zwsgi.config, request, response, req_data);
+    return z.buildContext(a, &request);
 }

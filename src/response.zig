@@ -45,11 +45,12 @@ const Error = error{
 
 pub const Writer = std.io.Writer(*Response, Error, write);
 
-//alloc: Allocator,
-request: *Request,
+//request: *Request,
 headers: Headers,
 phase: Phase = .created,
 tranfer_mode: TransferMode = .static,
+// This is just bad code, but I need to give the sane implementation more thought
+http_response: ?std.http.Server.Response = null,
 downstream: union(Downstream) {
     buffer: std.io.BufferedWriter(ONESHOT_SIZE, std.net.Stream.Writer),
     zwsgi: std.net.Stream.Writer,
@@ -57,16 +58,22 @@ downstream: union(Downstream) {
 },
 status: std.http.Status = .internal_server_error,
 
-pub fn init(a: Allocator, req: *Request) Response {
+pub fn init(a: Allocator, req: *Request) !Response {
     var res = Response{
         //.alloc = a,
-        .request = req,
         .headers = Headers.init(a),
+        .http_response = switch (req.raw_request) {
+            .zwsgi => null,
+            .http => |*h| h.respondStreaming(.{
+                .send_buffer = try a.alloc(u8, 0xffff),
+            }),
+        },
         .downstream = switch (req.raw_request) {
             .zwsgi => |*z| .{ .zwsgi = z.acpt.stream.writer() },
-            .http => |*h| .{ .http = h.writer() },
+            .http => .{ .http = undefined },
         },
     };
+    if (res.http_response) |*h| res.downstream.http = h.writer();
     res.headersInit() catch @panic("unable to create Response obj");
     return res;
 }
