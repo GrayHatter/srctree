@@ -152,6 +152,8 @@ fn serveHttp(zwsgi: *ZWSGI) !void {
     var conn = try srv.accept();
     defer conn.stream.close();
 
+    std.debug.print("HTTP conn from {}\n", .{conn.address});
+
     var hsrv = std.http.Server.init(conn, request_buffer);
 
     while (true) {
@@ -254,46 +256,6 @@ fn readVars(a: Allocator, b: []const u8) ![]uWSGIVar {
 
 const dump_vars = false;
 
-fn readuWSGIHeader(a: Allocator, acpt: Server.Connection) !Request {
-    var uwsgi_header = uProtoHeader{};
-    var ptr: [*]u8 = @ptrCast(&uwsgi_header);
-    _ = try acpt.stream.read(@alignCast(ptr[0..4]));
-
-    const buf: []u8 = try a.alloc(u8, uwsgi_header.size);
-    const read = try acpt.stream.read(buf);
-    if (read != uwsgi_header.size) {
-        std.log.err("unexpected read size {} {}", .{ read, uwsgi_header.size });
-    }
-
-    const vars = try readVars(a, buf);
-    for (vars) |v| {
-        if (dump_vars) std.log.info("{}", .{v});
-    }
-
-    return try Request.init(
-        a,
-        zWSGIRequest{
-            .header = uwsgi_header,
-            .acpt = acpt,
-            .vars = vars,
-        },
-    );
-}
-
-fn readHTTPHeader(a: Allocator, req: std.http.Server.Request) !Request {
-    //const vars = try readVars(a, buf);
-
-    var itr_headers = req.iterateHeaders();
-    while (itr_headers.next()) |header| {
-        if (dump_vars) std.log.info("{}", .{header});
-    }
-
-    return try Request.init(
-        a,
-        req,
-    );
-}
-
 fn find(list: []uWSGIVar, search: []const u8) ?[]const u8 {
     for (list) |each| {
         if (std.mem.eql(u8, each.key, search)) return each.val;
@@ -338,7 +300,7 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
                 .query_data = query,
             };
         },
-        .http => |_| {
+        .http => |hreq| {
             //if (find(hreq.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
             //    const h_type = findOr(hreq.vars, "HTTP_CONTENT_TYPE");
 
@@ -356,22 +318,62 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
             //    }
             //}
 
-            //var query: RequestData.QueryData = undefined;
-            //if (find(hreq.vars, "QUERY_STRING")) |qs| {
-            //    query = try RequestData.readQuery(a, qs);
-            //}
-            //req_data = RequestData.RequestData{
-            //    .post_data = post_data,
-            //    .query_data = query,
-            //};
+            var query_data: RequestData.QueryData = undefined;
+            if (std.mem.indexOf(u8, hreq.head.target, "/")) |i| {
+                query_data = try RequestData.readQuery(a, hreq.head.target[i..]);
+            }
+            req_data = RequestData.RequestData{
+                .post_data = post_data,
+                .query_data = query_data,
+            };
         },
     }
 
     return Context.init(a, z.config, request.*, response, req_data);
 }
+
+fn readHttpHeaders(a: Allocator, req: *std.http.Server.Request) !Request {
+    //const vars = try readVars(a, buf);
+
+    var itr_headers = req.iterateHeaders();
+    while (itr_headers.next()) |header| {
+        std.debug.print("http header => {s} -> {s}\n", .{ header.name, header.value });
+        if (dump_vars) std.log.info("{}", .{header});
+    }
+
+    return try Request.init(a, req.*);
+}
+
 fn buildContextHttp(z: ZWSGI, a: Allocator, req: *std.http.Server.Request) !Context {
-    var request = try Request.init(a, req.*);
+    var request = try readHttpHeaders(a, req);
+    std.debug.print("http target -> {s}\n", .{request.uri});
     return z.buildContext(a, &request);
+}
+
+fn readuWSGIHeader(a: Allocator, acpt: Server.Connection) !Request {
+    var uwsgi_header = uProtoHeader{};
+    var ptr: [*]u8 = @ptrCast(&uwsgi_header);
+    _ = try acpt.stream.read(@alignCast(ptr[0..4]));
+
+    const buf: []u8 = try a.alloc(u8, uwsgi_header.size);
+    const read = try acpt.stream.read(buf);
+    if (read != uwsgi_header.size) {
+        std.log.err("unexpected read size {} {}", .{ read, uwsgi_header.size });
+    }
+
+    const vars = try readVars(a, buf);
+    for (vars) |v| {
+        if (dump_vars) std.log.info("{}", .{v});
+    }
+
+    return try Request.init(
+        a,
+        zWSGIRequest{
+            .header = uwsgi_header,
+            .acpt = acpt,
+            .vars = vars,
+        },
+    );
 }
 
 fn buildContextuWSGI(z: ZWSGI, a: Allocator, conn: *Server.Connection) !Context {

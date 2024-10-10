@@ -71,7 +71,7 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
             var req = Request{
                 .raw_request = .{ .http = raw_req },
                 .headers = HeaderList.init(a),
-                .uri = undefined,
+                .uri = raw_req.head.target,
                 .method = Methods.GET,
                 .auth = undefined,
             };

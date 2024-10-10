@@ -93,7 +93,7 @@ pub fn start(res: *Response) !void {
     if (res.status == .internal_server_error) res.status = .ok;
     switch (res.downstream) {
         .http => {
-            unreachable;
+            //unreachable;
             //res.request.raw_request.http.transfer_encoding = .chunked;
             //res.phase = .headers;
             //return res.request.raw_request.http.do();
@@ -117,14 +117,19 @@ fn sendHTTPHeader(res: *const Response) !void {
 
 pub fn sendHeaders(res: *Response) !void {
     res.phase = .headers;
-    try res.sendHTTPHeader();
-    var itr = res.headers.index.iterator();
-    while (itr.next()) |header| {
-        var buf: [512]u8 = undefined;
-        const b = try std.fmt.bufPrint(&buf, "{s}: {s}\r\n", .{ header.key_ptr.*, header.value_ptr.str });
-        _ = try res.write(b);
+    switch (res.downstream) {
+        .http => unreachable,
+        .zwsgi, .buffer => {
+            try res.sendHTTPHeader();
+            var itr = res.headers.index.iterator();
+            while (itr.next()) |header| {
+                var buf: [512]u8 = undefined;
+                const b = try std.fmt.bufPrint(&buf, "{s}: {s}\r\n", .{ header.key_ptr.*, header.value_ptr.str });
+                _ = try res.write(b);
+            }
+            _ = try res.write("Transfer-Encoding: chunked\r\n");
+        },
     }
-    _ = try res.write("Transfer-Encoding: chunked\r\n");
 }
 
 pub fn redirect(res: *Response, loc: []const u8, see_other: bool) !void {
