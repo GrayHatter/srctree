@@ -413,12 +413,12 @@ fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: 
 
 pub fn readBody(
     a: Allocator,
-    acpt: std.net.Server.Connection,
+    reader: *std.io.AnyReader,
     size: usize,
     htype: []const u8,
 ) !PostData {
     const post_buf: []u8 = try a.alloc(u8, size);
-    const read_size = try acpt.stream.read(post_buf);
+    const read_size = try reader.read(post_buf);
     if (read_size != size) return error.UnexpectedHttpBodySize;
 
     const items = switch (try ContentType.fromStr(htype)) {

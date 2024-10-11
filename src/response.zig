@@ -66,6 +66,7 @@ pub fn init(a: Allocator, req: *Request) !Response {
             .zwsgi => null,
             .http => |*h| h.respondStreaming(.{
                 .send_buffer = try a.alloc(u8, 0xffff),
+                .respond_options = .{ .transfer_encoding = .chunked },
             }),
         },
         .downstream = switch (req.raw_request) {
@@ -93,16 +94,16 @@ pub fn start(res: *Response) !void {
     if (res.status == .internal_server_error) res.status = .ok;
     switch (res.downstream) {
         .http => {
-            //unreachable;
-            //res.request.raw_request.http.transfer_encoding = .chunked;
-            //res.phase = .headers;
-            //return res.request.raw_request.http.do();
+            // I don't know why/where the writer goes invalid, but I'll probably
+            // fix it later?
+            if (res.http_response) |*h| res.downstream.http = h.writer();
+            try res.sendHeaders();
         },
-        else => {},
+        else => {
+            try res.sendHeaders();
+            _ = try res.write("\r\n");
+        },
     }
-
-    try res.sendHeaders();
-    _ = try res.write("\r\n");
 }
 
 fn sendHTTPHeader(res: *const Response) !void {
@@ -118,7 +119,7 @@ fn sendHTTPHeader(res: *const Response) !void {
 pub fn sendHeaders(res: *Response) !void {
     res.phase = .headers;
     switch (res.downstream) {
-        .http => unreachable,
+        .http => try res.http_response.?.flush(),
         .zwsgi, .buffer => {
             try res.sendHTTPHeader();
             var itr = res.headers.index.iterator();
@@ -155,6 +156,8 @@ pub fn send(res: *Response, data: []const u8) !void {
     }
     res.phase = .body;
     try res.writeAll(data);
+
+    if (res.http_response) |*h| try h.endChunked(.{});
 }
 
 pub fn writer(res: *const Response) Writer {
@@ -193,7 +196,7 @@ pub fn typeErasedWrite(opq: *const anyopaque, data: []const u8) anyerror!usize {
 pub fn write(res: *const Response, data: []const u8) !usize {
     return switch (res.downstream) {
         .zwsgi => |*w| try w.write(data),
-        .http => |*w| try w.write(data),
+        .http => |*w| return try w.write(data),
         .buffer => {
             var bff: *Response = @constCast(res);
             return try bff.write(data);

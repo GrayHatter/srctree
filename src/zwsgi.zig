@@ -279,7 +279,8 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
 
                 const post_size = try std.fmt.parseInt(usize, h_len, 10);
                 if (post_size > 0) {
-                    post_data = try RequestData.readBody(a, zreq.acpt, post_size, h_type);
+                    var reader = zreq.acpt.stream.reader().any();
+                    post_data = try RequestData.readBody(a, &reader, post_size, h_type);
                     if (dump_vars) std.log.info(
                         "post data \"{s}\" {{{any}}}",
                         .{ post_data.rawdata, post_data.rawdata },
@@ -300,23 +301,22 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
                 .query_data = query,
             };
         },
-        .http => |hreq| {
-            //if (find(hreq.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
-            //    const h_type = findOr(hreq.vars, "HTTP_CONTENT_TYPE");
+        .http => |*hreq| {
+            if (hreq.head.content_length) |h_len| {
+                if (h_len > 0) {
+                    const h_type = hreq.head.content_type orelse "text/plain";
+                    var reader = try hreq.reader();
+                    post_data = try RequestData.readBody(a, &reader, h_len, h_type);
+                    if (dump_vars) std.log.info(
+                        "post data \"{s}\" {{{any}}}",
+                        .{ post_data.rawdata, post_data.rawdata },
+                    );
 
-            //    const post_size = try std.fmt.parseInt(usize, h_len, 10);
-            //    if (post_size > 0) {
-            //        post_data = try RequestData.readBody(a, request.server.connection.*, post_size, h_type);
-            //        if (dump_vars) std.log.info(
-            //            "post data \"{s}\" {{{any}}}",
-            //            .{ post_data.rawdata, post_data.rawdata },
-            //        );
-
-            //        for (post_data.?.items) |itm| {
-            //            if (dump_vars) std.log.info("{}", .{itm});
-            //        }
-            //    }
-            //}
+                    for (post_data.?.items) |itm| {
+                        if (dump_vars) std.log.info("{}", .{itm});
+                    }
+                }
+            }
 
             var query_data: RequestData.QueryData = undefined;
             if (std.mem.indexOf(u8, hreq.head.target, "/")) |i| {
