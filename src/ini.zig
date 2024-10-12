@@ -38,7 +38,7 @@ pub const Namespace = struct {
 
         while (itr.peek()) |peek| {
             const line = std.mem.trim(u8, peek, " \n\t");
-            if (line.len == 0) {
+            if (line.len < 3 or line[0] == '#') {
                 _ = itr.next();
                 continue;
             }
@@ -47,8 +47,8 @@ pub const Namespace = struct {
                 _ = itr.next();
                 continue;
             }
-
-            try list.append(try Setting.pair(a, line));
+            const pair = try Setting.pair(a, line);
+            try list.append(pair);
             _ = itr.next();
         }
 
@@ -229,4 +229,40 @@ test "getBool" {
     try std.testing.expectEqual(false, ns.getBool("eight").?);
     try std.testing.expectEqual(false, ns.getBool("ninth").?);
     try std.testing.expectEqual(null, ns.getBool("tenth"));
+}
+
+test "commented" {
+    const a = std.testing.allocator;
+
+    const vut =
+        \\[open]
+        \\left = right
+        \\#comment = ignored
+        \\    # long_comment = still_ignored
+        \\ this = works
+        \\ # but not this
+    ;
+
+    const expected = Config{
+        .alloc = a,
+        .ns = @constCast(&[1]Namespace{
+            Namespace{
+                .name = @as([]u8, @constCast("open")),
+                .settings = @constCast(
+                    &[2]Setting{
+                        .{ .name = "left", .val = "right" },
+                        .{ .name = "this", .val = "works" },
+                    },
+                ),
+                .block = @constCast(vut[7..]),
+            },
+        }),
+        .data = @constCast(vut),
+        .owned = @constCast(vut),
+    };
+
+    const vtest = try initDupe(a, vut);
+    defer vtest.raze();
+
+    try std.testing.expectEqualDeep(expected, vtest);
 }
