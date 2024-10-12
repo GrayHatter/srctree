@@ -105,6 +105,12 @@ pub fn POST(comptime name: []const u8, comptime match: Callable) Match {
     return mr;
 }
 
+pub fn STATIC(comptime name: []const u8) Match {
+    var mr = ROUTE(name, StaticFile.fileOnDisk);
+    mr.methods = .{ .GET = true };
+    return mr;
+}
+
 fn notfound(ctx: *Context) Error!void {
     ctx.response.status = .not_found;
     var tmpl = Template.find("4XX.html");

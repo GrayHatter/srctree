@@ -23,13 +23,6 @@ pub const TransferMode = enum {
     proxy_streaming,
 };
 
-const Phase = enum {
-    created,
-    headers,
-    body,
-    closed,
-};
-
 const Downstream = enum {
     buffer,
     zwsgi,
@@ -46,8 +39,7 @@ const Error = error{
 pub const Writer = std.io.Writer(*Response, Error, write);
 
 //request: *Request,
-headers: Headers,
-phase: Phase = .created,
+headers: ?Headers = null,
 tranfer_mode: TransferMode = .static,
 // This is just bad code, but I need to give the sane implementation more thought
 http_response: ?std.http.Server.Response = null,
@@ -66,7 +58,10 @@ pub fn init(a: Allocator, req: *Request) !Response {
             .zwsgi => null,
             .http => |*h| h.respondStreaming(.{
                 .send_buffer = try a.alloc(u8, 0xffff),
-                .respond_options = .{ .transfer_encoding = .chunked },
+                .respond_options = .{
+                    .transfer_encoding = .chunked,
+                    .keep_alive = false,
+                },
             }),
         },
         .downstream = switch (req.raw_request) {
@@ -85,12 +80,13 @@ fn headersInit(res: *Response) !void {
 }
 
 pub fn headersAdd(res: *Response, comptime name: []const u8, value: []const u8) !void {
-    if (res.phase != .created) return Error.HeadersFinished;
-    try res.headers.add(name, value);
+    if (res.headers) |*headers| {
+        try headers.add(name, value);
+    } else return Error.HeadersFinished;
 }
 
 pub fn start(res: *Response) !void {
-    if (res.phase != .created) return Error.WrongPhase;
+    if (res.headers == null) return Error.WrongPhase;
     if (res.status == .internal_server_error) res.status = .ok;
     switch (res.downstream) {
         .http => {
@@ -117,24 +113,29 @@ fn sendHTTPHeader(res: *const Response) !void {
 }
 
 pub fn sendHeaders(res: *Response) !void {
-    res.phase = .headers;
     switch (res.downstream) {
         .http => try res.http_response.?.flush(),
         .zwsgi, .buffer => {
-            try res.sendHTTPHeader();
-            var itr = res.headers.index.iterator();
-            while (itr.next()) |header| {
-                var buf: [512]u8 = undefined;
-                const b = try std.fmt.bufPrint(&buf, "{s}: {s}\r\n", .{ header.key_ptr.*, header.value_ptr.str });
-                _ = try res.write(b);
-            }
-            _ = try res.write("Transfer-Encoding: chunked\r\n");
+            if (res.headers) |*headers| {
+                try res.sendHTTPHeader();
+                var itr = headers.index.iterator();
+                while (itr.next()) |header| {
+                    var buf: [512]u8 = undefined;
+                    const b = try std.fmt.bufPrint(&buf, "{s}: {s}\r\n", .{
+                        header.key_ptr.*,
+                        header.value_ptr.str,
+                    });
+                    _ = try res.write(b);
+                }
+                _ = try res.write("Transfer-Encoding: chunked\r\n");
+            } else return error.WrongPhase;
         },
     }
+    res.headers = null;
 }
 
 pub fn redirect(res: *Response, loc: []const u8, see_other: bool) !void {
-    if (res.phase != .created) return error.WrongPhase;
+    if (res.headers == null) return error.WrongPhase;
 
     try res.writeAll("HTTP/1.1 ");
     if (see_other) {
@@ -148,16 +149,12 @@ pub fn redirect(res: *Response, loc: []const u8, see_other: bool) !void {
     try res.writeAll("\r\n\r\n");
 }
 
+/// Do not use
+/// TODO remove
 pub fn send(res: *Response, data: []const u8) !void {
-    switch (res.phase) {
-        .created => try res.start(),
-        .headers, .body => {},
-        .closed => return Error.ResponseClosed,
-    }
-    res.phase = .body;
+    if (res.headers != null) try res.start();
     try res.writeAll(data);
-
-    if (res.http_response) |*h| try h.endChunked(.{});
+    return res.finish();
 }
 
 pub fn writer(res: *const Response) Writer {
@@ -207,14 +204,16 @@ pub fn write(res: *const Response, data: []const u8) !usize {
 fn flush(res: *Response) !void {
     switch (res.downstream) {
         .buffer => |*w| try w.flush(),
+        .http => |*h| h.flush(),
         else => {},
     }
 }
 
 pub fn finish(res: *Response) !void {
-    res.phase = .closed;
     switch (res.downstream) {
-        .http => {},
+        .http => {
+            if (res.http_response) |*h| try h.endChunked(.{});
+        },
         //.zwsgi => |*w| _ = try w.write("0\r\n\r\n"),
         else => {},
     }

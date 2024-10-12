@@ -127,8 +127,6 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
                 },
             }
         };
-
-        if (ctx.response.phase != .closed) try ctx.response.finish();
     }
 }
 
@@ -149,14 +147,11 @@ fn serveHttp(zwsgi: *ZWSGI) !void {
     const request_buffer: []u8 = try zwsgi.alloc.alloc(u8, 0xffff);
     defer zwsgi.alloc.free(request_buffer);
 
-    var conn = try srv.accept();
-    defer conn.stream.close();
-
-    std.debug.print("HTTP conn from {}\n", .{conn.address});
-
-    var hsrv = std.http.Server.init(conn, request_buffer);
-
     while (true) {
+        var conn = try srv.accept();
+        defer conn.stream.close();
+        std.debug.print("HTTP conn from {}\n", .{conn.address});
+        var hsrv = std.http.Server.init(conn, request_buffer);
         var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
         defer arena.deinit();
         const a = arena.allocator();
@@ -200,8 +195,6 @@ fn serveHttp(zwsgi: *ZWSGI) !void {
                 },
             }
         };
-
-        if (ctx.response.phase != .closed) try ctx.response.finish();
     }
     unreachable;
 }

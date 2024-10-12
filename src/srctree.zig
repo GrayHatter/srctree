@@ -6,6 +6,7 @@ const Types = @import("types.zig");
 
 const ROUTE = Routes.ROUTE;
 const GET = Routes.GET;
+const STATIC = Routes.STATIC;
 const Match = Routes.Match;
 const Callable = Routes.Callable;
 const allocPrint = @import("std").fmt.allocPrint;
@@ -41,6 +42,7 @@ pub const routes = [_]Match{
     ROUTE("todo", USERS.todo),
     ROUTE("user", commitFlex),
     ROUTE("settings", &settings.endpoints),
+    STATIC("static"),
 };
 
 fn unroutable(ctx: *Context) Routes.Error!void {

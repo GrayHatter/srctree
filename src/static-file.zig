@@ -3,9 +3,10 @@ const std = @import("std");
 const Context = @import("context.zig");
 const Route = @import("routes.zig");
 
-pub fn file(ctx: *Context) Route.Error!void {
+pub fn fileOnDisk(ctx: *Context) Route.Error!void {
     _ = ctx.uri.next(); // clear /static
     const fname = ctx.uri.next() orelse return error.Unrouteable;
+    if (fname.len == 0) return error.Unrouteable;
     for (fname) |c| switch (c) {
         'A'...'Z', 'a'...'z', '-', '_', '.' => continue,
         else => return error.Abusive,

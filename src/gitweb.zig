@@ -76,7 +76,6 @@ fn gitUploadPack(ctx: *Context) Error!void {
     child.expand_arg0 = .no_expand;
 
     ctx.response.status = .ok;
-    ctx.response.phase = .headers;
 
     child.spawn() catch unreachable;
 

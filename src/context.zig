@@ -105,7 +105,6 @@ pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
     const page = try t.buildFor(ctx.alloc, ctx.template_ctx);
     defer ctx.alloc.free(page);
     ctx.response.send(page) catch unreachable;
-    ctx.response.finish() catch unreachable;
 }
 
 pub fn sendJSON(ctx: *Context, json: anytype) Error!void {
