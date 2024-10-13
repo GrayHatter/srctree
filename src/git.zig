@@ -1371,12 +1371,22 @@ pub const Agent = struct {
     fn execCustom(self: Agent, argv: []const []const u8) !std.ChildProcess.RunResult {
         std.debug.assert(std.mem.eql(u8, argv[0], "git"));
         const cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
-        const child = try std.ChildProcess.run(.{
+        const child = std.ChildProcess.run(.{
             .cwd_dir = cwd,
             .allocator = self.alloc,
             .argv = argv,
             .max_output_bytes = 0x1FFFFF,
-        });
+        }) catch |err| {
+            const errstr =
+                \\git agent error:
+                \\error :: {}
+                \\argv :: 
+            ;
+            std.debug.print(errstr, .{err});
+            for (argv) |arg| std.debug.print("{s} ", .{arg});
+            std.debug.print("\n", .{});
+            return err;
+        };
         return child;
     }
 
