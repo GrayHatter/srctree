@@ -159,7 +159,10 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     try ctx.putContext("Commit", .{ .block = &commit_ctx });
 
     var git = repo.getAgent(ctx.alloc);
-    var diff = git.show(sha) catch return error.Unknown;
+    var diff = git.show(sha) catch |err| switch (err) {
+        error.StdoutStreamTooLong => return ctx.sendError(.internal_server_error),
+        else => return error.Unknown,
+    };
 
     if (std.mem.indexOf(u8, diff, "diff")) |i| {
         diff = diff[i..];

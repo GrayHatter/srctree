@@ -111,9 +111,24 @@ pub fn STATIC(comptime name: []const u8) Match {
     return mr;
 }
 
-fn notfound(ctx: *Context) Error!void {
+pub fn defaultResponse(comptime code: std.http.Status) Callable {
+    return switch (code) {
+        .not_found => notFound,
+        .internal_server_error => internalServerError,
+        else => default,
+    };
+}
+
+fn notFound(ctx: *Context) Error!void {
     ctx.response.status = .not_found;
     var tmpl = Template.find("4XX.html");
+    tmpl.init(ctx.alloc);
+    ctx.sendTemplate(&tmpl) catch unreachable;
+}
+
+fn internalServerError(ctx: *Context) Error!void {
+    ctx.response.status = .internal_server_error;
+    var tmpl = Template.find("5XX.html");
     tmpl.init(ctx.alloc);
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
@@ -129,7 +144,7 @@ fn eql(a: []const u8, b: []const u8) bool {
 }
 
 pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
-    const search = ctx.uri.peek() orelse return notfound;
+    const search = ctx.uri.peek() orelse return notFound;
     inline for (routes) |ep| {
         if (eql(search, ep.name)) {
             switch (ep.match) {
@@ -139,7 +154,7 @@ pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
                 },
                 .route => |route| {
                     return route(ctx) catch |err| switch (err) {
-                        error.Unrouteable => return notfound,
+                        error.Unrouteable => return notFound,
                         else => unreachable,
                     };
                 },
@@ -154,7 +169,7 @@ pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
             }
         }
     }
-    return notfound;
+    return notFound;
 }
 
 const root = [_]Match{

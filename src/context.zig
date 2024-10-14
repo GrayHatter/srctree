@@ -11,7 +11,8 @@ pub const Request = @import("request.zig");
 pub const Response = @import("response.zig");
 pub const RequestData = @import("request_data.zig").RequestData;
 pub const Template = @import("template.zig");
-pub const UriIter = @import("routes.zig").UriIter;
+pub const Routes = @import("routes.zig");
+pub const UriIter = Routes.UriIter;
 const Config = @import("ini.zig").Config;
 
 const Error = @import("errors.zig").Error;
@@ -105,6 +106,10 @@ pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
     const page = try t.buildFor(ctx.alloc, ctx.template_ctx);
     defer ctx.alloc.free(page);
     ctx.response.send(page) catch unreachable;
+}
+
+pub fn sendError(ctx: *Context, comptime code: std.http.Status) Error!void {
+    return Routes.defaultResponse(code)(ctx);
 }
 
 pub fn sendJSON(ctx: *Context, json: anytype) Error!void {

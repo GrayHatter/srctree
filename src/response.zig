@@ -48,7 +48,7 @@ downstream: union(Downstream) {
     zwsgi: std.net.Stream.Writer,
     http: std.io.AnyWriter,
 },
-status: std.http.Status = .internal_server_error,
+status: ?std.http.Status = null,
 
 pub fn init(a: Allocator, req: *Request) !Response {
     var res = Response{
@@ -87,7 +87,7 @@ pub fn headersAdd(res: *Response, comptime name: []const u8, value: []const u8) 
 
 pub fn start(res: *Response) !void {
     if (res.headers == null) return Error.WrongPhase;
-    if (res.status == .internal_server_error) res.status = .ok;
+    if (res.status == null) res.status = .ok;
     switch (res.downstream) {
         .http => {
             // I don't know why/where the writer goes invalid, but I'll probably
@@ -102,12 +102,14 @@ pub fn start(res: *Response) !void {
     }
 }
 
-fn sendHTTPHeader(res: *const Response) !void {
-    _ = switch (res.status) {
+fn sendHTTPHeader(res: *Response) !void {
+    if (res.status == null) res.status = .ok;
+    _ = switch (res.status.?) {
         .ok => try res.write("HTTP/1.1 200 OK\r\n"),
         .found => try res.write("HTTP/1.1 302 Found\r\n"),
         .forbidden => try res.write("HTTP/1.1 403 Forbidden\r\n"),
         .not_found => try res.write("HTTP/1.1 404 Not Found\r\n"),
+        .internal_server_error => try res.write("HTTP/1.1 500 Internal Server Error\r\n"),
         else => return Error.UnknownStatus,
     };
 }
