@@ -131,9 +131,6 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
 }
 
 fn serveHttp(zwsgi: *ZWSGI) !void {
-    // I don't have time to read through the whole update before I know
-    // it's not gonna change again real soon... fucking zig...
-
     const addr = std.net.Address.parseIp(HOST, PORT) catch unreachable;
     var srv = try addr.listen(.{ .reuse_address = true });
     defer srv.deinit();
