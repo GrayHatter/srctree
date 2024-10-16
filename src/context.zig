@@ -103,9 +103,11 @@ pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
         try ctx.putContext("Current_username", .{ .slice = usr.username });
     } else |_| {}
     //
-    const page = try t.buildFor(ctx.alloc, ctx.template_ctx);
-    defer ctx.alloc.free(page);
-    ctx.response.send(page) catch unreachable;
+
+    const page = t.page(ctx.template_ctx);
+    const page_compiled = try page.build(ctx.alloc);
+    defer ctx.alloc.free(page_compiled);
+    ctx.response.send(page_compiled) catch unreachable;
 }
 
 pub fn sendError(ctx: *Context, comptime code: std.http.Status) Error!void {

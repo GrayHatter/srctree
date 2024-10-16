@@ -56,7 +56,6 @@ pub fn router(ctx: *Context) Error!Route.Callable {
 
 fn new(ctx: *Context) Error!void {
     var tmpl = comptime Template.find("diff-new.html");
-    tmpl.init(ctx.alloc);
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -112,7 +111,6 @@ fn newPost(ctx: *Context) Error!void {
     }
 
     var tmpl = Template.find("diff-new.html");
-    tmpl.init(ctx.alloc);
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -148,7 +146,6 @@ fn view(ctx: *Context) Error!void {
     const index = isHex(delta_id) orelse return error.Unrouteable;
 
     var tmpl = Template.find("delta-diff.html");
-    tmpl.init(ctx.alloc);
 
     var dom = DOM.new(ctx.alloc);
 
@@ -203,7 +200,7 @@ fn view(ctx: *Context) Error!void {
         const patch_html = try Commits.patchHtml(ctx.alloc, &patch);
         _ = try ctx.addElementsFmt(ctx.alloc, "{pretty}", "Patch", patch_html);
         f.close();
-    } else try tmpl.addString("Patch", "Patch not found");
+    } else try ctx.putContext("Patch", .{ .slice = "Patch not found" });
 
     try ctx.sendTemplate(&tmpl);
 }
@@ -237,7 +234,6 @@ fn list(ctx: *Context) Error!void {
         continue;
     }
     var tmpl = Template.find("deltalist.html");
-    tmpl.init(ctx.alloc);
     try ctx.putContext("List", .{ .block = tmpl_ctx[0..end] });
     try ctx.sendTemplate(&tmpl);
 }

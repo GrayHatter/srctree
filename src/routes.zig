@@ -122,20 +122,17 @@ pub fn defaultResponse(comptime code: std.http.Status) Callable {
 fn notFound(ctx: *Context) Error!void {
     ctx.response.status = .not_found;
     var tmpl = Template.find("4XX.html");
-    tmpl.init(ctx.alloc);
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn internalServerError(ctx: *Context) Error!void {
     ctx.response.status = .internal_server_error;
     var tmpl = Template.find("5XX.html");
-    tmpl.init(ctx.alloc);
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 fn default(ctx: *Context) Error!void {
     var tmpl = Template.find("index.html");
-    tmpl.init(ctx.alloc);
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 

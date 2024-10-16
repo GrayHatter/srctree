@@ -56,7 +56,6 @@ fn notFound(ctx: *Context) Routes.Error!void {
     @import("std").debug.print("404 for route\n", .{});
     ctx.response.status = .not_found;
     var tmpl = Template.find("4XX.html");
-    tmpl.init(ctx.alloc);
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 

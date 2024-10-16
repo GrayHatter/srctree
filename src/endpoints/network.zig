@@ -44,7 +44,6 @@ fn default(ctx: *Context) Error!void {
     const data = dom.done();
 
     var tmpl = Template.find("network.html");
-    tmpl.init(ctx.alloc);
     _ = ctx.addElements(ctx.alloc, "Netlist", data) catch unreachable;
     try ctx.sendTemplate(&tmpl);
 }

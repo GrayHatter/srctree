@@ -27,14 +27,12 @@ pub fn diffs(ctx: *Context) Error!void {
     const data = dom.done();
 
     var tmpl = Template.find("deltalist.html");
-    tmpl.init(ctx.alloc);
     _ = ctx.addElements(ctx.alloc, "todos", data) catch unreachable;
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 pub fn todo(ctx: *Context) Error!void {
     var tmpl = Template.find("deltalist.html");
-    tmpl.init(ctx.alloc);
 
     const tmpl_ctx_list = std.ArrayList(Template.Context).init(ctx.alloc);
     _ = tmpl_ctx_list;
@@ -63,7 +61,6 @@ pub fn todo(ctx: *Context) Error!void {
     //    continue;
     //}
     //var tmpl = Template.find("deltalist.html");
-    //tmpl.init(ctx.alloc);
     //try tmpl.ctx.?.putBlock("list", tmpl_ctx[0..end]);
 
     //var default_search_buf: [0xFF]u8 = undefined;

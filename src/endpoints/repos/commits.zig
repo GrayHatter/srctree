@@ -221,7 +221,6 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
     var tmpl = Template.find("commit.html");
-    tmpl.init(ctx.alloc);
     ctx.response.status = .ok;
     return ctx.sendTemplate(&tmpl) catch unreachable;
 }
@@ -467,7 +466,6 @@ pub fn commitsBefore(ctx: *Context) Error!void {
 
 fn sendCommits(ctx: *Context, list: []Template.Context, before_txt: []const u8) Error!void {
     var tmpl = Template.find("commit-list.html");
-    tmpl.init(ctx.alloc);
 
     try ctx.putContext("Commits", .{ .block = list });
 

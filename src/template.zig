@@ -22,9 +22,11 @@ fn validChar(c: u8) bool {
 
 const DEBUG = false;
 
+pub const Context = DataMap;
+
 // TODO rename this to... uhhh Map maybe?
 //
-pub const Context = struct {
+pub const DataMap = struct {
     pub const Pair = struct {
         name: []const u8,
         value: []const u8,
@@ -32,7 +34,7 @@ pub const Context = struct {
 
     pub const Data = union(enum) {
         slice: []const u8,
-        block: []Context,
+        block: []DataMap,
         reader: std.io.AnyReader,
     };
 
@@ -52,7 +54,7 @@ pub const Context = struct {
                 };
             }
 
-            pub fn buildUnsanitized(self: Self, a: Allocator, ctx: *Context) !void {
+            pub fn buildUnsanitized(self: Self, a: Allocator, ctx: *DataMap) !void {
                 if (comptime @import("builtin").zig_version.minor >= 12) {
                     if (std.meta.hasMethod(T, "contextBuilderUnsanitized")) {
                         return self.from.contextBuilderUnsanitized(a, ctx);
@@ -66,7 +68,7 @@ pub const Context = struct {
                 }
             }
 
-            pub fn build(self: Self, a: Allocator, ctx: *Context) !void {
+            pub fn build(self: Self, a: Allocator, ctx: *DataMap) !void {
                 if (comptime @import("builtin").zig_version.minor >= 12) {
                     if (std.meta.hasMethod(T, "contextBuilder")) {
                         return self.from.contextBuilder(a, ctx);
@@ -78,14 +80,14 @@ pub const Context = struct {
         };
     }
 
-    pub fn init(a: Allocator) Context {
-        return Context{
+    pub fn init(a: Allocator) DataMap {
+        return DataMap{
             .ctx = HashMap.init(a),
         };
     }
 
-    pub fn initWith(a: Allocator, data: []const Pair) !Context {
-        var ctx = Context.init(a);
+    pub fn initWith(a: Allocator, data: []const Pair) !DataMap {
+        var ctx = DataMap.init(a);
         for (data) |d| {
             ctx.putSlice(d.name, d.value) catch |err| switch (err) {
                 error.OutOfMemory => return err,
@@ -95,14 +97,14 @@ pub const Context = struct {
         return ctx;
     }
 
-    pub fn initBuildable(a: Allocator, buildable: anytype) !Context {
-        var ctx = Context.init(a);
+    pub fn initBuildable(a: Allocator, buildable: anytype) !DataMap {
+        var ctx = DataMap.init(a);
         const builder = buildable.builder();
         try builder.build(a, &ctx);
         return ctx;
     }
 
-    pub fn raze(self: *Context) void {
+    pub fn raze(self: *DataMap) void {
         var itr = self.ctx.iterator();
         while (itr.next()) |*n| {
             switch (n.value_ptr.*) {
@@ -113,22 +115,22 @@ pub const Context = struct {
         self.ctx.deinit();
     }
 
-    pub fn put(self: *Context, name: []const u8, value: Data) !void {
+    pub fn put(self: *DataMap, name: []const u8, value: Data) !void {
         try self.ctx.put(name, value);
     }
 
-    pub fn get(self: Context, name: []const u8) ?Data {
+    pub fn get(self: DataMap, name: []const u8) ?Data {
         return self.ctx.get(name);
     }
 
-    pub fn putSlice(self: *Context, name: []const u8, value: []const u8) !void {
+    pub fn putSlice(self: *DataMap, name: []const u8, value: []const u8) !void {
         if (comptime build_mode == .Debug)
             if (!std.ascii.isUpper(name[0]))
                 std.debug.print("Warning Template can't resolve {s}\n", .{name});
         try self.ctx.put(name, .{ .slice = value });
     }
 
-    pub fn getSlice(self: Context, name: []const u8) ?[]const u8 {
+    pub fn getSlice(self: DataMap, name: []const u8) ?[]const u8 {
         return switch (self.getNext(name) orelse return null) {
             .slice => |s| s,
             .block => unreachable,
@@ -138,11 +140,11 @@ pub const Context = struct {
 
     /// Memory of block is managed by the caller. Calling raze will not free the
     /// memory from within.
-    pub fn putBlock(self: *Context, name: []const u8, block: []Context) !void {
+    pub fn putBlock(self: *DataMap, name: []const u8, block: []DataMap) !void {
         try self.ctx.put(name, .{ .block = block });
     }
 
-    pub fn getBlock(self: Context, name: []const u8) !?[]const Context {
+    pub fn getBlock(self: DataMap, name: []const u8) !?[]const DataMap {
         return switch (self.ctx.get(name) orelse return null) {
             // I'm sure this hack will live forever, I'm abusing With to be
             // an IF here, without actually implementing IF... sorry!
@@ -152,11 +154,11 @@ pub const Context = struct {
         };
     }
 
-    pub fn putReader(self: *Context, name: []const u8, value: []const u8) !void {
+    pub fn putReader(self: *DataMap, name: []const u8, value: []const u8) !void {
         try self.putSlice(name, value);
     }
 
-    pub fn getReader(self: Context, name: []const u8) ?std.io.AnyReader {
+    pub fn getReader(self: DataMap, name: []const u8) ?std.io.AnyReader {
         switch (self.ctx.get(name) orelse return null) {
             .slice, .block => return error.NotAReader,
             .reader => |r| return r,
@@ -166,20 +168,10 @@ pub const Context = struct {
 };
 
 pub const Template = struct {
-    alloc: ?Allocator = null,
-    ctx: ?Context = null,
     // path: []const u8,
     name: []const u8,
     blob: []const u8,
     parent: ?*const Template = null,
-
-    /// This init takes a 'self' to support creation at comptime
-    pub fn init(self: *Template, a: Allocator) void {
-        std.debug.assert(self.alloc == null);
-        std.debug.assert(self.ctx == null);
-        self.alloc = a;
-        self.ctx = Context.init(a);
-    }
 
     pub fn initWith(self: *Template, a: Allocator, data: []struct { name: []const u8, val: []const u8 }) !void {
         self.init(a);
@@ -192,81 +184,239 @@ pub const Template = struct {
         self.ctx.raze();
     }
 
-    pub fn addString(self: *Template, name: []const u8, value: []const u8) !void {
-        try self.ctx.?.putSlice(name, value);
-    }
-
-    pub fn buildFor(self: *Template, a: Allocator, ctx: Context) ![]u8 {
-        var template: Template = self.*;
-        template.alloc = a;
-        template.ctx = ctx;
-        return std.fmt.allocPrint(a, "{}", .{template});
+    pub fn page(self: Template, data: DataMap) Page {
+        return .{
+            .data = data,
+            .template = self,
+        };
     }
 
     fn templateSearch() bool {
         return false;
     }
 
-    fn calcPos(comptime keyword: []const u8, blob: []const u8, verb: []const u8) ?struct {
-        start: usize,
-        end: usize,
-        endws: usize,
-        width: usize,
-    } {
-        const close: *const [keyword.len + 3]u8 = "</" ++ keyword ++ ">";
-        var start = 1 + (indexOf(u8, blob, ">") orelse return null);
-        const end = close.len + (lastIndexOf(u8, blob, close) orelse return null);
-        while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
-        const endws = end - close.len;
+    pub fn format(_: Template, comptime _: []const u8, _: std.fmt.FormatOptions, _: anytype) !void {
+        comptime unreachable;
+    }
+};
 
-        //while (endws > start and isWhitespace(blob[endws])) : (endws -|= 1) {}
-        //endws += 1;
+pub const Page = struct {
+    template: Template,
+    data: DataMap,
 
-        var width: usize = 1;
-        while (width < verb.len and validChar(verb[width])) {
-            width += 1;
-        }
+    pub fn init(comptime t: Template, d: DataMap) Page {
         return .{
-            .start = start,
-            .width = width,
-            .end = end,
-            .endws = endws,
+            .template = t,
+            .data = d,
         };
     }
 
-    fn directiveVerb(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive {
-        if (std.mem.eql(u8, noun, "For")) {
-            const pos = calcPos("For", blob, verb) orelse return null;
-            std.debug.assert(pos.width > 1);
-            return .{
-                .end = pos.end,
-                .kind = .{
-                    .verb = .{
-                        .vari = verb[1..pos.width],
-                        .blob = blob[pos.start..pos.endws],
-                        .word = .foreach,
-                    },
-                },
-            };
-        } else if (std.mem.eql(u8, noun, "With")) {
-            const pos = calcPos("With", blob, verb) orelse return null;
-            std.debug.assert(pos.width > 1);
-            return .{
-                .end = pos.end,
-                .kind = .{
-                    .verb = .{
-                        .vari = verb[1..pos.width],
-                        .blob = blob[pos.start..pos.endws],
-                        .word = .with,
-                    },
-                },
-            };
-            // pass
-        }
-        return null;
+    pub fn byName(comptime name: []const u8, d: DataMap) Page {
+        return .{
+            .template = find(name),
+            .data = d,
+        };
     }
 
-    fn validDirective(str: []const u8) ?Directive {
+    pub fn build(self: Page, a: Allocator) ![]u8 {
+        return std.fmt.allocPrint(a, "{}", .{self});
+    }
+
+    pub fn format(self: Page, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        var ctx = self.data;
+        var blob = self.template.blob;
+        while (blob.len > 0) {
+            if (std.mem.indexOf(u8, blob, "<")) |offset| {
+                try out.writeAll(blob[0..offset]);
+                blob = blob[offset..];
+                //var i: usize = 5;
+                //var c = blob[i];
+                if (Directive.init(blob)) |drct| {
+                    const end = drct.end;
+                    switch (drct.kind) {
+                        .noun => |noun| {
+                            const var_name = noun.vari;
+                            if (ctx.get(var_name)) |v_blob| {
+                                switch (v_blob) {
+                                    .slice => |s_blob| try out.writeAll(s_blob),
+                                    .block => |_| unreachable,
+                                    .reader => |_| unreachable,
+                                }
+                                blob = blob[end..];
+                            } else {
+                                if (DEBUG) std.debug.print("[missing var {s}]\n", .{var_name});
+                                switch (noun.otherwise) {
+                                    .str => |str| {
+                                        try out.writeAll(str);
+                                        blob = blob[end..];
+                                    },
+                                    .ign => {
+                                        try out.writeAll(blob[0..end]);
+                                        blob = blob[end..];
+                                    },
+                                    .del => {
+                                        blob = blob[end..];
+                                    },
+                                    .template => |subt| {
+                                        blob = blob[end..];
+                                        var subpage = subt.page(self.data);
+                                        try subpage.format(fmts, .{}, out);
+                                    },
+                                }
+                            }
+                        },
+                        .verb => |verb| {
+                            verb.do(&ctx, out) catch unreachable;
+                            blob = blob[end..];
+                        },
+                    }
+                } else {
+                    if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
+                        try out.writeAll(blob[0..next]);
+                        blob = blob[next..];
+                    } else {
+                        return try out.writeAll(blob);
+                    }
+                }
+                continue;
+            }
+            return try out.writeAll(blob);
+        }
+    }
+};
+
+pub const Directive = struct {
+    kind: Kind,
+    end: usize,
+
+    pub const Kind = union(enum) {
+        noun: Noun,
+        verb: Verb,
+    };
+    pub const Noun = struct {
+        vari: []const u8,
+        otherwise: union(enum) {
+            ign: void,
+            del: void,
+            str: []const u8,
+            template: Template,
+        } = .{ .ign = {} },
+    };
+
+    pub const Verb = struct {
+        vari: []const u8,
+        blob: []const u8,
+        word: enum {
+            foreach,
+            with,
+        },
+
+        pub fn init(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive {
+            if (std.mem.eql(u8, noun, "For")) {
+                const pos = calcPos("For", blob, verb) orelse return null;
+                std.debug.assert(pos.width > 1);
+                return .{
+                    .end = pos.end,
+                    .kind = .{
+                        .verb = .{
+                            .vari = verb[1..pos.width],
+                            .blob = blob[pos.start..pos.endws],
+                            .word = .foreach,
+                        },
+                    },
+                };
+            } else if (std.mem.eql(u8, noun, "With")) {
+                const pos = calcPos("With", blob, verb) orelse return null;
+                std.debug.assert(pos.width > 1);
+                return .{
+                    .end = pos.end,
+                    .kind = .{
+                        .verb = .{
+                            .vari = verb[1..pos.width],
+                            .blob = blob[pos.start..pos.endws],
+                            .word = .with,
+                        },
+                    },
+                };
+                // pass
+            }
+            return null;
+        }
+
+        fn calcPos(comptime keyword: []const u8, blob: []const u8, verb: []const u8) ?struct {
+            start: usize,
+            end: usize,
+            endws: usize,
+            width: usize,
+        } {
+            const close: *const [keyword.len + 3]u8 = "</" ++ keyword ++ ">";
+            var start = 1 + (indexOf(u8, blob, ">") orelse return null);
+            const end = close.len + (lastIndexOf(u8, blob, close) orelse return null);
+            while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
+            const endws = end - close.len;
+
+            //while (endws > start and isWhitespace(blob[endws])) : (endws -|= 1) {}
+            //endws += 1;
+
+            var width: usize = 1;
+            while (width < verb.len and validChar(verb[width])) {
+                width += 1;
+            }
+            return .{
+                .start = start,
+                .width = width,
+                .end = end,
+                .endws = endws,
+            };
+        }
+
+        pub fn do(self: Verb, ctx: *const DataMap, out: anytype) anyerror!void {
+            if (ctx.getBlock(self.vari) catch |err| switch (err) {
+                error.NotABlock => ctx[0..1],
+                else => return err,
+            }) |block| {
+                switch (self.word) {
+                    .foreach => {
+                        for (block) |s| {
+                            try self.foreach(&s, out);
+                        }
+                        return;
+                    },
+                    .with => {
+                        std.debug.assert(block.len == 1);
+                        try self.with(&block[0], out);
+                        return;
+                    },
+                }
+            } else if (self.word == .foreach) {
+                std.debug.print("<For {s}> ctx block missing.\n", .{self.vari});
+            }
+        }
+
+        pub fn foreach(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
+            var page = Page{
+                .data = block.*,
+                .template = .{
+                    .name = self.vari,
+                    .blob = self.blob,
+                },
+            };
+            try page.format("", .{}, out);
+        }
+
+        pub fn with(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
+            var page = Page{
+                .data = block.*,
+                .template = .{
+                    .name = self.vari,
+                    .blob = self.blob,
+                },
+            };
+            try page.format("", .{}, out);
+        }
+    };
+
+    pub fn init(str: []const u8) ?Directive {
         if (str.len < 2) return null;
         if (!std.ascii.isUpper(str[1]) and str[1] != '_') return null;
         const end = 1 + (std.mem.indexOf(u8, str, ">") orelse return null);
@@ -297,7 +447,7 @@ pub const Template = struct {
                     .vari = vari,
                 } },
             };
-        } else if (directiveVerb(vari, verb, str)) |kind| {
+        } else if (Verb.init(vari, verb, str)) |kind| {
             return kind;
         } else if (std.mem.startsWith(u8, verb, " ORELSE ")) {
             return Directive{
@@ -326,143 +476,6 @@ pub const Template = struct {
             };
         }
     }
-
-    pub fn format(self: Template, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        var ctx = self.ctx orelse unreachable; // return error.TemplateContextMissing;
-        var blob = self.blob;
-        while (blob.len > 0) {
-            if (std.mem.indexOf(u8, blob, "<")) |offset| {
-                try out.writeAll(blob[0..offset]);
-                blob = blob[offset..];
-                //var i: usize = 5;
-                //var c = blob[i];
-                if (validDirective(blob)) |drct| {
-                    const end = drct.end;
-                    switch (drct.kind) {
-                        .noun => |noun| {
-                            const var_name = noun.vari;
-                            if (ctx.get(var_name)) |v_blob| {
-                                switch (v_blob) {
-                                    .slice => |s_blob| try out.writeAll(s_blob),
-                                    .block => |_| unreachable,
-                                    .reader => |_| unreachable,
-                                }
-                                blob = blob[end..];
-                            } else {
-                                if (DEBUG) std.debug.print("[missing var {s}]\n", .{var_name});
-                                switch (noun.otherwise) {
-                                    .str => |str| {
-                                        try out.writeAll(str);
-                                        blob = blob[end..];
-                                    },
-                                    .ign => {
-                                        try out.writeAll(blob[0..end]);
-                                        blob = blob[end..];
-                                    },
-                                    .del => {
-                                        blob = blob[end..];
-                                    },
-                                    .template => |subt| {
-                                        blob = blob[end..];
-                                        var subtmpl = subt;
-                                        subtmpl.ctx = self.ctx;
-                                        try subtmpl.format(fmts, .{}, out);
-                                    },
-                                }
-                            }
-                        },
-                        .verb => |verb| {
-                            verb.do(&ctx, out) catch unreachable;
-                            blob = blob[end..];
-                        },
-                    }
-                } else {
-                    if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
-                        try out.writeAll(blob[0..next]);
-                        blob = blob[next..];
-                    } else {
-                        return try out.writeAll(blob);
-                    }
-                }
-                continue;
-            }
-            return try out.writeAll(blob);
-        }
-    }
-};
-
-pub const Directive = struct {
-    pub const Kind = union(enum) {
-        pub const Noun = struct {
-            vari: []const u8,
-            otherwise: union(enum) {
-                ign: void,
-                del: void,
-                str: []const u8,
-                template: Template,
-            } = .{ .ign = {} },
-        };
-
-        pub const Verb = struct {
-            vari: []const u8,
-            blob: []const u8,
-            word: enum {
-                foreach,
-                with,
-            },
-
-            pub fn do(self: Verb, ctx: *const Context, out: anytype) anyerror!void {
-                if (ctx.getBlock(self.vari) catch |err| switch (err) {
-                    error.NotABlock => ctx[0..1],
-                    else => return err,
-                }) |block| {
-                    switch (self.word) {
-                        .foreach => {
-                            for (block) |s| {
-                                try self.foreach(&s, out);
-                            }
-                            return;
-                        },
-                        .with => {
-                            std.debug.assert(block.len == 1);
-                            try self.with(&block[0], out);
-                            return;
-                        },
-                    }
-                } else if (self.word == .foreach) {
-                    std.debug.print("<For {s}> ctx block missing.\n", .{self.vari});
-                }
-            }
-
-            pub fn foreach(self: Verb, block: *const Context, out: anytype) anyerror!void {
-                var t = Template{
-                    .name = self.vari,
-                    //.path = "/dev/null",
-                    // would be nice not to have to do a mov here
-                    .ctx = block.*,
-                    .blob = self.blob,
-                };
-                try t.format("", .{}, out);
-            }
-
-            pub fn with(self: Verb, block: *const Context, out: anytype) anyerror!void {
-                var t = Template{
-                    .name = self.vari,
-                    //.path = "/dev/null",
-                    // would be nice not to have to do a mov here
-                    .ctx = block.*,
-                    .blob = self.blob,
-                };
-                try t.format("", .{}, out);
-            }
-        };
-
-        noun: Noun,
-        verb: Verb,
-    };
-
-    kind: Kind,
-    end: usize,
 };
 
 fn tail(path: []const u8) []const u8 {
@@ -477,7 +490,6 @@ pub const builtin: [compiled.data.len]Template = blk: {
     var t: [compiled.data.len]Template = undefined;
     for (compiled.data, &t) |filedata, *dst| {
         dst.* = Template{
-            .alloc = null,
             //.path = filedata.path,
             .name = tail(filedata.path),
             .blob = filedata.blob,
@@ -587,25 +599,22 @@ test "load templates" {
 }
 
 test "init" {
-    const a = std.testing.allocator;
-
-    var tmpl = find("user_commits.html");
-    tmpl.init(a);
+    const tmpl = find("user_commits.html");
+    _ = tmpl;
 }
 
 test "directive something" {
     var a = std.testing.allocator;
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = "<Something>",
     };
 
-    var ctx = Context.init(a);
+    var ctx = DataMap.init(a);
     try ctx.putSlice("Something", "Some Text Here");
     defer ctx.raze();
-    const page = try t.buildFor(a, ctx);
+    const page = try t.page(ctx).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings("Some Text Here", page);
 }
@@ -613,13 +622,12 @@ test "directive something" {
 test "directive nothing" {
     var a = std.testing.allocator;
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = "<!-- nothing -->",
     };
 
-    const page = try t.buildFor(a, Context.init(a));
+    const page = try t.page(DataMap.init(a)).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings("<!-- nothing -->", page);
 }
@@ -627,13 +635,12 @@ test "directive nothing" {
 test "directive nothing new" {
     var a = std.testing.allocator;
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = "<Nothing>",
     };
 
-    const page = try t.buildFor(a, Context.init(a));
+    const page = try t.page(DataMap.init(a)).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings("<Nothing>", page);
 }
@@ -641,13 +648,12 @@ test "directive nothing new" {
 test "directive ORELSE" {
     var a = std.testing.allocator;
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = "<This ORELSE string until end>",
     };
 
-    const page = try t.buildFor(a, Context.init(a));
+    const page = try t.page(DataMap.init(a)).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings("string until end", page);
 }
@@ -655,25 +661,23 @@ test "directive ORELSE" {
 test "directive ORNULL" {
     var a = std.testing.allocator;
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         // Invalid because 'string until end' is known to be unreachable
         .blob = "<This ORNULL string until end>",
     };
 
-    const page = try t.buildFor(a, Context.init(a));
+    const page = try t.page(DataMap.init(a)).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings("<This ORNULL string until end>", page);
 
     t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = "<This ORNULL>",
     };
 
-    const nullpage = try t.buildFor(a, Context.init(a));
+    const nullpage = try t.page(DataMap.init(a)).build(a);
     defer a.free(nullpage);
     try std.testing.expectEqualStrings("", nullpage);
 }
@@ -696,30 +700,29 @@ test "directive For" {
     ;
 
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };
 
-    var ctx = Context.init(a);
+    var ctx = DataMap.init(a);
     defer ctx.raze();
-    var blocks: [1]Context = [1]Context{
-        Context.init(a),
+    var blocks: [1]DataMap = [1]DataMap{
+        DataMap.init(a),
     };
     try blocks[0].putSlice("Name", "not that");
     // We have to raze because it will be over written
     defer blocks[0].raze();
     try ctx.putBlock("Loop", &blocks);
 
-    const page = try t.buildFor(a, ctx);
+    const page = try t.page(ctx).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings(expected, page);
 
     // many
-    var many_blocks: [2]Context = [_]Context{
-        Context.init(a),
-        Context.init(a),
+    var many_blocks: [2]DataMap = [_]DataMap{
+        DataMap.init(a),
+        DataMap.init(a),
     };
     // what... 2 is many
 
@@ -728,7 +731,7 @@ test "directive For" {
 
     try ctx.putBlock("Loop", &many_blocks);
 
-    const dbl_page = try t.buildFor(a, ctx);
+    const dbl_page = try t.page(ctx).build(a);
     defer a.free(dbl_page);
     try std.testing.expectEqualStrings(dbl_expected, dbl_page);
 
@@ -767,17 +770,16 @@ test "directive For & For" {
     ;
 
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };
 
-    var ctx = Context.init(a);
+    var ctx = DataMap.init(a);
     defer ctx.raze();
-    var outer = [2]Context{
-        Context.init(a),
-        Context.init(a),
+    var outer = [2]DataMap{
+        DataMap.init(a),
+        DataMap.init(a),
     };
 
     try outer[0].putSlice("Name", "Alice");
@@ -789,10 +791,10 @@ test "directive For & For" {
 
     const lput = "Number";
 
-    var alice_inner: [3]Context = undefined;
+    var alice_inner: [3]DataMap = undefined;
     try outer[0].putBlock("Numbers", &alice_inner);
     for (0..3) |i| {
-        alice_inner[i] = Context.init(a);
+        alice_inner[i] = DataMap.init(a);
         try alice_inner[i].putSlice(
             lput,
             try std.fmt.allocPrint(aa, "A{}", .{i}),
@@ -802,10 +804,10 @@ test "directive For & For" {
     try outer[1].putSlice("Name", "Bob");
     //defer outer[1].raze();
 
-    var bob_inner: [3]Context = undefined;
+    var bob_inner: [3]DataMap = undefined;
     try outer[1].putBlock("Numbers", &bob_inner);
     for (0..3) |i| {
-        bob_inner[i] = Context.init(a);
+        bob_inner[i] = DataMap.init(a);
         try bob_inner[i].putSlice(
             lput,
             try std.fmt.allocPrint(aa, "B{}", .{i}),
@@ -814,7 +816,7 @@ test "directive For & For" {
 
     try ctx.putBlock("Loop", &outer);
 
-    const page = try t.buildFor(a, ctx);
+    const page = try t.page(ctx).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings(expected, page);
 }
@@ -836,20 +838,19 @@ test "directive With" {
         \\</div>
     ;
     var t = Template{
-        .alloc = null,
         //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };
 
-    var ctx = Context.init(a);
+    var ctx = DataMap.init(a);
     defer ctx.raze();
-    const page = try t.buildFor(a, ctx);
+    const page = try t.page(ctx).build(a);
     defer a.free(page);
     try std.testing.expectEqualStrings(expected_empty, page);
 
-    var thing = [1]Context{
-        Context.init(a),
+    var thing = [1]DataMap{
+        DataMap.init(a),
     };
     try thing[0].putSlice("Thing", "THING");
     try ctx.putBlock("Thing", &thing);
@@ -861,7 +862,7 @@ test "directive With" {
         \\</div>
     ;
 
-    const page_thing = try t.buildFor(a, ctx);
+    const page_thing = try t.page(ctx).build(a);
     defer a.free(page_thing);
     try std.testing.expectEqualStrings(expected_thing, page_thing);
 }

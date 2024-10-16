@@ -12,7 +12,6 @@ pub const endpoints = [_]Route.Match{
 fn default(ctx: *Context) Route.Error!void {
     try ctx.request.auth.validOrError();
     var tmpl = Template.find("settings.html");
-    tmpl.init(ctx.alloc);
 
     var blocks = try ctx.alloc.alloc(Template.Context, ctx.cfg.?.ns.len);
     for (ctx.cfg.?.ns, 0..) |ns, i| {

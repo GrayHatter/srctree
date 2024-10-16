@@ -48,7 +48,6 @@ pub fn router(ctx: *Context) Error!Route.Callable {
 
 fn new(ctx: *Context) Error!void {
     var tmpl = comptime Template.find("issue-new.html");
-    tmpl.init(ctx.alloc);
     try ctx.sendTemplate(&tmpl);
 }
 
@@ -109,7 +108,6 @@ fn view(ctx: *Context) Error!void {
     const index = isHex(delta_id) orelse return error.Unrouteable;
 
     var tmpl = Template.find("delta-issue.html");
-    tmpl.init(ctx.alloc);
 
     var delta = (Delta.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     try ctx.putContext("Repo", .{ .slice = rd.name });
@@ -178,7 +176,6 @@ fn list(ctx: *Context) Error!void {
         continue;
     }
     var tmpl = Template.find("deltalist.html");
-    tmpl.init(ctx.alloc);
     try ctx.putContext("List", .{ .block = tmpl_ctx[0..end] });
 
     var default_search_buf: [0xFF]u8 = undefined;

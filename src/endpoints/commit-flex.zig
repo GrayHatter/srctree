@@ -327,7 +327,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
     const flex = dom.done();
 
     var tmpl = Template.find("user_commits.html");
-    tmpl.init(ctx.alloc);
 
     try ctx.putContext("CurrentStreak", .{
         .slice = switch (streak) {

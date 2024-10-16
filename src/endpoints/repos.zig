@@ -237,7 +237,6 @@ fn list(ctx: *Context) Error!void {
         dom = dom.close();
         const data = dom.done();
         var tmpl = Template.find("repos.html");
-        tmpl.init(ctx.alloc);
         _ = ctx.addElements(ctx.alloc, "Repos", data) catch return Error.Unknown;
 
         try ctx.sendTemplate(&tmpl);
@@ -256,7 +255,6 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
 
 fn newRepo(ctx: *Context) Error!void {
     var tmpl = Template.find("repo.html");
-    tmpl.init(ctx.alloc);
 
     ctx.putContext("Files", .{ .slice = "<h3>New Repo!</h3><p>Todo, add content here</p>" }) catch return error.Unknown;
     ctx.response.status = .ok;
@@ -445,7 +443,6 @@ fn blame(ctx: *Context) Error!void {
     }
 
     var tmpl = Template.find("blame.html");
-    tmpl.init(ctx.alloc);
 
     try ctx.putContext("Blame_lines", .{ .block = tctx[0..] });
 
@@ -539,7 +536,6 @@ fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
 
 fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var tmpl = Template.find("blob.html");
-    tmpl.init(ctx.alloc);
 
     var blb: Git.Blob = undefined;
 
@@ -679,7 +675,6 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
 
 fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     var tmpl = Template.find("tree.html");
-    tmpl.init(ctx.alloc);
 
     const head = if (repo.head) |h| switch (h) {
         .sha => |s| s,

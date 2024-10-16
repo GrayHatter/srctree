@@ -40,7 +40,6 @@ fn search(ctx: *Context) Error!void {
 
 fn custom(ctx: *Context, search_str: []const u8) Error!void {
     var tmpl = Template.find("deltalist.html");
-    tmpl.init(ctx.alloc);
 
     var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
