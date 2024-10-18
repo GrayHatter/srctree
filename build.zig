@@ -51,23 +51,22 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 
-    const tbuild_step = compileTemplatesStruct(b, target);
-    _ = tbuild_step;
-}
-
-fn compileTemplatesStruct(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
     const t_compiler = b.addExecutable(.{
         .name = "template-compiler",
         .root_source_file = b.path("src/template-compiler.zig"),
         .target = target,
     });
 
+    t_compiler.root_module.addImport("templates-compiled", templates_compiled);
     const tbuild_run = b.addRunArtifact(t_compiler);
     const tbuild_step = b.step("compile-templates", "Compile templates down into struct");
     _ = tbuild_run.addOutputFileArg("compiled-structs.zig");
     tbuild_step.dependOn(&tbuild_run.step);
-    return tbuild_step;
 }
+
+//fn compileTemplatesStruct(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
+//    return tbuild_step;
+//}
 
 fn compileTemplates(b: *std.Build) !*std.Build.Module {
     const compiled = b.addModule("templates-compiled", .{
