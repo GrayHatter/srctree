@@ -8,8 +8,8 @@ pub fn build(b: *std.Build) void {
     const options = b.addOptions();
     options.addOption(bool, "libcurl", enable_libcurl);
 
-    var binaries = std.ArrayList(*std.Build.Step.Compile).init(b.allocator);
-    defer binaries.clearAndFree();
+    var bins = std.ArrayList(*std.Build.Step.Compile).init(b.allocator);
+    defer bins.clearAndFree();
 
     const templates_compiled = try compileTemplates(b);
 
@@ -20,7 +20,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     b.installArtifact(exe);
-    binaries.append(exe) catch unreachable;
+    bins.append(exe) catch unreachable;
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
@@ -35,9 +35,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
-    binaries.append(unit_tests) catch unreachable;
+    bins.append(unit_tests) catch unreachable;
 
-    for (binaries.items) |ex| {
+    for (bins.items) |ex| {
         ex.root_module.addImport("templates-compiled", templates_compiled);
         ex.root_module.addOptions("config", options);
         if (enable_libcurl) {
@@ -50,6 +50,23 @@ pub fn build(b: *std.Build) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
+
+    const tbuild_step = compileTemplatesStruct(b, target);
+    _ = tbuild_step;
+}
+
+fn compileTemplatesStruct(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
+    const t_compiler = b.addExecutable(.{
+        .name = "template-compiler",
+        .root_source_file = b.path("src/template-compiler.zig"),
+        .target = target,
+    });
+
+    const tbuild_run = b.addRunArtifact(t_compiler);
+    const tbuild_step = b.step("compile-templates", "Compile templates down into struct");
+    _ = tbuild_run.addOutputFileArg("compiled-structs.zig");
+    tbuild_step.dependOn(&tbuild_run.step);
+    return tbuild_step;
 }
 
 fn compileTemplates(b: *std.Build) !*std.Build.Module {
