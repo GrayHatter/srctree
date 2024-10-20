@@ -1,5 +1,6 @@
 const std = @import("std");
 const compiled = @import("templates-compiled");
+const Template = @import("template.zig");
 
 pub fn main() !void {
     var args = std.process.args();
@@ -21,7 +22,58 @@ pub fn main() !void {
         std.debug.print("thing: {s}\n", .{tplt.path});
         try wout.writeAll("pub const ");
         try wout.writeAll(makeStructName(tplt.path));
-        try wout.writeAll(" = struct {\n};\n\n");
+        try wout.writeAll(" = struct {\n");
+        try collectVars(tplt.path, wout);
+        try wout.writeAll("};\n\n");
+    }
+}
+
+fn collectVars(fstr: []const u8, w: std.fs.File) !void {
+    var a = std.heap.page_allocator;
+    const fdata = try std.fs.cwd().readFileAlloc(a, fstr, 0xffff);
+    defer a.free(fdata);
+
+    var data = fdata;
+    while (data.len > 0) {
+        if (std.mem.indexOf(u8, data, "<")) |offset| {
+            data = data[offset..];
+            if (Template.Directive.init(data)) |drct| switch (drct.kind) {
+                .noun => |noun| {
+                    data = data[drct.end..];
+                    try w.writeAll("    ");
+                    switch (noun.otherwise) {
+                        .ign => {
+                            try w.writeAll(noun.vari);
+                            try w.writeAll(": []const u8,\n");
+                        },
+                        .str => |str| {
+                            try w.writeAll(noun.vari);
+                            try w.writeAll(": []const u8 = ");
+                            try w.writeAll(str);
+                            try w.writeAll(",\n");
+                        },
+                        .del => {
+                            try w.writeAll(noun.vari);
+                            try w.writeAll(": ?[]const u8 = null,\n");
+                        },
+                        .template => |_| {
+                            try w.writeAll(noun.vari[1 .. noun.vari.len - 5]);
+                            try w.writeAll(": ");
+                            try w.writeAll(makeStructName(noun.vari));
+                            try w.writeAll(",\n");
+                        },
+                    }
+                },
+                .verb => |verb| {
+                    data = data[drct.end..];
+                    try w.writeAll("    // Verb ");
+                    try w.writeAll(verb.vari);
+                    try w.writeAll("\n");
+                },
+            } else if (std.mem.indexOfPos(u8, data, 1, "<")) |next| {
+                data = data[next..];
+            } else return;
+        } else return;
     }
 }
 
