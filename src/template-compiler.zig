@@ -23,15 +23,21 @@ pub fn main() !void {
         try wout.writeAll("pub const ");
         try wout.writeAll(makeStructName(tplt.path));
         try wout.writeAll(" = struct {\n");
-        try collectVars(tplt.path, wout);
+        const fwriter = wout.writer().any();
+        const trailing = try emitVars(tplt.path, fwriter);
+        defer std.heap.page_allocator.free(trailing);
+        try wout.writeAll(trailing);
+
         try wout.writeAll("};\n\n");
     }
 }
 
-fn collectVars(fstr: []const u8, w: std.fs.File) !void {
+fn emitVars(fstr: []const u8, w: std.io.AnyWriter) ![]u8 {
     var a = std.heap.page_allocator;
     const fdata = try std.fs.cwd().readFileAlloc(a, fstr, 0xffff);
     defer a.free(fdata);
+
+    var trailing = std.ArrayList(u8).init(a);
 
     var data = fdata;
     while (data.len > 0) {
@@ -43,17 +49,17 @@ fn collectVars(fstr: []const u8, w: std.fs.File) !void {
                     try w.writeAll("    ");
                     switch (noun.otherwise) {
                         .ign => {
-                            try w.writeAll(noun.vari);
+                            try w.writeAll(makeFieldName(noun.vari));
                             try w.writeAll(": []const u8,\n");
                         },
                         .str => |str| {
-                            try w.writeAll(noun.vari);
+                            try w.writeAll(makeFieldName(noun.vari));
                             try w.writeAll(": []const u8 = ");
                             try w.writeAll(str);
                             try w.writeAll(",\n");
                         },
                         .del => {
-                            try w.writeAll(noun.vari);
+                            try w.writeAll(makeFieldName(noun.vari));
                             try w.writeAll(": ?[]const u8 = null,\n");
                         },
                         .template => |_| {
@@ -66,15 +72,73 @@ fn collectVars(fstr: []const u8, w: std.fs.File) !void {
                 },
                 .verb => |verb| {
                     data = data[drct.end..];
-                    try w.writeAll("    // Verb ");
-                    try w.writeAll(verb.vari);
-                    try w.writeAll("\n");
+                    try trailing.appendSlice("    pub const ");
+                    try trailing.appendSlice(makeStructName(verb.vari));
+                    try trailing.appendSlice(" = {\n");
+                    switch (verb.word) {
+                        .foreach => {
+                            try w.writeAll("    // For ");
+                            try w.writeAll(verb.vari);
+                            try w.writeAll("\n");
+                            try w.writeAll("    ");
+                            try w.writeAll(makeFieldName(verb.vari));
+                            try w.writeAll(": []");
+                            try w.writeAll(verb.vari);
+                            try w.writeAll(",\n");
+                            const this_writer = trailing.writer().any();
+                            emitVars(verb.blob, this_writer);
+                        },
+                        .with => {
+                            try w.writeAll("    // With ");
+                            try w.writeAll(verb.vari);
+                            try w.writeAll("\n");
+                        },
+                    }
+                    try trailing.appendSlice("    };\n");
                 },
             } else if (std.mem.indexOfPos(u8, data, 1, "<")) |next| {
                 data = data[next..];
-            } else return;
-        } else return;
+            } else return try trailing.toOwnedSlice();
+        } else return try trailing.toOwnedSlice();
     }
+    return try trailing.toOwnedSlice();
+}
+
+pub fn makeFieldName(in: []const u8) []const u8 {
+    const local = struct {
+        var name: [0xFFFF]u8 = undefined;
+    };
+
+    var i: usize = 0;
+    for (in) |chr| {
+        switch (chr) {
+            'a'...'z' => {
+                local.name[i] = chr;
+                i += 1;
+            },
+            'A'...'Z' => {
+                if (i != 0) {
+                    local.name[i] = '_';
+                    i += 1;
+                }
+                local.name[i] = std.ascii.toLower(chr);
+                i += 1;
+            },
+            '0'...'9' => {
+                for (intToWord(chr)) |cchr| {
+                    local.name[i] = cchr;
+                    i += 1;
+                }
+            },
+            '-', '_', '.' => {
+                local.name[i] = '_';
+                i += 1;
+            },
+            else => {},
+        }
+    }
+
+    return local.name[0..i];
 }
 
 pub fn makeStructName(in: []const u8) []const u8 {
