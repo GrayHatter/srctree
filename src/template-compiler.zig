@@ -1,6 +1,7 @@
 const std = @import("std");
 const compiled = @import("templates-compiled");
 const Template = @import("template.zig");
+const Allocator = std.mem.Allocator;
 
 pub fn main() !void {
     var args = std.process.args();
@@ -9,6 +10,11 @@ pub fn main() !void {
     while (args.next()) |arg| {
         wout_path = arg;
     }
+
+    const a = std.heap.page_allocator;
+    var trailing = std.ArrayList(u8).init(a);
+    defer trailing.deinit();
+    const trailingw = trailing.writer().any();
 
     const wout_dname = std.fs.path.dirname(wout_path.?) orelse return error.InvalidPath;
     const wout_dir = try std.fs.cwd().openDir(wout_dname, .{});
@@ -19,26 +25,23 @@ pub fn main() !void {
         \\
     );
     for (compiled.data) |tplt| {
+        const fdata = try std.fs.cwd().readFileAlloc(a, tplt.path, 0xffff);
+        defer a.free(fdata);
+
         std.debug.print("thing: {s}\n", .{tplt.path});
         try wout.writeAll("pub const ");
         try wout.writeAll(makeStructName(tplt.path));
         try wout.writeAll(" = struct {\n");
         const fwriter = wout.writer().any();
-        const trailing = try emitVars(tplt.path, fwriter);
-        defer std.heap.page_allocator.free(trailing);
-        try wout.writeAll(trailing);
+        try emitVars(a, fdata, fwriter, trailingw);
+        try wout.writeAll(trailing.items);
+        trailing.clearRetainingCapacity();
 
         try wout.writeAll("};\n\n");
     }
 }
 
-fn emitVars(fstr: []const u8, w: std.io.AnyWriter) ![]u8 {
-    var a = std.heap.page_allocator;
-    const fdata = try std.fs.cwd().readFileAlloc(a, fstr, 0xffff);
-    defer a.free(fdata);
-
-    var trailing = std.ArrayList(u8).init(a);
-
+fn emitVars(a: Allocator, fdata: []const u8, w: std.io.AnyWriter, trailing: std.io.AnyWriter) !void {
     var data = fdata;
     while (data.len > 0) {
         if (std.mem.indexOf(u8, data, "<")) |offset| {
@@ -72,9 +75,9 @@ fn emitVars(fstr: []const u8, w: std.io.AnyWriter) ![]u8 {
                 },
                 .verb => |verb| {
                     data = data[drct.end..];
-                    try trailing.appendSlice("    pub const ");
-                    try trailing.appendSlice(makeStructName(verb.vari));
-                    try trailing.appendSlice(" = {\n");
+                    try trailing.writeAll("    pub const ");
+                    try trailing.writeAll(makeStructName(verb.vari));
+                    try trailing.writeAll(" = {\n");
                     switch (verb.word) {
                         .foreach => {
                             try w.writeAll("    // For ");
@@ -85,8 +88,7 @@ fn emitVars(fstr: []const u8, w: std.io.AnyWriter) ![]u8 {
                             try w.writeAll(": []");
                             try w.writeAll(verb.vari);
                             try w.writeAll(",\n");
-                            const this_writer = trailing.writer().any();
-                            emitVars(verb.blob, this_writer);
+                            try emitVars(a, verb.blob, trailing, trailing);
                         },
                         .with => {
                             try w.writeAll("    // With ");
@@ -94,14 +96,14 @@ fn emitVars(fstr: []const u8, w: std.io.AnyWriter) ![]u8 {
                             try w.writeAll("\n");
                         },
                     }
-                    try trailing.appendSlice("    };\n");
+                    try trailing.writeAll("    };\n");
                 },
             } else if (std.mem.indexOfPos(u8, data, 1, "<")) |next| {
                 data = data[next..];
-            } else return try trailing.toOwnedSlice();
-        } else return try trailing.toOwnedSlice();
+            } else return;
+        } else return;
     }
-    return try trailing.toOwnedSlice();
+    return;
 }
 
 pub fn makeFieldName(in: []const u8) []const u8 {
