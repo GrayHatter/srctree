@@ -152,9 +152,15 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
 
                     switch (verb.word) {
                         .foreach => {
+                            var buffer: [0xFF]u8 = undefined;
+                            const kind = try std.fmt.bufPrint(&buffer, ": {s},\n", .{name});
+                            try current.append(makeFieldName(verb.vari), kind);
                             try emitVars(a, verb.blob, this);
                         },
                         .with => {
+                            var buffer: [0xFF]u8 = undefined;
+                            const kind = try std.fmt.bufPrint(&buffer, ": {s},\n", .{name});
+                            try current.append(makeFieldName(verb.vari), kind);
                             try emitVars(a, verb.blob, this);
                         },
                     }
