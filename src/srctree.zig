@@ -34,14 +34,15 @@ pub const routes = [_]Match{
     ROUTE("admin", admin),
     ROUTE("api", Api.router),
     ROUTE("diffs", USERS.diffs),
+    ROUTE("gist", commitFlex),
     ROUTE("inbox", search),
     ROUTE("network", network),
     ROUTE("repo", repo),
     ROUTE("repos", repo),
     ROUTE("search", search),
+    ROUTE("settings", &settings.endpoints),
     ROUTE("todo", USERS.todo),
     ROUTE("user", commitFlex),
-    ROUTE("settings", &settings.endpoints),
     STATIC("static"),
 };
 
