@@ -109,7 +109,7 @@ pub fn main() !void {
 
     var itr = tree.iterator();
     while (itr.next()) |each| {
-        std.debug.print("tree: {}\n", .{each.value_ptr.*});
+        //std.debug.print("tree: {}\n", .{each.value_ptr.*});
         try wout.print("{}\n", .{each.value_ptr.*});
     }
 }

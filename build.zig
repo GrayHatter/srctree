@@ -60,8 +60,13 @@ pub fn build(b: *std.Build) void {
     t_compiler.root_module.addImport("templates-compiled", templates_compiled);
     const tbuild_run = b.addRunArtifact(t_compiler);
     const tbuild_step = b.step("compile-templates", "Compile templates down into struct");
-    _ = tbuild_run.addOutputFileArg("compiled-structs.zig");
+    const tcstructs = tbuild_run.addOutputFileArg("compiled-structs.zig");
     tbuild_step.dependOn(&tbuild_run.step);
+
+    for (bins.items) |bin| bin.root_module.addImport("templates-compiled-structs", b.addModule(
+        "templates-compiled-structs",
+        .{ .root_source_file = tcstructs },
+    ));
 }
 
 //fn compileTemplatesStruct(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {

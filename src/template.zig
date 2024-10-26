@@ -1,6 +1,7 @@
 const std = @import("std");
 const build_mode = @import("builtin").mode;
 const compiled = @import("templates-compiled");
+const compiled_structs = @import("templates-compiled-structs");
 const isWhitespace = std.ascii.isWhitespace;
 const indexOf = std.mem.indexOf;
 const lastIndexOf = std.mem.lastIndexOf;
@@ -169,7 +170,7 @@ pub const DataMap = struct {
 
 pub const Template = struct {
     // path: []const u8,
-    name: []const u8,
+    name: []const u8 = "undefined",
     blob: []const u8,
     parent: ?*const Template = null,
 
@@ -184,15 +185,8 @@ pub const Template = struct {
         self.ctx.raze();
     }
 
-    pub fn page(self: Template, data: DataMap) Page {
-        return .{
-            .data = data,
-            .template = self,
-        };
-    }
-
-    fn templateSearch() bool {
-        return false;
+    pub fn page(self: Template, data: DataMap) Page(DataMap) {
+        return Page(DataMap).init(self, data);
     }
 
     pub fn format(_: Template, comptime _: []const u8, _: std.fmt.FormatOptions, _: anytype) !void {
@@ -200,15 +194,14 @@ pub const Template = struct {
     }
 };
 
-pub const Page = page(DataMap);
-
-pub fn page(comptime PageDataType: anytype) type {
+pub fn Page(comptime PageDataType: anytype) type {
     return struct {
         pub const Self = @This();
-        template: Template,
+        pub const Live: bool = PageDataType == DataMap;
+        template: Template = undefined,
         data: PageDataType,
 
-        pub fn init(comptime t: Template, d: DataMap) Page {
+        pub fn init(t: Template, d: PageDataType) Page(PageDataType) {
             return .{
                 .template = t,
                 .data = d,
@@ -217,13 +210,27 @@ pub fn page(comptime PageDataType: anytype) type {
 
         pub fn byName(comptime name: []const u8, d: DataMap) Page {
             return .{
-                .template = find(name),
+                .template = findTemplate(name),
                 .data = d,
             };
         }
 
         pub fn build(self: Self, a: Allocator) ![]u8 {
             return std.fmt.allocPrint(a, "{}", .{self});
+        }
+
+        fn typeField(name: []const u8, data: PageDataType) ?DataMap.Data {
+            var local: [0xff]u8 = undefined;
+            const realname = local[0..makeFieldName(name, &local)];
+            inline for (std.meta.fields(PageDataType)) |field| {
+                if (std.mem.eql(u8, field.name, realname)) {
+                    switch (field.type) {
+                        []const u8 => return .{ .slice = @field(data, field.name) },
+                        else => return null,
+                    }
+                }
+            }
+            return null;
         }
 
         pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
@@ -239,8 +246,8 @@ pub fn page(comptime PageDataType: anytype) type {
                         const end = drct.end;
                         switch (drct.kind) {
                             .noun => |noun| {
-                                const var_name = noun.vari;
-                                if (ctx.get(var_name)) |v_blob| {
+                                const var_name = if (Self.Live) ctx.get(noun.vari) else typeField(noun.vari, ctx);
+                                if (var_name) |v_blob| {
                                     switch (v_blob) {
                                         .slice => |s_blob| try out.writeAll(s_blob),
                                         .block => |_| unreachable,
@@ -248,7 +255,7 @@ pub fn page(comptime PageDataType: anytype) type {
                                     }
                                     blob = blob[end..];
                                 } else {
-                                    if (DEBUG) std.debug.print("[missing var {s}]\n", .{var_name});
+                                    if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
                                     switch (noun.otherwise) {
                                         .str => |str| {
                                             try out.writeAll(str);
@@ -263,14 +270,18 @@ pub fn page(comptime PageDataType: anytype) type {
                                         },
                                         .template => |subt| {
                                             blob = blob[end..];
-                                            var subpage = subt.page(self.data);
-                                            try subpage.format(fmts, .{}, out);
+                                            if (Self.Live) {
+                                                var subpage = subt.page(self.data);
+                                                try subpage.format(fmts, .{}, out);
+                                            }
                                         },
                                     }
                                 }
                             },
                             .verb => |verb| {
-                                verb.do(&ctx, out) catch unreachable;
+                                if (Self.Live) {
+                                    verb.do(&ctx, out) catch unreachable;
+                                }
                                 blob = blob[end..];
                             },
                         }
@@ -399,7 +410,7 @@ pub const Directive = struct {
         }
 
         pub fn foreach(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
-            var p = Page{
+            var p = Page(DataMap){
                 .data = block.*,
                 .template = .{
                     .name = self.vari,
@@ -410,7 +421,7 @@ pub const Directive = struct {
         }
 
         pub fn with(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
-            var p = Page{
+            var p = Page(DataMap){
                 .data = block.*,
                 .template = .{
                     .name = self.vari,
@@ -561,13 +572,110 @@ pub fn load(a: Allocator, comptime name: []const u8) Template {
     return t;
 }
 
-pub fn find(comptime name: []const u8) Template {
+/// TODO remove/replace
+/// Please use findTemplate instead
+pub const find = findTemplate;
+
+pub fn findTemplate(comptime name: []const u8) Template {
     inline for (builtin) |bi| {
         if (comptime std.mem.eql(u8, bi.name, name)) {
             return bi;
         }
     }
     @compileError("template " ++ name ++ " not found!");
+}
+
+pub fn findPage(comptime name: []const u8) type {
+    //const template = findTemplate(name);
+    const page_type = comptime findPageType(name);
+    return Page(page_type);
+}
+
+fn intToWord(in: u8) []const u8 {
+    return switch (in) {
+        '4' => "Four",
+        '5' => "Five",
+        else => unreachable,
+    };
+}
+
+fn makeStructName(comptime in: []const u8, comptime postfix: []const u8, comptime out: []u8) usize {
+    var ltail = in;
+    if (comptime std.mem.lastIndexOf(u8, in, "/")) |i| {
+        ltail = ltail[i..];
+    }
+
+    var i = 0;
+    var next_upper = true;
+    inline for (ltail) |chr| {
+        switch (chr) {
+            'a'...'z', 'A'...'Z' => {
+                if (next_upper) {
+                    out[i] = std.ascii.toUpper(chr);
+                } else {
+                    out[i] = std.ascii.toLower(chr);
+                }
+                next_upper = false;
+                i += 1;
+            },
+            '0'...'9' => {
+                for (intToWord(chr)) |cchr| {
+                    out[i] = cchr;
+                    i += 1;
+                }
+            },
+            '-', '_' => {
+                next_upper = true;
+            },
+            '.' => break,
+            else => {},
+        }
+    }
+
+    inline for (postfix) |chr| {
+        out[i] = chr;
+        i += 1;
+    }
+    return i;
+}
+
+pub fn makeFieldName(in: []const u8, out: []u8) usize {
+    var i: usize = 0;
+    for (in) |chr| {
+        switch (chr) {
+            'a'...'z' => {
+                out[i] = chr;
+                i += 1;
+            },
+            'A'...'Z' => {
+                if (i != 0) {
+                    out[i] = '_';
+                    i += 1;
+                }
+                out[i] = std.ascii.toLower(chr);
+                i += 1;
+            },
+            '0'...'9' => {
+                for (intToWord(chr)) |cchr| {
+                    out[i] = cchr;
+                    i += 1;
+                }
+            },
+            '-', '_', '.' => {
+                out[i] = '_';
+                i += 1;
+            },
+            else => {},
+        }
+    }
+
+    return i;
+}
+
+pub fn findPageType(comptime name: []const u8) type {
+    var local: [0xFFFF]u8 = undefined;
+    const llen = comptime makeStructName(name, "Page", &local);
+    return @field(compiled_structs, local[0..llen]);
 }
 
 test "build.zig included templates" {

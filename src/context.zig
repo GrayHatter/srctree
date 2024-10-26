@@ -91,6 +91,23 @@ pub fn addRouteVar(ctx: *Context, name: []const u8, val: []const u8) !void {
     try ctx.putContext(name, .{ .slice = val });
 }
 
+pub fn sendPage(ctx: *Context, page: anytype) Error!void {
+    ctx.response.start() catch |err| switch (err) {
+        error.BrokenPipe => return error.NetworkCrash,
+        else => unreachable,
+    };
+    const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
+    try ctx.putContext("Header.auth", .{ .slice = loggedin });
+    if (ctx.request.auth.user(ctx.alloc)) |usr| {
+        try ctx.putContext("Current_username", .{ .slice = usr.username });
+    } else |_| {}
+    //
+
+    const page_compiled = try page.build(ctx.alloc);
+    defer ctx.alloc.free(page_compiled);
+    ctx.response.send(page_compiled) catch unreachable;
+}
+
 /// TODO fix these unreachable, currently debugging
 pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
     ctx.response.start() catch |err| switch (err) {

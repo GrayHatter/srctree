@@ -15,8 +15,7 @@ const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
 const USERS = @import("endpoints/users.zig");
 
-const REPO = @import("endpoints/repos.zig");
-const repo = REPO.router;
+const Repo = @import("endpoints/repos.zig");
 
 const ADMIN = @import("endpoints/admin.zig");
 const admin = &ADMIN.endpoints;
@@ -28,17 +27,18 @@ const SEARCH = @import("endpoints/search.zig");
 const search = &SEARCH.router;
 
 const settings = @import("endpoints/settings.zig");
+const Gist = @import("endpoints/gist.zig");
 
 pub const routes = [_]Match{
     GET("", commitFlex),
     ROUTE("admin", admin),
     ROUTE("api", Api.router),
     ROUTE("diffs", USERS.diffs),
-    ROUTE("gist", commitFlex),
+    ROUTE("gist", Gist.router),
     ROUTE("inbox", search),
     ROUTE("network", network),
-    ROUTE("repo", repo),
-    ROUTE("repos", repo),
+    ROUTE("repo", Repo.router),
+    ROUTE("repos", Repo.router),
     ROUTE("search", search),
     ROUTE("settings", &settings.endpoints),
     ROUTE("todo", USERS.todo),
