@@ -200,90 +200,95 @@ pub const Template = struct {
     }
 };
 
-pub const Page = struct {
-    template: Template,
-    data: DataMap,
+pub const Page = page(DataMap);
 
-    pub fn init(comptime t: Template, d: DataMap) Page {
-        return .{
-            .template = t,
-            .data = d,
-        };
-    }
+pub fn page(comptime PageDataType: anytype) type {
+    return struct {
+        pub const Self = @This();
+        template: Template,
+        data: PageDataType,
 
-    pub fn byName(comptime name: []const u8, d: DataMap) Page {
-        return .{
-            .template = find(name),
-            .data = d,
-        };
-    }
-
-    pub fn build(self: Page, a: Allocator) ![]u8 {
-        return std.fmt.allocPrint(a, "{}", .{self});
-    }
-
-    pub fn format(self: Page, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-        var ctx = self.data;
-        var blob = self.template.blob;
-        while (blob.len > 0) {
-            if (std.mem.indexOf(u8, blob, "<")) |offset| {
-                try out.writeAll(blob[0..offset]);
-                blob = blob[offset..];
-                //var i: usize = 5;
-                //var c = blob[i];
-                if (Directive.init(blob)) |drct| {
-                    const end = drct.end;
-                    switch (drct.kind) {
-                        .noun => |noun| {
-                            const var_name = noun.vari;
-                            if (ctx.get(var_name)) |v_blob| {
-                                switch (v_blob) {
-                                    .slice => |s_blob| try out.writeAll(s_blob),
-                                    .block => |_| unreachable,
-                                    .reader => |_| unreachable,
-                                }
-                                blob = blob[end..];
-                            } else {
-                                if (DEBUG) std.debug.print("[missing var {s}]\n", .{var_name});
-                                switch (noun.otherwise) {
-                                    .str => |str| {
-                                        try out.writeAll(str);
-                                        blob = blob[end..];
-                                    },
-                                    .ign => {
-                                        try out.writeAll(blob[0..end]);
-                                        blob = blob[end..];
-                                    },
-                                    .del => {
-                                        blob = blob[end..];
-                                    },
-                                    .template => |subt| {
-                                        blob = blob[end..];
-                                        var subpage = subt.page(self.data);
-                                        try subpage.format(fmts, .{}, out);
-                                    },
-                                }
-                            }
-                        },
-                        .verb => |verb| {
-                            verb.do(&ctx, out) catch unreachable;
-                            blob = blob[end..];
-                        },
-                    }
-                } else {
-                    if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
-                        try out.writeAll(blob[0..next]);
-                        blob = blob[next..];
-                    } else {
-                        return try out.writeAll(blob);
-                    }
-                }
-                continue;
-            }
-            return try out.writeAll(blob);
+        pub fn init(comptime t: Template, d: DataMap) Page {
+            return .{
+                .template = t,
+                .data = d,
+            };
         }
-    }
-};
+
+        pub fn byName(comptime name: []const u8, d: DataMap) Page {
+            return .{
+                .template = find(name),
+                .data = d,
+            };
+        }
+
+        pub fn build(self: Self, a: Allocator) ![]u8 {
+            return std.fmt.allocPrint(a, "{}", .{self});
+        }
+
+        pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+            var ctx = self.data;
+            var blob = self.template.blob;
+            while (blob.len > 0) {
+                if (std.mem.indexOf(u8, blob, "<")) |offset| {
+                    try out.writeAll(blob[0..offset]);
+                    blob = blob[offset..];
+                    //var i: usize = 5;
+                    //var c = blob[i];
+                    if (Directive.init(blob)) |drct| {
+                        const end = drct.end;
+                        switch (drct.kind) {
+                            .noun => |noun| {
+                                const var_name = noun.vari;
+                                if (ctx.get(var_name)) |v_blob| {
+                                    switch (v_blob) {
+                                        .slice => |s_blob| try out.writeAll(s_blob),
+                                        .block => |_| unreachable,
+                                        .reader => |_| unreachable,
+                                    }
+                                    blob = blob[end..];
+                                } else {
+                                    if (DEBUG) std.debug.print("[missing var {s}]\n", .{var_name});
+                                    switch (noun.otherwise) {
+                                        .str => |str| {
+                                            try out.writeAll(str);
+                                            blob = blob[end..];
+                                        },
+                                        .ign => {
+                                            try out.writeAll(blob[0..end]);
+                                            blob = blob[end..];
+                                        },
+                                        .del => {
+                                            blob = blob[end..];
+                                        },
+                                        .template => |subt| {
+                                            blob = blob[end..];
+                                            var subpage = subt.page(self.data);
+                                            try subpage.format(fmts, .{}, out);
+                                        },
+                                    }
+                                }
+                            },
+                            .verb => |verb| {
+                                verb.do(&ctx, out) catch unreachable;
+                                blob = blob[end..];
+                            },
+                        }
+                    } else {
+                        if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
+                            try out.writeAll(blob[0..next]);
+                            blob = blob[next..];
+                        } else {
+                            return try out.writeAll(blob);
+                        }
+                    }
+                    continue;
+                }
+                return try out.writeAll(blob);
+            }
+        }
+    };
+}
 
 pub const Directive = struct {
     kind: Kind,
@@ -394,25 +399,25 @@ pub const Directive = struct {
         }
 
         pub fn foreach(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
-            var page = Page{
+            var p = Page{
                 .data = block.*,
                 .template = .{
                     .name = self.vari,
                     .blob = self.blob,
                 },
             };
-            try page.format("", .{}, out);
+            try p.format("", .{}, out);
         }
 
         pub fn with(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
-            var page = Page{
+            var p = Page{
                 .data = block.*,
                 .template = .{
                     .name = self.vari,
                     .blob = self.blob,
                 },
             };
-            try page.format("", .{}, out);
+            try p.format("", .{}, out);
         }
     };
 
@@ -566,7 +571,6 @@ pub fn find(comptime name: []const u8) Template {
 }
 
 test "build.zig included templates" {
-    //try std.testing.expectEqual(3, bldtmpls.names.len);
     const names = [_][]const u8{
         "templates/4XX.html",
         "templates/5XX.html",
@@ -614,9 +618,9 @@ test "directive something" {
     var ctx = DataMap.init(a);
     try ctx.putSlice("Something", "Some Text Here");
     defer ctx.raze();
-    const page = try t.page(ctx).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings("Some Text Here", page);
+    const p = try t.page(ctx).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings("Some Text Here", p);
 }
 
 test "directive nothing" {
@@ -627,9 +631,9 @@ test "directive nothing" {
         .blob = "<!-- nothing -->",
     };
 
-    const page = try t.page(DataMap.init(a)).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings("<!-- nothing -->", page);
+    const p = try t.page(DataMap.init(a)).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings("<!-- nothing -->", p);
 }
 
 test "directive nothing new" {
@@ -640,9 +644,9 @@ test "directive nothing new" {
         .blob = "<Nothing>",
     };
 
-    const page = try t.page(DataMap.init(a)).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings("<Nothing>", page);
+    const p = try t.page(DataMap.init(a)).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings("<Nothing>", p);
 }
 
 test "directive ORELSE" {
@@ -653,9 +657,9 @@ test "directive ORELSE" {
         .blob = "<This ORELSE string until end>",
     };
 
-    const page = try t.page(DataMap.init(a)).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings("string until end", page);
+    const p = try t.page(DataMap.init(a)).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings("string until end", p);
 }
 
 test "directive ORNULL" {
@@ -667,9 +671,9 @@ test "directive ORNULL" {
         .blob = "<This ORNULL string until end>",
     };
 
-    const page = try t.page(DataMap.init(a)).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings("<This ORNULL string until end>", page);
+    const p = try t.page(DataMap.init(a)).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings("<This ORNULL string until end>", p);
 
     t = Template{
         //.path = "/dev/null",
@@ -715,9 +719,9 @@ test "directive For" {
     defer blocks[0].raze();
     try ctx.putBlock("Loop", &blocks);
 
-    const page = try t.page(ctx).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings(expected, page);
+    const p = try t.page(ctx).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings(expected, p);
 
     // many
     var many_blocks: [2]DataMap = [_]DataMap{
@@ -816,9 +820,9 @@ test "directive For & For" {
 
     try ctx.putBlock("Loop", &outer);
 
-    const page = try t.page(ctx).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings(expected, page);
+    const p = try t.page(ctx).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings(expected, p);
 }
 
 test "directive With" {
@@ -845,9 +849,9 @@ test "directive With" {
 
     var ctx = DataMap.init(a);
     defer ctx.raze();
-    const page = try t.page(ctx).build(a);
-    defer a.free(page);
-    try std.testing.expectEqualStrings(expected_empty, page);
+    const p = try t.page(ctx).build(a);
+    defer a.free(p);
+    try std.testing.expectEqualStrings(expected_empty, p);
 
     var thing = [1]DataMap{
         DataMap.init(a),

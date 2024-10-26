@@ -1,4 +1,5 @@
-const found = @import("found_templates");
+const Found = @import("found_templates");
+const PageData = @import("pagedata");
 
 const TEMPLATE_PATH = "templates/";
 
@@ -7,10 +8,10 @@ pub const FileData = struct {
     blob: []const u8,
 };
 
-pub const data: [found.names.len]FileData = blk: {
+pub const data: [Found.names.len]FileData = blk: {
     @setEvalBranchQuota(5000);
-    var t: [found.names.len]FileData = undefined;
-    for (found.names, &t) |file, *dst| {
+    var t: [Found.names.len]FileData = undefined;
+    for (Found.names, &t) |file, *dst| {
         dst.* = FileData{
             .path = file,
             .blob = @embedFile(file),

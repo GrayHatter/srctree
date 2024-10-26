@@ -75,11 +75,7 @@ fn compileTemplates(b: *std.Build) !*std.Build.Module {
 
     const list = buildSrcTemplates(b) catch @panic("unable to build src files");
     const found = b.addOptions();
-    found.addOption(
-        []const []const u8,
-        "names",
-        list,
-    );
+    found.addOption([]const []const u8, "names", list);
     compiled.addOptions("found_templates", found);
 
     for (list) |file| {
