@@ -1,7 +1,7 @@
 const std = @import("std");
 const build_mode = @import("builtin").mode;
 const compiled = @import("templates-compiled");
-const compiled_structs = @import("templates-compiled-structs");
+pub const Structs = @import("templates-compiled-structs");
 const isWhitespace = std.ascii.isWhitespace;
 const indexOf = std.mem.indexOf;
 const lastIndexOf = std.mem.lastIndexOf;
@@ -198,9 +198,10 @@ pub const Template = struct {
     }
 };
 
-pub fn Page(comptime PageDataType: anytype) type {
+pub fn Page(comptime PageDataType: type) type {
     return struct {
         pub const Self = @This();
+        pub const Kind = PageDataType;
         pub const Live: bool = PageDataType == DataMap;
         template: Template = undefined,
         data: PageDataType,
@@ -223,13 +224,13 @@ pub fn Page(comptime PageDataType: anytype) type {
             return std.fmt.allocPrint(a, "{}", .{self});
         }
 
-        fn typeField(name: []const u8, data: *PageDataType) ?[]const u8 {
+        fn typeField(name: []const u8, data: PageDataType) ?[]const u8 {
             var local: [0xff]u8 = undefined;
             const realname = local[0..makeFieldName(name, &local)];
             inline for (std.meta.fields(PageDataType)) |field| {
                 if (std.mem.eql(u8, field.name, realname)) {
                     switch (field.type) {
-                        []const u8 => return @field(data.*, field.name),
+                        []const u8 => return @field(data, field.name),
                         else => return null,
                     }
                 }
@@ -277,7 +278,7 @@ pub fn Page(comptime PageDataType: anytype) type {
         fn formatTyped(
             self: Self,
             comptime fmts: []const u8,
-            ctx: *PageDataType,
+            ctx: PageDataType,
             drct: Directive,
             out: anytype,
         ) anyerror!void {
@@ -324,7 +325,9 @@ pub fn Page(comptime PageDataType: anytype) type {
                         }
                     }
                 },
-                .verb => |_| {}, //verb.do(ctx, out) catch unreachable,
+                .verb => |verb| {
+                    verb.doTyped(PageDataType, ctx, out) catch unreachable;
+                },
             }
         }
 
@@ -343,7 +346,7 @@ pub fn Page(comptime PageDataType: anytype) type {
                                 else => return err,
                             };
                         } else {
-                            self.formatTyped(fmts, &ctx, drct, out) catch |err| switch (err) {
+                            self.formatTyped(fmts, ctx, drct, out) catch |err| switch (err) {
                                 error.IgnoreDirective => try out.writeAll(blob[0..end]),
                                 else => return err,
                             };
@@ -448,6 +451,41 @@ pub const Directive = struct {
                 .end = end,
                 .endws = endws,
             };
+        }
+
+        pub fn doTyped(self: Verb, T: type, ctx: anytype, out: anytype) anyerror!void {
+            var local: [0xff]u8 = undefined;
+            const realname = local[0..makeFieldName(self.vari, &local)];
+            switch (self.word) {
+                .foreach => {
+                    inline for (std.meta.fields(T)) |field| {
+                        if (field.type == []const u8) continue;
+                        if (std.mem.eql(u8, field.name, realname)) {
+                            const child = @field(ctx, field.name);
+                            switch (@typeInfo(@TypeOf(child))) {
+                                .Pointer => {
+                                    for (child) |each| {
+                                        try self.foreachTyped(@TypeOf(each), each, out);
+                                    }
+                                },
+                                else => {},
+                            }
+                        }
+                    }
+                },
+                .with => {},
+            }
+        }
+
+        pub fn foreachTyped(self: Verb, T: type, ctx: T, out: anytype) anyerror!void {
+            var p = Page(T){
+                .data = ctx,
+                .template = .{
+                    .name = self.vari,
+                    .blob = self.blob,
+                },
+            };
+            try p.format("", .{}, out);
         }
 
         pub fn do(self: Verb, ctx: *const DataMap, out: anytype) anyerror!void {
@@ -734,7 +772,7 @@ pub fn makeFieldName(in: []const u8, out: []u8) usize {
 pub fn findPageType(comptime name: []const u8) type {
     var local: [0xFFFF]u8 = undefined;
     const llen = comptime makeStructName(name, &local);
-    return @field(compiled_structs, local[0..llen]);
+    return @field(Structs, local[0..llen]);
 }
 
 test "build.zig included templates" {

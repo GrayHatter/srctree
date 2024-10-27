@@ -24,6 +24,15 @@ fn post(ctx: *Context) Error!void {
 fn view(ctx: *Context) Error!void {
     const tmpl = Template.findTemplate("gist.html");
     const page_data = Template.PageData("gist.html");
+
+    // TODO move this back into context somehow
+    var btns = [1]Template.Structs.Navbuttons{
+        .{
+            .name = "inbox",
+            .url = "/inbox",
+        },
+    };
+
     var page = page_data.init(tmpl, .{
         .meta_head = .{
             .open_graph = .{
@@ -33,10 +42,7 @@ fn view(ctx: *Context) Error!void {
         .body_header = .{
             .nav = .{
                 .nav_auth = undefined,
-                .nav_buttons = .{
-                    .name = "inbox",
-                    .url = "/inbox",
-                },
+                .nav_buttons = &btns,
             },
         },
         .gist_body = "ha, it worked",
