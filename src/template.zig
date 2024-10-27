@@ -456,24 +456,28 @@ pub const Directive = struct {
         pub fn doTyped(self: Verb, T: type, ctx: anytype, out: anytype) anyerror!void {
             var local: [0xff]u8 = undefined;
             const realname = local[0..makeFieldName(self.vari, &local)];
-            switch (self.word) {
-                .foreach => {
-                    inline for (std.meta.fields(T)) |field| {
-                        if (field.type == []const u8) continue;
+            inline for (std.meta.fields(T)) |field| {
+                if (field.type == []const u8 or
+                    field.type == ?[]const u8) continue;
+                switch (@typeInfo(field.type)) {
+                    .Pointer => {
                         if (std.mem.eql(u8, field.name, realname)) {
                             const child = @field(ctx, field.name);
-                            switch (@typeInfo(@TypeOf(child))) {
-                                .Pointer => {
-                                    for (child) |each| {
-                                        try self.foreachTyped(@TypeOf(each), each, out);
-                                    }
-                                },
-                                else => {},
+                            for (child) |each| {
+                                try self.foreachTyped(@TypeOf(each), each, out);
                             }
                         }
-                    }
-                },
-                .with => {},
+                    },
+                    .Optional => {
+                        if (std.mem.eql(u8, field.name, realname)) {
+                            const child = @field(ctx, field.name);
+                            if (child) |exists| {
+                                try self.withTyped(@TypeOf(exists), exists, out);
+                            }
+                        }
+                    },
+                    else => {},
+                }
             }
         }
 
@@ -515,8 +519,8 @@ pub const Directive = struct {
             try self.foreachTyped(DataMap, block, out);
         }
 
-        pub fn with(self: Verb, block: DataMap, out: anytype) anyerror!void {
-            var p = Page(DataMap){
+        pub fn withTyped(self: Verb, T: type, block: T, out: anytype) anyerror!void {
+            var p = Page(T){
                 .data = block,
                 .template = .{
                     .name = self.vari,
@@ -524,6 +528,10 @@ pub const Directive = struct {
                 },
             };
             try p.format("", .{}, out);
+        }
+
+        pub fn with(self: Verb, data: DataMap, out: anytype) anyerror!void {
+            return try self.withTyped(DataMap, data, out);
         }
     };
 
