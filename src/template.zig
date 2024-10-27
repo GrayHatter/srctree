@@ -477,9 +477,9 @@ pub const Directive = struct {
             }
         }
 
-        pub fn foreachTyped(self: Verb, T: type, ctx: T, out: anytype) anyerror!void {
+        pub fn foreachTyped(self: Verb, T: type, data: T, out: anytype) anyerror!void {
             var p = Page(T){
-                .data = ctx,
+                .data = data,
                 .template = .{
                     .name = self.vari,
                     .blob = self.blob,
@@ -496,13 +496,13 @@ pub const Directive = struct {
                 switch (self.word) {
                     .foreach => {
                         for (block) |s| {
-                            try self.foreach(&s, out);
+                            try self.foreach(s, out);
                         }
                         return;
                     },
                     .with => {
                         std.debug.assert(block.len == 1);
-                        try self.with(&block[0], out);
+                        try self.with(block[0], out);
                         return;
                     },
                 }
@@ -511,20 +511,13 @@ pub const Directive = struct {
             }
         }
 
-        pub fn foreach(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
-            var p = Page(DataMap){
-                .data = block.*,
-                .template = .{
-                    .name = self.vari,
-                    .blob = self.blob,
-                },
-            };
-            try p.format("", .{}, out);
+        pub fn foreach(self: Verb, block: DataMap, out: anytype) anyerror!void {
+            try self.foreachTyped(DataMap, block, out);
         }
 
-        pub fn with(self: Verb, block: *const DataMap, out: anytype) anyerror!void {
+        pub fn with(self: Verb, block: DataMap, out: anytype) anyerror!void {
             var p = Page(DataMap){
-                .data = block.*,
+                .data = block,
                 .template = .{
                     .name = self.vari,
                     .blob = self.blob,
