@@ -23,12 +23,24 @@ fn post(ctx: *Context) Error!void {
 
 fn view(ctx: *Context) Error!void {
     const tmpl = Template.findTemplate("gist.html");
-    const pgtype = Template.findPage("gist.html");
-    const page = pgtype.init(tmpl, .{
-        .meta_head = undefined,
-        .body_header = undefined,
+    const page_data = Template.PageData("gist.html");
+    var page = page_data.init(tmpl, .{
+        .meta_head = .{
+            .open_graph = .{
+                .title = "Create A New Gist",
+            },
+        },
+        .body_header = .{
+            .nav = .{
+                .nav_auth = undefined,
+                .nav_buttons = .{
+                    .name = "inbox",
+                    .url = "/inbox",
+                },
+            },
+        },
         .gist_body = "ha, it worked",
     });
 
-    return ctx.sendPage(page);
+    return ctx.sendPage(&page);
 }

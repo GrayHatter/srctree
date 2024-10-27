@@ -98,7 +98,7 @@ pub fn main() !void {
         const fdata = try std.fs.cwd().readFileAlloc(a, tplt.path, 0xffff);
         defer a.free(fdata);
 
-        const name = makeStructName(tplt.path, "Page");
+        const name = makeStructName(tplt.path);
         const this = try AbstTree.init(a, name);
         const gop = try tree.getOrPut(this.name);
         if (!gop.found_existing) {
@@ -136,14 +136,14 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                         },
                         .template => |_| {
                             var buffer: [0xFF]u8 = undefined;
-                            const kind = try std.fmt.bufPrint(&buffer, ": {s},\n", .{makeStructName(noun.vari, "Page")});
+                            const kind = try std.fmt.bufPrint(&buffer, ": ?{s},\n", .{makeStructName(noun.vari)});
                             try current.append(makeFieldName(noun.vari[1 .. noun.vari.len - 5]), kind);
                         },
                     }
                 },
                 .verb => |verb| {
                     data = data[drct.end..];
-                    const name = makeStructName(verb.vari, "");
+                    const name = makeStructName(verb.vari);
                     const this = try AbstTree.init(a, name);
                     const gop = try tree.getOrPut(this.name);
                     if (!gop.found_existing) {
@@ -210,7 +210,7 @@ pub fn makeFieldName(in: []const u8) []const u8 {
     return local.name[0..i];
 }
 
-pub fn makeStructName(in: []const u8, comptime postfix: []const u8) []const u8 {
+pub fn makeStructName(in: []const u8) []const u8 {
     const local = struct {
         var name: [0xFFFF]u8 = undefined;
     };
@@ -240,18 +240,13 @@ pub fn makeStructName(in: []const u8, comptime postfix: []const u8) []const u8 {
                     i += 1;
                 }
             },
-            '-', '_' => {
+            '-', '_', '.' => {
                 next_upper = true;
             },
-            '.' => break,
             else => {},
         }
     }
 
-    for (postfix) |chr| {
-        local.name[i] = chr;
-        i += 1;
-    }
     return local.name[0..i];
 }
 

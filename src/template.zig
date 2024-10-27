@@ -189,6 +189,10 @@ pub const Template = struct {
         return Page(DataMap).init(self, data);
     }
 
+    pub fn pageOf(self: Template, comptime Kind: type, data: Kind) Page(Kind) {
+        return Page(Kind).init(self, data);
+    }
+
     pub fn format(_: Template, comptime _: []const u8, _: std.fmt.FormatOptions, _: anytype) !void {
         comptime unreachable;
     }
@@ -219,18 +223,109 @@ pub fn Page(comptime PageDataType: anytype) type {
             return std.fmt.allocPrint(a, "{}", .{self});
         }
 
-        fn typeField(name: []const u8, data: PageDataType) ?DataMap.Data {
+        fn typeField(name: []const u8, data: *PageDataType) ?[]const u8 {
             var local: [0xff]u8 = undefined;
             const realname = local[0..makeFieldName(name, &local)];
             inline for (std.meta.fields(PageDataType)) |field| {
                 if (std.mem.eql(u8, field.name, realname)) {
                     switch (field.type) {
-                        []const u8 => return .{ .slice = @field(data, field.name) },
+                        []const u8 => return @field(data.*, field.name),
                         else => return null,
                     }
                 }
             }
             return null;
+        }
+
+        fn formatLive(
+            self: Self,
+            comptime fmts: []const u8,
+            ctx: *DataMap,
+            drct: Directive,
+            out: anytype,
+        ) anyerror!void {
+            switch (drct.kind) {
+                .noun => |noun| {
+                    const var_name = ctx.get(noun.vari);
+                    if (var_name) |v_blob| {
+                        switch (v_blob) {
+                            .slice => |s_blob| try out.writeAll(s_blob),
+                            .block => |_| unreachable,
+                            .reader => |_| unreachable,
+                        }
+                    } else {
+                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
+                        switch (noun.otherwise) {
+                            .str => |str| try out.writeAll(str),
+                            // Not really an error, just instruct caller to print original text
+                            .ign => return error.IgnoreDirective,
+                            .del => {},
+                            .template => |subt| {
+                                var subpage = subt.page(self.data);
+                                subpage.format(fmts, .{}, out) catch |err| {
+                                    std.debug.print("swallowed subpage format error {}\n", .{err});
+                                    unreachable;
+                                };
+                            },
+                        }
+                    }
+                },
+                .verb => |verb| verb.do(ctx, out) catch unreachable,
+            }
+        }
+
+        fn formatTyped(
+            self: Self,
+            comptime fmts: []const u8,
+            ctx: *PageDataType,
+            drct: Directive,
+            out: anytype,
+        ) anyerror!void {
+            switch (drct.kind) {
+                .noun => |noun| {
+                    const var_name = typeField(noun.vari, ctx);
+                    if (var_name) |data_blob| {
+                        try out.writeAll(data_blob);
+                    } else {
+                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
+                        switch (noun.otherwise) {
+                            .str => |str| try out.writeAll(str),
+                            // Not really an error, just instruct caller to print original text
+                            .ign => return error.IgnoreDirective,
+                            .del => {},
+                            .template => |subt| {
+                                inline for (std.meta.fields(PageDataType)) |field|
+                                    switch (@typeInfo(field.type)) {
+                                        .Optional => |otype| {
+                                            if (otype.child == []const u8) continue;
+
+                                            var local: [0xff]u8 = undefined;
+                                            const realname = local[0..makeFieldName(noun.vari[1 .. noun.vari.len - 5], &local)];
+                                            if (std.mem.eql(u8, field.name, realname)) {
+                                                if (@field(self.data, field.name)) |subdata| {
+                                                    var subpage = subt.pageOf(otype.child, subdata);
+                                                    try subpage.format(fmts, .{}, out);
+                                                } else std.debug.print(
+                                                    "sub template data was null for {s}\n",
+                                                    .{field.name},
+                                                );
+                                            }
+                                        },
+                                        .Struct => {
+                                            if (std.mem.eql(u8, field.name, noun.vari)) {
+                                                const subdata = @field(self.data, field.name);
+                                                var subpage = subt.pageOf(@TypeOf(subdata), subdata);
+                                                try subpage.format(fmts, .{}, out);
+                                            }
+                                        },
+                                        else => {}, //@compileLog(field.type),
+                                    };
+                            },
+                        }
+                    }
+                },
+                .verb => |_| {}, //verb.do(ctx, out) catch unreachable,
+            }
         }
 
         pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
@@ -240,51 +335,20 @@ pub fn Page(comptime PageDataType: anytype) type {
                 if (std.mem.indexOf(u8, blob, "<")) |offset| {
                     try out.writeAll(blob[0..offset]);
                     blob = blob[offset..];
-                    //var i: usize = 5;
-                    //var c = blob[i];
                     if (Directive.init(blob)) |drct| {
                         const end = drct.end;
-                        switch (drct.kind) {
-                            .noun => |noun| {
-                                const var_name = if (Self.Live) ctx.get(noun.vari) else typeField(noun.vari, ctx);
-                                if (var_name) |v_blob| {
-                                    switch (v_blob) {
-                                        .slice => |s_blob| try out.writeAll(s_blob),
-                                        .block => |_| unreachable,
-                                        .reader => |_| unreachable,
-                                    }
-                                    blob = blob[end..];
-                                } else {
-                                    if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
-                                    switch (noun.otherwise) {
-                                        .str => |str| {
-                                            try out.writeAll(str);
-                                            blob = blob[end..];
-                                        },
-                                        .ign => {
-                                            try out.writeAll(blob[0..end]);
-                                            blob = blob[end..];
-                                        },
-                                        .del => {
-                                            blob = blob[end..];
-                                        },
-                                        .template => |subt| {
-                                            blob = blob[end..];
-                                            if (Self.Live) {
-                                                var subpage = subt.page(self.data);
-                                                try subpage.format(fmts, .{}, out);
-                                            }
-                                        },
-                                    }
-                                }
-                            },
-                            .verb => |verb| {
-                                if (Self.Live) {
-                                    verb.do(&ctx, out) catch unreachable;
-                                }
-                                blob = blob[end..];
-                            },
+                        if (comptime Self.Live) {
+                            self.formatLive(fmts, &ctx, drct, out) catch |err| switch (err) {
+                                error.IgnoreDirective => try out.writeAll(blob[0..end]),
+                                else => return err,
+                            };
+                        } else {
+                            self.formatTyped(fmts, &ctx, drct, out) catch |err| switch (err) {
+                                error.IgnoreDirective => try out.writeAll(blob[0..end]),
+                                else => return err,
+                            };
                         }
+                        blob = blob[end..];
                     } else {
                         if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
                             try out.writeAll(blob[0..next]);
@@ -585,7 +649,7 @@ pub fn findTemplate(comptime name: []const u8) Template {
     @compileError("template " ++ name ++ " not found!");
 }
 
-pub fn findPage(comptime name: []const u8) type {
+pub fn PageData(comptime name: []const u8) type {
     //const template = findTemplate(name);
     const page_type = comptime findPageType(name);
     return Page(page_type);
@@ -599,7 +663,7 @@ fn intToWord(in: u8) []const u8 {
     };
 }
 
-fn makeStructName(comptime in: []const u8, comptime postfix: []const u8, comptime out: []u8) usize {
+fn makeStructName(comptime in: []const u8, comptime out: []u8) usize {
     var ltail = in;
     if (comptime std.mem.lastIndexOf(u8, in, "/")) |i| {
         ltail = ltail[i..];
@@ -624,18 +688,13 @@ fn makeStructName(comptime in: []const u8, comptime postfix: []const u8, comptim
                     i += 1;
                 }
             },
-            '-', '_' => {
+            '-', '_', '.' => {
                 next_upper = true;
             },
-            '.' => break,
             else => {},
         }
     }
 
-    inline for (postfix) |chr| {
-        out[i] = chr;
-        i += 1;
-    }
     return i;
 }
 
@@ -674,7 +733,7 @@ pub fn makeFieldName(in: []const u8, out: []u8) usize {
 
 pub fn findPageType(comptime name: []const u8) type {
     var local: [0xFFFF]u8 = undefined;
-    const llen = comptime makeStructName(name, "Page", &local);
+    const llen = comptime makeStructName(name, &local);
     return @field(compiled_structs, local[0..llen]);
 }
 

@@ -77,7 +77,7 @@ pub fn router(ctx: *Context) Callable {
         }) catch return unroutable,
     }) catch return unroutable;
 
-    ctx.putContext("Header.Nav", .{ .block = header_nav }) catch return unroutable;
+    ctx.putContext("NavButtons", .{ .block = header_nav }) catch return unroutable;
     return Routes.router(ctx, &routes);
 }
 

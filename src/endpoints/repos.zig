@@ -120,7 +120,7 @@ pub fn router(ctx: *Context) Error!Route.Callable {
                 .{ .name = "Extra", .value = diffcnt },
             }) catch return error.OutOfMemory,
         });
-        try ctx.putContext("Header.Nav", .{ .block = header_nav });
+        try ctx.putContext("NavButtons", .{ .block = header_nav });
 
         if (rd.verb) |_| {
             _ = ctx.uri.next();
