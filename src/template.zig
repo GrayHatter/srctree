@@ -230,7 +230,7 @@ pub fn Page(comptime PageDataType: type) type {
             inline for (std.meta.fields(PageDataType)) |field| {
                 if (std.mem.eql(u8, field.name, realname)) {
                     switch (field.type) {
-                        []const u8 => return @field(data, field.name),
+                        []const u8, ?[]const u8 => return @field(data, field.name),
                         else => return null,
                     }
                 }
@@ -464,6 +464,7 @@ pub const Directive = struct {
                         if (std.mem.eql(u8, field.name, realname)) {
                             const child = @field(ctx, field.name);
                             for (child) |each| {
+                                std.debug.assert(self.word == .foreach);
                                 try self.foreachTyped(@TypeOf(each), each, out);
                             }
                         }
@@ -472,11 +473,12 @@ pub const Directive = struct {
                         if (std.mem.eql(u8, field.name, realname)) {
                             const child = @field(ctx, field.name);
                             if (child) |exists| {
+                                std.debug.assert(self.word == .with);
                                 try self.withTyped(@TypeOf(exists), exists, out);
                             }
                         }
                     },
-                    else => {},
+                    else => comptime unreachable,
                 }
             }
         }
