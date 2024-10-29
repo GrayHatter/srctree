@@ -17,12 +17,9 @@ pub fn readVersioned(a: Allocator, file: std.fs.File) !User {
     const ver: usize = try reader.readInt(usize, endian);
     switch (ver) {
         0 => {
-            var local: User = undefined;
-            if (try reader.read(&local.mtls_fp) != 40) return error.InvalidFile;
-            local.username = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF);
             return User{
-                .mtls_fp = local.mtls_fp,
-                .username = local.username,
+                .mtls_fp = try reader.readBytesNoEof(40),
+                .username = try reader.readUntilDelimiterAlloc(a, 0, 0xFFF),
             };
         },
         else => return error.UnsupportedVersion,
