@@ -48,6 +48,7 @@ pub fn writeOut(self: Gist, w: std.io.AnyWriter) !void {
     try w.writeInt(usize, GIST_VERSION, endian);
     try w.writeAll(self.owner);
     try w.writeAll("\x00");
+    try w.writeInt(i64, self.created, endian);
     try w.writeInt(u8, @truncate(self.files.len), endian);
     for (self.files) |file| {
         try w.writeAll(file.name);
@@ -73,6 +74,8 @@ pub fn new(owner: []const u8, names: [][]const u8, blobs: [][]const u8) ![64]u8 
     var hash_str: [64]u8 = undefined;
     var sha = std.crypto.hash.sha2.Sha256.init(.{});
     sha.update(owner);
+    const created = std.time.timestamp();
+    sha.update(std.mem.asBytes(&created));
 
     std.debug.assert(names.len <= 20);
     var files_buf: [20]File = undefined;
@@ -89,7 +92,7 @@ pub fn new(owner: []const u8, names: [][]const u8, blobs: [][]const u8) ![64]u8 
     const gist = Gist{
         .hash = hash,
         .owner = owner,
-        .created = std.time.timestamp(),
+        .created = created,
         .files = files_buf[0..names.len],
     };
     _ = try std.fmt.bufPrint(&hash_str, "{}", .{std.fmt.fmtSliceHexLower(&hash)});
