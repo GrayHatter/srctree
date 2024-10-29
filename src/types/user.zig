@@ -30,7 +30,7 @@ pub fn readVersioned(a: Allocator, file: std.fs.File) !User {
 }
 
 mtls_fp: [40]u8 = .{0} ** 40,
-username: []u8,
+username: []const u8,
 
 pub fn readFile(a: Allocator, file: std.fs.File) !User {
     defer file.close();

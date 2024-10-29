@@ -97,12 +97,6 @@ pub fn sendPage(ctx: *Context, page: anytype) Error!void {
         else => unreachable,
     };
     const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
-    try ctx.putContext("NavAuth", .{ .slice = loggedin });
-    if (ctx.request.auth.user(ctx.alloc)) |usr| {
-        try ctx.putContext("Current_username", .{ .slice = usr.username });
-    } else |_| {}
-    //
-
     page.data.body_header.?.nav.?.nav_auth = loggedin;
 
     const page_compiled = try page.build(ctx.alloc);

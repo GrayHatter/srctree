@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>srctree</title>
+    <_meta_head.html>
+  </head>
+  <body>
+    <_body_header.html>
+    <content>
+      <form method="POST" class="gist pretty" action="/gist/post">
+        <For GistFiles>
+        <div class="block">
+        <label>File Name</label>
+        <input name="file_name" value="<Name ORNULL>"/>
+        <br>
+        <textarea name="file_blob" cols="100" rows="<Count ORELSE 10>"><Blob ORNULL></textarea>
+        </div>
+
+        </For>
+        <button type="submit" name="new_file">Add Another File</button>
+        <button type="submit" name="save">Save</button>
+      </form>
+
+    </content>
+  </body>
+</html>

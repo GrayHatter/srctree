@@ -4,6 +4,7 @@ pub const Comment = @import("types/comment.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
 pub const Diff = @import("types/diff.zig");
+pub const Gist = @import("types/gist.zig");
 pub const Issue = @import("types/issue.zig");
 pub const Network = @import("types/network.zig");
 pub const Read = @import("types/read.zig");
@@ -22,6 +23,7 @@ pub fn init(dir: []const u8) !void {
         CommitMap,
         Delta,
         Diff,
+        Gist,
         Issue,
         Network,
         Read,

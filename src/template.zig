@@ -690,8 +690,8 @@ pub fn findTemplate(comptime name: []const u8) Template {
 
 pub fn PageData(comptime name: []const u8) type {
     //const template = findTemplate(name);
-    const page_type = comptime findPageType(name);
-    return Page(page_type);
+    const page_data = comptime findPageType(name);
+    return Page(page_data);
 }
 
 fn intToWord(in: u8) []const u8 {
