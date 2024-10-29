@@ -144,10 +144,12 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                 .verb => |verb| {
                     data = data[drct.end..];
                     const name = makeStructName(verb.vari);
-                    const this = try AbstTree.init(a, name);
+                    var this = try AbstTree.init(a, name);
                     const gop = try tree.getOrPut(this.name);
                     if (!gop.found_existing) {
                         gop.value_ptr.* = this;
+                    } else {
+                        this = gop.value_ptr.*;
                     }
 
                     switch (verb.word) {
