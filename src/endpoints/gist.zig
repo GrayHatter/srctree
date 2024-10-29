@@ -1,7 +1,10 @@
 const std = @import("std");
+
 const Context = @import("../context.zig");
 const Template = @import("../template.zig");
 const UserData = @import("../request_data.zig").UserData;
+const Bleach = @import("../bleach.zig");
+const Allocator = std.mem.Allocator;
 
 const Gist = @import("../types.zig").Gist;
 
@@ -50,10 +53,8 @@ fn post(ctx: *Context) Error!void {
 
     const postd = ctx.req_data.post_data orelse return error.BadData;
     const udata = UserData(GistPost).initMap(ctx.alloc, postd) catch return error.BadData;
-    // I assume this is still enforced in ReleaseFast but I want to control the
-    // error returned
-    if (udata.file_name.len != udata.file_blob.len) return error.BadData;
 
+    if (udata.file_name.len != udata.file_blob.len) return error.BadData;
     const username = if (ctx.auth.valid())
         (ctx.auth.user(ctx.alloc) catch unreachable).username
     else
@@ -94,27 +95,34 @@ fn new(ctx: *Context) Error!void {
     return ctx.sendPage(&page);
 }
 
+fn toTemplate(a: Allocator, files: []Gist.File) ![]Template.Structs.Gistfiles {
+    const out = try a.alloc(Template.Structs.Gistfiles, files.len);
+    for (files, out) |file, *o| {
+        o.* = .{
+            .file_name = try Bleach.sanitizeAlloc(a, file.name, .{}),
+            .file_blob = try Bleach.sanitizeAlloc(a, file.blob, .{}),
+        };
+    }
+    return out;
+}
+
 fn view(ctx: *Context) Error!void {
     const tmpl = Template.findTemplate("gist.html");
 
     // TODO move this back into context somehow
-    var btns = [1]Template.Structs.Navbuttons{
-        .{
-            .name = "inbox",
-            .url = "/inbox",
-        },
-    };
+    var btns = [1]Template.Structs.Navbuttons{.{ .name = "inbox", .url = "/inbox" }};
 
     if (ctx.uri.next()) |hash| {
         if (hash.len != 64) return error.BadData;
 
         const gist = Gist.open(ctx.alloc, hash[0..64].*) catch return error.Unknown;
-        std.debug.assert(gist.files.len == 1);
-
+        const files = toTemplate(ctx.alloc, gist.files) catch return error.Unknown;
+        const og = try std.fmt.allocPrint(ctx.alloc, "A perfect paste from {}", .{Bleach.Html{ .text = gist.owner }});
         var page = GistPage.init(tmpl, .{
             .meta_head = .{
                 .open_graph = .{
-                    .title = "Create A New Gist",
+                    .title = og,
+                    .desc = "",
                 },
             },
             .body_header = .{
@@ -123,7 +131,7 @@ fn view(ctx: *Context) Error!void {
                     .nav_buttons = &btns,
                 },
             },
-            .gist_body = gist.files[0].blob,
+            .gist_files = files,
         });
 
         return ctx.sendPage(&page);
