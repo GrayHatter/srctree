@@ -78,10 +78,11 @@ pub fn new(owner: []const u8, names: [][]const u8, blobs: [][]const u8) ![64]u8 
     var files_buf: [20]File = undefined;
 
     for (names, blobs, files_buf[0..names.len]) |name, blob, *fout| {
-        sha.update(name);
-        sha.update(blob);
-        fout.name = name;
+        // TODO sanitize file.name
+        fout.name = if (name.len > 0) name else "filename.txt";
         fout.blob = blob;
+        sha.update(fout.name);
+        sha.update(fout.blob);
     }
     sha.final(&hash);
 
