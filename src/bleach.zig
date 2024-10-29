@@ -30,6 +30,17 @@ pub const Options = struct {
     error_on_replace: bool = false,
 };
 
+pub const Html = struct {
+    text: []const u8,
+
+    pub fn format(self: Html, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        var buf: [6]u8 = undefined;
+        for (self.text) |c| {
+            try out.writeAll(buf[0 .. bleachHtml(c, &buf) catch unreachable]);
+        }
+    }
+};
+
 pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8, opts: Options) Error![]u8 {
     const func = opts.rules.func();
 
@@ -125,6 +136,14 @@ fn bleachHtml(in: u8, out: ?[]u8) Error!usize {
         @memcpy(o[0..replace.len], replace);
     }
     return replace.len;
+}
+
+test Html {
+    var a = std.testing.allocator;
+    const clean = try std.fmt.allocPrint(a, "{}", .{Html{ .text = "<tags not allowed>" }});
+    defer a.free(clean);
+
+    try std.testing.expectEqualStrings("&lt;tags not allowed&gt;", clean);
 }
 
 test bleachFilename {
