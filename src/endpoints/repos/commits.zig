@@ -416,19 +416,32 @@ fn buildListBetween(
 pub fn commits(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
-    const commitish = rd.noun;
-    if (commitish) |cmish| {
-        std.debug.print("{s}\n", .{cmish});
-        if (!Git.commitish(cmish)) return error.Unrouteable;
-        if (std.mem.indexOf(u8, cmish, "..")) |i| {
-            const left = cmish[0..i];
-            if (!Git.commitish(left)) return error.Unrouteable;
-            const right = cmish[i + 2 ..];
-            if (!Git.commitish(right)) return error.Unrouteable;
+    if (ctx.uri.next()) |next| {
+        if (!std.mem.eql(u8, next, "commits")) return error.Unrouteable;
+    }
 
-            std.debug.print("{s}, {s}\n", .{ left, right });
+    var commitish: ?[]const u8 = null;
+    if (ctx.uri.next()) |next| {
+        if (std.mem.eql(u8, next, "before")) {
+            if (ctx.uri.next()) |before| {
+                if (!Git.commitish(before)) return error.Unrouteable;
+                commitish = before;
+            }
         }
-    } else {}
+    }
+
+    // TODO use left and right commit finding
+    //if (commitish) |cmish| {
+    //    std.debug.print("{s}\n", .{cmish});
+    //    if (!Git.commitish(cmish)) return error.Unrouteable;
+    //    if (std.mem.indexOf(u8, cmish, "..")) |i| {
+    //        const left = cmish[0..i];
+    //        if (!Git.commitish(left)) return error.Unrouteable;
+    //        const right = cmish[i + 2 ..];
+    //        if (!Git.commitish(right)) return error.Unrouteable;
+    //        std.debug.print("{s}, {s}\n", .{ left, right });
+    //    }
+    //} else {}
 
     const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     var cwd = std.fs.cwd();
@@ -439,7 +452,7 @@ pub fn commits(ctx: *Context) Error!void {
 
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: [8]u8 = undefined;
-    const cmts_list = try buildList(ctx.alloc, repo, rd.name, null, commits_b, &last_sha);
+    const cmts_list = try buildList(ctx.alloc, repo, rd.name, commitish, commits_b, &last_sha);
 
     const before_txt = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
     return sendCommits(ctx, cmts_list, before_txt);
