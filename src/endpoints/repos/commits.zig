@@ -36,18 +36,18 @@ const AddComment = struct {
     text: []const u8,
 };
 
-fn newComment(ctx: *Context) Error!void {
-    if (ctx.req_data.post_data) |post| {
-        _ = UserData(AddComment).init(post) catch return error.BadData;
-    }
-    return error.BadData;
-}
-
 pub fn router(ctx: *Context) Error!Route.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return commits;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return commit;
     return commits;
+}
+
+fn newComment(ctx: *Context) Error!void {
+    if (ctx.req_data.post_data) |post| {
+        _ = UserData(AddComment).init(post) catch return error.BadData;
+    }
+    return error.BadData;
 }
 
 pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
