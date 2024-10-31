@@ -320,7 +320,7 @@ fn treeBlob(ctx: *Context) Error!void {
     opengraph[0].putSlice("Title", rd.name) catch return error.Unknown;
     var desc = repo.description(ctx.alloc) catch return error.Unknown;
     if (std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-        desc = try aPrint(ctx.alloc, "An Indescribable with {s} commits", .{"[todo count commits]"});
+        desc = try aPrint(ctx.alloc, "An Indescribable repo with {s} commits", .{"[todo count commits]"});
     }
     try opengraph[0].putSlice("Desc", desc);
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
