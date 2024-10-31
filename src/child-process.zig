@@ -67,7 +67,7 @@ pub fn stdin(self: *ChildProc, data: []const u8, more: bool) !usize {
 
 pub fn stdpoll(_: *ChildProc, fd: *std.os.pollfd, buf: []u8) ![]const u8 {
     while (true) {
-        var poll: []std.os.pollfd = &[_]std.os.pollfd{fd};
+        const poll: []std.os.pollfd = &[_]std.os.pollfd{fd};
         const events_len = std.os.poll(poll, std.math.maxInt(i32)) catch unreachable;
         if (events_len == 0) continue;
         if (fd.revents & std.os.POLL.IN != 0) {
