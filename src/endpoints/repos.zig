@@ -87,6 +87,37 @@ pub const RouteData = struct {
     }
 };
 
+fn navButtons(ctx: *Context) ![2]Template.Structs.Navbuttons {
+    const rd = RouteData.make(&ctx.uri) orelse unreachable;
+    if (!rd.exists()) unreachable;
+    var i_count: usize = 0;
+    var d_count: usize = 0;
+    var itr = Types.Delta.iterator(ctx.alloc, rd.name);
+    while (itr.next()) |dlt| {
+        switch (dlt.attach) {
+            .diff => d_count += 1,
+            .issue => i_count += 1,
+            else => {},
+        }
+        dlt.raze(ctx.alloc);
+    }
+
+    const btns = [2]Template.Structs.Navbuttons{
+        .{
+            .name = "issues",
+            .extra = try aPrint(ctx.alloc, "{}", .{i_count}),
+            .url = try aPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name}),
+        },
+        .{
+            .name = "diffs",
+            .extra = try aPrint(ctx.alloc, "{}", .{d_count}),
+            .url = try aPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name}),
+        },
+    };
+
+    return btns;
+}
+
 pub fn router(ctx: *Context) Error!Route.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
@@ -482,9 +513,9 @@ fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
     return dom.close();
 }
 
-fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
-    var tmpl = Template.find("blob.html");
+const BlobPage = Template.PageData("blob.html");
 
+fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var blb: Git.Blob = undefined;
 
     var files = pfiles;
@@ -525,17 +556,26 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
         "{pretty}",
         .{HTML.div(data, &HTML.Attr.class("code-block"))},
     );
-    ctx.putContext("Blob", .{ .slice = filestr }) catch return error.Unknown;
-    ctx.putContext("Filename", .{ .slice = blb.name }) catch return error.Unknown;
     ctx.uri.reset();
     _ = ctx.uri.next();
-    ctx.putContext("Repo", .{ .slice = ctx.uri.next() orelse "unknown" }) catch return error.Unknown;
+    const uri_repo = ctx.uri.next() orelse return error.Unrouteable;
     _ = ctx.uri.next();
-    ctx.putContext("Uri_filename", .{ .slice = ctx.uri.rest() }) catch return error.Unknown;
+    const uri_filename = Bleach.sanitizeAlloc(ctx.alloc, ctx.uri.rest(), .{}) catch return error.Unknown;
 
     ctx.response.status = .ok;
 
-    try ctx.sendTemplate(&tmpl);
+    var btns = navButtons(ctx) catch return error.Unknown;
+
+    var page = BlobPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .repo = uri_repo,
+        .uri_filename = uri_filename,
+        .filename = blb.name,
+        .blob = filestr,
+    });
+
+    try ctx.sendPage(&page);
 }
 
 fn mkTree(a: Allocator, repo: Git.Repo, uri: *UriIter, pfiles: Git.Tree) !Git.Tree {
