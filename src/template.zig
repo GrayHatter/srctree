@@ -883,6 +883,8 @@ test "directive With" {
         \\  
         \\</div>
     ;
+    // trailing spaces expected and required
+    try std.testing.expect(std.mem.count(u8, expected_empty, "  \n") == 1);
     var t = Template{
         //.path = "/dev/null",
         .name = "test",
