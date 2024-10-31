@@ -513,6 +513,19 @@ fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
     return dom.close();
 }
 
+fn excludedExt(name: []const u8) bool {
+    const exclude_ext = [_][:0]const u8{
+        ".jpg",
+        ".jpeg",
+        ".gif",
+        ".png",
+    };
+    inline for (exclude_ext) |un| {
+        if (std.mem.endsWith(u8, name, un)) return true;
+    }
+    return true;
+}
+
 const BlobPage = Template.PageData("blob.html");
 
 fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
@@ -543,6 +556,8 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     if (Highlighting.Language.guessFromFilename(blb.name)) |lang| {
         const pre = try Highlighting.highlight(ctx.alloc, lang, d2);
         formatted = pre[28..][0 .. pre.len - 38];
+    } else if (excludedExt(blb.name)) {
+        formatted = "This file type is currently unsupported";
     } else {
         formatted = Bleach.sanitizeAlloc(ctx.alloc, d2, .{}) catch return error.Unknown;
     }
