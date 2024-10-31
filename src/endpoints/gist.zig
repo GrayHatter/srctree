@@ -66,7 +66,7 @@ fn post(ctx: *Context) Error!void {
 }
 
 fn new(ctx: *Context) Error!void {
-    const tmpl = Template.findTemplate("gist_new.html");
+    //const tmpl = Template.findTemplate("gist_new.html");
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.Navbuttons{
         .{
@@ -77,7 +77,7 @@ fn new(ctx: *Context) Error!void {
 
     var files = [1]Template.Structs.Gistfiles{.{}};
 
-    var page = GistNewPage.init(tmpl, .{
+    var page = GistNewPage.init(.{
         .meta_head = .{
             .open_graph = .{
                 .title = "Create A New Gist",
@@ -107,8 +107,6 @@ fn toTemplate(a: Allocator, files: []Gist.File) ![]Template.Structs.Gistfiles {
 }
 
 fn view(ctx: *Context) Error!void {
-    const tmpl = Template.findTemplate("gist.html");
-
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.Navbuttons{.{ .name = "inbox", .url = "/inbox" }};
 
@@ -118,7 +116,7 @@ fn view(ctx: *Context) Error!void {
         const gist = Gist.open(ctx.alloc, hash[0..64].*) catch return error.Unknown;
         const files = toTemplate(ctx.alloc, gist.files) catch return error.Unknown;
         const og = try std.fmt.allocPrint(ctx.alloc, "A perfect paste from {}", .{Bleach.Html{ .text = gist.owner }});
-        var page = GistPage.init(tmpl, .{
+        var page = GistPage.init(.{
             .meta_head = .{
                 .open_graph = .{
                     .title = og,
