@@ -67,6 +67,15 @@ pub fn build(b: *std.Build) void {
         "templates-compiled-structs",
         .{ .root_source_file = tcstructs },
     ));
+
+    // Partner Binaries
+    const mailer = b.addExecutable(.{
+        .name = "mailer",
+        .root_source_file = b.path("src/mailer.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    b.installArtifact(mailer);
 }
 
 //fn compileTemplatesStruct(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
