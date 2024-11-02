@@ -70,12 +70,20 @@ pub fn build(b: *std.Build) void {
 
     // Partner Binaries
     const mailer = b.addExecutable(.{
-        .name = "mailer",
+        .name = "srctree-mailer",
         .root_source_file = b.path("src/mailer.zig"),
         .target = target,
         .optimize = optimize,
     });
     b.installArtifact(mailer);
+
+    const send_email = b.addRunArtifact(mailer);
+    send_email.step.dependOn(b.getInstallStep());
+    const send_email_step = b.step("email", "send an email");
+    send_email_step.dependOn(&send_email.step);
+    if (b.args) |args| {
+        send_email.addArgs(args);
+    }
 }
 
 //fn compileTemplatesStruct(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
