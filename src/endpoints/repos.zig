@@ -285,13 +285,13 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
     return out;
 }
 
+const NewRepoPage = Template.PageData("repo-new.html");
 fn newRepo(ctx: *Context) Error!void {
-    var tmpl = Template.find("repo.html");
-
     ctx.putContext("Files", .{ .slice = "<h3>New Repo!</h3><p>Todo, add content here</p>" }) catch return error.Unknown;
     ctx.response.status = .ok;
 
-    try ctx.sendTemplate(&tmpl);
+    //try ctx.sendTemplate(&tmpl);
+    return error.NotImplemented;
 }
 
 fn treeBlob(ctx: *Context) Error!void {

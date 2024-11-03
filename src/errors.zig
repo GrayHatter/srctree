@@ -3,6 +3,7 @@ pub const ServerError = error{
     OutOfMemory,
     NoSpaceLeft,
     ReqResInvalid,
+    NotImplemented,
     Unknown,
 };
 

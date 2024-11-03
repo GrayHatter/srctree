@@ -102,6 +102,7 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
                         std.debug.dumpStackTrace(trace.*);
                     }
                 },
+                error.NotImplemented,
                 error.Unknown,
                 error.ReqResInvalid,
                 error.AndExit,
@@ -167,6 +168,7 @@ fn serveHttp(zwsgi: *ZWSGI) !void {
                         std.debug.dumpStackTrace(trace.*);
                     }
                 },
+                error.NotImplemented,
                 error.Unknown,
                 error.ReqResInvalid,
                 error.AndExit,
