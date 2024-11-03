@@ -4,7 +4,9 @@ const compiled = @import("templates-compiled");
 pub const Structs = @import("templates-compiled-structs");
 const isWhitespace = std.ascii.isWhitespace;
 const indexOf = std.mem.indexOf;
+const indexOfPos = std.mem.indexOfPos;
 const lastIndexOf = std.mem.lastIndexOf;
+const count = std.mem.count;
 
 const Allocator = std.mem.Allocator;
 
@@ -266,11 +268,19 @@ pub const Directive = struct {
             endws: usize,
             width: usize,
         } {
+            const open: *const [keyword.len + 2]u8 = "<" ++ keyword ++ " ";
             const close: *const [keyword.len + 3]u8 = "</" ++ keyword ++ ">";
+
             var start = 1 + (indexOf(u8, blob, ">") orelse return null);
-            const end = close.len + (lastIndexOf(u8, blob, close) orelse return null);
+            var close_pos: usize = indexOfPos(u8, blob, 0, close) orelse return null;
+            var skip = count(u8, blob[start..close_pos], open);
+            while (skip > 0) : (skip -= 1) {
+                close_pos = indexOfPos(u8, blob, close_pos + 1, close) orelse close_pos;
+            }
+
+            const end = close_pos + close.len;
             while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
-            const endws = end - close.len;
+            const end_ws = end - close.len;
 
             //while (endws > start and isWhitespace(blob[endws])) : (endws -|= 1) {}
             //endws += 1;
@@ -283,7 +293,7 @@ pub const Directive = struct {
                 .start = start,
                 .width = width,
                 .end = end,
-                .endws = endws,
+                .endws = end_ws,
             };
         }
 
@@ -865,6 +875,69 @@ test "directive For & For" {
     const p = try t.page(ctx).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings(expected, p);
+}
+
+test "directive for then for" {
+    var a = std.testing.allocator;
+
+    const blob =
+        \\<div>
+        \\  <For Loop>
+        \\    <span><Name></span>
+        \\  </For>
+        \\  <For Numbers>
+        \\    <Number>
+        \\  </For>
+        \\</div>
+    ;
+
+    const expected: []const u8 =
+        \\<div>
+        \\  <span>Alice</span>
+        \\  <span>Bob</span>
+        \\  
+        \\  A0
+        \\  A1
+        \\  A2
+        \\  
+        \\</div>
+    ;
+
+    const FTF = struct {
+        const Loop = struct {
+            name: []const u8,
+        };
+        const Numbers = struct {
+            number: []const u8,
+        };
+
+        loop: []const Loop,
+        numbers: []const Numbers,
+    };
+
+    const t = Template{
+        //.path = "/dev/null",
+        .name = "test",
+        .blob = blob,
+    };
+    const page = Page(t, FTF);
+
+    const loop = [2]FTF.Loop{
+        .{ .name = "Alice" },
+        .{ .name = "Bob" },
+    };
+    const numbers = [3]FTF.Numbers{
+        .{ .number = "A0" },
+        .{ .number = "A1" },
+        .{ .number = "A2" },
+    };
+    const p = page.init(.{
+        .loop = loop[0..],
+        .numbers = numbers[0..],
+    });
+    const build = try p.build(a);
+    defer a.free(build);
+    try std.testing.expectEqualStrings(expected, build);
 }
 
 test "directive With" {
