@@ -3,8 +3,13 @@ const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 
-fn usage() !void {
-    std.debug.print("TODO write usage/help text\n", .{});
+fn usage(arg0: []const u8) !void {
+    std.debug.print(
+        \\{s} <send|receive> [mail-sender] [mail-dest]
+        \\
+    ,
+        .{arg0},
+    );
 }
 
 pub const Server = struct {
@@ -130,7 +135,7 @@ fn receive() !void {
 pub fn main() !void {
     var args = std.process.args();
     var config_filename: []const u8 = "./mailer.ini";
-    _ = args.next() orelse {
+    const argv0 = args.next() orelse {
         std.log.err("argv is invalid", .{});
         std.process.exit(10);
     };
@@ -141,7 +146,7 @@ pub fn main() !void {
     while (args.next()) |arg| {
         if (std.mem.startsWith(u8, arg, "-h")) {
             // TODO stdout instead
-            try usage();
+            try usage(argv0);
             std.process.exit(0);
         } else if (std.mem.startsWith(u8, arg, "-c")) {
             if (args.next()) |arg_conf| {
@@ -173,7 +178,7 @@ pub fn main() !void {
         try receive();
         std.process.exit(1);
     } else if (std.mem.eql(u8, action, "-h")) {
-        try usage();
+        try usage(argv0);
         std.process.exit(0);
     }
 }
