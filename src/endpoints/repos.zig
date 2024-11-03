@@ -191,46 +191,36 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn htmlRepoBlock(a: Allocator, pre_dom: *DOM, name: []const u8, repo: Git.Repo) !*DOM {
-    var dom = pre_dom.open(HTML.repo());
-    dom = dom.open(HTML.element("name", name, null));
-    dom.dupe(HTML.anch(name, &[_]HTML.Attribute{
-        .{ .key = "href", .value = try aPrint(a, "/repo/{s}", .{name}) },
-    }));
-    dom = dom.close();
-    dom = dom.open(HTML.element("desc", null, null));
-    {
-        const desc = try repo.description(a);
-        if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-            dom.push(HTML.p(desc, null));
-        }
-
-        // upstream
-        if (try Repos.hasUpstream(a, repo)) |url| {
-            const purl = try Repos.parseGitRemoteUrl(a, url);
-            dom = dom.open(HTML.p(null, &HTML.Attr.class("upstream")));
-            dom.push(HTML.text("Upstream: "));
-            dom.push(HTML.anch(purl, try HTML.Attr.create(a, "href", purl)));
-            dom = dom.close();
-        }
-
-        if (repo.headCommit(a)) |cmt| {
-            defer cmt.raze();
-            const committer = cmt.committer;
-            const updated_str = try aPrint(
-                a,
-                "updated about {}",
-                .{Humanize.unix(committer.timestamp)},
-            );
-            dom.dupe(HTML.span(updated_str, &HTML.Attr.class("updated")));
-        } else |_| {
-            dom.dupe(HTML.span("new repo", &HTML.Attr.class("updated")));
-        }
+fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.Repolist {
+    var desc: ?[]const u8 = try repo.description(a);
+    if (std.mem.startsWith(u8, desc.?, "Unnamed repository; edit this file")) {
+        desc = null;
     }
-    dom = dom.close();
-    dom.push(HTML.element("last", null, null));
-    return dom.close();
+
+    var upstream: ?[]const u8 = null;
+    if (try Repos.hasUpstream(a, repo)) |url| {
+        upstream = try Repos.parseGitRemoteUrl(a, url);
+    }
+    var updated: []const u8 = "new repo";
+    if (repo.headCommit(a)) |cmt| {
+        defer cmt.raze();
+        const committer = cmt.committer;
+        updated = try aPrint(
+            a,
+            "updated about {}",
+            .{Humanize.unix(committer.timestamp)},
+        );
+    } else |_| {}
+    return .{
+        .name = name,
+        .uri = try aPrint(a, "/repo/{s}", .{name}),
+        .desc = desc,
+        .upstream = upstream,
+        .updated = updated,
+    };
 }
+
+const ReposPage = Template.PageData("repos.html");
 
 fn list(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
@@ -248,31 +238,40 @@ fn list(ctx: *Context) Error!void {
         }
         std.sort.heap(Git.Repo, repos.items, repoctx{ .alloc = ctx.alloc }, repoSorterNew);
 
-        var dom = DOM.new(ctx.alloc);
-
+        var repo_buttons: []const u8 = "";
         if (ctx.request.auth.valid()) {
-            dom = dom.open(HTML.div(null, &HTML.Attr.class("act-btns")));
-            dom.dupe(try HTML.linkBtnAlloc(ctx.alloc, "New Upstream", "/admin/clone-upstream"));
-            dom = dom.close();
+            repo_buttons =
+                \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
+            ;
         }
 
-        dom = dom.open(HTML.element("repos", null, null));
-
-        for (repos.items) |*repo| {
+        const repos_compiled = try ctx.alloc.alloc(Template.Structs.Repolist, repos.items.len);
+        for (repos.items, repos_compiled) |*repo, *compiled| {
             defer repo.raze(ctx.alloc);
-            dom = htmlRepoBlock(
-                ctx.alloc,
-                dom,
-                repo.repo_name orelse "unknown",
-                repo.*,
-            ) catch return error.Unknown;
+            compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
+                return error.Unknown;
+            };
         }
-        dom = dom.close();
-        const data = dom.done();
-        var tmpl = Template.find("repos.html");
-        _ = ctx.addElements(ctx.alloc, "Repos", data) catch return Error.Unknown;
 
-        try ctx.sendTemplate(&tmpl);
+        var btns = [1]Template.Structs.Navbuttons{.{
+            .name = "inbox",
+            .extra = "0",
+            .url = "/inbox",
+        }};
+
+        var page = ReposPage.init(.{
+            .meta_head = .{ .open_graph = .{} },
+            .body_header = .{
+                .nav = .{
+                    .nav_auth = undefined,
+                    .nav_buttons = &btns,
+                },
+            },
+            .buttons = .{ .buttons = repo_buttons },
+            .repo_list = repos_compiled,
+        });
+
+        try ctx.sendPage(&page);
     } else |err| {
         std.debug.print("unable to open given dir {}\n", .{err});
         return;
