@@ -14,50 +14,60 @@ Good luck!
 
 ## TODO
 In an unsorted order
-  - [ ] manual code sync
-  - [x] view code
-  - [x] public http clone
-  - [x] view commits
-  - [ ] blame view for files/dirs
-  - [ ] view history for file
-  - [-] syntax highlighting
-  - [ ] native syntax highlighting
-  - [ ] README markdown support/formatting
-  - [ ] fold repo .files by default
-  - [ ] comment on commits
-  - [ ] email support
-    - [ ] outgoing email
-    - [ ] incoming email
-  - [-] submit diffs (works with special build step)
-  - [x] open issues
-  - [x] clone repo from remote
-  - [ ] set HEAD for newly clone repos
-  - [x] auto pull from upstream
-  - [x] auto push to downstream
-  - [ ] smart push/pull system
-  - [ ] auto create git branch for issues/diffs
-  - [ ] support for viewing branches
-  - [ ] network collection & browsing
-  - [x] owner heat map
-  - [-] owner activity journal
-    - [x] commits
-    - [ ] anything other that
-  - [ ] user accounts
-  - [ ] new account setup
-  - [ ] git via ssh support
-  - [x] basic logic for template system
-    - [x] For
-    - [x] ORNULL
-    - [x] ORELSE "default"
-    - [x] With
-  - [ ] 
-  - [ ] 
-  - [ ] docs for everything
-  - [ ] docs for template engine
-  - [ ] API for dynamic updates
-  - [ ] Integration with other web VCS
-  - [ ] Improve CSS theme
-  - [ ] git (native support)
+  - [ ] srctree
+    - [ ] manual code sync
+    - [x] view code
+    - [x] public http clone
+    - [x] view commits
+    - [ ] diff/code review
+    - [ ] CI API
+    - [x] blame view for files
+    - [ ] blame view for dirs
+    - [ ] view history for file (navigable blame view)
+    - [x] syntax highlighting (ish)
+    - [ ] native syntax highlighting
+    - [ ] README markdown support/formatting
+    - [ ] fold repo .files by default
+    - [ ] comment on commits
+    - [ ] email support
+      - [ ] outgoing email
+      - [ ] incoming email
+    - [-] submit diffs (works with special build step)
+    - [x] open issues
+    - [x] clone repo from remote
+    - [ ] set HEAD for newly clone repos
+    - [x] auto pull from upstream
+    - [x] auto push to downstream
+    - [ ] smart push/pull system
+    - [ ] auto create git branch for issues/diffs
+    - [ ] support for viewing branches
+    - [ ] network collection & browsing
+    - [x] owner heat map
+    - [x] owner activity journal
+      - [x] commits
+      - [ ] anything other that
+    - [ ] user accounts
+    - [ ] new account setup
+    - [ ] git via ssh support
+    - [ ] Integration with other web VCS
+    - [ ] Improve CSS theme
+
+  - [ ] verse
+    - [x] typed templates
+    - [ ] custom types for templates
+    - [x] basic logic for template system
+      - [x] For
+      - [x] ORNULL
+      - [x] ORELSE "default"
+      - [x] With
+      - [x] Nested loops
+      - [x] paired loops
+      - [ ] nested and paired loops
+    - [ ] docs for everything
+    - [ ] docs for template engine
+    - [ ] API for dynamic updates
+
+  - [ ] git 
     - [x] raw blob
     - [x] packed blob
     - [-] tree/blob
