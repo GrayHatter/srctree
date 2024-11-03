@@ -43,6 +43,7 @@ const endpoints = [_]Route.Match{
     ROUTE("commits", &Commits.router),
     ROUTE("diffs", &Diffs.router),
     ROUTE("issues", &Issues.router),
+    ROUTE("tags", tags),
     ROUTE("tree", treeBlob),
 } ++ gitweb.endpoints;
 
@@ -762,4 +763,8 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     }
 
     ctx.sendTemplate(&tmpl) catch return error.Unknown;
+}
+
+fn tags(ctx: *Context) Error!void {
+    ctx.response.redirect("/", true) catch return error.Unrouteable;
 }
