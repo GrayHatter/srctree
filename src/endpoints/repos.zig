@@ -37,13 +37,13 @@ const gitweb = @import("../gitweb.zig");
 
 const endpoints = [_]Route.Match{
     ROUTE("", treeBlob),
+    ROUTE("blame", blame),
     ROUTE("blob", treeBlob),
     ROUTE("commit", &Commits.router),
     ROUTE("commits", &Commits.router),
-    ROUTE("tree", treeBlob),
     ROUTE("diffs", &Diffs.router),
     ROUTE("issues", &Issues.router),
-    ROUTE("blame", blame),
+    ROUTE("tree", treeBlob),
 } ++ gitweb.endpoints;
 
 pub const RouteData = struct {
