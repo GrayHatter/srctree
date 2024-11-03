@@ -676,9 +676,9 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
     return dom;
 }
 
-fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
-    var tmpl = Template.find("tree.html");
+const TreePage = Template.PageData("tree.html");
 
+fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     const head = if (repo.head) |h| switch (h) {
         .sha => |s| s,
         .branch => |b| b.name,
@@ -747,21 +747,31 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     dom = dom.close();
 
     dom = dom.close();
-    const data = dom.done();
-    _ = ctx.addElements(ctx.alloc, "Repo", data) catch return error.Unknown;
+    const repo_data = dom.done();
 
+    var readme: ?[]const u8 = null;
     for (files.objects) |obj| {
         if (isReadme(obj.name)) {
             var resolve = repo.blob(ctx.alloc, &obj.hash) catch return error.Unknown;
             var reader = resolve.reader();
             const readme_txt = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
-            const readme = htmlReadme(ctx.alloc, readme_txt) catch unreachable;
-            _ = ctx.addElementsFmt(ctx.alloc, "{pretty}", "Readme", readme) catch return error.Unknown;
+            const readme_html = htmlReadme(ctx.alloc, readme_txt) catch unreachable;
+            readme = try std.fmt.allocPrint(ctx.alloc, "{pretty}", .{readme_html[0]});
             break;
         }
     }
 
-    ctx.sendTemplate(&tmpl) catch return error.Unknown;
+    var btns = navButtons(ctx) catch return error.Unknown;
+
+    var page = TreePage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .upstream = null,
+        .repo = try std.fmt.allocPrint(ctx.alloc, "{s}", .{repo_data[0]}),
+        .readme = readme,
+    });
+
+    try ctx.sendPage(&page);
 }
 
 fn tags(ctx: *Context) Error!void {
