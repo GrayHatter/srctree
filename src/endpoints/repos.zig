@@ -3,6 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const aPrint = std.fmt.allocPrint;
 const bPrint = std.fmt.bufPrint;
+const eql = std.mem.eql;
 
 const Context = @import("../context.zig");
 const Response = @import("../response.zig");
@@ -17,6 +18,7 @@ const UriIter = Route.UriIter;
 const ROUTE = Route.ROUTE;
 const POST = Route.POST;
 const GET = Route.GET;
+const UserData = @import("../request_data.zig").UserData;
 
 const Bleach = @import("../bleach.zig");
 const Humanize = @import("../humanize.zig");
@@ -173,18 +175,45 @@ fn typeSorter(_: void, l: Git.Blob, r: Git.Blob) bool {
 
 const repoctx = struct {
     alloc: Allocator,
+    by: enum {
+        commit,
+        tag,
+    } = .commit,
 };
+
+fn tagSorter(_: void, l: Git.Tag, r: Git.Tag) bool {
+    return l.tagger.timestamp >= r.tagger.timestamp;
+}
 
 fn repoSorterNew(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     return !repoSorter(ctx, l, r);
 }
 
-fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
-    var lc = l.headCommit(ctx.alloc) catch return true;
+fn commitSorter(a: Allocator, l: Git.Repo, r: Git.Repo) bool {
+    var lc = l.headCommit(a) catch return true;
     defer lc.raze();
-    var rc = r.headCommit(ctx.alloc) catch return false;
+    var rc = r.headCommit(a) catch return false;
     defer rc.raze();
     return sorter({}, lc.committer.timestr, rc.committer.timestr);
+}
+
+fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
+    switch (ctx.by) {
+        .commit => {
+            return commitSorter(ctx.alloc, l, r);
+        },
+        .tag => {
+            if (l.tags) |lt| {
+                if (r.tags) |rt| {
+                    if (lt.len == 0) return true;
+                    if (rt.len == 0) return false;
+                    if (lt[0].tagger.timestamp == rt[0].tagger.timestamp)
+                        return commitSorter(ctx.alloc, l, r);
+                    return lt[0].tagger.timestamp > rt[0].tagger.timestamp;
+                } else return false;
+            } else return true;
+        },
+    }
 }
 
 fn sorter(_: void, l: []const u8, r: []const u8) bool {
@@ -222,6 +251,10 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.R
 
 const ReposPage = Template.PageData("repos.html");
 
+const RepoSortReq = struct {
+    sort: ?[]const u8,
+};
+
 fn list(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
     if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
@@ -234,9 +267,18 @@ fn list(ctx: *Context) Error!void {
             var rpo = Git.Repo.init(rdir) catch continue;
             rpo.loadData(ctx.alloc) catch return error.Unknown;
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
+            rpo.loadTags(ctx.alloc) catch return error.Unknown;
+            if (rpo.tags != null) {
+                std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
+            }
             try repos.append(rpo);
         }
-        std.sort.heap(Git.Repo, repos.items, repoctx{ .alloc = ctx.alloc }, repoSorterNew);
+
+        const udata = UserData(RepoSortReq).init(ctx.req_data.query_data) catch return error.BadData;
+        std.sort.heap(Git.Repo, repos.items, repoctx{
+            .alloc = ctx.alloc,
+            .by = if (udata.sort) |srt| if (eql(u8, srt, "tag")) .tag else .commit else .commit,
+        }, repoSorterNew);
 
         var repo_buttons: []const u8 = "";
         if (ctx.request.auth.valid()) {
@@ -788,6 +830,7 @@ fn tags(ctx: *Context) Error!void {
     defer repo.raze(ctx.alloc);
 
     repo.loadTags(ctx.alloc) catch unreachable;
+    std.sort.heap(Git.Tag, repo.tags.?, {}, tagSorter);
 
     const tstack = try ctx.alloc.alloc(Template.Structs.Tags, repo.tags.?.len);
 

@@ -387,16 +387,19 @@ pub const Repo = struct {
             for (&sha, 0..) |*s, i| {
                 s.* = try std.fmt.parseInt(u8, lsha[i * 2 .. (i + 1) * 2], 16);
             }
-        }
+        } else if (lsha.len != 20) return error.InvalidSha;
         const tag_blob = try self.findBlob(a, sha[0..]);
         return try Tag.fromSlice(lsha, tag_blob);
     }
 
     pub fn loadTags(self: *Repo, a: Allocator) !void {
         var tagdir = try self.dir.openDir("refs/tags", .{ .iterate = true });
-        const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0xffff) catch |err| pk: {
-            std.debug.print("packed-refs {any}\n", .{err});
-            break :pk null;
+        const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0xffff) catch |err| switch (err) {
+            error.FileNotFound => null,
+            else => {
+                std.debug.print("packed-refs {any}\n", .{err});
+                unreachable;
+            },
         };
         defer if (pk_refs) |pr| a.free(pr);
 
@@ -404,14 +407,13 @@ pub const Repo = struct {
         var itr = tagdir.iterate();
         var count: usize = if (pk_refs) |p| std.mem.count(u8, p, "refs/tags/") else 0;
         while (try itr.next()) |next| {
-            std.debug.print("next {s} {any}\n", .{ next.name, next.kind });
             if (next.kind != .file) continue;
             count += 1;
         }
         if (count == 0) return;
         self.tags = try a.alloc(Tag, count);
-        errdefer a.free(self.tags.?);
         errdefer self.tags = null;
+        errdefer a.free(self.tags.?);
 
         var index: usize = 0;
         if (pk_refs) |pkrefs| {
@@ -434,11 +436,11 @@ pub const Repo = struct {
                 std.debug.print("unexpected tag format for {s}\n", .{fname});
                 return err;
             };
-            if (contents.len != 40) {
+            if (contents.len != 41) {
                 std.debug.print("unexpected tag format for {s}\n", .{fname});
                 return error.InvalidTagFound;
             }
-            self.tags.?[index] = try self.loadTag(a, contents);
+            self.tags.?[index] = try self.loadTag(a, contents[0..40]);
             index += 1;
         }
         if (index != self.tags.?.len) return error.UnexpectedError;
@@ -555,6 +557,7 @@ pub const Branch = struct {
 
 pub const TagType = enum {
     commit,
+    lightweight,
 
     pub fn fromSlice(str: []const u8) ?TagType {
         inline for (std.meta.tags(TagType)) |t| {
@@ -574,7 +577,40 @@ pub const Tag = struct {
     signature: ?[]const u8,
     //signature: ?Commit.GPGSig,
 
-    pub fn fromSlice(sha: SHA, blob: []const u8) !Tag {
+    pub fn fromSlice(sha: SHA, bblob: []const u8) !Tag {
+        // sometimes, the slice will have a preamble
+        var blob = bblob;
+        if (indexOf(u8, bblob[0..20], "\x00")) |i| {
+            std.debug.assert(startsWith(u8, bblob, "tag "));
+            blob = bblob[i + 1 ..];
+        }
+        //std.debug.print("tag\n{s}\n{s}\n", .{ sha, bblob });
+        if (startsWith(u8, blob, "tree ")) return try lightTag(sha, blob);
+        return try fullTag(sha, blob);
+    }
+
+    /// I don't like this implementation, but I can't be arsed... good luck
+    /// future me!
+    fn lightTag(sha: SHA, blob: []const u8) !Tag {
+        var actor: ?Actor = null;
+        if (indexOf(u8, blob, "committer ")) |i| {
+            var act = blob[i + 10 ..];
+            if (indexOf(u8, act, "\n")) |end| act = act[0..end];
+            actor = Actor.make(act) catch return error.InvalidActor;
+        } else return error.InvalidTag;
+
+        return .{
+            .name = "[lightweight tag]",
+            .sha = sha,
+            .object = sha,
+            .type = .lightweight,
+            .tagger = actor orelse unreachable,
+            .message = "",
+            .signature = null,
+        };
+    }
+
+    fn fullTag(sha: SHA, blob: []const u8) !Tag {
         var name: ?[]const u8 = null;
         var object: ?[]const u8 = null;
         var ttype: ?TagType = null;
