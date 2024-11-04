@@ -279,10 +279,10 @@ pub fn loadObj(self: Pack, a: Allocator, offset: usize, repo: Repo) Error![]u8 {
     const h = parseObjHeader(&reader);
 
     switch (h.kind) {
-        .commit, .tree, .blob => return loadBlob(a, &reader) catch return error.PackCorrupt,
+        .commit, .tree, .blob, .tag => return loadBlob(a, &reader) catch return error.PackCorrupt,
         .ofs_delta => return try self.loadDelta(a, &reader, offset, repo),
         .ref_delta => return try self.loadRefDelta(a, &reader, offset, repo),
-        else => {
+        .invalid => {
             std.debug.print("obj type ({}) not implemened\n", .{h.kind});
             unreachable; // not implemented
         },

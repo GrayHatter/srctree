@@ -774,6 +774,33 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     try ctx.sendPage(&page);
 }
 
+const TagPage = Template.PageData("repo-tags.html");
+
 fn tags(ctx: *Context) Error!void {
-    ctx.response.redirect("/", true) catch return error.Unrouteable;
+    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+
+    var cwd = std.fs.cwd();
+    const filename = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    var repo = Git.Repo.init(dir) catch return error.Unknown;
+    repo.loadData(ctx.alloc) catch return error.Unknown;
+    defer repo.raze(ctx.alloc);
+
+    repo.loadTags(ctx.alloc) catch unreachable;
+
+    const tstack = try ctx.alloc.alloc(Template.Structs.Tags, repo.tags.?.len);
+
+    for (repo.tags.?, tstack) |tag, *html| {
+        html.name = tag.name;
+    }
+
+    var btns = navButtons(ctx) catch return error.Unknown;
+    var page = TagPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .upstream = null,
+        .tags = tstack,
+    });
+
+    try ctx.sendPage(&page);
 }

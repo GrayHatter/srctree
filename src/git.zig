@@ -1,9 +1,12 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const startsWith = std.mem.startsWith;
+const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
+const indexOf = std.mem.indexOf;
 const zlib = std.compress.zlib;
 const hexLower = std.fmt.fmtSliceHexLower;
+const bufPrint = std.fmt.bufPrint;
 const AnyReader = std.io.AnyReader;
 
 pub const Actor = @import("git/actor.zig");
@@ -111,6 +114,8 @@ pub const Repo = struct {
     refs: []Ref,
     current: ?[]u8 = null,
     head: ?Ref = null,
+    // Leaks, badly
+    tags: ?[]Tag = null,
 
     repo_name: ?[]const u8 = null,
 
@@ -376,6 +381,75 @@ pub const Repo = struct {
         return self.head.?;
     }
 
+    fn loadTag(self: *Repo, a: Allocator, lsha: SHA) !Tag {
+        var sha: [20]u8 = lsha[0..20].*;
+        if (lsha.len == 40) {
+            for (&sha, 0..) |*s, i| {
+                s.* = try std.fmt.parseInt(u8, lsha[i * 2 .. (i + 1) * 2], 16);
+            }
+        }
+        const tag_blob = try self.findBlob(a, sha[0..]);
+        return try Tag.fromSlice(lsha, tag_blob);
+    }
+
+    pub fn loadTags(self: *Repo, a: Allocator) !void {
+        var rbuf: [2048]u8 = undefined;
+
+        var tagdir = try self.dir.openDir("refs/tags", .{ .iterate = true });
+
+        const rpath = try tagdir.realpath(".", &rbuf);
+        std.debug.print("ready {s}\n", .{rpath});
+
+        const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0xffff) catch |err| pk: {
+            std.debug.print("packed-refs {any}\n", .{err});
+            break :pk null;
+        };
+        defer if (pk_refs) |pr| a.free(pr);
+
+        defer tagdir.close();
+        var itr = tagdir.iterate();
+        var count: usize = if (pk_refs) |p| std.mem.count(u8, p, "refs/tags/") else 0;
+        while (try itr.next()) |next| {
+            std.debug.print("next {s} {any}\n", .{ next.name, next.kind });
+            if (next.kind != .file) continue;
+            count += 1;
+        }
+        if (count == 0) return;
+        self.tags = try a.alloc(Tag, count);
+        errdefer a.free(self.tags.?);
+        errdefer self.tags = null;
+
+        var index: usize = 0;
+        if (pk_refs) |pkrefs| {
+            var lines = splitScalar(u8, pkrefs, '\n');
+            while (lines.next()) |line| {
+                if (indexOf(u8, line, "refs/tags/") != null) {
+                    self.tags.?[index] = try self.loadTag(a, line[0..40]);
+                    index += 1;
+                }
+            }
+        }
+
+        itr.reset();
+        while (try itr.next()) |next| {
+            var fnbuf: [2048]u8 = undefined;
+            if (next.kind != .file) continue;
+            const fname = try bufPrint(&fnbuf, "refs/tags/{s}", .{next.name});
+            var conbuf: [44]u8 = undefined;
+            const contents = self.dir.readFile(fname, &conbuf) catch |err| {
+                std.debug.print("unexpected tag format for {s}\n", .{fname});
+                return err;
+            };
+            if (contents.len != 40) {
+                std.debug.print("unexpected tag format for {s}\n", .{fname});
+                return error.InvalidTagFound;
+            }
+            self.tags.?[index] = try self.loadTag(a, contents);
+            index += 1;
+        }
+        if (index != self.tags.?.len) return error.UnexpectedError;
+    }
+
     pub fn resolvePartial(_: *const Repo, _: SHA) !SHA {
         return error.NotImplemented;
     }
@@ -439,6 +513,8 @@ pub const Repo = struct {
             .branch => |b| a.free(b.name),
             else => {}, //a.free(h);
         };
+
+        // TODO self.tags leaks, badly
     }
 
     // functions that might move or be removed...
@@ -543,7 +619,8 @@ pub const Tag = struct {
         };
     }
 
-    pub fn fromReader(sha: SHA, reader: AnyReader) !Tag {
+    /// LOL, don't use this
+    fn fromReader(sha: SHA, reader: AnyReader) !Tag {
         var buffer: [0xFFFF]u8 = undefined;
         const len = try reader.readAll(&buffer);
         return try fromSlice(sha, buffer[0..len]);
