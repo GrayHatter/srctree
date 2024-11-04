@@ -10,7 +10,7 @@ const Actor = @import("actor.zig");
 pub const Commit = @This();
 
 // TODO not currently implemented
-const GPGSig = struct {};
+pub const GPGSig = struct {};
 
 alloc: ?Allocator = null,
 blob: []const u8,
