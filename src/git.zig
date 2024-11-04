@@ -393,13 +393,7 @@ pub const Repo = struct {
     }
 
     pub fn loadTags(self: *Repo, a: Allocator) !void {
-        var rbuf: [2048]u8 = undefined;
-
         var tagdir = try self.dir.openDir("refs/tags", .{ .iterate = true });
-
-        const rpath = try tagdir.realpath(".", &rbuf);
-        std.debug.print("ready {s}\n", .{rpath});
-
         const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0xffff) catch |err| pk: {
             std.debug.print("packed-refs {any}\n", .{err});
             break :pk null;
