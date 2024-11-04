@@ -767,6 +767,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
         .upstream = null,
+        .repo_name = rd.name,
         .repo = try std.fmt.allocPrint(ctx.alloc, "{s}", .{repo_data[0]}),
         .readme = readme,
     });
