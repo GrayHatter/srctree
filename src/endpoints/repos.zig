@@ -257,6 +257,10 @@ const RepoSortReq = struct {
 
 fn list(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
+
+    const udata = UserData(RepoSortReq).init(ctx.req_data.query_data) catch return error.BadData;
+    const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
+
     if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
         var repos = std.ArrayList(Git.Repo).init(ctx.alloc);
         var itr = idir.iterate();
@@ -267,17 +271,19 @@ fn list(ctx: *Context) Error!void {
             var rpo = Git.Repo.init(rdir) catch continue;
             rpo.loadData(ctx.alloc) catch return error.Unknown;
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
-            rpo.loadTags(ctx.alloc) catch return error.Unknown;
-            if (rpo.tags != null) {
-                std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
+
+            if (tag_sort) {
+                rpo.loadTags(ctx.alloc) catch return error.Unknown;
+                if (rpo.tags != null) {
+                    std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
+                }
             }
             try repos.append(rpo);
         }
 
-        const udata = UserData(RepoSortReq).init(ctx.req_data.query_data) catch return error.BadData;
         std.sort.heap(Git.Repo, repos.items, repoctx{
             .alloc = ctx.alloc,
-            .by = if (udata.sort) |srt| if (eql(u8, srt, "tag")) .tag else .commit else .commit,
+            .by = if (tag_sort) .tag else .commit,
         }, repoSorterNew);
 
         var repo_buttons: []const u8 = "";
