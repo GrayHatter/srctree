@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
+const Sha256 = std.crypto.hash.sha2.Sha256;
 
 pub const Gist = @This();
 
@@ -17,7 +18,7 @@ pub const File = struct {
 hash: [32]u8,
 owner: []const u8,
 created: i64,
-files: []File,
+files: []const File,
 
 pub fn init(_: []const u8) !void {}
 pub fn initType() !void {}
@@ -26,18 +27,20 @@ fn readVersioned(a: Allocator, hash: [32]u8, reader: std.io.AnyReader) !Gist {
     const int: usize = try reader.readInt(usize, endian);
     return switch (int) {
         0 => {
-            const t = Gist{
-                .hash = hash,
-                .owner = try reader.readUntilDelimiterAlloc(a, 0x00, 0x100),
-                .created = try reader.readInt(i64, endian),
-                .files = try a.alloc(File, try reader.readInt(u8, endian)),
-            };
-            for (t.files) |*file| {
+            const owner = try reader.readUntilDelimiterAlloc(a, 0x00, 0x100);
+            const created = try reader.readInt(i64, endian);
+            const files = try a.alloc(File, try reader.readInt(u8, endian));
+            for (files) |*file| {
                 file.name = try reader.readUntilDelimiterAlloc(a, 0x00, 0xFFF);
                 file.blob = try reader.readUntilDelimiterAlloc(a, 0x00, 0xFFFF);
             }
 
-            return t;
+            return Gist{
+                .hash = hash,
+                .owner = owner,
+                .created = created,
+                .files = files,
+            };
         },
 
         else => error.UnsupportedVersion,
@@ -69,23 +72,19 @@ pub fn open(a: Allocator, hash: [64]u8) !Gist {
     return readVersioned(a, hashbytes[0..32].*, reader);
 }
 
-pub fn new(owner: []const u8, names: [][]const u8, blobs: [][]const u8) ![64]u8 {
+pub fn new(owner: []const u8, files: []const File) ![64]u8 {
     var hash: [32]u8 = undefined;
     var hash_str: [64]u8 = undefined;
-    var sha = std.crypto.hash.sha2.Sha256.init(.{});
+    var sha = Sha256.init(.{});
     sha.update(owner);
     const created = std.time.timestamp();
     sha.update(std.mem.asBytes(&created));
 
-    std.debug.assert(names.len <= 20);
-    var files_buf: [20]File = undefined;
-
-    for (names, blobs, files_buf[0..names.len]) |name, blob, *fout| {
+    for (files) |file| {
         // TODO sanitize file.name
-        fout.name = if (name.len > 0) name else "filename.txt";
-        fout.blob = blob;
-        sha.update(fout.name);
-        sha.update(fout.blob);
+        if (file.name.len == 0) return error.InvalidFilename;
+        sha.update(file.name);
+        sha.update(file.blob);
     }
     sha.final(&hash);
 
@@ -93,11 +92,11 @@ pub fn new(owner: []const u8, names: [][]const u8, blobs: [][]const u8) ![64]u8 
         .hash = hash,
         .owner = owner,
         .created = created,
-        .files = files_buf[0..names.len],
+        .files = files,
     };
     _ = try std.fmt.bufPrint(&hash_str, "{}", .{std.fmt.fmtSliceHexLower(&hash)});
 
-    var buf: [2048]u8 = undefined;
+    var buf: [67]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.gist", .{hash_str});
     const file = try datad.createFile(filename, .{});
     const writer = file.writer().any();

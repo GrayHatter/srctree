@@ -1,4 +1,5 @@
 const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
 
 const Context = @import("../context.zig");
 const Template = @import("../template.zig");
@@ -60,7 +61,20 @@ fn post(ctx: *Context) Error!void {
     else
         "public";
 
-    const hash_str: [64]u8 = Gist.new(username, udata.file_name, udata.file_blob) catch return error.Unknown;
+    const files = try ctx.alloc.alloc(Gist.File, udata.file_name.len);
+
+    for (files, udata.file_name, udata.file_blob, 0..) |*file, fname, fblob, i| {
+        var name = std.mem.trim(u8, fname, &std.ascii.whitespace);
+        if (name.len == 0) {
+            name = try allocPrint(ctx.alloc, "filename{}.txt", .{i});
+        }
+        file.* = .{
+            .name = name,
+            .blob = fblob,
+        };
+    }
+
+    const hash_str: [64]u8 = Gist.new(username, files) catch return error.Unknown;
 
     return ctx.response.redirect("/gist/" ++ hash_str, true) catch unreachable;
 }
@@ -95,7 +109,7 @@ fn new(ctx: *Context) Error!void {
     return ctx.sendPage(&page);
 }
 
-fn toTemplate(a: Allocator, files: []Gist.File) ![]Template.Structs.Gistfiles {
+fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.Gistfiles {
     const out = try a.alloc(Template.Structs.Gistfiles, files.len);
     for (files, out) |file, *o| {
         o.* = .{
