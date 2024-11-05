@@ -1,4 +1,5 @@
 const std = @import("std");
+const eql = std.mem.eql;
 
 const Allocator = std.mem.Allocator;
 
@@ -15,11 +16,10 @@ pub const Error = Errors.ServerError || Errors.ClientError || Errors.NetworkErro
 
 pub const UriIter = std.mem.SplitIterator(u8, .sequence);
 
-const div = HTML.div;
-const span = HTML.span;
-
 pub const Router = *const fn (*Context) Error!Callable;
 pub const Callable = *const fn (*Context) Error!void;
+
+pub const DEBUG: bool = false;
 
 /// Methods is a struct so bitwise or will work as expected
 pub const Methods = packed struct {
@@ -136,14 +136,13 @@ fn default(ctx: *Context) Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
-fn eql(a: []const u8, b: []const u8) bool {
-    return std.mem.eql(u8, a, b);
-}
-
 pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
-    const search = ctx.uri.peek() orelse return notFound;
+    const search = ctx.uri.peek() orelse {
+        if (DEBUG) std.debug.print("No endpoint found: URI is empty.\n", .{});
+        return notFound;
+    };
     inline for (routes) |ep| {
-        if (eql(search, ep.name)) {
+        if (eql(u8, search, ep.name)) {
             switch (ep.match) {
                 .call => |call| {
                     if (ep.methods.matchMethod(ctx.request.method))
@@ -158,7 +157,7 @@ pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
                 .simple => |simple| {
                     _ = ctx.uri.next();
                     if (ctx.uri.peek() == null and
-                        std.mem.eql(u8, simple[0].name, "") and
+                        eql(u8, simple[0].name, "") and
                         simple[0].match == .call)
                         return simple[0].match.call;
                     return router(ctx, simple);
@@ -174,7 +173,7 @@ const root = [_]Match{
 };
 
 pub fn baseRouter(ctx: *Context) Error!void {
-    //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
+    if (DEBUG) std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
             const route: Callable = router(ctx, &root);
@@ -188,7 +187,7 @@ const root_with_static = root ++
     [_]Match{.{ .name = "static", .match = .{ .call = StaticFile.file } }};
 
 pub fn baseRouterHtml(ctx: *Context) Error!void {
-    //std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
+    if (DEBUG) std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
             const route: Callable = router(ctx, &root_with_static);
