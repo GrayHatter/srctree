@@ -47,6 +47,7 @@ pub fn router(ctx: *Context) Error!Route.Callable {
 const GistPost = struct {
     file_name: [][]const u8,
     file_blob: [][]const u8,
+    new_file: ?[]const u8,
 };
 
 fn post(ctx: *Context) Error!void {
@@ -61,8 +62,19 @@ fn post(ctx: *Context) Error!void {
     else
         "public";
 
-    const files = try ctx.alloc.alloc(Gist.File, udata.file_name.len);
+    if (udata.new_file != null) {
+        const files = try ctx.alloc.alloc(Template.Structs.Gistfiles, udata.file_name.len + 1);
+        for (files[0 .. files.len - 1], udata.file_name, udata.file_blob) |*file, name, blob| {
+            file.* = .{
+                .name = name,
+                .blob = blob,
+            };
+        }
+        files[files.len - 1] = .{};
+        return edit(ctx, files);
+    }
 
+    const files = try ctx.alloc.alloc(Gist.File, udata.file_name.len);
     for (files, udata.file_name, udata.file_blob, 0..) |*file, fname, fblob, i| {
         var name = std.mem.trim(u8, fname, &std.ascii.whitespace);
         if (name.len == 0) {
@@ -80,7 +92,11 @@ fn post(ctx: *Context) Error!void {
 }
 
 fn new(ctx: *Context) Error!void {
-    //const tmpl = Template.findTemplate("gist_new.html");
+    const files = [1]Template.Structs.Gistfiles{.{}};
+    return edit(ctx, &files);
+}
+
+fn edit(ctx: *Context, files: []const Template.Structs.Gistfiles) Error!void {
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.Navbuttons{
         .{
@@ -88,8 +104,6 @@ fn new(ctx: *Context) Error!void {
             .url = "/inbox",
         },
     };
-
-    var files = [1]Template.Structs.Gistfiles{.{}};
 
     var page = GistNewPage.init(.{
         .meta_head = .{
@@ -103,7 +117,7 @@ fn new(ctx: *Context) Error!void {
                 .nav_buttons = &btns,
             },
         },
-        .gist_files = &files,
+        .gist_files = files,
     });
 
     return ctx.sendPage(&page);
