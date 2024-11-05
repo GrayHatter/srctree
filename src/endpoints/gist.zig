@@ -17,7 +17,7 @@ const GistPage = Template.PageData("gist.html");
 const GistNewPage = Template.PageData("gist_new.html");
 
 const endpoints = [_]Route.Match{
-    GET("", view),
+    GET("", new),
     GET("gist", view),
     GET("new", new),
     POST("new", post),
@@ -38,7 +38,7 @@ pub fn router(ctx: *Context) Error!Route.Callable {
                 return view;
             }
         }
-    }
+    } else return new;
 
     return Route.router(ctx, &endpoints);
 }
