@@ -125,6 +125,9 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
                     for (ctx.request.raw_request.zwsgi.vars) |vars| {
                         std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
                     }
+                    if (ctx.req_data.post_data) |post_data| {
+                        std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
+                    }
                 },
             }
         };
