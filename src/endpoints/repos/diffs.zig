@@ -1,4 +1,5 @@
 const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
 
 const Allocator = std.mem.Allocator;
 
@@ -140,12 +141,58 @@ fn newComment(ctx: *Context) Error!void {
     return error.Unknown;
 }
 
+pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
+    patch.parse(a) catch |err| {
+        if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
+            std.debug.print("err: {any}\n", .{err});
+            std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
+            return err;
+        } else {
+            std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
+            return &[0]HTML.Element{};
+        }
+    };
+
+    const diffs = patch.diffs orelse unreachable;
+
+    var dom = DOM.new(a);
+
+    dom = dom.open(HTML.patch());
+    for (diffs) |diff| {
+        const body = diff.changes orelse continue;
+
+        const dstat = patch.patchStat();
+        const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
+            dstat.additions,
+            dstat.deletions,
+            dstat.total,
+        });
+        dom.push(HTML.element("diffstat", stat, null));
+        dom = dom.open(HTML.diff());
+
+        dom.push(HTML.element(
+            "filename",
+            if (diff.filename) |name|
+                try std.fmt.allocPrint(a, "{s}", .{name})
+            else
+                try std.fmt.allocPrint(a, "{s} was Deleted", .{"filename"}),
+            null,
+        ));
+        dom = dom.open(HTML.element("changes", null, null));
+        dom.pushSlice(Patch.diffLineHtml(a, body));
+        dom = dom.close();
+        dom = dom.close();
+    }
+    dom = dom.close();
+    return dom.done();
+}
+
+const DiffViewPage = Template.PageData("delta-diff.html");
+
 fn view(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
-
-    var tmpl = Template.find("delta-diff.html");
 
     var dom = DOM.new(ctx.alloc);
 
@@ -166,7 +213,7 @@ fn view(ctx: *Context) Error!void {
     dom = dom.close();
     dom = dom.close();
 
-    _ = try ctx.addElements(ctx.alloc, "Patch_header", dom.done());
+    const patch_header = try allocPrint(ctx.alloc, "{pretty}", .{dom.done()[0]});
 
     // meme saved to protect history
     //for ([_]Comment{ .{
@@ -181,10 +228,16 @@ fn view(ctx: *Context) Error!void {
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
 
+    var comments_: []Template.Structs.Comments = &[0]Template.Structs.Comments{};
     if (delta.getComments(ctx.alloc)) |comments| {
-        const contexts: []Template.Context = try ctx.alloc.alloc(Template.Context, comments.len);
-        for (comments, contexts) |*comment, *c_ctx| c_ctx.* = try comment.toContext(ctx.alloc);
-        try ctx.putContext("Comments", .{ .block = contexts });
+        comments_ = try ctx.alloc.alloc(Template.Structs.Comments, comments.len);
+        for (comments, comments_) |comment, *c_ctx| {
+            c_ctx.* = .{ .comment = .{
+                .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
+                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
+                .message = try Bleach.sanitizeAlloc(ctx.alloc, comment.message, .{}),
+            } };
+        }
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
         @panic("oops");
@@ -192,17 +245,40 @@ fn view(ctx: *Context) Error!void {
 
     try ctx.putContext("Delta_id", .{ .slice = delta_id });
 
+    var patch_formatted: ?[]u8 = null;
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     const file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
     if (file) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         var patch = Patch.Patch.init(fdata);
-        const patch_html = try Commits.patchHtml(ctx.alloc, &patch);
-        _ = try ctx.addElementsFmt(ctx.alloc, "{pretty}", "Patch", patch_html);
+        if (patchHtml(ctx.alloc, &patch)) |phtml| {
+            patch_formatted = try allocPrint(ctx.alloc, "{pretty}", .{phtml});
+        } else |err| {
+            std.debug.print("Unable to generate patch {any}\n", .{err});
+        }
         f.close();
     } else try ctx.putContext("Patch", .{ .slice = "Patch not found" });
 
-    try ctx.sendTemplate(&tmpl);
+    var page = DiffViewPage.init(.{
+        .meta_head = .{
+            .open_graph = .{},
+        },
+        .body_header = .{ .nav = .{
+            .nav_buttons = &try Repo.navButtons(ctx),
+            .nav_auth = undefined,
+        } },
+        .patch = if (patch_formatted) |pf| .{
+            .header = patch_header,
+            .data = pf,
+        } else .{
+            .header = patch_header,
+            .data = "unable to generate a usable patch",
+        },
+        .comments = comments_,
+        .delta_id = delta_id,
+    });
+
+    try ctx.sendPage(&page);
 }
 
 fn list(ctx: *Context) Error!void {

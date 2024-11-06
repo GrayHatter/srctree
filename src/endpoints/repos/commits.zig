@@ -93,51 +93,6 @@ pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     return patch_ctx;
 }
 
-pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
-    patch.parse(a) catch |err| {
-        if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
-            std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
-        } else {
-            std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
-        }
-
-        return &[0]HTML.Element{};
-    };
-
-    const diffs = patch.diffs orelse unreachable;
-
-    var dom = DOM.new(a);
-
-    dom = dom.open(HTML.patch());
-    for (diffs) |diff| {
-        const body = diff.changes orelse continue;
-
-        const dstat = patch.patchStat();
-        const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
-            dstat.additions,
-            dstat.deletions,
-            dstat.total,
-        });
-        dom.push(HTML.element("diffstat", stat, null));
-        dom = dom.open(HTML.diff());
-
-        dom.push(HTML.element(
-            "filename",
-            if (diff.filename) |name|
-                try std.fmt.allocPrint(a, "{s}", .{name})
-            else
-                try std.fmt.allocPrint(a, "{s} was Deleted", .{"filename"}),
-            null,
-        ));
-        dom = dom.open(HTML.element("changes", null, null));
-        dom.pushSlice(Patch.diffLineHtml(a, body));
-        dom = dom.close();
-        dom = dom.close();
-    }
-    dom = dom.close();
-    return dom.done();
-}
-
 fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});

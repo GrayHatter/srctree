@@ -90,7 +90,7 @@ pub const RouteData = struct {
     }
 };
 
-fn navButtons(ctx: *Context) ![2]Template.Structs.Navbuttons {
+pub fn navButtons(ctx: *Context) ![2]Template.Structs.Navbuttons {
     const rd = RouteData.make(&ctx.uri) orelse unreachable;
     if (!rd.exists()) unreachable;
     var i_count: usize = 0;
