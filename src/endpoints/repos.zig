@@ -45,7 +45,7 @@ const endpoints = [_]Route.Match{
     ROUTE("commits", &Commits.router),
     ROUTE("diffs", &Diffs.router),
     ROUTE("issues", &Issues.router),
-    ROUTE("tags", tags),
+    ROUTE("tags", tagsList),
     ROUTE("tree", treeBlob),
 } ++ gitweb.endpoints;
 
@@ -240,12 +240,24 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.R
             .{Humanize.unix(committer.timestamp)},
         );
     } else |_| {}
+
+    var tag: ?Template.Structs.Tag = null;
+
+    if (repo.tags) |tags| {
+        tag = .{
+            .tag = tags[0].name,
+            .title = try aPrint(a, "created {}", .{Humanize.unix(tags[0].tagger.timestamp)}),
+            .uri = try aPrint(a, "/repo/{s}/tags", .{name}),
+        };
+    }
+
     return .{
         .name = name,
         .uri = try aPrint(a, "/repo/{s}", .{name}),
         .desc = desc,
         .upstream = upstream,
         .updated = updated,
+        .tag = tag,
     };
 }
 
@@ -272,11 +284,9 @@ fn list(ctx: *Context) Error!void {
             rpo.loadData(ctx.alloc) catch return error.Unknown;
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
 
-            if (tag_sort) {
-                rpo.loadTags(ctx.alloc) catch return error.Unknown;
-                if (rpo.tags != null) {
-                    std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
-                }
+            rpo.loadTags(ctx.alloc) catch return error.Unknown;
+            if (rpo.tags != null) {
+                std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
             }
             try repos.append(rpo);
         }
@@ -825,7 +835,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
 const TagPage = Template.PageData("repo-tags.html");
 
-fn tags(ctx: *Context) Error!void {
+fn tagsList(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();

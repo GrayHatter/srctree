@@ -205,10 +205,11 @@ repo {
 		a { margin: 0 0 5px; }
 		.updated {
 			color: #bbb;
-			display: block;
 			font-family: 'Titillium Web', sans-serif;
 			font-size: 80%;
 			margin: 6px 0 0;
+			display: flex;
+			justify-content: space-between;
 		}
 		.updated:only-child {
 			margin: 0
