@@ -141,6 +141,45 @@ fn newComment(ctx: *Context) Error!void {
     return error.Unknown;
 }
 
+pub fn patchStruct(a: Allocator, patch: *Patch.Patch) !Template.Structs.PatchHtml {
+    patch.parse(a) catch |err| {
+        if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
+            std.debug.print("err: {any}\n", .{err});
+            std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
+            return err;
+        } else {
+            std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
+            return error.UnableToGeneratePatch;
+        }
+    };
+
+    const diffs = patch.diffs orelse unreachable;
+    const files = try a.alloc(Template.Structs.Files, diffs.len);
+    errdefer a.free(files);
+    for (diffs, files) |diff, *file| {
+        const body = diff.changes orelse continue;
+
+        const dstat = patch.patchStat();
+        const stat = try allocPrint(
+            a,
+            "added: {}, removed: {}, total {}",
+            .{ dstat.additions, dstat.deletions, dstat.total },
+        );
+
+        file.* = .{
+            .diff_stat = stat,
+            .filename = if (diff.filename) |name|
+                try allocPrint(a, "{s}", .{name})
+            else
+                try allocPrint(a, "{s} was Deleted", .{"filename"}),
+            .diff = try allocPrint(a, "{}", .{Patch.diffLineHtml(a, body)[0]}),
+        };
+    }
+    return .{
+        .files = files,
+    };
+}
+
 pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
@@ -162,11 +201,11 @@ pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
         const body = diff.changes orelse continue;
 
         const dstat = patch.patchStat();
-        const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
-            dstat.additions,
-            dstat.deletions,
-            dstat.total,
-        });
+        const stat = try std.fmt.allocPrint(
+            a,
+            "added: {}, removed: {}, total {}",
+            .{ dstat.additions, dstat.deletions, dstat.total },
+        );
         dom.push(HTML.element("diffstat", stat, null));
         dom = dom.open(HTML.diff());
 
@@ -245,19 +284,21 @@ fn view(ctx: *Context) Error!void {
 
     try ctx.putContext("Delta_id", .{ .slice = delta_id });
 
-    var patch_formatted: ?[]u8 = null;
+    var patch_formatted: ?Template.Structs.PatchHtml = null;
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
-    const file: ?std.fs.File = std.fs.cwd().openFile(filename, .{}) catch null;
-    if (file) |f| {
+
+    if (std.fs.cwd().openFile(filename, .{})) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         var patch = Patch.Patch.init(fdata);
-        if (patchHtml(ctx.alloc, &patch)) |phtml| {
-            patch_formatted = try allocPrint(ctx.alloc, "{pretty}", .{phtml});
+        if (patchStruct(ctx.alloc, &patch)) |phtml| {
+            patch_formatted = phtml;
         } else |err| {
             std.debug.print("Unable to generate patch {any}\n", .{err});
         }
         f.close();
-    } else try ctx.putContext("Patch", .{ .slice = "Patch not found" });
+    } else |err| {
+        std.debug.print("Unable to load patch {} {s}\n", .{ err, filename });
+    }
 
     var page = DiffViewPage.init(.{
         .meta_head = .{
@@ -269,10 +310,10 @@ fn view(ctx: *Context) Error!void {
         } },
         .patch = if (patch_formatted) |pf| .{
             .header = patch_header,
-            .data = pf,
+            .patch = pf,
         } else .{
             .header = patch_header,
-            .data = "unable to generate a usable patch",
+            .patch = .{ .files = &[0]Template.Structs.Files{} },
         },
         .comments = comments_,
         .delta_id = delta_id,

@@ -39,7 +39,7 @@ const AddComment = struct {
 pub fn router(ctx: *Context) Error!Route.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return commits;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
-        return commit;
+        return viewCommit;
     return commits;
 }
 
@@ -60,37 +60,8 @@ pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
 
         return error.PatchInvalid;
     };
-    //const dstat = patch.patchStat();
-    //const stat = try std.fmt.allocPrint(a, "added: {}, removed: {}, total {}", .{
-    //    dstat.additions,
-    //    dstat.deletions,
-    //    dstat.total,
-    //});
 
-    const patch_ctx = try patch.diffsContextSlice(a);
-
-    //for (diffs, files) |diff, *file| {
-    //    const body = diff.changes orelse {
-    //        file.* = Template.Context.init(a);
-    //        continue;
-    //    };
-    //    var ctx: Template.Context = Template.Context.init(a);
-    //    try ctx.putSlice("DiffStat", stat);
-    //    {
-    //        const changes = Patch.diffLine(a, body);
-    //        const list = try a.alloc([]u8, changes.len);
-    //        defer a.free(list);
-    //        for (list, changes) |*l, e| {
-    //            l.* = try std.fmt.allocPrint(a, "{pretty}", .{e});
-    //        }
-    //        defer for (list) |l| a.free(l);
-    //        const value = try std.mem.join(a, "", list);
-    //        try ctx.putSlice("Diff", value);
-    //    }
-    //    file.* = ctx;
-    //}
-
-    return patch_ctx;
+    return try patch.diffsContextSlice(a);
 }
 
 fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
@@ -200,7 +171,7 @@ pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
     }
 }
 
-pub fn commit(ctx: *Context) Error!void {
+pub fn viewCommit(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (rd.verb == null) return commits(ctx);
 
