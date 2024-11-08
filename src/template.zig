@@ -225,49 +225,52 @@ pub const Directive = struct {
     pub const Verb = struct {
         vari: []const u8,
         blob: []const u8,
-        word: enum {
+        whitespace: []const u8,
+        word: Word,
+
+        const Word = enum {
             foreach,
+            forrow,
             with,
-        },
+        };
+
+        const Positions = struct {
+            start: usize,
+            start_ws: usize,
+            end: usize,
+            end_ws: usize,
+            width: usize,
+        };
 
         pub fn init(noun: []const u8, verb: []const u8, blob: []const u8) ?Directive {
+            var pos: Positions = undefined;
+            var word: Word = undefined;
             if (std.mem.eql(u8, noun, "For")) {
-                const pos = calcPos("For", blob, verb) orelse return null;
-                std.debug.assert(pos.width > 1);
-                return .{
-                    .end = pos.end,
-                    .kind = .{
-                        .verb = .{
-                            .vari = verb[1..pos.width],
-                            .blob = blob[pos.start..pos.endws],
-                            .word = .foreach,
-                        },
-                    },
-                };
+                pos = calcPos("For", blob, verb) orelse return null;
+                word = .foreach;
+            } else if (std.mem.eql(u8, noun, "ForRow")) {
+                pos = calcPos("ForRow", blob, verb) orelse return null;
+                word = .forrow;
             } else if (std.mem.eql(u8, noun, "With")) {
-                const pos = calcPos("With", blob, verb) orelse return null;
-                std.debug.assert(pos.width > 1);
-                return .{
-                    .end = pos.end,
-                    .kind = .{
-                        .verb = .{
-                            .vari = verb[1..pos.width],
-                            .blob = blob[pos.start..pos.endws],
-                            .word = .with,
-                        },
+                pos = calcPos("With", blob, verb) orelse return null;
+                word = .with;
+            } else return null;
+
+            std.debug.assert(pos.width > 1);
+            return .{
+                .end = pos.end,
+                .kind = .{
+                    .verb = .{
+                        .vari = verb[1..pos.width],
+                        .blob = blob[pos.start..pos.end_ws],
+                        .whitespace = blob[pos.start_ws..pos.end_ws],
+                        .word = word,
                     },
-                };
-                // pass
-            }
-            return null;
+                },
+            };
         }
 
-        fn calcPos(comptime keyword: []const u8, blob: []const u8, verb: []const u8) ?struct {
-            start: usize,
-            end: usize,
-            endws: usize,
-            width: usize,
-        } {
+        fn calcPos(comptime keyword: []const u8, blob: []const u8, verb: []const u8) ?Positions {
             const open: *const [keyword.len + 2]u8 = "<" ++ keyword ++ " ";
             const close: *const [keyword.len + 3]u8 = "</" ++ keyword ++ ">";
 
@@ -279,8 +282,9 @@ pub const Directive = struct {
             }
 
             const end = close_pos + close.len;
-            while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
             const end_ws = end - close.len;
+            const start_ws = start;
+            while (start < end and isWhitespace(blob[start])) : (start +|= 1) {}
 
             //while (endws > start and isWhitespace(blob[endws])) : (endws -|= 1) {}
             //endws += 1;
@@ -291,9 +295,10 @@ pub const Directive = struct {
             }
             return .{
                 .start = start,
+                .start_ws = start_ws,
                 .width = width,
                 .end = end,
-                .endws = end_ws,
+                .end_ws = end_ws,
             };
         }
 
@@ -308,8 +313,17 @@ pub const Directive = struct {
                         if (std.mem.eql(u8, field.name, realname)) {
                             const child = @field(ctx, field.name);
                             for (child) |each| {
-                                std.debug.assert(self.word == .foreach);
-                                try self.foreachTyped(@TypeOf(each), each, out);
+                                switch (field.type) {
+                                    []const []const u8 => {
+                                        std.debug.assert(self.word == .forrow);
+                                        try out.writeAll(each);
+                                        try out.writeAll(self.whitespace);
+                                    },
+                                    else => {
+                                        std.debug.assert(self.word == .foreach);
+                                        try self.forEachTyped(@TypeOf(each), each, out);
+                                    },
+                                }
                             }
                         }
                     },
@@ -327,7 +341,26 @@ pub const Directive = struct {
             }
         }
 
-        pub fn foreachTyped(self: Verb, T: type, data: T, out: anytype) anyerror!void {
+        pub fn do(self: Verb, ctx: *const DataMap, out: anytype) anyerror!void {
+            if (ctx.getBlock(self.vari) catch |err| switch (err) {
+                error.NotABlock => ctx[0..1],
+                else => return err,
+            }) |block| {
+                switch (self.word) {
+                    .foreach => for (block) |s| try self.forEach(s, out),
+                    .forrow => unreachable, // for (block) |s| try self.forRow(s, out),
+                    .with => {
+                        std.debug.assert(block.len == 1);
+                        try self.with(block[0], out);
+                    },
+                }
+                return;
+            } else if (self.word == .foreach) {
+                std.debug.print("<For {s}> ctx block missing.\n", .{self.vari});
+            }
+        }
+
+        pub fn forEachTyped(self: Verb, T: type, data: T, out: anytype) anyerror!void {
             var p = PageRuntime(T){
                 .data = data,
                 .template = .{
@@ -338,31 +371,8 @@ pub const Directive = struct {
             try p.format("", .{}, out);
         }
 
-        pub fn do(self: Verb, ctx: *const DataMap, out: anytype) anyerror!void {
-            if (ctx.getBlock(self.vari) catch |err| switch (err) {
-                error.NotABlock => ctx[0..1],
-                else => return err,
-            }) |block| {
-                switch (self.word) {
-                    .foreach => {
-                        for (block) |s| {
-                            try self.foreach(s, out);
-                        }
-                        return;
-                    },
-                    .with => {
-                        std.debug.assert(block.len == 1);
-                        try self.with(block[0], out);
-                        return;
-                    },
-                }
-            } else if (self.word == .foreach) {
-                std.debug.print("<For {s}> ctx block missing.\n", .{self.vari});
-            }
-        }
-
-        pub fn foreach(self: Verb, block: DataMap, out: anytype) anyerror!void {
-            try self.foreachTyped(DataMap, block, out);
+        pub fn forEach(self: Verb, block: DataMap, out: anytype) anyerror!void {
+            try self.forEachTyped(DataMap, block, out);
         }
 
         pub fn withTyped(self: Verb, T: type, block: T, out: anytype) anyerror!void {
@@ -986,4 +996,51 @@ test "directive With" {
     const page_thing = try t.page(ctx).build(a);
     defer a.free(page_thing);
     try std.testing.expectEqualStrings(expected_thing, page_thing);
+}
+
+test "directive ForRow" {
+    var a = std.testing.allocator;
+
+    const blob =
+        \\<div>
+        \\  <ForRow Slice>
+        \\  </ForRow>
+        \\</div>
+        \\
+    ;
+
+    const expected: []const u8 =
+        \\<div>
+        \\  Alice
+        \\  Bob
+        \\  Charlie
+        \\  Eve
+        \\  
+        \\</div>
+        \\
+    ;
+
+    const FE = struct {
+        slice: []const []const u8,
+    };
+
+    const t = Template{
+        //.path = "/dev/null",
+        .name = "test",
+        .blob = blob,
+    };
+    const page = Page(t, FE);
+
+    const slice = FE{
+        .slice = &[_][]const u8{
+            "Alice",
+            "Bob",
+            "Charlie",
+            "Eve",
+        },
+    };
+    const p = page.init(slice);
+    const build = try p.build(a);
+    defer a.free(build);
+    try std.testing.expectEqualStrings(expected, build);
 }
