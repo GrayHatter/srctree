@@ -165,14 +165,18 @@ pub fn patchStruct(a: Allocator, patch: *Patch.Patch) !Template.Structs.PatchHtm
             "added: {}, removed: {}, total {}",
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
-
+        const html_lines = Patch.diffLineHtml(a, body);
+        const diff_lines = try a.alloc([]u8, html_lines.len);
+        for (diff_lines, html_lines) |*dline, hline| {
+            dline.* = try allocPrint(a, "{}", .{hline});
+        }
         file.* = .{
             .diff_stat = stat,
             .filename = if (diff.filename) |name|
                 try allocPrint(a, "{s}", .{name})
             else
                 try allocPrint(a, "{s} was Deleted", .{"filename"}),
-            .diff = try allocPrint(a, "{}", .{Patch.diffLineHtml(a, body)[0]}),
+            .diff_lines = diff_lines,
         };
     }
     return .{
