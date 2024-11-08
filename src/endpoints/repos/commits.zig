@@ -18,8 +18,12 @@ const Error = Route.Error;
 const UserData = @import("../../request_data.zig").UserData;
 const RouteData = Repos.RouteData;
 
+const Repo = @import("../repos.zig");
+const Diffs = @import("diffs.zig");
+
 const Git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
+const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
 const Types = @import("../../types.zig");
 const Thread = Types.Thread;
@@ -64,6 +68,8 @@ pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     return try patch.diffsContextSlice(a);
 }
 
+const CommitPage = Template.PageData("commit.html");
+
 fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});
@@ -79,11 +85,6 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         break :cmt fallback;
     };
 
-    var commit_ctx = [1]Template.Context{
-        try commitCtx(ctx.alloc, current, repo_name),
-    };
-    try ctx.putContext("Commit", .{ .block = &commit_ctx });
-
     var git = repo.getAgent(ctx.alloc);
     var diff = git.show(sha) catch |err| switch (err) {
         error.StdoutStreamTooLong => return ctx.sendError(.internal_server_error),
@@ -95,9 +96,6 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     }
     var patch = Patch.Patch.init(diff);
 
-    const files_ctx: []Template.Context = patchContext(ctx.alloc, &patch) catch unreachable;
-
-    try ctx.putContext("Files", .{ .block = files_ctx });
     //for ([_]Comment{ .{
     //    .author = "robinli",
     //    .message = "Woah, I didn't know srctree had the ability to comment on commits!",
@@ -108,47 +106,58 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     //}
 
-    var ctx_comments: Template.Context.Data = .{ .block = &[0]Template.Context{} };
+    const diffstat = patch.patchStat();
+    const og_title = try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
+        Bleach.sanitizeAlloc(ctx.alloc, current.author.name, .{}) catch unreachable,
+        diffstat.files,
+        if (diffstat.files > 1) "s" else "",
+        diffstat.additions,
+        diffstat.deletions,
+    });
+    const meta_head = Template.Structs.MetaHeadHtml{
+        .open_graph = .{
+            .title = og_title,
+            .desc = Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable,
+        },
+    };
 
-    const cmap: ?CommitMap = CommitMap.open(ctx.alloc, repo_name, sha) catch null;
-
-    if (cmap) |map| {
+    var comments: []Template.Structs.Comments = &[0]Template.Structs.Comments{};
+    if (CommitMap.open(ctx.alloc, repo_name, sha) catch null) |map| {
         var dlt = map.delta(ctx.alloc) catch |err| n: {
             std.debug.print("error generating delta {}\n", .{err});
             break :n @as(?Delta, null);
         };
         if (dlt) |*delta| {
             _ = delta.loadThread(ctx.alloc) catch unreachable;
-            if (delta.getComments(ctx.alloc)) |comments| {
-                const contexts: []Template.Context = try ctx.alloc.alloc(Template.Context, comments.len);
-                for (comments, contexts) |*comment, *c_ctx| c_ctx.* = try comment.toContext(ctx.alloc);
-                ctx_comments = .{ .block = contexts };
+            if (delta.getComments(ctx.alloc)) |thread_comments| {
+                comments = try ctx.alloc.alloc(Template.Structs.Comments, thread_comments.len);
+                for (thread_comments, comments) |thr_cmt, *pg_comment| {
+                    pg_comment.* = .{ .comment = .{
+                        .author = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.author, .{}),
+                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(thr_cmt.updated)}),
+                        .message = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.message, .{}),
+                    } };
+                }
             } else |err| {
                 std.debug.print("Unable to load comments for thread {} {}\n", .{ map.attach.delta, err });
                 @panic("oops");
             }
         }
     }
-    try ctx.putContext("Comments", ctx_comments);
 
-    var opengraph = [_]Template.Context{
-        Template.Context.init(ctx.alloc),
-    };
+    var page = CommitPage.init(.{
+        .meta_head = meta_head,
+        .body_header = .{ .nav = .{
+            .nav_buttons = &try Repo.navButtons(ctx),
+            .nav_auth = undefined,
+        } },
+        .commit = try commitCtx(ctx.alloc, current, repo_name),
+        .comments = comments,
+        .patch = Diffs.patchStruct(ctx.alloc, &patch) catch return error.Unknown,
+    });
 
-    const diffstat = patch.patchStat();
-    try opengraph[0].putSlice("Title", try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
-        Bleach.sanitizeAlloc(ctx.alloc, current.author.name, .{}) catch unreachable,
-        diffstat.files,
-        if (diffstat.files > 1) "s" else "",
-        diffstat.additions,
-        diffstat.deletions,
-    }));
-    try opengraph[0].putSlice("Desc", Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable);
-    try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
-
-    var tmpl = Template.find("commit.html");
     ctx.response.status = .ok;
-    return ctx.sendTemplate(&tmpl) catch unreachable;
+    return ctx.sendPage(&page) catch unreachable;
 }
 
 pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
@@ -192,32 +201,35 @@ pub fn viewCommit(ctx: *Context) Error!void {
     return error.Unrouteable;
 }
 
-pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Context {
-    var ctx = Template.Context.init(a);
-
-    try ctx.putSlice("Author", Bleach.sanitizeAlloc(a, c.author.name, .{}) catch unreachable);
+pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Template.Structs.Parents {
     var plen: usize = 0;
     for (c.parent) |cp| {
         if (cp != null) plen += 1;
     }
-    const parents = try a.alloc(Template.Context, plen);
+    const parents = try a.alloc(Template.Structs.Parents, plen);
     errdefer a.free(parents);
     for (parents, c.parent[0..plen]) |*par, par_cmt| {
         // TODO leaks on err
-        var pctx = Template.Context.init(a);
         if (par_cmt == null) continue;
-
-        try pctx.putSlice("Parent_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?[0..8] }));
-        try pctx.putSlice("Parent_Sha_Short", try a.dupe(u8, par_cmt.?[0..8]));
-        par.* = pctx;
+        par.* = .{
+            .parent_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?[0..8] }),
+            .parent_sha_short = try a.dupe(u8, par_cmt.?[0..8]),
+        };
     }
-    try ctx.putBlock("Parents", parents);
-    try ctx.putSlice("Sha_URI", try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
-    try ctx.putSlice("Sha", try a.dupe(u8, c.sha));
-    try ctx.putSlice("Sha_Short", try a.dupe(u8, c.sha[0..8]));
-    try ctx.putSlice("Title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
-    try ctx.putSlice("Body", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
-    return ctx;
+
+    return parents;
+}
+
+pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Structs.Commit {
+    return .{
+        .author = Bleach.sanitizeAlloc(a, c.author.name, .{}) catch unreachable,
+        .parents = try commitCtxParents(a, c, repo),
+        .sha_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
+        .sha_short = try a.dupe(u8, c.sha[0..8]),
+        //.sha = try a.dupe(u8, c.sha),
+        .title = Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable,
+        .body = Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable,
+    };
 }
 
 pub fn htmlCommit(a: Allocator, c: Git.Commit, repo: []const u8, comptime top: bool) ![]HTML.E {

@@ -317,7 +317,7 @@ pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
                 "DiffStat",
                 try std.fmt.allocPrint(a, "+{} -{}", .{ diff.stat.additions, diff.stat.deletions }),
             );
-            try ctx.putSlice("Diff", try diffLineSlice(a, diff.changes.?));
+            try ctx.putSlice("DiffLines", try diffLineSlice(a, diff.changes.?));
             dctx.* = ctx;
         }
         return diffs_ctx;

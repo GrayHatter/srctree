@@ -348,7 +348,7 @@ pub const Directive = struct {
             }) |block| {
                 switch (self.word) {
                     .foreach => for (block) |s| try self.forEach(s, out),
-                    .forrow => unreachable, // for (block) |s| try self.forRow(s, out),
+                    .forrow => for (block) |s| try self.forEach(s, out),
                     .with => {
                         std.debug.assert(block.len == 1);
                         try self.with(block[0], out);
