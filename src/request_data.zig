@@ -1,7 +1,7 @@
 const std = @import("std");
 const Type = @import("builtin").Type;
-
 const Allocator = std.mem.Allocator;
+const eql = std.mem.eql;
 
 /// This is the preferred api to use... once it actually exists :D
 pub fn Validator(comptime T: type) type {
@@ -19,7 +19,7 @@ pub fn Validator(comptime T: type) type {
         pub fn count(v: *Self, name: []const u8) usize {
             var i: usize = 0;
             for (v.data.items) |item| {
-                if (std.mem.eql(u8, item.name, name)) i += 1;
+                if (eql(u8, item.name, name)) i += 1;
             }
             return i;
         }
@@ -31,7 +31,7 @@ pub fn Validator(comptime T: type) type {
         pub fn requirePos(v: *Self, name: []const u8, skip: usize) !DataItem {
             var skipped: usize = skip;
             for (v.data.items) |item| {
-                if (std.mem.eql(u8, item.name, name)) {
+                if (eql(u8, item.name, name)) {
                     if (skipped > 0) {
                         skipped -= 1;
                         continue;
@@ -44,7 +44,17 @@ pub fn Validator(comptime T: type) type {
 
         pub fn optional(v: *Self, name: []const u8) ?DataItem {
             for (v.data.items) |item| {
-                if (std.mem.eql(u8, item.name, name)) return item;
+                if (eql(u8, item.name, name)) return item;
+            }
+            return null;
+        }
+
+        pub fn optionalBool(v: *Self, name: []const u8) ?bool {
+            if (v.optional(name)) |boolish| {
+                if (eql(u8, boolish.value, "0") or eql(u8, boolish.value, "false")) {
+                    return false;
+                }
+                return true;
             }
             return null;
         }
@@ -206,7 +216,15 @@ pub fn UserData(comptime T: type) type {
             var req: T = undefined;
             inline for (std.meta.fields(T)) |field| {
                 @field(req, field.name) = switch (@typeInfo(field.type)) {
-                    .Optional => if (valid.optional(field.name)) |o| o.value else null,
+                    .Optional => |opt| switch (opt.child) {
+                        bool => if (valid.optionalBool(field.name)) |b|
+                            b
+                        else if (field.default_value != null)
+                            @as(*const ?bool, @ptrCast(field.default_value.?)).*
+                        else
+                            null,
+                        else => if (valid.optional(field.name)) |o| o.value else null,
+                    },
                     .Pointer => (try valid.require(field.name)).value,
                     else => unreachable,
                 };
