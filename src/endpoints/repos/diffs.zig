@@ -229,6 +229,10 @@ pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
     return dom.done();
 }
 
+const PatchView = struct {
+    @"inline": ?bool = true,
+};
+
 const DiffViewPage = Template.PageData("delta-diff.html");
 
 fn view(ctx: *Context) Error!void {
@@ -277,6 +281,13 @@ fn view(ctx: *Context) Error!void {
     }
 
     try ctx.putContext("Delta_id", .{ .slice = delta_id });
+
+    const udata = UserData(PatchView).init(ctx.req_data.query_data) catch return error.BadData;
+    if (udata.@"inline") |_| {
+        //
+    } else {
+        //
+    }
 
     var patch_formatted: ?Template.Structs.PatchHtml = null;
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
