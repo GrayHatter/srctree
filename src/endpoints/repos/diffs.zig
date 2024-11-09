@@ -236,8 +236,6 @@ fn view(ctx: *Context) Error!void {
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
 
-    var dom = DOM.new(ctx.alloc);
-
     var delta = Delta.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
         error.InvalidTarget => return error.Unrouteable,
         error.InputOutput => unreachable,
@@ -245,17 +243,10 @@ fn view(ctx: *Context) Error!void {
         else => unreachable,
     } orelse return error.Unrouteable;
 
-    dom = dom.open(HTML.element("context", null, null));
-    dom.push(HTML.text(rd.name));
-    dom = dom.open(HTML.p(null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable));
-    dom = dom.close();
-    dom = dom.open(HTML.p(null, null));
-    dom.push(HTML.text(Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable));
-    dom = dom.close();
-    dom = dom.close();
-
-    const patch_header = try allocPrint(ctx.alloc, "{pretty}", .{dom.done()[0]});
+    const patch_header = S.Header{
+        .title = Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable,
+        .message = Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable,
+    };
 
     // meme saved to protect history
     //for ([_]Comment{ .{
