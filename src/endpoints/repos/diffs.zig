@@ -1,34 +1,33 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 
-const Allocator = std.mem.Allocator;
-
-const DOM = @import("../../dom.zig");
-const HTML = @import("../../html.zig");
-const Context = @import("../../context.zig");
-const Response = @import("../../response.zig");
-const Template = @import("../../template.zig");
-const Route = @import("../../routes.zig");
-const Error = Route.Error;
-const UriIter = Route.UriIter;
-const ROUTE = Route.ROUTE;
-const POST = Route.POST;
-const GET = Route.GET;
-
-const UserData = @import("../../request_data.zig").UserData;
-
-const Repo = @import("../repos.zig");
 const Commits = @import("commits.zig");
 
-const Types = @import("../../types.zig");
-const Thread = Types.Thread;
-const Delta = Types.Delta;
-const Comment = Types.Comment;
+const Repo = @import("../repos.zig");
 
-const Patch = @import("../../patch.zig");
-const Humanize = @import("../../humanize.zig");
-const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
+const CURL = @import("../../curl.zig");
+const Context = @import("../../context.zig");
+const DOM = @import("../../dom.zig");
+const HTML = @import("../../html.zig");
+const Humanize = @import("../../humanize.zig");
+const Patch = @import("../../patch.zig");
+const Response = @import("../../response.zig");
+const Route = @import("../../routes.zig");
+const Template = @import("../../template.zig");
+const Types = @import("../../types.zig");
+const UserData = @import("../../request_data.zig").UserData;
+
+const Comment = Types.Comment;
+const Delta = Types.Delta;
+const Error = Route.Error;
+const GET = Route.GET;
+const POST = Route.POST;
+const ROUTE = Route.ROUTE;
+const S = Template.Structs;
+const Thread = Types.Thread;
+const UriIter = Route.UriIter;
 
 pub const routes = [_]Route.Match{
     ROUTE("", list),
