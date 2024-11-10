@@ -165,9 +165,9 @@ pub fn patchStruct(a: Allocator, patch: *Patch.Patch, unified: bool) !Template.S
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
         const html_lines = if (unified)
-            Patch.diffLineHtmlUnified(a, body)
+            Patch.diffLineHtmlSplit(a, body)
         else
-            Patch.diffLineHtmlSplit(a, body);
+            Patch.diffLineHtmlUnified(a, body);
         const diff_lines = try a.alloc([]u8, html_lines.len);
         for (diff_lines, html_lines) |*dline, hline| {
             dline.* = try allocPrint(a, "{}", .{hline});
