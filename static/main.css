@@ -460,6 +460,11 @@ diff {
 
 		.del { background: #5b0000 }
 		.add { background: #003e00 }
+		.block {
+			background: #4a4a91;
+			display: inline-block;
+			width: 100%;
+		}
 	}
 	.buttons {
 		background: #333;

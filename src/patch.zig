@@ -379,18 +379,24 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
 pub fn diffLineHtml(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
 
-    const line_count = std.mem.count(u8, diff, "\n");
-    var litr = std.mem.split(u8, diff, "\n");
+    const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
+    const line_count = std.mem.count(u8, clean, "\n");
+    var litr = std.mem.split(u8, clean, "\n");
     for (0..line_count + 1) |_| {
         const a_add = &HTML.Attr.class("add");
         const a_del = &HTML.Attr.class("del");
-        const dirty = litr.next().?;
-        const clean = Bleach.sanitizeAlloc(a, dirty, .{}) catch unreachable;
-        const attr: ?[]const HTML.Attr = if (clean.len > 0 and (clean[0] == '-' or clean[0] == '+'))
-            if (clean[0] == '-') a_del else a_add
-        else
-            null;
-        dom.dupe(HTML.span(clean, attr));
+        const a_block = &HTML.Attr.class("block");
+        const line = litr.next().?;
+        var attr: ?[]const HTML.Attr = null;
+        if (line.len > 0) {
+            switch (line[0]) {
+                '-' => attr = a_del,
+                '+' => attr = a_add,
+                '@' => attr = a_block,
+                else => {},
+            }
+        }
+        dom.dupe(HTML.span(line, attr));
     }
 
     return dom.done();
