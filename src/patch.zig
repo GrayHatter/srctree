@@ -317,7 +317,7 @@ pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
                 "DiffStat",
                 try std.fmt.allocPrint(a, "+{} -{}", .{ diff.stat.additions, diff.stat.deletions }),
             );
-            try ctx.putSlice("DiffLines", try diffLineSlice(a, diff.changes.?));
+            try ctx.putSlice("DiffLines", try diffLineUnifiedSlice(a, diff.changes.?));
             dctx.* = ctx;
         }
         return diffs_ctx;
@@ -376,7 +376,51 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .blob = try fetch(a, uri) };
 }
 
-pub fn diffLineHtml(a: Allocator, diff: []const u8) []HTML.Element {
+pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) []HTML.Element {
+    var dom = DOM.new(a);
+
+    const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
+    const line_count = std.mem.count(u8, clean, "\n");
+    var litr = std.mem.split(u8, clean, "\n");
+    for (0..line_count + 1) |_| {
+        const a_splt = &HTML.Attr.class("split");
+        const a_add = &HTML.Attr.class("add");
+        const a_del = &HTML.Attr.class("del");
+        const a_block = &HTML.Attr.class("block");
+        const line = litr.next().?;
+        if (line.len > 0) {
+            switch (line[0]) {
+                '-' => {
+                    dom = dom.open(HTML.span(null, a_splt));
+                    dom.dupe(HTML.span(line[1..], a_del));
+                    dom.dupe(HTML.span(null, null));
+                    dom = dom.close();
+                },
+                '+' => {
+                    dom = dom.open(HTML.span(null, a_splt));
+                    dom.dupe(HTML.span(null, null));
+                    dom.dupe(HTML.span(line[1..], a_add));
+                    dom = dom.close();
+                },
+                '@' => {
+                    dom = dom.open(HTML.span(null, a_splt));
+                    dom.dupe(HTML.span(line[1..], a_block));
+                    dom = dom.close();
+                },
+                else => {
+                    dom = dom.open(HTML.span(null, a_splt));
+                    dom.dupe(HTML.span(line[1..], null));
+                    dom.dupe(HTML.span(line[1..], null));
+                    dom = dom.close();
+                },
+            }
+        } else dom.dupe(HTML.span(line, null));
+    }
+
+    return dom.done();
+}
+
+pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
 
     const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
@@ -402,8 +446,8 @@ pub fn diffLineHtml(a: Allocator, diff: []const u8) []HTML.Element {
     return dom.done();
 }
 
-pub fn diffLineSlice(a: Allocator, diffs: []const u8) ![]u8 {
-    const elms = diffLineHtml(a, diffs);
+pub fn diffLineUnifiedSlice(a: Allocator, diffs: []const u8) ![]u8 {
+    const elms = diffLineHtmlUnified(a, diffs);
     const list = try a.alloc([]u8, elms.len);
     defer a.free(list);
     for (list, elms) |*l, e| {

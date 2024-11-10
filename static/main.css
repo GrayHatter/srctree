@@ -457,6 +457,22 @@ diff {
 		text-align: left;
 		background: #333;
 		span {
+			&.split {
+				width: 100%;
+				margin: 0;
+				display: inline-block;
+				span {
+					width: 48%;
+					display: inline-block;
+				}
+				span.block {
+					background: #4a4a91;
+					display: block;
+					width: auto;
+					margin: 8px auto;
+					padding: 8px;
+				}
+			}
 			margin: 0 8px;
 			&.del { background: #5b0000 }
 			&.add { background: #003e00 }

@@ -140,7 +140,7 @@ fn newComment(ctx: *Context) Error!void {
     return error.Unknown;
 }
 
-pub fn patchStruct(a: Allocator, patch: *Patch.Patch) !Template.Structs.PatchHtml {
+pub fn patchStruct(a: Allocator, patch: *Patch.Patch, unified: bool) !Template.Structs.PatchHtml {
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("err: {any}\n", .{err});
@@ -164,7 +164,10 @@ pub fn patchStruct(a: Allocator, patch: *Patch.Patch) !Template.Structs.PatchHtm
             "added: {}, removed: {}, total {}",
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
-        const html_lines = Patch.diffLineHtml(a, body);
+        const html_lines = if (unified)
+            Patch.diffLineHtmlUnified(a, body)
+        else
+            Patch.diffLineHtmlSplit(a, body);
         const diff_lines = try a.alloc([]u8, html_lines.len);
         for (diff_lines, html_lines) |*dline, hline| {
             dline.* = try allocPrint(a, "{}", .{hline});
@@ -283,11 +286,7 @@ fn view(ctx: *Context) Error!void {
     try ctx.putContext("Delta_id", .{ .slice = delta_id });
 
     const udata = UserData(PatchView).init(ctx.req_data.query_data) catch return error.BadData;
-    if (udata.@"inline") |_| {
-        //
-    } else {
-        //
-    }
+    const inline_html = udata.@"inline" orelse true;
 
     var patch_formatted: ?Template.Structs.PatchHtml = null;
     const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
@@ -295,7 +294,7 @@ fn view(ctx: *Context) Error!void {
     if (std.fs.cwd().openFile(filename, .{})) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         var patch = Patch.Patch.init(fdata);
-        if (patchStruct(ctx.alloc, &patch)) |phtml| {
+        if (patchStruct(ctx.alloc, &patch, !inline_html)) |phtml| {
             patch_formatted = phtml;
         } else |err| {
             std.debug.print("Unable to generate patch {any}\n", .{err});

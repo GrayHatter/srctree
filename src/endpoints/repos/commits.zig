@@ -153,7 +153,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         } },
         .commit = try commitCtx(ctx.alloc, current, repo_name),
         .comments = comments,
-        .patch = Diffs.patchStruct(ctx.alloc, &patch) catch return error.Unknown,
+        .patch = Diffs.patchStruct(ctx.alloc, &patch, true) catch return error.Unknown,
     });
 
     ctx.response.status = .ok;
