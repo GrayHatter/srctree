@@ -232,7 +232,7 @@ pub fn patchHtml(a: Allocator, patch: *Patch.Patch) ![]HTML.Element {
     return dom.done();
 }
 
-const PatchView = struct {
+pub const PatchView = struct {
     @"inline": ?bool = true,
 };
 

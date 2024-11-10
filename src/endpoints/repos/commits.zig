@@ -1,35 +1,33 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 
-const Repos = @import("../repos.zig");
-
-const Route = @import("../../routes.zig");
-const Response = @import("../../response.zig");
-const Context = @import("../../context.zig");
-const HTML = @import("../../html.zig");
-const DOM = @import("../../dom.zig");
-const Template = @import("../../template.zig");
-const UriIter = Route.UriIter;
-const ROUTE = Route.ROUTE;
-const GET = Route.GET;
-const Error = Route.Error;
-const UserData = @import("../../request_data.zig").UserData;
-const RouteData = Repos.RouteData;
-
-const Repo = @import("../repos.zig");
 const Diffs = @import("diffs.zig");
 
-const Git = @import("../../git.zig");
+const Repos = @import("../repos.zig");
+
 const Bleach = @import("../../bleach.zig");
+const Context = @import("../../context.zig");
+const DOM = @import("../../dom.zig");
+const Git = @import("../../git.zig");
+const HTML = @import("../../html.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
+const Response = @import("../../response.zig");
+const Route = @import("../../routes.zig");
+const Template = @import("../../template.zig");
 const Types = @import("../../types.zig");
-const Thread = Types.Thread;
-const Delta = Types.Delta;
-const CommitMap = Types.CommitMap;
+const UserData = @import("../../request_data.zig").UserData;
+
 const Comment = Types.Comment;
+const CommitMap = Types.CommitMap;
+const Delta = Types.Delta;
+const Error = Route.Error;
+const GET = Route.GET;
+const ROUTE = Route.ROUTE;
+const RouteData = Repos.RouteData;
+const Thread = Types.Thread;
+const UriIter = Route.UriIter;
 
 pub const routes = [_]Route.MatchRouter{
     ROUTE("", commits),
@@ -145,15 +143,18 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         }
     }
 
+    const udata = UserData(Diffs.PatchView).init(ctx.req_data.query_data) catch return error.BadData;
+    const inline_html = udata.@"inline" orelse true;
+
     var page = CommitPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
-            .nav_buttons = &try Repo.navButtons(ctx),
+            .nav_buttons = &try Repos.navButtons(ctx),
             .nav_auth = undefined,
         } },
         .commit = try commitCtx(ctx.alloc, current, repo_name),
         .comments = comments,
-        .patch = Diffs.patchStruct(ctx.alloc, &patch, true) catch return error.Unknown,
+        .patch = Diffs.patchStruct(ctx.alloc, &patch, inline_html) catch return error.Unknown,
     });
 
     ctx.response.status = .ok;
