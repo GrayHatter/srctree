@@ -379,35 +379,54 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
 pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
 
+    const a_splt = &HTML.Attr.class("split");
+    const a_add = &HTML.Attr.class("add");
+    const a_del = &HTML.Attr.class("del");
+    const a_block = &HTML.Attr.class("block");
+
     const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.split(u8, clean, "\n");
+    var left = std.ArrayList([]const u8).init(a);
+    defer left.clearAndFree();
+    var right = std.ArrayList([]const u8).init(a);
+    defer right.clearAndFree();
     for (0..line_count + 1) |_| {
-        const a_splt = &HTML.Attr.class("split");
-        const a_add = &HTML.Attr.class("add");
-        const a_del = &HTML.Attr.class("del");
-        const a_block = &HTML.Attr.class("block");
         const line = litr.next().?;
         if (line.len > 0) {
             switch (line[0]) {
-                '-' => {
-                    dom = dom.open(HTML.span(null, a_splt));
-                    dom.dupe(HTML.span(line[1..], a_del));
-                    dom.dupe(HTML.span(null, null));
-                    dom = dom.close();
-                },
-                '+' => {
-                    dom = dom.open(HTML.span(null, a_splt));
-                    dom.dupe(HTML.span(null, null));
-                    dom.dupe(HTML.span(line[1..], a_add));
-                    dom = dom.close();
-                },
+                '-' => left.append(line[1..]) catch unreachable,
+                '+' => right.append(line[1..]) catch unreachable,
                 '@' => {
                     dom = dom.open(HTML.span(null, a_splt));
-                    dom.dupe(HTML.span(line[1..], a_block));
+                    dom.dupe(HTML.span(line, a_block));
                     dom = dom.close();
                 },
                 else => {
+                    const min = @min(left.items.len, right.items.len);
+                    for (0..min) |i| {
+                        dom = dom.open(HTML.span(null, a_splt));
+                        dom.dupe(HTML.span(left.items[i], a_del));
+                        dom.dupe(HTML.span(right.items[i], a_add));
+                        dom = dom.close();
+                    }
+                    if (left.items.len > min) {
+                        for (left.items[min..]) |l| {
+                            dom = dom.open(HTML.span(null, a_splt));
+                            dom.dupe(HTML.span(l, a_del));
+                            dom.dupe(HTML.span(null, null));
+                            dom = dom.close();
+                        }
+                    } else if (right.items.len > min) {
+                        for (right.items[min..]) |r| {
+                            dom = dom.open(HTML.span(null, a_splt));
+                            dom.dupe(HTML.span(null, null));
+                            dom.dupe(HTML.span(r, a_add));
+                            dom = dom.close();
+                        }
+                    }
+                    left.clearRetainingCapacity();
+                    right.clearRetainingCapacity();
                     dom = dom.open(HTML.span(null, a_splt));
                     dom.dupe(HTML.span(line[1..], null));
                     dom.dupe(HTML.span(line[1..], null));
