@@ -453,17 +453,20 @@ diff {
 		font-size: 0.8em;
 		border: 1px solid gray;
 		display: block;
-		padding: 8px;
 		white-space: pre;
 		text-align: left;
 		background: #333;
-
-		.del { background: #5b0000 }
-		.add { background: #003e00 }
-		.block {
-			background: #4a4a91;
-			display: inline-block;
-			width: 100%;
+		span {
+			margin: 0 8px;
+			&.del { background: #5b0000 }
+			&.add { background: #003e00 }
+			&.block {
+				background: #4a4a91;
+				display: block;
+				width: auto;
+				margin: 8px auto;
+				padding: 8px;
+			}
 		}
 	}
 	.buttons {

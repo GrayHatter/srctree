@@ -396,7 +396,7 @@ pub fn diffLineHtml(a: Allocator, diff: []const u8) []HTML.Element {
                 else => {},
             }
         }
-        dom.dupe(HTML.span(line, attr));
+        dom.dupe(HTML.span(if (line.len > 0) line[1..] else line, attr));
     }
 
     return dom.done();
