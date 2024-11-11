@@ -205,7 +205,7 @@ pub fn commitFlex(ctx: *Context) Error!void {
     var nowish = DateTime.now();
     var email: []const u8 = undefined;
     var tz_offset: ?i32 = null;
-    var query = ctx.req_data.query_data.validator();
+    var query = ctx.reqdata.query.validator();
     const user = query.optional("user");
 
     if (user) |u| {

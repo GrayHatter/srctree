@@ -53,7 +53,7 @@ fn gitUploadPack(ctx: *Context) Error!void {
     defer map.deinit();
 
     //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
-    if (ctx.req_data.post_data == null) {
+    if (ctx.reqdata.post == null) {
         try map.put("PATH_TRANSLATED", path_tr);
         try map.put("QUERY_STRING", "service=git-upload-pack");
         try map.put("REQUEST_METHOD", "GET");
@@ -87,7 +87,7 @@ fn gitUploadPack(ctx: *Context) Error!void {
             .revents = undefined,
         },
     };
-    if (ctx.req_data.post_data) |pd| {
+    if (ctx.reqdata.post) |pd| {
         _ = std.posix.write(child.stdin.?.handle, pd.rawpost) catch unreachable;
         std.posix.close(child.stdin.?.handle);
         child.stdin = null;

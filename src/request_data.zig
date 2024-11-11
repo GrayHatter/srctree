@@ -3,6 +3,15 @@ const Type = @import("builtin").Type;
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
 
+const Data = @This();
+
+post: ?PostData,
+query: QueryData,
+
+pub fn Validate(data: Data, comptime T: type) !T {
+    return RequestData(T).init(data);
+}
+
 /// This is the preferred api to use... once it actually exists :D
 pub fn Validator(comptime T: type) type {
     return struct {
@@ -87,6 +96,10 @@ pub const PostData = struct {
     rawpost: []u8,
     items: []DataItem,
 
+    pub fn validate(pdata: PostData, comptime T: type) !T {
+        return RequestData(T).initPost(pdata);
+    }
+
     pub fn validator(self: PostData) Validator(PostData) {
         return Validator(PostData).init(self);
     }
@@ -96,6 +109,26 @@ pub const QueryData = struct {
     alloc: Allocator,
     rawquery: []const u8,
     items: []DataItem,
+
+    /// TODO leaks on error
+    pub fn init(a: Allocator, query: []const u8) !QueryData {
+        var itr = std.mem.split(u8, query, "&");
+        const count = std.mem.count(u8, query, "&") + 1;
+        const items = try a.alloc(DataItem, count);
+        for (items) |*item| {
+            item.* = try parseSegment(a, itr.next().?);
+        }
+
+        return QueryData{
+            .alloc = a,
+            .rawquery = query,
+            .items = items,
+        };
+    }
+
+    pub fn validate(qdata: QueryData, comptime T: type) !T {
+        return RequestData(T).initQuery(qdata);
+    }
 
     /// segments name=value&name2=otherval
     /// segment in  name=%22dquote%22
@@ -123,30 +156,9 @@ pub const QueryData = struct {
         }
     }
 
-    /// TODO leaks on error
-    pub fn init(a: Allocator, query: []const u8) !QueryData {
-        var itr = std.mem.split(u8, query, "&");
-        const count = std.mem.count(u8, query, "&") + 1;
-        const items = try a.alloc(DataItem, count);
-        for (items) |*item| {
-            item.* = try parseSegment(a, itr.next().?);
-        }
-
-        return QueryData{
-            .alloc = a,
-            .rawquery = query,
-            .items = items,
-        };
-    }
-
     pub fn validator(self: QueryData) Validator(QueryData) {
         return Validator(QueryData).init(self);
     }
-};
-
-pub const RequestData = struct {
-    post_data: ?PostData,
-    query_data: QueryData,
 };
 
 pub const ContentType = union(enum) {
@@ -188,31 +200,36 @@ pub const ContentType = union(enum) {
     }
 };
 
-pub fn UserData(comptime T: type) type {
+pub fn RequestData(comptime T: type) type {
     return struct {
         req: T,
 
         const Self = @This();
 
-        pub fn init(data: anytype) !T {
+        pub fn init(data: Data) !T {
             return switch (@TypeOf(data)) {
                 QueryData => initQuery(data),
                 PostData => initPost(data),
                 else => comptime unreachable,
             };
+            //const info = @typeInfo(T).@"struct".info.fields;
+            //if (info.len == 2) {
+            //    for (std.meta.fields(T)) |field| {
+            //        if (!eql(u8, field.name, "post") or !eql(u8, field.name, "query")) {
+            //        }
+            //    }
+            //} else @compileLog("not implemented");
         }
 
-        pub fn initMap(a: Allocator, data: anytype) !T {
-            return switch (@TypeOf(data)) {
-                QueryData => comptime unreachable, // Not implemented
-                PostData => initPostMap(a, data),
-                else => comptime unreachable,
-            };
+        pub fn initMap(a: Allocator, data: Data) !T {
+            if (data.post) |post| return initPostMap(a, post);
+
+            // Only post is implemented
+            return error.NotImplemented;
         }
 
-        fn initQuery(data: QueryData) !T {
-            var valid = data.validator();
-
+        fn initQuery(query: QueryData) !T {
+            var valid = query.validator();
             var req: T = undefined;
             inline for (std.meta.fields(T)) |field| {
                 @field(req, field.name) = switch (@typeInfo(field.type)) {

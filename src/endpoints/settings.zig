@@ -2,7 +2,7 @@ const std = @import("std");
 pub const Template = @import("../template.zig");
 const Context = @import("../context.zig");
 const Route = @import("../routes.zig");
-const UserData = @import("../request_data.zig").UserData;
+const RequestData = @import("../request_data.zig").RequestData;
 
 pub const endpoints = [_]Route.Match{
     Route.GET("", default),
@@ -40,7 +40,7 @@ const SettingsReq = struct {
 fn post(ctx: *Context) Route.Error!void {
     try ctx.request.auth.validOrError();
 
-    const udata = UserData(SettingsReq).initMap(ctx.alloc, ctx.req_data.post_data.?) catch return error.BadData;
+    const udata = RequestData(SettingsReq).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
 
     for (udata.block_name, udata.block_text) |name, text| {
         std.debug.print("block data:\nname '{s}'\ntext '''{s}'''\n", .{ name, text });

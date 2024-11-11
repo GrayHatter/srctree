@@ -17,7 +17,6 @@ const Response = @import("../../response.zig");
 const Route = @import("../../routes.zig");
 const Template = @import("../../template.zig");
 const Types = @import("../../types.zig");
-const UserData = @import("../../request_data.zig").UserData;
 
 const Comment = Types.Comment;
 const Delta = Types.Delta;
@@ -78,8 +77,8 @@ const IssueCreateReq = struct {
 
 fn newPost(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (ctx.req_data.post_data) |post| {
-        const udata = UserData(IssueCreateReq).init(post) catch return error.BadData;
+    if (ctx.reqdata.post) |post| {
+        const udata = post.validate(IssueCreateReq) catch return error.BadData;
 
         var delta = Delta.new(rd.name) catch unreachable;
         //delta.src = src;
@@ -117,7 +116,7 @@ fn newPost(ctx: *Context) Error!void {
 fn newComment(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.req_data.post_data) |post| {
+    if (ctx.reqdata.post) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const delta_index = isHex(delta_id.value) orelse return error.Unrouteable;
@@ -285,7 +284,7 @@ fn view(ctx: *Context) Error!void {
 
     try ctx.putContext("Delta_id", .{ .slice = delta_id });
 
-    const udata = UserData(PatchView).init(ctx.req_data.query_data) catch return error.BadData;
+    const udata = ctx.reqdata.query.validate(PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
 
     var patch_formatted: ?Template.Structs.PatchHtml = null;

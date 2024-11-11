@@ -17,7 +17,7 @@ const Response = @import("../../response.zig");
 const Route = @import("../../routes.zig");
 const Template = @import("../../template.zig");
 const Types = @import("../../types.zig");
-const UserData = @import("../../request_data.zig").UserData;
+const RequestData = @import("../../request_data.zig").RequestData;
 
 const Comment = Types.Comment;
 const CommitMap = Types.CommitMap;
@@ -46,8 +46,8 @@ pub fn router(ctx: *Context) Error!Route.Callable {
 }
 
 fn newComment(ctx: *Context) Error!void {
-    if (ctx.req_data.post_data) |post| {
-        _ = UserData(AddComment).init(post) catch return error.BadData;
+    if (ctx.reqdata.post) |post| {
+        _ = post.validate(AddComment) catch return error.BadData;
     }
     return error.BadData;
 }
@@ -143,7 +143,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         }
     }
 
-    const udata = UserData(Diffs.PatchView).init(ctx.req_data.query_data) catch return error.BadData;
+    const udata = ctx.reqdata.query.validate(Diffs.PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
 
     var page = CommitPage.init(.{

@@ -122,7 +122,7 @@ pub fn defaultResponse(comptime code: std.http.Status) Callable {
 fn notFound(ctx: *Context) Error!void {
     ctx.response.status = .not_found;
     var tmpl = Template.find("4XX.html");
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    try ctx.sendTemplate(&tmpl);
 }
 
 fn internalServerError(ctx: *Context) Error!void {
@@ -133,7 +133,7 @@ fn internalServerError(ctx: *Context) Error!void {
 
 fn default(ctx: *Context) Error!void {
     var tmpl = Template.find("index.html");
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    ctx.sendTemplate(&tmpl);
 }
 
 pub fn router(ctx: *Context, comptime routes: []const Match) Callable {

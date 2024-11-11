@@ -125,7 +125,7 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
                     for (ctx.request.raw_request.zwsgi.vars) |vars| {
                         std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
                     }
-                    if (ctx.req_data.post_data) |post_data| {
+                    if (ctx.reqdata.post) |post_data| {
                         std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
                     }
                 },
@@ -266,7 +266,7 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
     const response = try Response.init(a, request);
 
     var post_data: ?RequestData.PostData = null;
-    var req_data: RequestData.RequestData = undefined;
+    var reqdata: RequestData = undefined;
     switch (request.raw_request) {
         .zwsgi => |zreq| {
             if (find(zreq.vars, "HTTP_CONTENT_LENGTH")) |h_len| {
@@ -291,9 +291,9 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
             if (find(zreq.vars, "QUERY_STRING")) |qs| {
                 query = try RequestData.readQuery(a, qs);
             }
-            req_data = RequestData.RequestData{
-                .post_data = post_data,
-                .query_data = query,
+            reqdata = RequestData{
+                .post = post_data,
+                .query = query,
             };
         },
         .http => |*hreq| {
@@ -317,14 +317,14 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
             if (std.mem.indexOf(u8, hreq.head.target, "/")) |i| {
                 query_data = try RequestData.readQuery(a, hreq.head.target[i..]);
             }
-            req_data = RequestData.RequestData{
-                .post_data = post_data,
-                .query_data = query_data,
+            reqdata = RequestData{
+                .post = post_data,
+                .query = query_data,
             };
         },
     }
 
-    return Context.init(a, z.config, request.*, response, req_data);
+    return Context.init(a, z.config, request.*, response, reqdata);
 }
 
 fn readHttpHeaders(a: Allocator, req: *std.http.Server.Request) !Request {

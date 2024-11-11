@@ -4,7 +4,6 @@ const Allocator = std.mem.Allocator;
 
 const Context = @import("../context.zig");
 const Route = @import("../routes.zig");
-const UserData = @import("../request_data.zig").UserData;
 const HTML = @import("../html.zig");
 const DOM = @import("../dom.zig");
 const Template = @import("../template.zig");
@@ -85,7 +84,7 @@ const CloneUpstreamReq = struct {
 fn postCloneUpstream(ctx: *Context) Error!void {
     try ctx.request.auth.validOrError();
 
-    const udata = UserData(CloneUpstreamReq).init(ctx.req_data.post_data.?) catch return error.BadData;
+    const udata = ctx.reqdata.post.?.validate(CloneUpstreamReq) catch return error.BadData;
     std.debug.print("repo uri {s}\n", .{udata.repo_uri});
     var nameitr = std.mem.splitBackwards(u8, udata.repo_uri, "/");
     const name = nameitr.first();
@@ -121,7 +120,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
 fn postNewRepo(ctx: *Context) Error!void {
     try ctx.request.auth.validOrError();
     // TODO ini repo dir
-    var valid = if (ctx.req_data.post_data) |p|
+    var valid = if (ctx.reqdata.post) |p|
         p.validator()
     else
         return error.Unknown;
@@ -185,7 +184,7 @@ fn newRepo(ctx: *Context) Error!void {
 
 fn view(ctx: *Context) Error!void {
     try ctx.request.auth.validOrError();
-    if (ctx.req_data.post_data) |pd| {
+    if (ctx.reqdata.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(ctx);
     }

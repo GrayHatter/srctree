@@ -8,7 +8,6 @@ const Route = @import("../routes.zig");
 const Error = Route.Error;
 const ROUTE = Route.ROUTE;
 
-const UserData = @import("../request_data.zig").UserData;
 const Bleach = @import("../bleach.zig");
 
 pub const routes = [_]Route.Match{
@@ -30,7 +29,7 @@ fn inbox(ctx: *Context) Error!void {
 }
 
 fn search(ctx: *Context) Error!void {
-    const udata = UserData(SearchReq).init(ctx.req_data.query_data) catch return error.BadData;
+    const udata = ctx.reqdata.query.validate(SearchReq) catch return error.BadData;
 
     const query_str = udata.q orelse "null";
     std.debug.print("query {s}\n", .{query_str});

@@ -3,7 +3,7 @@ const allocPrint = std.fmt.allocPrint;
 
 const Context = @import("../context.zig");
 const Template = @import("../template.zig");
-const UserData = @import("../request_data.zig").UserData;
+const RequestData = @import("../request_data.zig").RequestData;
 const Bleach = @import("../bleach.zig");
 const Allocator = std.mem.Allocator;
 
@@ -53,8 +53,7 @@ const GistPost = struct {
 fn post(ctx: *Context) Error!void {
     try ctx.request.auth.validOrError();
 
-    const postd = ctx.req_data.post_data orelse return error.BadData;
-    const udata = UserData(GistPost).initMap(ctx.alloc, postd) catch return error.BadData;
+    const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
 
     if (udata.file_name.len != udata.file_blob.len) return error.BadData;
     const username = if (ctx.auth.valid())

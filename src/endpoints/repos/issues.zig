@@ -54,7 +54,7 @@ fn new(ctx: *Context) Error!void {
 fn newPost(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.req_data.post_data) |post| {
+    if (ctx.reqdata.post) |post| {
         var valid = post.validator();
         const title = try valid.require("title");
         const msg = try valid.require("desc");
@@ -74,7 +74,7 @@ fn newPost(ctx: *Context) Error!void {
 
 fn newComment(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (ctx.req_data.post_data) |post| {
+    if (ctx.reqdata.post) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const msg = try valid.require("comment");

@@ -18,7 +18,7 @@ const UriIter = Route.UriIter;
 const ROUTE = Route.ROUTE;
 const POST = Route.POST;
 const GET = Route.GET;
-const UserData = @import("../request_data.zig").UserData;
+const RequestData = @import("../request_data.zig").RequestData;
 
 const Bleach = @import("../bleach.zig");
 const Humanize = @import("../humanize.zig");
@@ -270,7 +270,7 @@ const RepoSortReq = struct {
 fn list(ctx: *Context) Error!void {
     var cwd = std.fs.cwd();
 
-    const udata = UserData(RepoSortReq).init(ctx.req_data.query_data) catch return error.BadData;
+    const udata = ctx.reqdata.query.validate(RepoSortReq) catch return error.BadData;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
     if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
