@@ -462,7 +462,8 @@ diff {
 				margin: 0;
 				display: inline-block;
 				span {
-					width: 48%;
+					margin: 0;
+					width: 50%;
 					display: inline-block;
 				}
 				span.block {
