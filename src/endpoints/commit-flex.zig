@@ -408,5 +408,5 @@ pub fn commitFlex(ctx: *Context) Error!void {
         try ctx.putContext("Months", .{ .block = groups.items });
     }
 
-    return ctx.sendTemplate(&tmpl) catch unreachable;
+    return try ctx.sendTemplate(&tmpl);
 }
