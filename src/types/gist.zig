@@ -96,7 +96,7 @@ pub fn new(owner: []const u8, files: []const File) ![64]u8 {
     };
     _ = try std.fmt.bufPrint(&hash_str, "{}", .{std.fmt.fmtSliceHexLower(&hash)});
 
-    var buf: [67]u8 = undefined;
+    var buf: [69]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.gist", .{hash_str});
     const file = try datad.createFile(filename, .{});
     const writer = file.writer().any();
