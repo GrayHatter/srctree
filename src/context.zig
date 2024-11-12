@@ -133,7 +133,9 @@ pub fn sendJSON(ctx: *Context, json: anytype) Error!void {
         else => unreachable,
     };
 
-    const data = std.json.stringifyAlloc(ctx.alloc, json, .{}) catch |err| {
+    const data = std.json.stringifyAlloc(ctx.alloc, json, .{
+        .emit_null_optional_fields = false,
+    }) catch |err| {
         std.debug.print("Error trying to print json {}\n", .{err});
         return error.Unknown;
     };
