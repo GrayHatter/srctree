@@ -8,15 +8,17 @@ pub const Error = error{
 };
 
 pub const Rules = enum {
-    html,
-    title,
     filename,
+    html,
+    path,
+    title,
 
     pub fn func(r: Rules) RuleFn {
         return switch (r) {
-            .html => bleachHtml,
-            .title => bleachHtml,
             .filename => bleachFilename,
+            .html => bleachHtml,
+            .path => bleachPath,
+            .title => bleachHtml,
         };
     }
 };
@@ -37,6 +39,19 @@ pub const Html = struct {
         var buf: [6]u8 = undefined;
         for (self.text) |c| {
             try out.writeAll(buf[0 .. bleachHtml(c, &buf) catch unreachable]);
+        }
+    }
+};
+
+pub const Filename = struct {
+    text: []const u8,
+    permit_directories: bool = false,
+
+    pub fn format(self: Filename, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        const bleach_fn = if (self.permit_directories) bleachPath else bleachFilename;
+        var buf: [2]u8 = undefined;
+        for (self.text) |txt| {
+            try out.writeAll(buf[0..bleach_fn(txt, &buf)]);
         }
     }
 };
@@ -106,15 +121,29 @@ pub fn StreamSanitizer(comptime Source: type) type {
     };
 }
 
-fn bleachFilename(in: u8, out: ?[]u8) Error!usize {
+/// Allows subdirectories but not parents.
+fn bleachPath(in: u8, out: ?[]u8) Error!usize {
     var same = [1:0]u8{in};
     const replace = switch (in) {
         'a'...'z', 'A'...'Z', '0'...'9', '-', '_' => &same,
         ' ', '.' => "-",
-        '\n', '\t' => "",
+        '\n', '\t', '\\' => "",
         else => "",
     };
-    if (out) |o| {
+    if (comptime out) |o| {
+        if (replace.len > o.len) return error.NoSpaceLeft;
+        @memcpy(o[0..replace.len], replace);
+    }
+    return replace.len;
+}
+
+/// Filters out '/'
+fn bleachFilename(in: u8, out: ?[]u8) Error!usize {
+    const replace = switch (in) {
+        '/' => "-",
+        else => return bleachPath(in, out),
+    };
+    if (comptime out) |o| {
         if (replace.len > o.len) return error.NoSpaceLeft;
         @memcpy(o[0..replace.len], replace);
     }
