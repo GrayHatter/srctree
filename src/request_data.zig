@@ -8,7 +8,7 @@ const Data = @This();
 post: ?PostData,
 query: QueryData,
 
-pub fn Validate(data: Data, comptime T: type) !T {
+pub fn validate(data: Data, comptime T: type) !T {
     return RequestData(T).init(data);
 }
 
@@ -207,18 +207,17 @@ pub fn RequestData(comptime T: type) type {
         const Self = @This();
 
         pub fn init(data: Data) !T {
-            return switch (@TypeOf(data)) {
-                QueryData => initQuery(data),
-                PostData => initPost(data),
-                else => comptime unreachable,
-            };
-            //const info = @typeInfo(T).@"struct".info.fields;
-            //if (info.len == 2) {
-            //    for (std.meta.fields(T)) |field| {
-            //        if (!eql(u8, field.name, "post") or !eql(u8, field.name, "query")) {
-            //        }
-            //    }
-            //} else @compileLog("not implemented");
+            var query_valid = data.query.validator();
+            var mpost_valid = if (data.post) |post| post.validator() else null;
+            var req: T = undefined;
+            inline for (std.meta.fields(T)) |field| {
+                if (mpost_valid) |*post_valid| {
+                    @field(req, field.name) = get(field.type, field.name, post_valid, field.default_value) catch try get(field.type, field.name, &query_valid, field.default_value);
+                } else {
+                    @field(req, field.name) = try get(field.type, field.name, &query_valid, field.default_value);
+                }
+            }
+            return req;
         }
 
         pub fn initMap(a: Allocator, data: Data) !T {
@@ -228,23 +227,27 @@ pub fn RequestData(comptime T: type) type {
             return error.NotImplemented;
         }
 
+        fn get(FieldType: type, comptime name: []const u8, valid: anytype, default: ?*const anyopaque) !FieldType {
+            return switch (@typeInfo(FieldType)) {
+                .Optional => |opt| switch (opt.child) {
+                    bool => if (valid.optionalBool(name)) |b|
+                        b
+                    else if (default != null)
+                        @as(*const ?bool, @ptrCast(default.?)).*
+                    else
+                        null,
+                    else => if (valid.optional(name)) |o| o.value else null,
+                },
+                .Pointer => (try valid.require(name)).value,
+                else => comptime unreachable,
+            };
+        }
+
         fn initQuery(query: QueryData) !T {
             var valid = query.validator();
             var req: T = undefined;
             inline for (std.meta.fields(T)) |field| {
-                @field(req, field.name) = switch (@typeInfo(field.type)) {
-                    .Optional => |opt| switch (opt.child) {
-                        bool => if (valid.optionalBool(field.name)) |b|
-                            b
-                        else if (field.default_value != null)
-                            @as(*const ?bool, @ptrCast(field.default_value.?)).*
-                        else
-                            null,
-                        else => if (valid.optional(field.name)) |o| o.value else null,
-                    },
-                    .Pointer => (try valid.require(field.name)).value,
-                    else => unreachable,
-                };
+                @field(req, field.name) = try get(field.type, field.name, &valid, field.default_value);
             }
             return req;
         }
@@ -254,11 +257,7 @@ pub fn RequestData(comptime T: type) type {
 
             var req: T = undefined;
             inline for (std.meta.fields(T)) |field| {
-                @field(req, field.name) = switch (@typeInfo(field.type)) {
-                    .Optional => if (valid.optional(field.name)) |o| o.value else null,
-                    .Pointer => (try valid.require(field.name)).value,
-                    else => unreachable,
-                };
+                @field(req, field.name) = try get(field.type, field.name, &valid, field.default_value);
             }
             return req;
         }
