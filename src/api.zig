@@ -1,8 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+
 pub const Routes = @import("routes.zig");
-const ROUTE = Routes.ROUTE;
 pub const Context = @import("context.zig");
+
+const ROUTE = Routes.ROUTE;
 
 const Repo = @import("api/repo.zig");
 
@@ -15,7 +17,7 @@ const endpoints = [_]Routes.Match{
     ROUTE("issue", issue),
     ROUTE("network", router),
     ROUTE("patch", diff),
-    ROUTE("repo", Repo.repo),
+    ROUTE("repo", Repo.router),
     ROUTE("user", user),
 };
 
