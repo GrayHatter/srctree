@@ -278,7 +278,8 @@ pub const Repo = struct {
     fn loadTag(self: *Repo, a: Allocator, sha: SHA) !Tag {
         const obj = try self.loadObject(a, sha);
         switch (obj.kind) {
-            .blob, .tree, .commit => unreachable,
+            .blob, .tree => unreachable,
+            .commit => return try Tag.lightTag(sha, obj.body),
             .tag => return try Tag.fromSlice(sha, obj.body),
         }
     }
@@ -589,6 +590,7 @@ pub const Tag = struct {
 
     /// I don't like this implementation, but I can't be arsed... good luck
     /// future me!
+    /// Dear past me... fuck you! dear future me... HA same!
     fn lightTag(sha: SHA, blob: []const u8) !Tag {
         var actor: ?Actor = null;
         if (indexOf(u8, blob, "committer ")) |i| {
