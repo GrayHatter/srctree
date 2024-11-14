@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const AnyReader = std.io.AnyReader;
 
 const Git = @import("../git.zig");
 const SHA = Git.SHA;
@@ -13,7 +14,7 @@ pub const Commit = @This();
 pub const GPGSig = struct {};
 
 alloc: ?Allocator = null,
-blob: []const u8,
+memory: ?[]const u8 = null,
 sha: SHA,
 tree: SHA,
 /// 9 ought to be enough for anyone... or at least robinli ... at least for a while
@@ -25,7 +26,6 @@ committer: Actor,
 message: []const u8,
 title: []const u8,
 body: []const u8,
-repo: ?*const Repo = null,
 gpgsig: ?GPGSig,
 
 ptr_parent: ?*Commit = null, // TOOO multiple parents
@@ -33,17 +33,13 @@ ptr_parent: ?*Commit = null, // TOOO multiple parents
 fn header(self: *Commit, data: []const u8) !void {
     if (std.mem.indexOf(u8, data, " ")) |brk| {
         const name = data[0..brk];
-        const payload = data[brk..];
-        if (std.mem.eql(u8, name, "commit")) {
-            if (std.mem.indexOf(u8, data, "\x00")) |nl| {
-                self.tree = payload[nl..][0..40];
-            } else unreachable;
-        } else if (std.mem.eql(u8, name, "tree")) {
-            self.tree = payload[1..41];
+        const payload = data[brk + 1 ..];
+        if (std.mem.eql(u8, name, "tree")) {
+            self.tree = SHA.init(payload[0..40]);
         } else if (std.mem.eql(u8, name, "parent")) {
             for (&self.parent) |*parr| {
                 if (parr.* == null) {
-                    parr.* = payload[1..41];
+                    parr.* = SHA.init(payload[0..40]);
                     return;
                 }
             }
@@ -52,7 +48,7 @@ fn header(self: *Commit, data: []const u8) !void {
         } else if (std.mem.eql(u8, name, "committer")) {
             self.committer = try Actor.make(payload);
         } else {
-            std.debug.print("unknown header: {s}\n", .{name});
+            std.debug.print("unknown header: {any}\n", .{name});
             return error.UnknownHeader;
         }
     } else return error.MalformedHeader;
@@ -67,27 +63,12 @@ fn gpgSig(_: *Commit, itr: *std.mem.SplitIterator(u8, .sequence)) !void {
     return error.InvalidGpgsig;
 }
 
-pub fn initAlloc(a: Allocator, sha_in: SHA, data: []const u8) !Commit {
-    const sha = try a.dupe(u8, sha_in);
-    const blob = try a.dupe(u8, data);
-
-    var self = try make(sha, blob, a);
-    self.alloc = a;
-    return self;
-}
-
 pub fn init(sha: SHA, data: []const u8) !Commit {
-    return make(sha, data, null);
-}
-
-pub fn make(sha: SHA, data: []const u8, a: ?Allocator) !Commit {
-    _ = a;
+    if (std.mem.startsWith(u8, data, "commit")) unreachable;
     var lines = std.mem.split(u8, data, "\n");
     var self: Commit = undefined;
-    self.repo = null;
     // I don't like it either, but... lazy
     self.parent = .{ null, null, null, null, null, null, null, null, null };
-    self.blob = data;
     while (lines.next()) |line| {
         if (std.mem.startsWith(u8, line, "gpgsig")) {
             self.gpgSig(&lines) catch |e| {
@@ -119,52 +100,46 @@ pub fn make(sha: SHA, data: []const u8, a: ?Allocator) !Commit {
     return self;
 }
 
-pub fn fromReader(a: Allocator, sha: SHA, reader: Git.Reader) !Commit {
-    var buffer: [0xFFFF]u8 = undefined;
-    const len = try reader.readAll(&buffer);
-    return try initAlloc(a, sha, buffer[0..len]);
+pub fn initOwned(sha: SHA, a: Allocator, object: Git.Object) !Commit {
+    var commit = try init(sha, object.body);
+    commit.alloc = a;
+    commit.memory = object.memory;
+    return commit;
 }
 
-pub fn toParent(self: Commit, a: Allocator, idx: u8) !Commit {
+pub fn toParent(self: Commit, a: Allocator, idx: u8, repo: *const Repo) !Commit {
     if (idx >= self.parent.len) return error.NoParent;
     if (self.parent[idx]) |parent| {
-        if (self.repo) |repo| {
-            var obj = try repo.findObj(a, parent);
-            defer obj.raze(a);
-            var cmt = try Commit.fromReader(a, parent, obj.reader());
-            cmt.repo = repo;
-            return cmt;
-        }
-        return error.DetachedCommit;
+        const tmp = try repo.loadObject(a, parent);
+        return try initOwned(parent, a, tmp);
     }
     return error.NoParent;
 }
 
-pub fn mkTree(self: Commit, a: Allocator) !Tree {
-    if (self.repo) |repo| {
-        return try Tree.fromRepo(a, repo.*, self.tree);
-    } else return error.DetachedCommit;
+pub fn mkTree(self: Commit, a: Allocator, repo: *const Repo) !Tree {
+    const tmp = try repo.loadObject(a, self.tree);
+    return try Tree.initOwned(self.tree, a, tmp);
 }
 
-pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8) !Tree {
-    const path = subpath orelse return self.mkTree(a);
-    if (path.len == 0) return self.mkTree(a);
+pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8, repo: *const Repo) !Tree {
+    const rootpath = subpath orelse return self.mkTree(a, repo);
+    if (rootpath.len == 0) return self.mkTree(a, repo);
 
-    var itr = std.mem.split(u8, path, "/");
-    var root = try self.mkTree(a);
-    root.path = try a.dupe(u8, path);
-    iter: while (itr.next()) |p| {
-        for (root.objects) |obj| {
-            if (std.mem.eql(u8, obj.name, p)) {
+    var itr = std.mem.split(u8, rootpath, "/");
+    var root = try self.mkTree(a, repo);
+    root.path = try a.dupe(u8, rootpath);
+    iter: while (itr.next()) |path| {
+        for (root.blobs) |obj| {
+            if (std.mem.eql(u8, obj.name, path)) {
                 if (itr.rest().len == 0) {
-                    defer root.raze(a);
-                    var out = try obj.toTree(a, self.repo.?.*);
-                    out.path = try a.dupe(u8, path);
+                    defer root.raze();
+                    var out = try obj.toTree(a, repo);
+                    out.path = try a.dupe(u8, rootpath);
                     return out;
                 } else {
-                    const tree = try obj.toTree(a, self.repo.?.*);
+                    const tree = try obj.toTree(a, repo);
                     defer root = tree;
-                    root.raze(a);
+                    root.raze();
                     continue :iter;
                 }
             }
@@ -175,10 +150,7 @@ pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8) !Tree {
 
 /// Warning; this function is probably unsafe
 pub fn raze(self: Commit) void {
-    if (self.alloc) |a| {
-        a.free(self.sha);
-        a.free(self.blob);
-    }
+    if (self.alloc) |a| a.free(self.memory.?);
 }
 
 pub fn format(
@@ -192,10 +164,10 @@ pub fn format(
         \\commit {s}
         \\tree {s}
         \\
-    , .{ self.sha, self.tree });
+    , .{ self.sha.hex[0..], self.tree.hex[0..] });
     for (self.parent) |par| {
         if (par) |p|
-            try out.print("parent {s}\n", .{p});
+            try out.print("parent {s}\n", .{p.hex[0..]});
     }
     try out.print(
         \\author {}

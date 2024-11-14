@@ -125,7 +125,7 @@ pub fn updateThread(cfg: *AgentConfig) void {
             const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
             const dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
             var repo = Git.Repo.init(dir) catch continue;
-            defer repo.raze(a);
+            defer repo.raze();
             repo.loadData(a) catch {
                 std.debug.print("Warning, unable to load data for repo {s}\n", .{rname});
             };

@@ -3,18 +3,17 @@ const Allocator = std.mem.Allocator;
 const zlib = std.compress.zlib;
 const PROT = std.posix.PROT;
 const MAP_TYPE = std.os.linux.MAP_TYPE;
+const AnyReader = std.io.AnyReader;
+const bufPrint = std.fmt.bufPrint;
 
 const Git = @import("../git.zig");
 const Error = Git.Error;
-const FBSReader = Git.FBSReader;
 const Repo = Git.Repo;
-const shaToHex = Git.shaToHex;
 
 const SHA = Git.SHA;
 
 pub const Pack = @This();
 
-name: SHA,
 pack: []u8,
 idx: []u8,
 pack_fd: std.fs.File,
@@ -41,7 +40,7 @@ const IdxHeader = extern struct {
     fanout: [256]u32,
 };
 
-const ObjType = enum(u3) {
+const PackedObjectTypes = enum(u3) {
     invalid = 0,
     commit = 1,
     tree = 2,
@@ -51,19 +50,22 @@ const ObjType = enum(u3) {
     ref_delta = 7,
 };
 
-const ObjHeader = struct {
-    kind: ObjType,
-    size: usize,
+pub const PackedObject = struct {
+    const Header = struct {
+        kind: PackedObjectTypes,
+        size: usize,
+    };
+    header: PackedObject.Header,
+    data: []u8,
 };
 
 /// assumes name ownership
-pub fn init(dir: std.fs.Dir, name: []u8) !Pack {
+pub fn init(dir: std.fs.Dir, name: []const u8) !Pack {
     std.debug.assert(name.len <= 45);
     var filename: [50]u8 = undefined;
-    const ifd = try dir.openFile(try std.fmt.bufPrint(&filename, "{s}.idx", .{name}), .{});
-    const pfd = try dir.openFile(try std.fmt.bufPrint(&filename, "{s}.pack", .{name}), .{});
+    const ifd = try dir.openFile(try bufPrint(&filename, "{s}.idx", .{name}), .{});
+    const pfd = try dir.openFile(try bufPrint(&filename, "{s}.pack", .{name}), .{});
     var pack = Pack{
-        .name = name,
         .pack = try mmap(pfd),
         .idx = try mmap(ifd),
         .pack_fd = pfd,
@@ -117,11 +119,11 @@ pub fn fanOutCount(self: Pack, i: u8) u32 {
 }
 
 pub fn contains(self: Pack, sha: SHA) ?u32 {
-    std.debug.assert(sha.len == 20);
-    return self.containsPrefix(sha) catch unreachable;
+    return self.containsPrefix(sha.bin[0..]) catch unreachable;
 }
 
-pub fn containsPrefix(self: Pack, sha: SHA) !?u32 {
+pub fn containsPrefix(self: Pack, sha: []const u8) !?u32 {
+    std.debug.assert(sha.len <= 20);
     const count: usize = self.fanOutCount(sha[0]);
     if (count == 0) return null;
 
@@ -140,15 +142,15 @@ pub fn containsPrefix(self: Pack, sha: SHA) !?u32 {
     return null;
 }
 
-pub fn getReaderOffset(self: Pack, offset: u32) !FBSReader {
+pub fn getReaderOffset(self: Pack, offset: u32) !AnyReader {
     if (offset > self.pack.len) return error.WTF;
     return self.pack[offset];
 }
 
-fn parseObjHeader(reader: *FBSReader) Pack.ObjHeader {
+fn parseObjHeader(reader: *AnyReader) PackedObject.Header {
     var byte: usize = 0;
     byte = reader.readByte() catch unreachable;
-    var h = Pack.ObjHeader{
+    var h = PackedObject.Header{
         .size = byte & 0b1111,
         .kind = @enumFromInt((byte & 0b01110000) >> 4),
     };
@@ -163,25 +165,24 @@ fn parseObjHeader(reader: *FBSReader) Pack.ObjHeader {
     return h;
 }
 
-fn loadBlob(a: Allocator, reader: *FBSReader) ![]u8 {
-    var _zlib = zlib.decompressor(reader.*);
-    var zr = _zlib.reader();
-    return try zr.readAllAlloc(a, 0xffffff);
+fn loadBlob(a: Allocator, reader: *AnyReader) ![]u8 {
+    var zlib_ = zlib.decompressor(reader.*);
+    return try zlib_.reader().readAllAlloc(a, 0xffffff);
 }
 
-fn readVarInt(reader: *FBSReader) !usize {
-    var byte: usize = try reader.readByte();
+fn readVarInt(reader: *AnyReader) error{ReadError}!usize {
+    var byte: usize = reader.readByte() catch return error.ReadError;
     var base: usize = byte & 0x7F;
     while (byte >= 0x80) {
         base += 1;
-        byte = try reader.readByte();
+        byte = reader.readByte() catch return error.ReadError;
         base = (base << 7) + (byte & 0x7F);
     }
     //std.debug.print("varint = {}\n", .{base});
     return base;
 }
 
-fn deltaInst(reader: *FBSReader, writer: anytype, base: []u8) !usize {
+fn deltaInst(reader: *AnyReader, writer: anytype, base: []u8) !usize {
     const readb: usize = try reader.readByte();
     if (readb == 0) {
         std.debug.print("INVALID INSTRUCTION 0x00\n", .{});
@@ -219,81 +220,131 @@ fn deltaInst(reader: *FBSReader, writer: anytype, base: []u8) !usize {
     }
 }
 
-fn loadRefDelta(_: Pack, a: Allocator, reader: *FBSReader, _: usize, repo: Repo) ![]u8 {
+fn loadRefDelta(_: Pack, a: Allocator, reader: *AnyReader, _: usize, repo: *const Repo) Error!PackedObject {
     var buf: [20]u8 = undefined;
-    var hexy: [40]u8 = undefined;
 
-    _ = try reader.read(&buf);
-    shaToHex(&buf, &hexy);
-    const basez = repo.findBlob(a, &buf) catch return error.BlobMissing;
-    defer a.free(basez);
+    if (reader.read(&buf)) |count| {
+        if (count != 20) return error.PackCorrupt;
+    } else |_| return error.ReadError;
+    const sha = SHA.init(buf[0..]);
+    // I hate it too... but I need a break
+    var basefree: []u8 = undefined;
+    var basedata: []u8 = undefined;
+    var basetype: PackedObjectTypes = undefined;
+    switch (repo.loadObjectOrDelta(a, sha) catch return error.BlobMissing) {
+        .pack => |pk| {
+            basefree = pk.data;
+            basedata = pk.data;
+            basetype = pk.header.kind;
+        },
+        .file => |fdata| {
+            basefree = fdata.memory;
+            basedata = fdata.body;
+            basetype = switch (fdata.kind) {
+                .blob => .blob,
+                .tree => .tree,
+                .commit => .commit,
+                .tag => .tag,
+            };
+        },
+    }
+    defer a.free(basefree);
 
-    var _zlib = zlib.decompressor(reader.*);
-    var zr = _zlib.reader();
-    const inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
+    var zlib_ = zlib.decompressor(reader.*);
+    const inst = zlib_.reader().readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
     defer a.free(inst);
     var inst_fbs = std.io.fixedBufferStream(inst);
-    var inst_reader = inst_fbs.reader();
+    var inst_reader = inst_fbs.reader().any();
     // We don't actually need these when zlib works :)
     _ = try readVarInt(&inst_reader);
     _ = try readVarInt(&inst_reader);
     var buffer = std.ArrayList(u8).init(a);
     while (true) {
-        _ = deltaInst(&inst_reader, buffer.writer(), basez) catch {
+        _ = deltaInst(&inst_reader, buffer.writer(), basedata) catch {
             break;
         };
     }
-    return try buffer.toOwnedSlice();
+    return .{
+        .header = .{
+            .size = 0,
+            .kind = basetype,
+        },
+        .data = try buffer.toOwnedSlice(),
+    };
 }
 
-fn loadDelta(self: Pack, a: Allocator, reader: *FBSReader, offset: usize, repo: Repo) ![]u8 {
+fn loadDelta(self: Pack, a: Allocator, reader: *AnyReader, offset: usize, repo: *const Repo) Error!PackedObject {
     // fd pos is offset + 2-ish because of the header read
     const srclen = try readVarInt(reader);
 
-    var _zlib = zlib.decompressor(reader.*);
-    var zr = _zlib.reader();
-    const inst = zr.readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
+    var zlib_ = zlib.decompressor(reader.*);
+    const inst = zlib_.reader().readAllAlloc(a, 0xffffff) catch return error.PackCorrupt;
     defer a.free(inst);
     var inst_fbs = std.io.fixedBufferStream(inst);
-    var inst_reader = inst_fbs.reader();
+    var inst_reader = inst_fbs.reader().any();
     // We don't actually need these when zlib works :)
     _ = try readVarInt(&inst_reader);
     _ = try readVarInt(&inst_reader);
 
     const baseobj_offset = offset - srclen;
-    const basez = try self.loadObj(a, baseobj_offset, repo);
-    defer a.free(basez);
+    const baseobj = try self.loadData(a, baseobj_offset, repo);
+    defer a.free(baseobj.data);
 
     var buffer = std.ArrayList(u8).init(a);
     while (true) {
-        _ = deltaInst(&inst_reader, buffer.writer(), basez) catch {
+        _ = deltaInst(&inst_reader, buffer.writer(), baseobj.data) catch {
             break;
         };
     }
-    return try buffer.toOwnedSlice();
+    return .{
+        .header = baseobj.header,
+        .data = try buffer.toOwnedSlice(),
+    };
 }
 
-pub fn loadObj(self: Pack, a: Allocator, offset: usize, repo: Repo) Error![]u8 {
+pub fn loadData(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Error!PackedObject {
     var fbs = std.io.fixedBufferStream(self.pack[offset..]);
-    var reader = fbs.reader();
+    var reader = fbs.reader().any();
     const h = parseObjHeader(&reader);
 
-    switch (h.kind) {
-        .commit, .tree, .blob, .tag => return loadBlob(a, &reader) catch return error.PackCorrupt,
-        .ofs_delta => return try self.loadDelta(a, &reader, offset, repo),
-        .ref_delta => return try self.loadRefDelta(a, &reader, offset, repo),
-        .invalid => {
-            std.debug.print("obj type ({}) not implemened\n", .{h.kind});
-            unreachable; // not implemented
+    return .{
+        .header = h,
+        .data = switch (h.kind) {
+            .commit, .tree, .blob, .tag => loadBlob(a, &reader) catch return error.PackCorrupt,
+            .ofs_delta => return try self.loadDelta(a, &reader, offset, repo),
+            .ref_delta => return try self.loadRefDelta(a, &reader, offset, repo),
+            .invalid => {
+                std.debug.print("obj type ({}) not implemened\n", .{h.kind});
+                @panic("not implemented");
+            },
         },
-    }
-    unreachable;
+    };
 }
 
-pub fn raze(self: Pack, a: Allocator) void {
+pub fn resolveObject(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Error!Git.Object {
+    const resolved = try self.loadData(a, offset, repo);
+    errdefer a.free(resolved.data);
+
+    return switch (resolved.header.kind) {
+        .blob, .tree, .commit, .tag => |kind| .{
+            .kind = switch (kind) {
+                .blob => .blob,
+                .tree => .tree,
+                .commit => .commit,
+                .tag => .tag,
+                else => unreachable,
+            },
+            .memory = resolved.data,
+            .header = resolved.data[0..0],
+            .body = resolved.data,
+        },
+        else => return error.IncompleteObject,
+    };
+}
+
+pub fn raze(self: Pack) void {
     self.pack_fd.close();
     self.idx_fd.close();
     munmap(@alignCast(self.pack));
     munmap(@alignCast(self.idx));
-    a.free(self.name);
 }

@@ -20,7 +20,7 @@ const Scribe = struct {
         repo: []const u8,
         title: []const u8,
         date: DateTime,
-        sha: []const u8,
+        sha: Git.SHA,
 
         pub fn toContext(self: Commit, a: Allocator) !Template.Context {
             var jctx = Template.Context.init(a);
@@ -32,8 +32,8 @@ const Scribe = struct {
                 "<span>{Y-m-d}</span><span>{day}</span><span>{time}</span>",
                 .{ self.date, self.date, self.date },
             ));
-            try jctx.putSlice("ShaLong", self.sha);
-            try jctx.putSlice("Sha", self.sha[0..8]);
+            try jctx.putSlice("ShaLong", self.sha.hex[0..]);
+            try jctx.putSlice("Sha", self.sha.hex[0..8]);
             return jctx;
         }
     };
@@ -56,7 +56,7 @@ const HeatMapSize = 366 + 6;
 const HeatMapArray = [HeatMapSize]u16;
 
 pub const HeatMap = struct {
-    sha: [40]u8,
+    sha: Git.SHA.Bin,
     hits: HeatMapArray,
 };
 
@@ -79,11 +79,12 @@ fn countAll(
     seen: *std.BufSet,
     until: i64,
     root_cmt: Git.Commit,
+    repo: *const Git.Repo,
     email: []const u8,
 ) !*HeatMapArray {
     var commit = root_cmt;
     while (true) {
-        if (seen.contains(commit.sha)) return hits;
+        if (seen.contains(commit.sha.bin[0..])) return hits;
         var commit_time = commit.author.timestamp;
         if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
             commit_time += tzs;
@@ -95,14 +96,14 @@ fn countAll(
             hits[day_off] += 1;
         }
         for (commit.parent[1..], 1..) |par, pidx| {
-            if (par) |_| {
-                seen.insert(par.?) catch unreachable;
-                const parent = try commit.toParent(a, @truncate(pidx));
+            if (par) |p| {
+                seen.insert(p.bin[0..]) catch unreachable;
+                const parent = try commit.toParent(a, @truncate(pidx), repo);
                 //defer parent.raze(a);
-                _ = try countAll(a, hits, seen, until, parent, email);
+                _ = try countAll(a, hits, seen, until, parent, repo, email);
             }
         }
-        commit = commit.toParent(a, 0) catch |err| switch (err) {
+        commit = commit.toParent(a, 0, repo) catch |err| switch (err) {
             error.NoParent => {
                 return hits;
             },
@@ -131,14 +132,14 @@ fn buildJournal(
     const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
     try repo.loadData(a);
-    defer repo.raze(a);
+    defer repo.raze();
 
     var lseen = std.BufSet.init(a);
     const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
     var commit = try repo.headCommit(a);
 
     while (true) {
-        if (lseen.contains(commit.sha)) break;
+        if (lseen.contains(commit.sha.bin[0..])) break;
         var commit_time = commit.author.timestamp;
         if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
             commit_time += tzs;
@@ -149,12 +150,12 @@ fn buildJournal(
                 .name = try Bleach.sanitizeAlloc(a, commit.author.name, .{}),
                 .title = try Bleach.sanitizeAlloc(a, commit.title, .{}),
                 .date = DateTime.fromEpoch(commit_time),
-                .sha = try a.dupe(u8, commit.sha),
+                .sha = commit.sha,
                 .repo = try a.dupe(u8, gitdir[8..]),
             });
         }
 
-        commit = commit.toParent(a, 0) catch |err| switch (err) {
+        commit = commit.toParent(a, 0, &repo) catch |err| switch (err) {
             error.NoParent => break,
             else => |e| return e,
         };
@@ -165,7 +166,7 @@ fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const 
     const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
     try repo.loadData(a);
-    defer repo.raze(a);
+    defer repo.raze();
 
     // TODO return empty hits here
     const commit = repo.headCommit(a) catch unreachable;
@@ -186,10 +187,10 @@ fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const 
         @memset(hits[0..], 0);
     }
 
-    if (!std.mem.eql(u8, heatmap.sha[0..], commit.sha[0..40])) {
-        @memcpy(heatmap.sha[0..], commit.sha[0..40]);
+    if (!std.mem.eql(u8, heatmap.sha[0..], commit.sha.bin[0..])) {
+        @memcpy(heatmap.sha[0..], commit.sha.bin[0..]);
         @memset(hits[0..], 0);
-        _ = try countAll(a, hits, seen, until, commit, email);
+        _ = try countAll(a, hits, seen, until, commit, &repo, email);
     }
 
     return hits;

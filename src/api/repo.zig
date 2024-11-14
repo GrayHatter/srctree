@@ -59,7 +59,7 @@ pub fn repo(ctx: *API.Context) API.Routes.Error!void {
             return try ctx.sendJSON([0]Repo{});
         },
     };
-    defer gitrepo.raze(ctx.alloc);
+    defer gitrepo.raze();
 
     const head = switch (gitrepo.HEAD(ctx.alloc) catch return error.Unknown) {
         .branch => |b| b.sha,
@@ -69,7 +69,7 @@ pub fn repo(ctx: *API.Context) API.Routes.Error!void {
 
     return try ctx.sendJSON([1]Repo{.{
         .name = req.name,
-        .head = head,
+        .head = head.hex[0..],
         .updated = "undefined",
     }});
 }
@@ -94,7 +94,7 @@ pub fn repoBranches(ctx: *API.Context) API.Routes.Error!void {
             return try ctx.sendJSON([0]RepoBranches{});
         },
     };
-    defer gitrepo.raze(ctx.alloc);
+    defer gitrepo.raze();
 
     return try ctx.sendJSON([1]RepoBranches{.{
         .name = req.name,
@@ -125,9 +125,8 @@ pub fn repoTags(ctx: *API.Context) API.Routes.Error!void {
             return try ctx.sendJSON([0]RepoTags{});
         },
     };
-    defer gitrepo.raze(ctx.alloc);
-
-    gitrepo.loadTags(ctx.alloc) catch return error.Unknown;
+    gitrepo.loadData(ctx.alloc) catch return error.Unknown;
+    defer gitrepo.raze();
 
     const repotags = gitrepo.tags orelse return try ctx.sendJSON([1]RepoTags{.{
         .name = req.name,

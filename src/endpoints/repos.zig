@@ -282,9 +282,9 @@ fn list(ctx: *Context) Error!void {
             const rdir = idir.openDir(file.name, .{}) catch continue;
             var rpo = Git.Repo.init(rdir) catch continue;
             rpo.loadData(ctx.alloc) catch return error.Unknown;
+            defer rpo.raze();
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
 
-            rpo.loadTags(ctx.alloc) catch return error.Unknown;
             if (rpo.tags != null) {
                 std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
             }
@@ -305,7 +305,7 @@ fn list(ctx: *Context) Error!void {
 
         const repos_compiled = try ctx.alloc.alloc(Template.Structs.Repolist, repos.items.len);
         for (repos.items, repos_compiled) |*repo, *compiled| {
-            defer repo.raze(ctx.alloc);
+            defer repo.raze();
             compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
                 return error.Unknown;
             };
@@ -361,7 +361,7 @@ fn treeBlob(ctx: *Context) Error!void {
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze(ctx.alloc);
+    defer repo.raze();
 
     if (Repos.hasUpstream(ctx.alloc, repo) catch return error.Unknown) |up| {
         var upstream = [_]Template.Context{
@@ -384,17 +384,17 @@ fn treeBlob(ctx: *Context) Error!void {
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
 
     const cmt = repo.headCommit(ctx.alloc) catch return newRepo(ctx);
-    var files: Git.Tree = cmt.mkTree(ctx.alloc) catch return error.Unknown;
+    var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
     if (rd.verb) |blb| {
         if (std.mem.eql(u8, blb, "blob")) {
             return blob(ctx, &repo, files);
         } else if (std.mem.eql(u8, blb, "tree")) {
-            files = mkTree(ctx.alloc, repo, &ctx.uri, files) catch return error.Unknown;
+            files = mkTree(ctx.alloc, &repo, &ctx.uri, files) catch return error.Unknown;
             return tree(ctx, &repo, &files);
         } else if (std.mem.eql(u8, blb, "")) { // There's a better way to do this
-            files = cmt.mkTree(ctx.alloc) catch return error.Unknown;
+            files = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
         } else return error.InvalidURI;
-    } else files = cmt.mkTree(ctx.alloc) catch return error.Unknown;
+    } else files = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
     return tree(ctx, &repo, &files);
 }
 
@@ -485,7 +485,7 @@ fn blame(ctx: *Context) Error!void {
     const fname = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(fname, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
-    defer repo.raze(ctx.alloc);
+    defer repo.raze();
 
     var actions = repo.getAgent(ctx.alloc);
     actions.cwd = cwd.openDir(fname, .{}) catch unreachable;
@@ -591,33 +591,30 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
 
     var files = pfiles;
     search: while (ctx.uri.next()) |bname| {
-        for (files.objects) |obj| {
+        for (files.blobs) |obj| {
             if (std.mem.eql(u8, bname, obj.name)) {
                 blb = obj;
                 if (obj.isFile()) {
                     if (ctx.uri.next()) |_| return error.InvalidURI;
                     break :search;
                 }
-                files = Git.Tree.fromRepo(ctx.alloc, repo.*, &obj.hash) catch return error.Unknown;
+                const treeobj = repo.loadObject(ctx.alloc, obj.sha) catch return error.Unknown;
+                files = Git.Tree.initOwned(obj.sha, ctx.alloc, treeobj) catch return error.Unknown;
                 continue :search;
             }
         } else return error.InvalidURI;
     }
 
-    var resolve = repo.blob(ctx.alloc, &blb.hash) catch return error.Unknown;
-    var reader = resolve.reader();
-
+    var resolve = repo.loadBlob(ctx.alloc, blb.sha) catch return error.Unknown;
+    if (!resolve.isFile()) return error.Unknown;
     var formatted: []const u8 = undefined;
-
-    const d2 = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
-
     if (Highlighting.Language.guessFromFilename(blb.name)) |lang| {
-        const pre = try Highlighting.highlight(ctx.alloc, lang, d2);
+        const pre = try Highlighting.highlight(ctx.alloc, lang, resolve.data.?);
         formatted = pre[28..][0 .. pre.len - 38];
     } else if (excludedExt(blb.name)) {
         formatted = "This file type is currently unsupported";
     } else {
-        formatted = Bleach.sanitizeAlloc(ctx.alloc, d2, .{}) catch return error.Unknown;
+        formatted = Bleach.sanitizeAlloc(ctx.alloc, resolve.data.?, .{}) catch return error.Unknown;
     }
 
     var dom = DOM.new(ctx.alloc);
@@ -651,11 +648,12 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn mkTree(a: Allocator, repo: Git.Repo, uri: *UriIter, pfiles: Git.Tree) !Git.Tree {
+fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *UriIter, pfiles: Git.Tree) !Git.Tree {
     var files: Git.Tree = pfiles;
-    if (uri.next()) |udir| for (files.objects) |obj| {
+    if (uri.next()) |udir| for (files.blobs) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
-            files = try Git.Tree.fromRepo(a, repo, &obj.hash);
+            const treeobj = try repo.loadObject(a, obj.sha);
+            files = try Git.Tree.initOwned(obj.sha, a, treeobj);
             return try mkTree(a, repo, uri, files);
         }
     };
@@ -702,7 +700,7 @@ fn drawFileLine(
 
     // I know... I KNOW!!!
     dom = dom.open(HTML.div(null, null));
-    const commit_href = try aPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha[0..8] });
+    const commit_href = try aPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha.hex[0..8] });
     dom.push(try HTML.aHrefAlloc(a, ch.commit_title, commit_href));
     dom.dupe(HTML.span(try aPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
     dom = dom.close();
@@ -738,7 +736,7 @@ const TreePage = Template.PageData("tree.html");
 
 fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     const head = if (repo.head) |h| switch (h) {
-        .sha => |s| s,
+        .sha => |s| s.hex[0..],
         .branch => |b| b.name,
         else => "unknown",
     } else "unknown";
@@ -764,9 +762,9 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     dom.push(HTML.span(c.title[0..@min(c.title.len, 50)], null));
     const commit_time = try aPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
     dom = dom.open(HTML.span(null, &HTML.Attr.class("muted")));
-    const commit_href = try aPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha[0..8] });
+    const commit_href = try aPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha.hex[0..8] });
     dom.push(HTML.text(commit_time));
-    dom.push(try HTML.aHrefAlloc(ctx.alloc, c.sha[0..8], commit_href));
+    dom.push(try HTML.aHrefAlloc(ctx.alloc, c.sha.hex[0..8], commit_href));
     dom = dom.close();
     dom = dom.close();
 
@@ -787,8 +785,8 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     }
     try files.pushPath(ctx.alloc, uri_base);
     if (files.changedSet(ctx.alloc, repo)) |changed| {
-        std.sort.pdq(Git.Blob, files.objects, {}, typeSorter);
-        for (files.objects) |obj| {
+        std.sort.pdq(Git.Blob, files.blobs, {}, typeSorter);
+        for (files.blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
                     dom = try drawFileLine(ctx.alloc, dom, rd.name, uri_base, obj, ch);
@@ -808,12 +806,11 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
     const repo_data = dom.done();
 
     var readme: ?[]const u8 = null;
-    for (files.objects) |obj| {
+
+    for (files.blobs) |obj| {
         if (isReadme(obj.name)) {
-            var resolve = repo.blob(ctx.alloc, &obj.hash) catch return error.Unknown;
-            var reader = resolve.reader();
-            const readme_txt = reader.readAllAlloc(ctx.alloc, 0xffffff) catch unreachable;
-            const readme_html = htmlReadme(ctx.alloc, readme_txt) catch unreachable;
+            const resolve = repo.blob(ctx.alloc, obj.sha) catch return error.Unknown;
+            const readme_html = htmlReadme(ctx.alloc, resolve.data.?) catch unreachable;
             readme = try std.fmt.allocPrint(ctx.alloc, "{pretty}", .{readme_html[0]});
             break;
         }
@@ -843,9 +840,8 @@ fn tagsList(ctx: *Context) Error!void {
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze(ctx.alloc);
+    defer repo.raze();
 
-    repo.loadTags(ctx.alloc) catch unreachable;
     std.sort.heap(Git.Tag, repo.tags.?, {}, tagSorter);
 
     const tstack = try ctx.alloc.alloc(Template.Structs.Tags, repo.tags.?.len);

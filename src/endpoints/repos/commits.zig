@@ -74,11 +74,11 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         return error.Abusive;
     }
 
-    const current: Git.Commit = repo.commit(ctx.alloc, sha) catch cmt: {
+    const current: Git.Commit = repo.commit(ctx.alloc, Git.SHA.init(sha)) catch cmt: {
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
-        while (!std.mem.startsWith(u8, fallback.sha, sha)) {
-            fallback = fallback.toParent(ctx.alloc, 0) catch return error.Unknown;
+        while (!std.mem.startsWith(u8, fallback.sha.hex[0..], sha)) {
+            fallback = fallback.toParent(ctx.alloc, 0, &repo) catch return error.Unknown;
         }
         break :cmt fallback;
     };
@@ -165,8 +165,8 @@ pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
     var current: Git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
     var acts = repo.getAgent(ctx.alloc);
     if (std.mem.indexOf(u8, sha, ".patch")) |tail| {
-        while (!std.mem.startsWith(u8, current.sha, sha[0..tail])) {
-            current = current.toParent(ctx.alloc, 0) catch return error.Unknown;
+        while (!std.mem.startsWith(u8, current.sha.hex[0..], sha[0..tail])) {
+            current = current.toParent(ctx.alloc, 0, &repo) catch return error.Unknown;
         }
 
         var diff = acts.show(sha[0..tail]) catch return error.Unknown;
@@ -193,7 +193,7 @@ pub fn viewCommit(ctx: *Context) Error!void {
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze(ctx.alloc);
+    defer repo.raze();
 
     if (std.mem.endsWith(u8, sha, ".patch"))
         return commitPatch(ctx, sha, repo)
@@ -213,8 +213,8 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Templa
         // TODO leaks on err
         if (par_cmt == null) continue;
         par.* = .{
-            .parent_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?[0..8] }),
-            .parent_sha_short = try a.dupe(u8, par_cmt.?[0..8]),
+            .parent_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?.hex[0..8] }),
+            .parent_sha_short = try a.dupe(u8, par_cmt.?.hex[0..8]),
         };
     }
 
@@ -225,8 +225,8 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Struct
     return .{
         .author = Bleach.sanitizeAlloc(a, c.author.name, .{}) catch unreachable,
         .parents = try commitCtxParents(a, c, repo),
-        .sha_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
-        .sha_short = try a.dupe(u8, c.sha[0..8]),
+        .sha_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha.hex[0..8] }),
+        .sha_short = try a.dupe(u8, c.sha.hex[0..8]),
         //.sha = try a.dupe(u8, c.sha),
         .title = Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable,
         .body = Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable,
@@ -279,8 +279,8 @@ pub fn htmlCommit(a: Allocator, c: Git.Commit, repo: []const u8, comptime top: b
 fn commitContext(a: Allocator, c: Git.Commit, repo: []const u8, comptime _: bool) !Template.Context {
     var ctx = Template.Context.init(a);
 
-    try ctx.putSlice("Sha", c.sha[0..8]);
-    try ctx.putSlice("Uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }));
+    try ctx.putSlice("Sha", c.sha.hex[0..8]);
+    try ctx.putSlice("Uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha.hex[0..8] }));
     // TODO handle error.NotImplemented
     try ctx.putSlice("Msg_title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
     try ctx.putSlice("Msg", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
@@ -293,8 +293,12 @@ fn commitContext(a: Allocator, c: Git.Commit, repo: []const u8, comptime _: bool
         var pctx = Template.Context.init(a);
         if (par_cmt == null) continue;
 
-        try pctx.putSlice("Parent", par_cmt.?[0..8]);
-        try pctx.putSlice("Parent_uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?[0..8] }));
+        try pctx.putSlice("Parent", par_cmt.?.hex[0..8]);
+        try pctx.putSlice("Parent_uri", try std.fmt.allocPrint(
+            a,
+            "/repo/{s}/commit/{s}",
+            .{ repo, par_cmt.?.hex[0..8] },
+        ));
         par.* = pctx;
     }
     try ctx.putBlock("Parents", parents);
@@ -307,9 +311,9 @@ fn buildList(
     name: []const u8,
     before: ?[]const u8,
     elms: []Template.Context,
-    sha: []u8,
+    outsha: *Git.SHA,
 ) ![]Template.Context {
-    return buildListBetween(a, repo, name, null, before, elms, sha);
+    return buildListBetween(a, repo, name, null, before, elms, outsha);
 }
 
 fn buildListBetween(
@@ -319,19 +323,19 @@ fn buildListBetween(
     left: ?[]const u8,
     right: ?[]const u8,
     elms: []Template.Context,
-    sha: []u8,
+    outsha: *Git.SHA,
 ) ![]Template.Context {
     var current: Git.Commit = repo.headCommit(a) catch return error.Unknown;
     if (right) |r| {
         std.debug.assert(r.len <= 40);
-        const min = @min(r.len, current.sha.len);
-        while (!std.mem.eql(u8, r, current.sha[0..min])) {
-            current = current.toParent(a, 0) catch {
+        const min = @min(r.len, current.sha.hex.len);
+        while (!std.mem.eql(u8, r, current.sha.hex[0..min])) {
+            current = current.toParent(a, 0, &repo) catch {
                 std.debug.print("unable to build commit history\n", .{});
                 return elms[0..0];
             };
         }
-        current = current.toParent(a, 0) catch {
+        current = current.toParent(a, 0, &repo) catch {
             std.debug.print("unable to build commit history\n", .{});
             return elms[0..0];
         };
@@ -339,13 +343,13 @@ fn buildListBetween(
     var count: usize = 0;
     for (elms, 1..) |*c, i| {
         count = i;
-        @memcpy(sha, current.sha[0..8]);
+        outsha.* = Git.SHA.init(current.sha.bin[0..]);
         c.* = try commitContext(a, current, name, false);
         if (left) |l| {
-            const min = @min(l.len, current.sha.len);
-            if (std.mem.eql(u8, l, current.sha[0..min])) break;
+            const min = @min(l.len, current.sha.hex.len);
+            if (std.mem.eql(u8, l, current.sha.hex[0..min])) break;
         }
-        current = current.toParent(a, 0) catch {
+        current = current.toParent(a, 0, &repo) catch {
             break;
         };
     }
@@ -387,13 +391,16 @@ pub fn commits(ctx: *Context) Error!void {
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze(ctx.alloc);
+    defer repo.raze();
 
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
-    var last_sha: [8]u8 = undefined;
+    var last_sha: Git.SHA = undefined;
     const cmts_list = try buildList(ctx.alloc, repo, rd.name, commitish, commits_b, &last_sha);
 
-    const before_txt = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
+    const before_txt = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{
+        rd.name,
+        last_sha.hex[0..8],
+    });
     return sendCommits(ctx, cmts_list, before_txt);
 }
 

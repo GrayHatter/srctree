@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const hexLower = std.fmt.fmtSliceHexLower;
+const bufPrint = std.fmt.bufPrint;
 
 const Git = @import("../git.zig");
 const SHA = Git.SHA;
@@ -9,10 +10,12 @@ const Blob = @import("blob.zig");
 
 const Tree = @This();
 
-sha: []const u8,
+alloc: Allocator,
+memory: ?[]u8 = null,
+sha: SHA,
 path: ?[]const u8 = null,
 blob: []const u8,
-objects: []Blob,
+blobs: []Blob,
 
 pub fn pushPath(self: *Tree, a: Allocator, path: []const u8) !void {
     const spath = self.path orelse {
@@ -24,18 +27,12 @@ pub fn pushPath(self: *Tree, a: Allocator, path: []const u8) !void {
     a.free(spath);
 }
 
-pub fn fromRepo(a: Allocator, r: Repo, sha: SHA) !Tree {
-    var blob = try r.findObj(a, sha);
-    defer blob.raze(a);
-    const b = try blob.reader().readAllAlloc(a, 0xffff);
-    return try Tree.make(a, sha, b);
-}
-
-pub fn make(a: Allocator, sha: SHA, blob: []const u8) !Tree {
+pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
     var self: Tree = .{
-        .sha = try a.dupe(u8, sha),
+        .alloc = a,
+        .sha = sha,
         .blob = blob,
-        .objects = try a.alloc(Blob, std.mem.count(u8, blob, "\x00")),
+        .blobs = try a.alloc(Blob, std.mem.count(u8, blob, "\x00")),
     };
 
     var i: usize = 0;
@@ -49,52 +46,54 @@ pub fn make(a: Allocator, sha: SHA, blob: []const u8) !Tree {
     }
     var obj_i: usize = 0;
     while (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
-        var obj = &self.objects[obj_i];
+        var obj = &self.blobs[obj_i];
+
         obj_i += 1;
         if (blob[i] == '1') {
-            _ = try std.fmt.bufPrint(&obj.mode, "{s}", .{blob[i .. i + 6]});
-            _ = try std.fmt.bufPrint(&obj.hash, "{}", .{hexLower(blob[index + 1 .. index + 21])});
+            _ = try bufPrint(&obj.mode, "{s}", .{blob[i .. i + 6]});
+            obj.sha = SHA.init(blob[index + 1 .. index + 21]);
             obj.name = blob[i + 7 .. index];
         } else if (blob[i] == '4') {
-            _ = try std.fmt.bufPrint(&obj.mode, "0{s}", .{blob[i .. i + 5]});
-            _ = try std.fmt.bufPrint(&obj.hash, "{}", .{hexLower(blob[index + 1 .. index + 21])});
+            _ = try bufPrint(&obj.mode, "0{s}", .{blob[i .. i + 5]});
+            obj.sha = SHA.init(blob[index + 1 .. index + 21]);
             obj.name = blob[i + 6 .. index];
         } else std.debug.print("panic {s} ", .{blob[i..index]});
 
         i = index + 21;
     }
-    if (a.resize(self.objects, obj_i)) {
-        self.objects.len = obj_i;
+    if (a.resize(self.blobs, obj_i)) {
+        self.blobs.len = obj_i;
     }
     return self;
 }
 
-pub fn fromReader(a: Allocator, sha: SHA, reader: Git.Reader) !Tree {
-    const buf = try reader.readAllAlloc(a, 0xffff);
-    return try Tree.make(a, sha, buf);
+pub fn initOwned(sha: SHA, a: Allocator, obj: Git.Object) !Tree {
+    var tree = try init(sha, a, obj.body);
+    tree.memory = obj.memory;
+    return tree;
 }
 
-pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]Git.ChangeSet {
+pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]Git.ChangeSet {
     const cmtt = try repo.headCommit(a);
     defer cmtt.raze();
-    const search_list: []?Blob = try a.alloc(?Blob, self.objects.len);
-    for (self.objects, search_list) |src, *dst| {
+    const search_list: []?Blob = try a.alloc(?Blob, self.blobs.len);
+    for (self.blobs, search_list) |src, *dst| {
         dst.* = src;
     }
     defer a.free(search_list);
 
     var par = try repo.headCommit(a);
-    var ptree = try par.mkSubTree(a, self.path);
+    var ptree = try par.mkSubTree(a, self.path, repo);
 
-    var changed = try a.alloc(Git.ChangeSet, self.objects.len);
+    var changed = try a.alloc(Git.ChangeSet, self.blobs.len);
     var old = par;
     var oldtree = ptree;
     var found: usize = 0;
     while (found < search_list.len) {
         old = par;
         oldtree = ptree;
-        par = par.toParent(a, 0) catch |err| switch (err) {
-            error.NoParent => {
+        par = par.toParent(a, 0, repo) catch |err| switch (err) {
+            error.NoParent, error.IncompleteObject => {
                 for (search_list, 0..) |search_ish, i| {
                     if (search_ish) |search| {
                         found += 1;
@@ -108,13 +107,13 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]Git.ChangeSet {
                     }
                 }
                 old.raze();
-                oldtree.raze(a);
+                oldtree.raze();
                 break;
             },
             else => |e| return e,
         };
-        ptree = par.mkSubTree(a, self.path) catch |err| switch (err) {
-            error.PathNotFound => {
+        ptree = par.mkSubTree(a, self.path, repo) catch |err| switch (err) {
+            error.PathNotFound, error.IncompleteObject => {
                 for (search_list, 0..) |search_ish, i| {
                     if (search_ish) |search| {
                         found += 1;
@@ -128,7 +127,7 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]Git.ChangeSet {
                     }
                 }
                 old.raze();
-                oldtree.raze(a);
+                oldtree.raze();
                 break;
             },
             else => |e| return e,
@@ -152,19 +151,18 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *Repo) ![]Git.ChangeSet {
             }
         }
         old.raze();
-        oldtree.raze(a);
+        oldtree.raze();
     }
 
     par.raze();
-    ptree.raze(a);
+    ptree.raze();
     return changed;
 }
 
-pub fn raze(self: Tree, a: Allocator) void {
-    a.free(self.sha);
-    if (self.path) |p| a.free(p);
-    a.free(self.objects);
-    a.free(self.blob);
+pub fn raze(self: Tree) void {
+    if (self.path) |p| self.alloc.free(p);
+    if (self.memory) |m| self.alloc.free(m);
+    self.alloc.free(self.blobs);
 }
 
 pub fn format(self: Tree, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
