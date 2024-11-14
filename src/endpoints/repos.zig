@@ -282,7 +282,6 @@ fn list(ctx: *Context) Error!void {
             const rdir = idir.openDir(file.name, .{}) catch continue;
             var rpo = Git.Repo.init(rdir) catch continue;
             rpo.loadData(ctx.alloc) catch return error.Unknown;
-            defer rpo.raze();
             rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
 
             if (rpo.tags != null) {
