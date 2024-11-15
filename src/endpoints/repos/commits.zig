@@ -74,7 +74,8 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         return error.Abusive;
     }
 
-    const current: Git.Commit = repo.commit(ctx.alloc, Git.SHA.init(sha)) catch cmt: {
+    // lol... I'd forgotten I'd done this. >:)
+    const current: Git.Commit = repo.commit(ctx.alloc, Git.SHA.initPartial(sha)) catch cmt: {
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
         while (!std.mem.startsWith(u8, fallback.sha.hex[0..], sha)) {

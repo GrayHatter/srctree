@@ -44,6 +44,8 @@ pub const SHA = struct {
     bin: Bin,
     hex: Hex,
     partial: bool = false,
+    len: usize = 0,
+    binlen: usize = 0,
 
     pub fn init(sha: []const u8) SHA {
         if (sha.len == 20) {
@@ -59,7 +61,17 @@ pub const SHA = struct {
         } else unreachable;
     }
 
-    pub fn initPartial(_: []const u8) !SHA {}
+    pub fn initPartial(sha: []const u8) SHA {
+        var buf: [40]u8 = ("0" ** 40).*;
+        for (buf[0..sha.len], sha[0..]) |*dst, src| dst.* = src;
+        return .{
+            .bin = toBin(buf[0..40].*),
+            .hex = buf[0..].*,
+            .partial = true,
+            .len = sha.len,
+            .binlen = sha.len / 2,
+        };
+    }
 
     pub fn toHex(sha: Bin) Hex {
         var hex: Hex = undefined;
@@ -207,10 +219,20 @@ pub const Repo = struct {
         return null;
     }
 
+    fn expandPartial(self: Repo, sha: SHA) !?SHA {
+        std.debug.assert(sha.partial == true);
+        for (self.packs) |pack| {
+            if (try pack.containsPrefix(sha.bin[0..sha.binlen])) |_| {
+                return try pack.expandPrefix(sha.bin[0..sha.binlen]);
+            }
+        }
+        return null;
+    }
+
     fn loadPackedPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
         std.debug.assert(sha.partial == true);
         for (self.packs) |pack| {
-            if (try pack.containsPrefix(sha.bin[0..])) |offset| {
+            if (try pack.containsPrefix(sha.bin[0..sha.binlen])) |offset| {
                 return try pack.resolveObject(a, offset, &self);
             }
         }
@@ -243,6 +265,7 @@ pub const Repo = struct {
 
     /// TODO binary search lol
     pub fn loadObject(self: Repo, a: Allocator, sha: SHA) !Object {
+        std.debug.assert(sha.partial == false);
         if (try self.loadPacked(a, sha)) |pack| return pack;
         return try self.loadFile(a, sha);
     }
@@ -489,12 +512,17 @@ pub const Repo = struct {
     }
 
     pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
-        const obj = if (sha.partial)
-            try self.loadObjPartial(a, sha)
-        else
-            try self.loadObject(a, sha);
+        var obj: ?Object = null;
+        var fullsha: SHA = sha;
+
+        if (sha.partial) {
+            obj = try self.loadObjPartial(a, sha);
+            fullsha = try self.expandPartial(sha) orelse sha;
+        } else {
+            obj = try self.loadObject(a, sha);
+        }
         if (obj == null) return error.CommitMissing;
-        return try Commit.initOwned(sha, a, obj.?);
+        return try Commit.initOwned(fullsha, a, obj.?);
     }
 
     pub fn headCommit(self: *const Repo, a: Allocator) !Commit {
