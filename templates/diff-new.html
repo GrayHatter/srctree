@@ -7,11 +7,25 @@
   <body>
     <_body_header.html>
     <content>
-        <form class="pretty" action="new" method="POST">
+        <form class="pretty" action="create" method="POST">
           <context>Suggest New Diff</context>
-          <input name="patch_uri" placeholder="Patch URL" />
-          <input name="title" placeholder="Diff Title" />
-          <textarea name="desc" placeholder="Additional information about this patch suggestion"></textarea>
+          <input name="title" placeholder="Diff Title" value="<Title ORNULL>" />
+          <With Network>
+              <div style="display:flex">
+              <select name="network">
+              <For Remotes>
+                <option value="<Value>"><Name></option>
+              </For>
+              </select><span style="font-size: 130%;margin: auto;">/</span>
+              <select name="branch">
+              <For Branches>
+                <option value="<Value>"><Name></option>
+              </For>
+              </select>
+              </div>
+          </With>
+          <With PatchUri><div style="display:flex"><input name="patch_uri" placeholder="Patch URL" /><button name="from_network" value="true" formaction="new">Use Network</button></div></With>
+          <textarea name="desc" placeholder="Additional information about this patch suggestion"><Desc ORNULL></textarea>
           <buttons>
             <button name="submit">Submit</button>
             <button name="preview">Preview</button>

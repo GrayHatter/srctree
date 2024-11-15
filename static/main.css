@@ -511,18 +511,20 @@ form.pretty {
 		height: 35px;
 		padding: 4px 0 4px 12px;
 	}
-	input, textarea {
+	input, textarea, select {
 		margin: 0 0.5em;
-		display: block;
+		flex-grow: 1;
 		background: #333;
+		display: inline-block;
 		border: 1px solid gray;
 		border-radius: 0;
 		font-size: 130%;
 		padding: 4px;
+	}
+	input, textarea {
 		border-bottom: 0px solid gray;
 		&:last-of-type {
 			border-bottom: 1px solid gray;
-			margin-bottom: 0.5em;
 		}
 	}
 	button {

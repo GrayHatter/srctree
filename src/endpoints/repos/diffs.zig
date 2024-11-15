@@ -30,8 +30,8 @@ const UriIter = Route.UriIter;
 
 pub const routes = [_]Route.Match{
     ROUTE("", list),
-    GET("new", new),
-    POST("new", newPost),
+    ROUTE("new", new),
+    POST("create", newPost),
     POST("add-comment", newComment),
 };
 
@@ -53,9 +53,49 @@ pub fn router(ctx: *Context) Error!Route.Callable {
     return Route.router(ctx, &routes);
 }
 
+const DiffNewHtml = Template.PageData("diff-new.html");
+
+const DiffCreateChangeReq = struct {
+    from_network: ?bool = null,
+    patch_uri: []const u8,
+    title: []const u8,
+    desc: []const u8,
+};
+
 fn new(ctx: *Context) Error!void {
-    var tmpl = comptime Template.find("diff-new.html");
-    try ctx.sendTemplate(&tmpl);
+    var network: ?S.Network = null;
+    var patchuri: ?S.PatchUri = .{};
+    if (ctx.reqdata.post) |post| {
+        const udata = post.validate(DiffCreateChangeReq) catch return error.BadData;
+
+        if (udata.from_network) |_| {
+            network = .{
+                .remotes = &.{
+                    .{ .value = "upstream", .name = "upstream network thingy" },
+                },
+                .branches = &.{
+                    .{ .value = "main", .name = "main" },
+                    .{ .value = "develop", .name = "develop" },
+                    .{ .value = "master", .name = "master" },
+                },
+            };
+        }
+        patchuri = null;
+    }
+
+    var page = DiffNewHtml.init(.{
+        .meta_head = .{
+            .open_graph = .{},
+        },
+        .body_header = .{ .nav = .{
+            .nav_buttons = &try Repo.navButtons(ctx),
+            .nav_auth = undefined,
+        } },
+        .network = network,
+        .patch_uri = patchuri,
+    });
+
+    try ctx.sendPage(&page);
 }
 
 fn inNetwork(str: []const u8) bool {
@@ -64,7 +104,7 @@ fn inNetwork(str: []const u8) bool {
     return true;
 }
 
-const IssueCreateReq = struct {
+const DiffCreateReq = struct {
     patch_uri: []const u8,
     title: []const u8,
     desc: []const u8,
@@ -77,7 +117,9 @@ const IssueCreateReq = struct {
 fn newPost(ctx: *Context) Error!void {
     const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (ctx.reqdata.post) |post| {
-        const udata = post.validate(IssueCreateReq) catch return error.BadData;
+        const udata = post.validate(DiffCreateReq) catch return error.BadData;
+
+        if (udata.title.len == 0) return error.BadData;
 
         var delta = Delta.new(rd.name) catch unreachable;
         //delta.src = src;

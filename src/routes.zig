@@ -83,7 +83,7 @@ pub fn ROUTE(comptime name: []const u8, comptime match: anytype) Match {
                 "]"),
         },
 
-        .methods = .{ .GET = true },
+        .methods = .{ .GET = true, .POST = true },
     };
 }
 
