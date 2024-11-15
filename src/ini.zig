@@ -1,4 +1,5 @@
 const std = @import("std");
+const eql = std.mem.eql;
 
 const Allocator = std.mem.Allocator;
 
@@ -74,9 +75,9 @@ pub const Namespace = struct {
         if (set.len > 5) return null;
         var buffer: [6]u8 = undefined;
         const check = std.ascii.lowerString(buffer[0..], set);
-        if (eql(check, "false") or eql(check, "0") or eql(check, "f")) {
+        if (eql(u8, check, "false") or eql(u8, check, "0") or eql(u8, check, "f")) {
             return false;
-        } else if (eql(check, "true") or eql(check, "1") or eql(check, "t")) {
+        } else if (eql(u8, check, "true") or eql(u8, check, "1") or eql(u8, check, "t")) {
             return true;
         } else return null;
     }
@@ -162,13 +163,18 @@ pub fn init(a: Allocator, data: []const u8) !Config {
     };
 }
 
+/// I'm not happy with this API. I think I deleted it once already... deleted
+/// twice incoming!
+pub fn initOwned(a: Allocator, data: []u8) !Config {
+    var c =
+        try init(a, data);
+    c.owned = data;
+    return c;
+}
+
 pub fn fromFile(a: Allocator, file: std.fs.File) !Config {
     const data = try file.readToEndAlloc(a, 1 <<| 18);
     return try init(a, data);
-}
-
-fn eql(left: []const u8, right: []const u8) bool {
-    return std.mem.eql(u8, left, right);
 }
 
 test "default" {

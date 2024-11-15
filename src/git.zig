@@ -11,12 +11,15 @@ const parseInt = std.fmt.parseInt;
 const allocPrint = std.fmt.allocPrint;
 const AnyReader = std.io.AnyReader;
 
+const Ini = @import("ini.zig");
+
 pub const Actor = @import("git/actor.zig");
 pub const Agent = @import("git/agent.zig");
 pub const Blob = @import("git/blob.zig");
 pub const Commit = @import("git/commit.zig");
 pub const Pack = @import("git/pack.zig");
 pub const Tree = @import("git/tree.zig");
+pub const Remote = @import("git/remote.zig");
 
 pub const Error = error{
     ReadError,
@@ -122,6 +125,7 @@ pub const Repo = struct {
         repo.dir = d;
         if (d.openFile("./HEAD", .{})) |file| {
             file.close();
+            repo.bare = true;
         } else |_| {
             if (d.openDir("./.git", .{})) |full| {
                 if (full.openFile("./HEAD", .{})) |file| {
@@ -166,6 +170,24 @@ pub const Repo = struct {
         try self.loadTags();
         try self.loadBranches();
         _ = try self.HEAD(a);
+    }
+
+    pub fn listRemotes(self: Repo, a: Allocator) ![]Remote {
+        var list = std.ArrayList(Remote).init(a);
+        errdefer list.clearAndFree();
+        const config_data = try self.dir.readFileAlloc(a, "config", 0xffff);
+        const cfg = try Ini.initOwned(a, config_data);
+        defer cfg.raze();
+        for (0..cfg.ns.len) |i| {
+            const ns = cfg.filter("remote", i) orelse break;
+            try list.append(.{
+                .name = try a.dupe(u8, std.mem.trim(u8, ns.name[6..], "' \t\n\"")),
+                .url = if (ns.get("url")) |url| try a.dupe(u8, url) else null,
+                .fetch = if (ns.get("fetch")) |fetch| try a.dupe(u8, fetch) else null,
+            });
+        }
+
+        return try list.toOwnedSlice();
     }
 
     fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
@@ -1303,4 +1325,21 @@ test "updated at" {
     const oldest = try repo.updatedAt(a);
     _ = oldest;
     //std.debug.print("{}\n", .{oldest});
+}
+
+test "list remotes" {
+    const a = std.testing.allocator;
+
+    const cwd = try std.fs.cwd().openDir(".", .{});
+    var repo = try Repo.init(cwd);
+    const remotes = try repo.listRemotes(a);
+    try std.testing.expect(remotes.len == 2);
+    try std.testing.expectEqualStrings("github", remotes[0].name);
+    try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
+    for (remotes) |rm| {
+        a.free(rm.name);
+        if (rm.url) |url| a.free(url);
+        if (rm.fetch) |fetch| a.free(fetch);
+    }
+    a.free(remotes);
 }

@@ -6,6 +6,8 @@ const Commits = @import("commits.zig");
 
 const Repo = @import("../repos.zig");
 
+const Git = @import("../../git.zig");
+const RepoUtil = @import("../../repos.zig");
 const Bleach = @import("../../bleach.zig");
 const CURL = @import("../../curl.zig");
 const Context = @import("../../context.zig");
@@ -69,10 +71,32 @@ fn new(ctx: *Context) Error!void {
         const udata = post.validate(DiffCreateChangeReq) catch return error.BadData;
 
         if (udata.from_network) |_| {
+            const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+            var cwd = std.fs.cwd();
+            const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+            const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+            const repo = Git.Repo.init(dir) catch return error.Unrouteable;
+
+            const remotes = repo.listRemotes(ctx.alloc) catch return error.Unknown;
+            defer {
+                for (remotes) |r| {
+                    ctx.alloc.free(r.name);
+                    if (r.url) |url| ctx.alloc.free(url);
+                    if (r.fetch) |fetch| ctx.alloc.free(fetch);
+                }
+                ctx.alloc.free(remotes);
+            }
+
+            const network_remotes = try ctx.alloc.alloc(S.Remotes, remotes.len);
+            for (remotes, network_remotes) |src, *dst| {
+                dst.* = .{
+                    .value = src.name,
+                    .name = try allocPrint(ctx.alloc, "{diff}", .{src}),
+                };
+            }
+
             network = .{
-                .remotes = &.{
-                    .{ .value = "upstream", .name = "upstream network thingy" },
-                },
+                .remotes = network_remotes,
                 .branches = &.{
                     .{ .value = "main", .name = "main" },
                     .{ .value = "develop", .name = "develop" },
