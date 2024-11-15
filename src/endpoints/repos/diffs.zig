@@ -79,11 +79,7 @@ fn new(ctx: *Context) Error!void {
 
             const remotes = repo.listRemotes(ctx.alloc) catch return error.Unknown;
             defer {
-                for (remotes) |r| {
-                    ctx.alloc.free(r.name);
-                    if (r.url) |url| ctx.alloc.free(url);
-                    if (r.fetch) |fetch| ctx.alloc.free(fetch);
-                }
+                for (remotes) |r| r.raze(ctx.alloc);
                 ctx.alloc.free(remotes);
             }
 

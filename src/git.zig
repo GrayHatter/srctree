@@ -1336,10 +1336,6 @@ test "list remotes" {
     try std.testing.expect(remotes.len == 2);
     try std.testing.expectEqualStrings("github", remotes[0].name);
     try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
-    for (remotes) |rm| {
-        a.free(rm.name);
-        if (rm.url) |url| a.free(url);
-        if (rm.fetch) |fetch| a.free(fetch);
-    }
+    for (remotes) |rm| rm.raze(a);
     a.free(remotes);
 }
