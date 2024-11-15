@@ -99,6 +99,7 @@ pub const Repo = struct {
     head: ?Ref = null,
     // Leaks, badly
     tags: ?[]Tag = null,
+    branches: ?[]Branch = null,
 
     repo_name: ?[]const u8 = null,
 
@@ -151,6 +152,7 @@ pub const Repo = struct {
         try self.loadPacks();
         try self.loadRefs();
         try self.loadTags();
+        try self.loadBranches();
         _ = try self.HEAD(a);
     }
 
@@ -322,6 +324,7 @@ pub const Repo = struct {
             const read = try f.readAll(&buf);
             std.debug.assert(read == 40);
             try list.append(Ref{ .branch = .{
+                .alloc = a,
                 .name = try a.dupe(u8, file.name),
                 .sha = SHA.init(&buf),
                 .repo = self,
@@ -336,6 +339,7 @@ pub const Repo = struct {
             while (p_itr.next()) |line| {
                 if (std.mem.indexOf(u8, line, "refs/heads")) |_| {
                     try list.append(Ref{ .branch = .{
+                        .alloc = a,
                         .name = try a.dupe(u8, line[52..]),
                         .sha = SHA.init(line[0..40]),
                         .repo = self,
@@ -385,6 +389,7 @@ pub const Repo = struct {
         if (std.mem.eql(u8, head[0..5], "ref: ")) {
             self.head = Ref{
                 .branch = Branch{
+                    .alloc = a,
                     .sha = self.ref(head[16 .. head.len - 1]) catch SHA.init(&[_]u8{0} ** 20),
                     .name = try a.dupe(u8, head[5 .. head.len - 1]),
                     .repo = self,
@@ -456,6 +461,29 @@ pub const Repo = struct {
         if (index != self.tags.?.len) return error.UnexpectedError;
     }
 
+    fn loadBranches(self: *Repo) !void {
+        const a = self.alloc orelse unreachable;
+
+        var branchdir = try self.dir.openDir("refs/heads", .{ .iterate = true });
+        defer branchdir.close();
+        var list = std.ArrayList(Branch).init(a);
+        var itr = branchdir.iterate();
+        while (try itr.next()) |file| {
+            if (file.kind != .file) continue;
+            var fnbuf: [2048]u8 = undefined;
+            const fname = try bufPrint(&fnbuf, "refs/heads/{s}", .{file.name});
+            var shabuf: [41]u8 = undefined;
+            _ = try self.dir.readFile(fname, &shabuf);
+            try list.append(.{
+                .alloc = a,
+                .name = try a.dupe(u8, file.name),
+                .sha = SHA.init(shabuf[0..40]),
+                .repo = self,
+            });
+        }
+        self.branches = try list.toOwnedSlice();
+    }
+
     pub fn resolvePartial(_: *const Repo, _: SHA) !SHA {
         return error.NotImplemented;
     }
@@ -511,6 +539,10 @@ pub const Repo = struct {
                 .branch => |b| a.free(b.name),
                 else => {}, //a.free(h);
             };
+            if (self.branches) |branches| {
+                for (branches) |branch| branch.raze();
+                a.free(branches);
+            }
         } else unreachable;
         // TODO self.tags leaks, badly
     }
@@ -543,14 +575,18 @@ pub const Repo = struct {
 };
 
 pub const Branch = struct {
+    alloc: Allocator,
     name: []const u8,
     sha: SHA,
-    repo: ?*const Repo = null,
+    repo: *const Repo,
 
     pub fn toCommit(self: Branch, a: Allocator) !Commit {
-        const repo = self.repo orelse return error.NoConnectedRepo;
-        const obj = try repo.loadObject(a, self.sha);
+        const obj = try self.repo.loadObject(a, self.sha);
         return Commit.initOwned(self.sha, a, obj);
+    }
+
+    pub fn raze(self: Branch) void {
+        self.alloc.free(self.name);
     }
 };
 

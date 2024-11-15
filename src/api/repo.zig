@@ -75,9 +75,13 @@ pub fn repo(ctx: *API.Context) API.Routes.Error!void {
 }
 
 pub const RepoBranches = struct {
+    pub const Branch = struct {
+        name: []const u8,
+        hash: [40]u8,
+    };
     name: []const u8,
     updated: []const u8,
-    branches: []const []const u8,
+    branches: []const Branch,
 };
 
 pub fn repoBranches(ctx: *API.Context) API.Routes.Error!void {
@@ -96,12 +100,18 @@ pub fn repoBranches(ctx: *API.Context) API.Routes.Error!void {
     };
     defer gitrepo.raze();
 
+    const branches = try ctx.alloc.alloc(RepoBranches.Branch, gitrepo.branches.?.len);
+    for (branches, gitrepo.branches.?) |*dst, src| {
+        dst.* = .{
+            .name = src.name,
+            .hash = src.sha.hex,
+        };
+    }
+
     return try ctx.sendJSON([1]RepoBranches{.{
         .name = req.name,
         .updated = "undefined",
-        .branches = &.{
-            "main",
-        },
+        .branches = branches[0..],
     }});
 }
 
