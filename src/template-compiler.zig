@@ -237,7 +237,7 @@ pub fn makeStructName(in: []const u8) []const u8 {
                 if (next_upper) {
                     local.name[i] = std.ascii.toUpper(chr);
                 } else {
-                    local.name[i] = std.ascii.toLower(chr);
+                    local.name[i] = chr;
                 }
                 next_upper = false;
                 i += 1;

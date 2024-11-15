@@ -572,7 +572,7 @@ pub fn makeStructName(comptime in: []const u8, comptime out: []u8) usize {
                 if (next_upper) {
                     out[i] = std.ascii.toUpper(chr);
                 } else {
-                    out[i] = std.ascii.toLower(chr);
+                    out[i] = chr;
                 }
                 next_upper = false;
                 i += 1;

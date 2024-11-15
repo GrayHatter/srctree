@@ -62,7 +62,7 @@ fn post(ctx: *Context) Error!void {
         "public";
 
     if (udata.new_file != null) {
-        const files = try ctx.alloc.alloc(Template.Structs.Gistfiles, udata.file_name.len + 1);
+        const files = try ctx.alloc.alloc(Template.Structs.GistFiles, udata.file_name.len + 1);
         for (files[0 .. files.len - 1], udata.file_name, udata.file_blob) |*file, name, blob| {
             file.* = .{
                 .name = name,
@@ -91,13 +91,13 @@ fn post(ctx: *Context) Error!void {
 }
 
 fn new(ctx: *Context) Error!void {
-    const files = [1]Template.Structs.Gistfiles{.{}};
+    const files = [1]Template.Structs.GistFiles{.{}};
     return edit(ctx, &files);
 }
 
-fn edit(ctx: *Context, files: []const Template.Structs.Gistfiles) Error!void {
+fn edit(ctx: *Context, files: []const Template.Structs.GistFiles) Error!void {
     // TODO move this back into context somehow
-    var btns = [1]Template.Structs.Navbuttons{
+    var btns = [1]Template.Structs.NavButtons{
         .{
             .name = "inbox",
             .url = "/inbox",
@@ -122,8 +122,8 @@ fn edit(ctx: *Context, files: []const Template.Structs.Gistfiles) Error!void {
     return ctx.sendPage(&page);
 }
 
-fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.Gistfiles {
-    const out = try a.alloc(Template.Structs.Gistfiles, files.len);
+fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFiles {
+    const out = try a.alloc(Template.Structs.GistFiles, files.len);
     for (files, out) |file, *o| {
         o.* = .{
             .file_name = try Bleach.sanitizeAlloc(a, file.name, .{}),
@@ -135,7 +135,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.Gistfi
 
 fn view(ctx: *Context) Error!void {
     // TODO move this back into context somehow
-    var btns = [1]Template.Structs.Navbuttons{.{ .name = "inbox", .url = "/inbox" }};
+    var btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .url = "/inbox" }};
 
     if (ctx.uri.next()) |hash| {
         if (hash.len != 64) return error.BadData;

@@ -90,7 +90,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn navButtons(ctx: *Context) ![2]Template.Structs.Navbuttons {
+pub fn navButtons(ctx: *Context) ![2]Template.Structs.NavButtons {
     const rd = RouteData.make(&ctx.uri) orelse unreachable;
     if (!rd.exists()) unreachable;
     var i_count: usize = 0;
@@ -105,7 +105,7 @@ pub fn navButtons(ctx: *Context) ![2]Template.Structs.Navbuttons {
         dlt.raze(ctx.alloc);
     }
 
-    const btns = [2]Template.Structs.Navbuttons{
+    const btns = [2]Template.Structs.NavButtons{
         .{
             .name = "issues",
             .extra = try aPrint(ctx.alloc, "{}", .{i_count}),
@@ -220,7 +220,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.Repolist {
+fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.RepoList {
     var desc: ?[]const u8 = try repo.description(a);
     if (std.mem.startsWith(u8, desc.?, "Unnamed repository; edit this file")) {
         desc = null;
@@ -302,7 +302,7 @@ fn list(ctx: *Context) Error!void {
             ;
         }
 
-        const repos_compiled = try ctx.alloc.alloc(Template.Structs.Repolist, repos.items.len);
+        const repos_compiled = try ctx.alloc.alloc(Template.Structs.RepoList, repos.items.len);
         for (repos.items, repos_compiled) |*repo, *compiled| {
             defer repo.raze();
             compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
@@ -310,7 +310,7 @@ fn list(ctx: *Context) Error!void {
             };
         }
 
-        var btns = [1]Template.Structs.Navbuttons{.{
+        var btns = [1]Template.Structs.NavButtons{.{
             .name = "inbox",
             .extra = "0",
             .url = "/inbox",

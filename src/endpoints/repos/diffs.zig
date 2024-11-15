@@ -72,7 +72,6 @@ const IssueCreateReq = struct {
     //    submit: bool,
     //    preview: bool,
     //},
-
 };
 
 fn newPost(ctx: *Context) Error!void {
