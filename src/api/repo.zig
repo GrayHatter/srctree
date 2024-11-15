@@ -135,7 +135,6 @@ pub fn repoTags(ctx: *API.Context) API.Routes.Error!void {
             return try ctx.sendJSON([0]RepoTags{});
         },
     };
-    gitrepo.loadData(ctx.alloc) catch return error.Unknown;
     defer gitrepo.raze();
 
     const repotags = gitrepo.tags orelse return try ctx.sendJSON([1]RepoTags{.{
