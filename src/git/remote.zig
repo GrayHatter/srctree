@@ -2,6 +2,7 @@ const std = @import("std");
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const endsWith = std.mem.endsWith;
+const indexOf = std.mem.indexOf;
 
 pub const Remote = @This();
 
@@ -15,8 +16,9 @@ pub fn format(r: Remote, comptime fmt: []const u8, _: std.fmt.FormatOptions, out
             var printable = url;
             if (startsWith(u8, printable, "https://")) {
                 printable = printable[8..];
-            } else if (startsWith(u8, printable, "git@")) {
-                printable = printable[4..];
+            }
+            if (indexOf(u8, printable, "@")) |i| {
+                printable = printable[i + 1 ..];
             }
             if (endsWith(u8, printable, ".git")) {
                 printable = printable[0 .. printable.len - 4];
