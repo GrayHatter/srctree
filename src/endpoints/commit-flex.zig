@@ -24,6 +24,7 @@ const Scribe = struct {
 
         pub fn toContext(self: Commit, a: Allocator) !Template.Context {
             var jctx = Template.Context.init(a);
+            const shahex = try a.dupe(u8, self.sha.hex[0..]);
             try jctx.putSlice("Name", self.name);
             try jctx.putSlice("Repo", self.repo);
             try jctx.putSlice("Title", self.title);
@@ -32,8 +33,8 @@ const Scribe = struct {
                 "<span>{Y-m-d}</span><span>{day}</span><span>{time}</span>",
                 .{ self.date, self.date, self.date },
             ));
-            try jctx.putSlice("ShaLong", self.sha.hex[0..]);
-            try jctx.putSlice("Sha", self.sha.hex[0..8]);
+            try jctx.putSlice("ShaLong", shahex[0..]);
+            try jctx.putSlice("Sha", shahex[0..8]);
             return jctx;
         }
     };
@@ -56,7 +57,7 @@ const HeatMapSize = 366 + 6;
 const HeatMapArray = [HeatMapSize]u16;
 
 pub const HeatMap = struct {
-    sha: Git.SHA.Bin,
+    shahex: Git.SHA.Hex,
     hits: HeatMapArray,
 };
 
@@ -162,7 +163,13 @@ fn buildJournal(
     }
 }
 
-fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const u8, email: []const u8) !*HeatMapArray {
+fn buildCommitList(
+    a: Allocator,
+    seen: *std.BufSet,
+    until: i64,
+    gitdir: []const u8,
+    email: []const u8,
+) !*HeatMapArray {
     const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
     var repo = try Git.Repo.init(repo_dir);
     try repo.loadData(a);
@@ -187,8 +194,8 @@ fn buildCommitList(a: Allocator, seen: *std.BufSet, until: i64, gitdir: []const 
         @memset(hits[0..], 0);
     }
 
-    if (!std.mem.eql(u8, heatmap.sha[0..], commit.sha.bin[0..])) {
-        @memcpy(heatmap.sha[0..], commit.sha.bin[0..]);
+    if (!std.mem.eql(u8, heatmap.shahex[0..], commit.sha.hex[0..])) {
+        heatmap.shahex = commit.sha.hex;
         @memset(hits[0..], 0);
         _ = try countAll(a, hits, seen, until, commit, &repo, email);
     }
