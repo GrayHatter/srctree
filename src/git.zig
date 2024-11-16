@@ -116,6 +116,7 @@ pub const Repo = struct {
     // Leaks, badly
     tags: ?[]Tag = null,
     branches: ?[]Branch = null,
+    remotes: ?[]Remote = null,
 
     repo_name: ?[]const u8 = null,
 
@@ -170,10 +171,12 @@ pub const Repo = struct {
         try self.loadRefs();
         try self.loadTags();
         try self.loadBranches();
+        try self.loadRemotes();
         _ = try self.HEAD(a);
     }
 
-    pub fn listRemotes(self: Repo, a: Allocator) ![]Remote {
+    fn loadRemotes(self: *Repo) !void {
+        const a = self.alloc orelse unreachable;
         var list = std.ArrayList(Remote).init(a);
         errdefer list.clearAndFree();
         const config_data = try self.dir.readFileAlloc(a, "config", 0xffff);
@@ -188,7 +191,7 @@ pub const Repo = struct {
             });
         }
 
-        return try list.toOwnedSlice();
+        self.remotes = try list.toOwnedSlice();
     }
 
     fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
@@ -593,6 +596,10 @@ pub const Repo = struct {
             if (self.branches) |branches| {
                 for (branches) |branch| branch.raze();
                 a.free(branches);
+            }
+            if (self.remotes) |remotes| {
+                for (remotes) |remote| remote.raze(a);
+                a.free(remotes);
             }
         }
         // TODO self.tags leaks, badly
@@ -1306,10 +1313,10 @@ test "list remotes" {
 
     const cwd = try std.fs.cwd().openDir(".", .{});
     var repo = try Repo.init(cwd);
-    const remotes = try repo.listRemotes(a);
+    try repo.loadData(a);
+    defer repo.raze();
+    const remotes = repo.remotes orelse unreachable;
     try std.testing.expect(remotes.len == 2);
     try std.testing.expectEqualStrings("github", remotes[0].name);
     try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
-    for (remotes) |rm| rm.raze(a);
-    a.free(remotes);
 }

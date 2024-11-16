@@ -81,9 +81,11 @@ fn new(ctx: *Context) Error!void {
             var cwd = std.fs.cwd();
             const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
             const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-            const repo = Git.Repo.init(dir) catch return error.Unrouteable;
+            var repo = Git.Repo.init(dir) catch return error.Unrouteable;
+            defer repo.raze();
+            repo.loadData(ctx.alloc) catch return error.Unknown;
 
-            const remotes = repo.listRemotes(ctx.alloc) catch return error.Unknown;
+            const remotes = repo.remotes orelse unreachable;
             defer {
                 for (remotes) |r| r.raze(ctx.alloc);
                 ctx.alloc.free(remotes);
