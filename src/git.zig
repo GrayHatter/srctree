@@ -571,8 +571,8 @@ pub const Repo = struct {
     }
 
     pub fn raze(self: *Repo) void {
+        self.dir.close();
         if (self.alloc) |a| {
-            self.dir.close();
             for (self.packs) |pack| {
                 pack.raze();
             }
@@ -594,13 +594,13 @@ pub const Repo = struct {
                 for (branches) |branch| branch.raze();
                 a.free(branches);
             }
-        } else unreachable;
+        }
         // TODO self.tags leaks, badly
     }
 
     // functions that might move or be removed...
 
-    pub fn updatedAt(self: *Repo, a: Allocator) !i64 {
+    pub fn updatedAt(self: *const Repo, a: Allocator) !i64 {
         var oldest: i64 = 0;
         for (self.refs) |r| {
             switch (r) {
