@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
+const eql = std.mem.eql;
 
 const Commits = @import("commits.zig");
 
@@ -34,7 +35,7 @@ const UriIter = Route.UriIter;
 pub const routes = [_]Route.Match{
     ROUTE("", list),
     ROUTE("new", new),
-    POST("create", newPost),
+    POST("create", createDiff),
     POST("add-comment", newComment),
 };
 
@@ -68,8 +69,12 @@ const DiffCreateChangeReq = struct {
 fn new(ctx: *Context) Error!void {
     var network: ?S.Network = null;
     var patchuri: ?S.PatchUri = .{};
+    var title: ?[]const u8 = null;
+    var desc: ?[]const u8 = null;
     if (ctx.reqdata.post) |post| {
         const udata = post.validate(DiffCreateChangeReq) catch return error.BadData;
+        title = udata.title;
+        desc = udata.desc;
 
         if (udata.from_network) |_| {
             const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
@@ -112,6 +117,8 @@ fn new(ctx: *Context) Error!void {
             .nav_buttons = &try Repos.navButtons(ctx),
             .nav_auth = undefined,
         } },
+        .title = title,
+        .desc = desc,
         .network = network,
         .patch_uri = patchuri,
     });
@@ -135,18 +142,28 @@ const DiffCreateReq = struct {
     //},
 };
 
-fn newPost(ctx: *Context) Error!void {
+fn createDiff(ctx: *Context) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (ctx.reqdata.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.BadData;
-
         if (udata.title.len == 0) return error.BadData;
 
-        var delta = Delta.new(rd.name) catch unreachable;
-        //delta.src = src;
-        delta.title = udata.title;
-        delta.message = udata.desc;
-        delta.attach = .{ .diff = 0 };
+        var remote_addr: []const u8 = "unknown";
+        for (ctx.request.headers.items) |head| {
+            if (eql(u8, head.name, "REMOTE_ADDR")) {
+                remote_addr = head.val;
+            }
+        }
+
+        var delta = Delta.new(
+            rd.name,
+            udata.title,
+            udata.desc,
+            if (ctx.auth.valid())
+                (ctx.auth.user(ctx.alloc) catch unreachable).username
+            else
+                try allocPrint(ctx.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
+        ) catch unreachable;
         delta.commit() catch unreachable;
 
         if (inNetwork(udata.patch_uri)) {
@@ -171,8 +188,7 @@ fn newPost(ctx: *Context) Error!void {
         return ctx.response.redirect(loc, true) catch unreachable;
     }
 
-    var tmpl = Template.find("diff-new.html");
-    try ctx.sendTemplate(&tmpl);
+    return try new(ctx);
 }
 
 fn newComment(ctx: *Context) Error!void {

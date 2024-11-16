@@ -1,5 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const indexOf = std.mem.indexOf;
+const eql = std.mem.eql;
+
 const zWSGIRequest = @import("zwsgi.zig").zWSGIRequest;
 const Auth = @import("auth.zig");
 
@@ -7,7 +10,7 @@ pub const Request = @This();
 
 pub const RawRequests = union(enum) {
     zwsgi: zWSGIRequest,
-    http: std.http.Server.Request,
+    http: *std.http.Server.Request,
 };
 
 const Pair = struct {
@@ -56,7 +59,7 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
                 .auth = undefined,
             };
             for (raw_req.vars) |v| {
-                try addHeader(&req.headers, v.key, v.val);
+                try req.addHeader(v.key, v.val);
                 if (std.mem.eql(u8, v.key, "PATH_INFO")) {
                     req.uri = v.val;
                 }
@@ -67,14 +70,22 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
             req.auth = Auth.init(req.headers);
             return req;
         },
-        std.http.Server.Request => {
+        *std.http.Server.Request => {
             var req = Request{
                 .raw_request = .{ .http = raw_req },
                 .headers = HeaderList.init(a),
                 .uri = raw_req.head.target,
-                .method = Methods.GET,
+                .method = switch (raw_req.head.method) {
+                    .GET => .GET,
+                    .POST => .POST,
+                    else => @panic("not implemented"),
+                },
                 .auth = undefined,
             };
+            var itr = raw_req.iterateHeaders();
+            while (itr.next()) |head| {
+                try req.addHeader(head.name, head.value);
+            }
             req.auth = Auth.init(req.headers);
             return req;
         },
@@ -83,8 +94,8 @@ pub fn init(a: Allocator, raw_req: anytype) !Request {
     @compileError("unreachable");
 }
 
-fn addHeader(h: *HeaderList, name: []const u8, val: []const u8) !void {
-    try h.append(.{ .name = name, .val = val });
+pub fn addHeader(self: *Request, name: []const u8, val: []const u8) !void {
+    try self.headers.append(.{ .name = name, .val = val });
 }
 
 pub fn getHeader(self: Request, key: []const u8) ?[]const u8 {

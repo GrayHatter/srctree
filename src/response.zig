@@ -56,7 +56,7 @@ pub fn init(a: Allocator, req: *Request) !Response {
         .headers = Headers.init(a),
         .http_response = switch (req.raw_request) {
             .zwsgi => null,
-            .http => |*h| h.respondStreaming(.{
+            .http => |h| h.*.respondStreaming(.{
                 .send_buffer = try a.alloc(u8, 0xffff),
                 .respond_options = .{
                     .transfer_encoding = .chunked,

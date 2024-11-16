@@ -263,7 +263,7 @@ fn openFile(repo: []const u8) !std.fs.File {
     return try datad.createFile(filename, .{ .read = true });
 }
 
-pub fn new(repo: []const u8) !Delta {
+pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8) !Delta {
     // TODO this is probably a bug
     const max: usize = currMax(repo) catch 0;
 
@@ -272,9 +272,9 @@ pub fn new(repo: []const u8) !Delta {
         .created = std.time.timestamp(),
         .updated = std.time.timestamp(),
         .repo = repo,
-        .title = "",
-        .message = "",
-        .author = "",
+        .title = title,
+        .message = msg,
+        .author = author,
     };
 
     var thread = try Thread.new(d);

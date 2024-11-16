@@ -53,16 +53,26 @@ fn new(ctx: *Context) Error!void {
     try ctx.sendTemplate(&tmpl);
 }
 
+const IssueCreate = struct {
+    title: []const u8,
+    desc: []const u8,
+};
+
 fn newPost(ctx: *Context) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.reqdata.post) |post| {
-        var valid = post.validator();
-        const title = try valid.require("title");
-        const msg = try valid.require("desc");
-        var delta = Delta.new(rd.name) catch unreachable;
-        delta.title = title.value;
-        delta.message = msg.value;
+        const valid = post.validate(IssueCreate) catch return error.BadData;
+        var delta = Delta.new(
+            rd.name,
+            valid.title,
+            valid.desc,
+            if (ctx.auth.valid())
+                (ctx.auth.user(ctx.alloc) catch unreachable).username
+            else
+                try allocPrint(ctx.alloc, "remote_address", .{}),
+        ) catch unreachable;
+
         delta.attach = .{ .issue = 0 };
         delta.commit() catch unreachable;
 
@@ -113,7 +123,6 @@ fn view(ctx: *Context) Error!void {
 
     var delta = (Delta.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
     try ctx.putContext("Repo", .{ .slice = rd.name });
-    //dom.push(HTML.text(delta.repo));
 
     try ctx.putContext(
         "Title",

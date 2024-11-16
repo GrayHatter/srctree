@@ -160,6 +160,12 @@ fn serveHttp(zwsgi: *ZWSGI) !void {
         var hreq = try hsrv.receiveHead();
 
         var ctx = try zwsgi.buildContextHttp(a, &hreq);
+        var ipbuf: [0x20]u8 = undefined;
+        const ipport = try std.fmt.bufPrint(&ipbuf, "{}", .{conn.address});
+        if (std.mem.indexOf(u8, ipport, ":")) |i| {
+            try ctx.request.addHeader("REMOTE_ADDR", ipport[0..i]);
+            try ctx.request.addHeader("REMOTE_PORT", ipport[i + 1 ..]);
+        } else unreachable;
 
         const callable = zwsgi.routefn(&ctx);
         zwsgi.buildfn(&ctx, callable) catch |err| {
@@ -263,8 +269,6 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
 }
 
 fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
-    const response = try Response.init(a, request);
-
     var post_data: ?RequestData.PostData = null;
     var reqdata: RequestData = undefined;
     switch (request.raw_request) {
@@ -278,7 +282,7 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
                     post_data = try RequestData.readBody(a, &reader, post_size, h_type);
                     if (dump_vars) std.log.info(
                         "post data \"{s}\" {{{any}}}",
-                        .{ post_data.rawdata, post_data.rawdata },
+                        .{ post_data.?.rawpost, post_data.?.rawpost },
                     );
 
                     for (post_data.?.items) |itm| {
@@ -296,7 +300,7 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
                 .query = query,
             };
         },
-        .http => |*hreq| {
+        .http => |hreq| {
             if (hreq.head.content_length) |h_len| {
                 if (h_len > 0) {
                     const h_type = hreq.head.content_type orelse "text/plain";
@@ -304,7 +308,7 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
                     post_data = try RequestData.readBody(a, &reader, h_len, h_type);
                     if (dump_vars) std.log.info(
                         "post data \"{s}\" {{{any}}}",
-                        .{ post_data.rawdata, post_data.rawdata },
+                        .{ post_data.?.rawpost, post_data.?.rawpost },
                     );
 
                     for (post_data.?.items) |itm| {
@@ -324,6 +328,7 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
         },
     }
 
+    const response = try Response.init(a, request);
     return Context.init(a, z.config, request.*, response, reqdata);
 }
 
@@ -336,7 +341,7 @@ fn readHttpHeaders(a: Allocator, req: *std.http.Server.Request) !Request {
         if (dump_vars) std.log.info("{}", .{header});
     }
 
-    return try Request.init(a, req.*);
+    return try Request.init(a, req);
 }
 
 fn buildContextHttp(z: ZWSGI, a: Allocator, req: *std.http.Server.Request) !Context {
