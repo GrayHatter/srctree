@@ -81,7 +81,7 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
         try list.append(try next.toContext(ctx.alloc));
     }
 
-    try ctx.putContext("List", .{ .block = list.items });
+    try ctx.putContext("DeltaList", .{ .block = list.items });
     try ctx.putContext(
         "Search",
         .{ .slice = Bleach.sanitizeAlloc(ctx.alloc, search_str, .{}) catch unreachable },

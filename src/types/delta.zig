@@ -188,7 +188,7 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
     try ctx.putSlice("Desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
 
     try ctx.putSlice("Index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
-    try ctx.putSlice("Title_uri", try std.fmt.allocPrint(a, "/repo/{s}/{s}/{x}", .{
+    try ctx.putSlice("TitleUri", try std.fmt.allocPrint(a, "/repo/{s}/{s}/{x}", .{
         self.repo,
         if (self.attach == .issue) "issues" else "diffs",
         self.index,
@@ -196,7 +196,7 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
 
     if (self.thread) |thread| if (thread.getComments()) |comments| {
         try ctx.putSlice(
-            "Comments_icon",
+            "CommentsIcon",
             try std.fmt.allocPrint(a, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{comments.len}),
         );
     } else |_| {};
