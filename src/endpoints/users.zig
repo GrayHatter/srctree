@@ -26,13 +26,13 @@ pub fn diffs(ctx: *Context) Error!void {
 
     const data = dom.done();
 
-    var tmpl = Template.find("deltalist.html");
+    var tmpl = Template.find("delta-list.html");
     _ = ctx.addElements(ctx.alloc, "todos", data) catch unreachable;
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
 pub fn todo(ctx: *Context) Error!void {
-    var tmpl = Template.find("deltalist.html");
+    var tmpl = Template.find("delta-list.html");
 
     const tmpl_ctx_list = std.ArrayList(Template.Context).init(ctx.alloc);
     _ = tmpl_ctx_list;

@@ -407,14 +407,14 @@ fn list(ctx: *Context) Error!void {
         _ = d.loadThread(ctx.alloc) catch unreachable;
         if (d.getComments(ctx.alloc)) |cmts| {
             try delta_ctx.putSlice(
-                "Comments_icon",
+                "CommentsIcon",
                 try std.fmt.allocPrint(ctx.alloc, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{cmts.len}),
             );
         } else |_| unreachable;
         end += 1;
         continue;
     }
-    var tmpl = Template.find("deltalist.html");
-    try ctx.putContext("List", .{ .block = tmpl_ctx[0..end] });
+    var tmpl = Template.find("delta-list.html");
+    try ctx.putContext("DeltaList", .{ .block = tmpl_ctx[0..end] });
     try ctx.sendTemplate(&tmpl);
 }

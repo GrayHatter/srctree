@@ -14,18 +14,16 @@
         <a class="btn" href="new" style="width:5%">New</a>
       </search>
       <actionable>
-      <For List>
+      <For DeltaList>
         <row>
           <div>
             <div>
               <span class="muted"><Index></span>
-              <a href="<Title_uri>"><Title></a>
+              <a href="<TitleUri>"><Title></a>
             </div>
-            <Comments_icon>
+            <CommentsIcon>
           </div>
-          <desc>
-            <Desc ORNULL>
-          </desc>
+          <desc class="muted"><Desc ORELSE &nbsp;></desc>
         </row>
         </For>
       </actionable>

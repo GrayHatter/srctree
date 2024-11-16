@@ -388,6 +388,14 @@ patchheader {
 	margin: auto;
 }
 
+.new {
+	background: white;
+	color: black;
+	border-radius: 100%;
+	padding: 1.5px;
+
+}
+
 patch {
 	& > header {
 		border-radius: 3px 3px 0 0;

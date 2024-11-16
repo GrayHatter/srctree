@@ -1,6 +1,7 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
 
 const Route = @import("../../routes.zig");
 const DOM = @import("../../dom.zig");
@@ -11,8 +12,9 @@ const Error = Route.Error;
 const UriIter = Route.Error;
 const ROUTE = Route.ROUTE;
 const POST = Route.POST;
+const S = Template.Structs;
 
-const Repo = @import("../repos.zig");
+const Repos = @import("../repos.zig");
 
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
@@ -52,7 +54,7 @@ fn new(ctx: *Context) Error!void {
 }
 
 fn newPost(ctx: *Context) Error!void {
-    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.reqdata.post) |post| {
         var valid = post.validator();
@@ -73,7 +75,7 @@ fn newPost(ctx: *Context) Error!void {
 }
 
 fn newComment(ctx: *Context) Error!void {
-    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (ctx.reqdata.post) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
@@ -103,7 +105,7 @@ fn newComment(ctx: *Context) Error!void {
 }
 
 fn view(ctx: *Context) Error!void {
-    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
 
@@ -147,40 +149,65 @@ fn view(ctx: *Context) Error!void {
     try ctx.sendTemplate(&tmpl);
 }
 
+const DeltaListHtml = Template.PageData("delta-list.html");
+
 fn list(ctx: *Context) Error!void {
-    const rd = Repo.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;
-    var end: usize = 0;
+    const ts = std.time.timestamp() - 86400;
 
-    var tmpl_ctx = try ctx.alloc.alloc(Template.Context, last);
+    var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     for (0..last) |i| {
+        // TODO implement seen
+        var new_comments = false;
         var d = Delta.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
             d.raze(ctx.alloc);
             continue;
         }
 
-        const delta_ctx = &tmpl_ctx[end];
-        delta_ctx.* = Template.Context.init(ctx.alloc);
-        const builder = d.builder();
-        builder.build(ctx.alloc, delta_ctx) catch unreachable;
         _ = d.loadThread(ctx.alloc) catch unreachable;
+        var cmtslen: usize = 0;
         if (d.getComments(ctx.alloc)) |cmts| {
-            try delta_ctx.putSlice(
-                "Comments_icon",
-                try std.fmt.allocPrint(ctx.alloc, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{cmts.len}),
-            );
-        } else |_| unreachable;
-        end += 1;
-        continue;
+            cmtslen = cmts.len;
+            for (cmts) |c| {
+                if (c.updated > ts) new_comments = true;
+            }
+        } else |_| {}
+
+        try d_list.append(.{
+            .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
+            .title_uri = try allocPrint(
+                ctx.alloc,
+                "/repo/{s}/{s}/{x}",
+                .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
+            ),
+            .title = try Bleach.sanitizeAlloc(ctx.alloc, d.title, .{}),
+            .comments_icon = try allocPrint(
+                ctx.alloc,
+                "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
+                .{ if (new_comments) " new" else "", cmtslen },
+            ),
+        });
     }
-    var tmpl = Template.find("deltalist.html");
-    try ctx.putContext("List", .{ .block = tmpl_ctx[0..end] });
 
     var default_search_buf: [0xFF]u8 = undefined;
-    const def_search = try std.fmt.bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
-    try ctx.putContext("Search", .{ .slice = def_search });
+    const def_search = try bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
 
-    try ctx.sendTemplate(&tmpl);
+    const meta_head = Template.Structs.MetaHeadHtml{
+        .open_graph = .{},
+    };
+
+    var page = DeltaListHtml.init(.{
+        .meta_head = meta_head,
+        .body_header = .{ .nav = .{
+            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_auth = undefined,
+        } },
+        .delta_list = try d_list.toOwnedSlice(),
+        .search = def_search,
+    });
+
+    try ctx.sendPage(&page);
 }
