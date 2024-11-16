@@ -6,6 +6,8 @@ html {
 	min-height: 100%;
 }
 
+body { margin: 0 auto; }
+
 a {
 	text-decoration: none;
 	color: #FFFFEB;
@@ -41,14 +43,12 @@ h1,h2,h3 { margin: 0 }
 	margin: 6px 0 0;
 }
 
-body { margin: 0 auto; }
-
 header {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
 	margin: auto;
-	width: 1050px;
+	max-width: 1050px;
 	> h1 {
 		display: inline-block;
 		font-family: 'Titillium Web', sans-serif;
@@ -74,7 +74,7 @@ content {
 	display: block;
 	margin: auto;
 	text-align: center;
-	width: 1050px;
+	max-width: 1050px;
 
 	h3 { text-align: left; }
 	&.diff {
