@@ -22,7 +22,8 @@ pub fn initType() !void {}
 pub const State = packed struct {
     closed: bool = false,
     locked: bool = false,
-    padding: u62 = 0,
+    embargoed: bool = false,
+    padding: u61 = 0,
 };
 
 test State {
