@@ -189,6 +189,7 @@ fn list(ctx: *Context) Error!void {
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
                 .{ if (new_comments) " new" else "", cmtslen },
             ),
+            .desc = try Bleach.sanitizeAlloc(ctx.alloc, d.message, .{}),
         });
     }
 
