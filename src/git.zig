@@ -194,6 +194,16 @@ pub const Repo = struct {
         self.remotes = try list.toOwnedSlice();
     }
 
+    pub fn findRemote(self: Repo, name: []const u8) !?*const Remote {
+        const remotes = self.remotes orelse unreachable;
+        for (remotes) |*remote| {
+            if (eql(u8, remote.name, name)) {
+                return remote;
+            }
+        }
+        return null;
+    }
+
     fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
         var fb = [_]u8{0} ** 2048;
         const grouped = try bufPrint(&fb, "./objects/{s}/{s}", .{ sha.hex[0..2], sha.hex[2..] });

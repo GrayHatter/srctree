@@ -1,4 +1,5 @@
 const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
 
 const DOM = @import("../dom.zig");
 const Context = @import("../context.zig");
@@ -10,6 +11,7 @@ const UriIter = Route.UriIter;
 const HTML = @import("../html.zig");
 const Repos = @import("../repos.zig");
 const Ini = @import("../ini.zig");
+const Git = @import("../git.zig");
 
 const ROUTE = Route.ROUTE;
 
@@ -24,17 +26,16 @@ fn default(ctx: *Context) Error!void {
     const cwd = std.fs.cwd();
     for (list) |reponame| {
         var b: [0x800]u8 = undefined;
-        const confname = std.fmt.bufPrint(&b, "repos/{s}/", .{reponame}) catch unreachable;
-        var rdir = cwd.openDir(confname, .{}) catch unreachable;
-        defer rdir.close();
-        const cffd = rdir.openFile("config", .{}) catch rdir.openFile(".git/config", .{}) catch continue;
-        defer cffd.close();
-        const conf = Ini.fromFile(ctx.alloc, cffd) catch unreachable;
-        if (conf.get("remote \"upstream\"")) |ns| {
-            if (ns.get("url")) |url| {
-                const purl = try Repos.parseGitRemoteUrl(ctx.alloc, url);
+        const confname = std.fmt.bufPrint(&b, "repos/{s}/", .{reponame}) catch continue;
+        const rdir = cwd.openDir(confname, .{}) catch continue;
+        var repo = Git.Repo.init(rdir) catch continue;
+        repo.loadData(ctx.alloc) catch continue;
+        defer repo.raze();
+        if (repo.findRemote("upstream") catch continue) |remote| {
+            if (remote.url) |_| {
                 dom = dom.open(HTML.h3(null, &HTML.Attr.class("upstream")));
                 dom.push(HTML.text("Upstream: "));
+                const purl = try allocPrint(ctx.alloc, "{link}", .{remote});
                 dom.push(HTML.anch(purl, try HTML.Attr.create(ctx.alloc, "href", purl)));
                 dom = dom.close();
             }

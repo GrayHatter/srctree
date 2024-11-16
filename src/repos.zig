@@ -28,47 +28,6 @@ pub fn containsName(name: []const u8) bool {
     return if (name.len > 0) true else false;
 }
 
-pub fn parseGitRemoteUrl(a: Allocator, url: []const u8) ![]u8 {
-    if (std.mem.startsWith(u8, url, "https://")) return try a.dupe(u8, url);
-
-    if (std.mem.startsWith(u8, url, "git@")) {
-        const end = if (std.mem.endsWith(u8, url, ".git")) url.len - 4 else url.len;
-        var p = try a.dupe(u8, url[4..end]);
-        if (std.mem.indexOf(u8, p, ":")) |i| p[i] = '/';
-        const joiner = [_][]const u8{ "https://", p };
-        const http = try std.mem.join(a, "", &joiner);
-        return http;
-    }
-
-    return try a.dupe(u8, url);
-}
-
-pub fn hasUpstream(a: Allocator, r: Git.Repo) !?[]u8 {
-    var conffd = try r.dir.openFile("config", .{});
-    defer conffd.close();
-    const conf = try Ini.fromFile(a, conffd);
-    defer conf.raze();
-    if (conf.get("remote \"upstream\"")) |ns| {
-        if (ns.get("url")) |url| {
-            return try a.dupe(u8, url);
-        }
-    }
-    return null;
-}
-
-pub fn hasDownstream(a: Allocator, r: Git.Repo) !?[]u8 {
-    var conffd = try r.dir.openFile("config", .{});
-    defer conffd.close();
-    const conf = try Ini.fromFile(a, conffd);
-    defer conf.raze();
-    if (conf.get("remote \"downstream\"")) |ns| {
-        if (ns.get("url")) |url| {
-            return try a.dupe(u8, url);
-        }
-    }
-    return null;
-}
-
 pub const AgentConfig = struct {
     running: bool = true,
     sleep_for: usize = 60 * 60 * 1000 * 1000 * 1000,
@@ -83,15 +42,15 @@ fn pushUpstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
         .{std.time.timestamp()},
     ) catch unreachable;
 
-    const rhead = try repo.*.HEAD(a);
+    const rhead = try repo.HEAD(a);
     const head: []const u8 = switch (rhead) {
         .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
         .tag => |t| t.name,
         else => "main",
     };
-    if (try hasUpstream(a, repo.*)) |up| {
+
+    if (try repo.findRemote("upstream")) |_| {
         repo.dir.writeFile(.{ .sub_path = "srctree_last_update", .data = update }) catch {};
-        a.free(up);
         var agent = repo.getAgent(a);
         const updated = agent.updateUpstream(head) catch er: {
             std.debug.print("Warning, unable to update repo {s}\n", .{name});
@@ -161,9 +120,8 @@ pub fn updateThread(cfg: *AgentConfig) void {
             ) catch unreachable;
 
             if (repo_update > last_push) {
-                if (hasDownstream(a, repo) catch continue) |down| {
+                if (repo.findRemote("downstream") catch continue) |_| {
                     repo.dir.writeFile(.{ .sub_path = "srctree_last_downdate", .data = update }) catch {};
-                    a.free(down);
                     var agent = repo.getAgent(a);
                     const updated = agent.updateDownstream() catch er: {
                         std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});

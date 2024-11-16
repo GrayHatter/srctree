@@ -1,7 +1,6 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
-const aPrint = std.fmt.allocPrint;
+const allocPrint = std.fmt.allocPrint;
 const bPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 
@@ -108,13 +107,13 @@ pub fn navButtons(ctx: *Context) ![2]Template.Structs.NavButtons {
     const btns = [2]Template.Structs.NavButtons{
         .{
             .name = "issues",
-            .extra = try aPrint(ctx.alloc, "{}", .{i_count}),
-            .url = try aPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name}),
+            .extra = try allocPrint(ctx.alloc, "{}", .{i_count}),
+            .url = try allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name}),
         },
         .{
             .name = "diffs",
-            .extra = try aPrint(ctx.alloc, "{}", .{d_count}),
-            .url = try aPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name}),
+            .extra = try allocPrint(ctx.alloc, "{}", .{d_count}),
+            .url = try allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name}),
         },
     };
 
@@ -227,14 +226,14 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.R
     }
 
     var upstream: ?[]const u8 = null;
-    if (try Repos.hasUpstream(a, repo)) |url| {
-        upstream = try Repos.parseGitRemoteUrl(a, url);
+    if (try repo.findRemote("upstream")) |remote| {
+        upstream = try allocPrint(a, "{link}", .{remote});
     }
     var updated: []const u8 = "new repo";
     if (repo.headCommit(a)) |cmt| {
         defer cmt.raze();
         const committer = cmt.committer;
-        updated = try aPrint(
+        updated = try allocPrint(
             a,
             "updated about {}",
             .{Humanize.unix(committer.timestamp)},
@@ -246,14 +245,14 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.R
     if (repo.tags) |tags| {
         tag = .{
             .tag = tags[0].name,
-            .title = try aPrint(a, "created {}", .{Humanize.unix(tags[0].tagger.timestamp)}),
-            .uri = try aPrint(a, "/repo/{s}/tags", .{name}),
+            .title = try allocPrint(a, "created {}", .{Humanize.unix(tags[0].tagger.timestamp)}),
+            .uri = try allocPrint(a, "/repo/{s}/tags", .{name}),
         };
     }
 
     return .{
         .name = name,
-        .uri = try aPrint(a, "/repo/{s}", .{name}),
+        .uri = try allocPrint(a, "/repo/{s}", .{name}),
         .desc = desc,
         .upstream = upstream,
         .updated = updated,
@@ -356,17 +355,17 @@ fn treeBlob(ctx: *Context) Error!void {
     _ = ctx.uri.next();
 
     var cwd = std.fs.cwd();
-    const filename = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze();
 
-    if (Repos.hasUpstream(ctx.alloc, repo) catch return error.Unknown) |up| {
+    if (repo.findRemote("upstream") catch return error.Unknown) |remote| {
         var upstream = [_]Template.Context{
             Template.Context.init(ctx.alloc),
         };
-        upstream[0].putSlice("URI", up) catch return error.Unknown;
+        upstream[0].putSlice("URI", remote.url orelse "") catch return error.Unknown;
         ctx.putContext("Upstream", .{ .block = upstream[0..] }) catch return error.Unknown;
     }
 
@@ -377,7 +376,7 @@ fn treeBlob(ctx: *Context) Error!void {
     opengraph[0].putSlice("Title", rd.name) catch return error.Unknown;
     var desc = repo.description(ctx.alloc) catch return error.Unknown;
     if (std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-        desc = try aPrint(ctx.alloc, "An Indescribable repo with {s} commits", .{"[todo count commits]"});
+        desc = try allocPrint(ctx.alloc, "An Indescribable repo with {s} commits", .{"[todo count commits]"});
     }
     try opengraph[0].putSlice("Desc", desc);
     try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
@@ -481,7 +480,7 @@ fn blame(ctx: *Context) Error!void {
     const blame_file = ctx.uri.rest();
 
     var cwd = std.fs.cwd();
-    const fname = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const fname = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(fname, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     defer repo.raze();
@@ -620,7 +619,7 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     dom = try wrapLineNumbers(ctx.alloc, dom, formatted);
     const data = dom.done();
 
-    const filestr = try aPrint(
+    const filestr = try allocPrint(
         ctx.alloc,
         "{pretty}",
         .{HTML.div(data, &HTML.Attr.class("code-block"))},
@@ -699,16 +698,16 @@ fn drawFileLine(
 
     // I know... I KNOW!!!
     dom = dom.open(HTML.div(null, null));
-    const commit_href = try aPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha.hex[0..8] });
+    const commit_href = try allocPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha.hex[0..8] });
     dom.push(try HTML.aHrefAlloc(a, ch.commit_title, commit_href));
-    dom.dupe(HTML.span(try aPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
+    dom.dupe(HTML.span(try allocPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
     dom = dom.close();
     return dom.close();
 }
 
 fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
     var dom = ddom.open(HTML.element("file", null, null));
-    const file_link = try aPrint(a, "/repo/{s}/blob/{s}{s}", .{ rname, base, obj.name });
+    const file_link = try allocPrint(a, "/repo/{s}/blob/{s}{s}", .{ rname, base, obj.name });
 
     const href = &[_]HTML.Attribute{.{
         .key = "href",
@@ -721,7 +720,7 @@ fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
 
 fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
     var dom = ddom.open(HTML.element("tree", null, null));
-    const file_link = try aPrint(a, "/repo/{s}/tree/{s}{s}/", .{ rname, base, obj.name });
+    const file_link = try allocPrint(a, "/repo/{s}/tree/{s}{s}/", .{ rname, base, obj.name });
 
     const href = &[_]HTML.Attribute{.{
         .key = "href",
@@ -754,14 +753,14 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
     dom = dom.open(HTML.element("intro", null, null));
     dom.push(HTML.h3(rd.name, null));
-    const branches = try aPrint(ctx.alloc, "{} branches", .{repo.refs.len});
+    const branches = try allocPrint(ctx.alloc, "{} branches", .{repo.refs.len});
     dom.push(HTML.span(branches, null));
 
     const c = repo.headCommit(ctx.alloc) catch return error.Unknown;
     dom.push(HTML.span(c.title[0..@min(c.title.len, 50)], null));
-    const commit_time = try aPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
+    const commit_time = try allocPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
     dom = dom.open(HTML.span(null, &HTML.Attr.class("muted")));
-    const commit_href = try aPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha.hex[0..8] });
+    const commit_href = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha.hex[0..8] });
     dom.push(HTML.text(commit_time));
     dom.push(try HTML.aHrefAlloc(ctx.alloc, c.sha.hex[0..8], commit_href));
     dom = dom.close();
@@ -773,7 +772,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
         dom = dom.open(HTML.element("tree", null, null));
         const dd_href = &[_]HTML.Attribute{.{
             .key = "href",
-            .value = try aPrint(
+            .value = try allocPrint(
                 ctx.alloc,
                 "/repo/{s}/tree/{s}",
                 .{ rd.name, uri_base[0..end] },
@@ -835,7 +834,7 @@ fn tagsList(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
-    const filename = try aPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
