@@ -110,11 +110,16 @@ pub fn checkPatch(self: Agent, patch: []const u8) !?[]u8 {
         "git",
         "apply",
         "--check",
+        "--index",
+        "--cached",
+        "--verbose",
         "--",
     }, patch);
 
     if (res.term.Exited == 0) return null;
     std.debug.print("git apply error {}\n", .{res.term.Exited});
+    std.debug.print("stderr {s}", .{res.stderr});
+    std.debug.print("stdout {s}", .{res.stdout});
     return error.DoesNotApply;
 }
 

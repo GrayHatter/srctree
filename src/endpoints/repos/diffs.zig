@@ -387,7 +387,7 @@ fn view(ctx: *Context) Error!void {
         var agent = repo.getAgent(ctx.alloc);
         const applies = agent.checkPatch(fdata) catch |err| apl: {
             std.debug.print("git apply failed {any}\n", .{err});
-            break :apl null;
+            break :apl "";
         };
         if (applies == null) patch_applies = true;
     } else |err| {
@@ -415,7 +415,7 @@ fn view(ctx: *Context) Error!void {
         },
         .comments = comments_,
         .delta_id = delta_id,
-        .patch_does_not_apply = if (patch_applies) .{} else null,
+        .patch_does_not_apply = if (patch_applies) null else .{},
         .current_username = username,
     });
 
