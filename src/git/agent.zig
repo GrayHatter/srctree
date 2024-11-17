@@ -95,6 +95,16 @@ pub fn show(self: Agent, sha: []const u8) ![]u8 {
     });
 }
 
+pub fn formatPatch(self: Agent, sha: []const u8) ![]u8 {
+    return try self.exec(&[_][]const u8{
+        "git",
+        "format-patch",
+        "--stdout",
+        "-1",
+        sha,
+    });
+}
+
 pub fn blame(self: Agent, name: []const u8) ![]u8 {
     std.debug.print("{s}\n", .{name});
     return try self.exec(&[_][]const u8{

@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
+const endsWith = std.mem.endsWith;
 
 const Diffs = @import("diffs.zig");
 
@@ -163,17 +165,16 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
 }
 
 pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
-    var current: Git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
     var acts = repo.getAgent(ctx.alloc);
-    if (std.mem.indexOf(u8, sha, ".patch")) |tail| {
-        while (!std.mem.startsWith(u8, current.sha.hex[0..], sha[0..tail])) {
-            current = current.toParent(ctx.alloc, 0, &repo) catch return error.Unknown;
-        }
+    if (endsWith(u8, sha, ".patch")) {
+        var rbuf: [0xff]u8 = undefined;
+        const commit_only = sha[0 .. sha.len - 6];
+        const range = try bufPrint(rbuf[0..], "{s}^..{s}", .{ commit_only, commit_only });
 
-        var diff = acts.show(sha[0..tail]) catch return error.Unknown;
-        if (std.mem.indexOf(u8, diff, "diff")) |i| {
-            diff = diff[i..];
-        }
+        const diff = acts.formatPatch(range) catch return error.Unknown;
+        //if (std.mem.indexOf(u8, diff, "diff")) |i| {
+        //    diff = diff[i..];
+        //}
         ctx.response.status = .ok;
         ctx.response.headersAdd("Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
         ctx.response.start() catch return Error.Unknown;
