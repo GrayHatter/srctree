@@ -24,10 +24,11 @@
           <_comment.html>
         </For>
         <form class="pretty" action="add-comment" method="POST">
-          <context><Current_username ORNULL></context>
+          <context><CurrentUsername></context>
           <textarea name="comment"></textarea>
           <button type="submit" name="comment">Comment</button>
-          <input type="hidden" name="did" value="<Delta_id>" />
+          <With PatchDoesNotApply><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
+          <input type="hidden" name="did" value="<DeltaId>" />
         </form>
       </comments>
     </content>

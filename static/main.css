@@ -94,6 +94,10 @@ button {
 	border-radius: 3px;
 	font-family: 'Titillium Web', sans-serif;
 	padding: 6px 18px;
+
+	&.red {
+		color: red;
+	}
 }
 
 lines {

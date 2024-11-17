@@ -362,15 +362,13 @@ fn view(ctx: *Context) Error!void {
         @panic("oops");
     }
 
-    try ctx.putContext("Delta_id", .{ .slice = delta_id });
-
     const udata = ctx.reqdata.query.validate(PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
 
     var patch_formatted: ?Template.Structs.PatchHtml = null;
-    const filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
-
-    if (std.fs.cwd().openFile(filename, .{})) |f| {
+    const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
+    var patch_applies: bool = false;
+    if (std.fs.cwd().openFile(patch_filename, .{})) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         var patch = Patch.Patch.init(fdata);
         if (patchStruct(ctx.alloc, &patch, !inline_html)) |phtml| {
@@ -379,10 +377,27 @@ fn view(ctx: *Context) Error!void {
             std.debug.print("Unable to generate patch {any}\n", .{err});
         }
         f.close();
+
+        var cwd = std.fs.cwd();
+        const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+        const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+        var repo = Git.Repo.init(dir) catch return error.Unknown;
+        repo.loadData(ctx.alloc) catch return error.Unknown;
+        defer repo.raze();
+        var agent = repo.getAgent(ctx.alloc);
+        const applies = agent.checkPatch(fdata) catch |err| apl: {
+            std.debug.print("git apply failed {any}\n", .{err});
+            break :apl null;
+        };
+        if (applies == null) patch_applies = true;
     } else |err| {
-        std.debug.print("Unable to load patch {} {s}\n", .{ err, filename });
+        std.debug.print("Unable to load patch {} {s}\n", .{ err, patch_filename });
     }
 
+    const username = if (ctx.auth.valid())
+        (ctx.auth.user(ctx.alloc) catch unreachable).username
+    else
+        "public";
     var page = DiffViewPage.init(.{
         .meta_head = .{
             .open_graph = .{},
@@ -400,6 +415,8 @@ fn view(ctx: *Context) Error!void {
         },
         .comments = comments_,
         .delta_id = delta_id,
+        .patch_does_not_apply = if (patch_applies) .{} else null,
+        .current_username = username,
     });
 
     try ctx.sendPage(&page);

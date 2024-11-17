@@ -105,6 +105,19 @@ pub fn formatPatch(self: Agent, sha: []const u8) ![]u8 {
     });
 }
 
+pub fn checkPatch(self: Agent, patch: []const u8) !?[]u8 {
+    const res = try self.execStdin(&.{
+        "git",
+        "apply",
+        "--check",
+        "--",
+    }, patch);
+
+    if (res.term.Exited == 0) return null;
+    std.debug.print("git apply error {}\n", .{res.term.Exited});
+    return error.DoesNotApply;
+}
+
 pub fn blame(self: Agent, name: []const u8) ![]u8 {
     std.debug.print("{s}\n", .{name});
     return try self.exec(&[_][]const u8{
@@ -113,6 +126,51 @@ pub fn blame(self: Agent, name: []const u8) ![]u8 {
         "--porcelain",
         name,
     });
+}
+
+fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.ChildProcess.RunResult {
+    std.debug.assert(std.mem.eql(u8, argv[0], "git"));
+    const cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
+    var child = std.ChildProcess.init(argv, self.alloc);
+
+    child.stdin_behavior = .Pipe;
+    child.stdout_behavior = .Pipe;
+    child.stderr_behavior = .Pipe;
+    child.cwd_dir = cwd;
+
+    var stdout = std.ArrayList(u8).init(self.alloc);
+    var stderr = std.ArrayList(u8).init(self.alloc);
+    errdefer {
+        stdout.deinit();
+        stderr.deinit();
+    }
+
+    try child.spawn();
+    if (child.stdin) |cstdin| {
+        try cstdin.writeAll(stdin);
+        cstdin.close();
+        child.stdin = null;
+    }
+
+    child.collectOutput(&stdout, &stderr, 0x1fffff) catch |err| {
+        const errstr =
+            \\git agent error:
+            \\error :: {}
+            \\argv :: 
+        ;
+        std.debug.print(errstr, .{err});
+        for (argv) |arg| std.debug.print("{s} ", .{arg});
+        std.debug.print("\n", .{});
+        return err;
+    };
+
+    const res = std.ChildProcess.RunResult{
+        .term = try child.wait(),
+        .stdout = try stdout.toOwnedSlice(),
+        .stderr = try stderr.toOwnedSlice(),
+    };
+
+    return res;
 }
 
 fn execCustom(self: Agent, argv: []const []const u8) !std.ChildProcess.RunResult {
