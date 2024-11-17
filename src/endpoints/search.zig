@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const splitScalar = std.mem.splitScalar;
 
 const Context = @import("../context.zig");
 const Delta = @import("../types.zig").Delta;
@@ -42,7 +43,7 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
 
     var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
-    var itr = std.mem.split(u8, search_str, " ");
+    var itr = splitScalar(u8, search_str, ' ');
     while (itr.next()) |r_line| {
         var line = r_line;
         line = std.mem.trim(u8, line, " ");

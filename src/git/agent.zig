@@ -102,7 +102,6 @@ pub fn formatPatch(self: Agent, sha: []const u8) ![]u8 {
         "format-patch",
         "--histogram",
         "--stdout",
-        "-1",
         sha,
     });
 }
@@ -133,10 +132,10 @@ pub fn blame(self: Agent, name: []const u8) ![]u8 {
     });
 }
 
-fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.ChildProcess.RunResult {
+fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.process.Child.RunResult {
     std.debug.assert(std.mem.eql(u8, argv[0], "git"));
     const cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
-    var child = std.ChildProcess.init(argv, self.alloc);
+    var child = std.process.Child.init(argv, self.alloc);
 
     child.stdin_behavior = .Pipe;
     child.stdout_behavior = .Pipe;
@@ -169,7 +168,7 @@ fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.Chil
         return err;
     };
 
-    const res = std.ChildProcess.RunResult{
+    const res = std.process.Child.RunResult{
         .term = try child.wait(),
         .stdout = try stdout.toOwnedSlice(),
         .stderr = try stderr.toOwnedSlice(),
@@ -178,10 +177,10 @@ fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.Chil
     return res;
 }
 
-fn execCustom(self: Agent, argv: []const []const u8) !std.ChildProcess.RunResult {
+fn execCustom(self: Agent, argv: []const []const u8) !std.process.Child.RunResult {
     std.debug.assert(std.mem.eql(u8, argv[0], "git"));
     const cwd = if (self.cwd != null and self.cwd.?.fd != std.fs.cwd().fd) self.cwd else null;
-    const child = std.ChildProcess.run(.{
+    const child = std.process.Child.run(.{
         .cwd_dir = cwd,
         .allocator = self.alloc,
         .argv = argv,

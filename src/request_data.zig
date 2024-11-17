@@ -2,6 +2,8 @@ const std = @import("std");
 const Type = @import("builtin").Type;
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
+const splitScalar = std.mem.splitScalar;
+const splitSequence = std.mem.splitSequence;
 
 const Data = @This();
 
@@ -112,7 +114,7 @@ pub const QueryData = struct {
 
     /// TODO leaks on error
     pub fn init(a: Allocator, query: []const u8) !QueryData {
-        var itr = std.mem.split(u8, query, "&");
+        var itr = splitScalar(u8, query, '&');
         const count = std.mem.count(u8, query, "&") + 1;
         const items = try a.alloc(DataItem, count);
         for (items) |*item| {
@@ -319,7 +321,7 @@ fn parseApplication(a: Allocator, ap: ContentType.Application, data: []u8, htype
         .@"x-www-form-urlencoded" => {
             std.debug.assert(std.mem.startsWith(u8, htype, "application/x-www-form-urlencoded"));
 
-            var itr = std.mem.split(u8, data, "&");
+            var itr = splitScalar(u8, data, '&');
             const count = std.mem.count(u8, data, "&") +| 1;
             const items = try a.alloc(DataItem, count);
             for (items) |*itm| {
@@ -380,7 +382,7 @@ const MultiData = struct {
 };
 
 fn parseMultiData(data: []const u8) !MultiData {
-    var extra = std.mem.split(u8, data, ";");
+    var extra = splitScalar(u8, data, ';');
     const first = extra.first();
     const header = try DataHeader.fromStr(first);
     var mdata: MultiData = .{
@@ -406,7 +408,7 @@ fn parseMultiFormData(a: Allocator, data: []const u8) !DataItem {
         };
 
         post_item.headers = data[0..i];
-        var headeritr = std.mem.split(u8, post_item.headers.?, "\r\n");
+        var headeritr = splitSequence(u8, post_item.headers.?, "\r\n");
         while (headeritr.next()) |header| {
             if (header.len == 0) continue;
             const md = try parseMultiData(header);
@@ -434,7 +436,7 @@ fn parseMulti(a: Allocator, mp: ContentType.MultiPart, data: []const u8, htype: 
             const boundry = boundry_buffer[0 .. bound_given.len + 2];
             const count = std.mem.count(u8, data, boundry) -| 1;
             const items = try a.alloc(DataItem, count);
-            var itr = std.mem.split(u8, data, boundry);
+            var itr = splitSequence(u8, data, boundry);
             _ = itr.first(); // the RFC says I'm supposed to ignore the preamble :<
             for (items) |*itm| {
                 itm.* = try parseMultiFormData(a, itr.next().?);

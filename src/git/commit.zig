@@ -65,7 +65,7 @@ fn gpgSig(_: *Commit, itr: *std.mem.SplitIterator(u8, .sequence)) !void {
 
 pub fn init(sha: SHA, data: []const u8) !Commit {
     if (std.mem.startsWith(u8, data, "commit")) unreachable;
-    var lines = std.mem.split(u8, data, "\n");
+    var lines = std.mem.splitSequence(u8, data, "\n");
     var self: Commit = undefined;
     // I don't like it either, but... lazy
     self.parent = .{ null, null, null, null, null, null, null, null, null };
@@ -125,7 +125,7 @@ pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8, repo: *const 
     const rootpath = subpath orelse return self.mkTree(a, repo);
     if (rootpath.len == 0) return self.mkTree(a, repo);
 
-    var itr = std.mem.split(u8, rootpath, "/");
+    var itr = std.mem.splitScalar(u8, rootpath, '/');
     var root = try self.mkTree(a, repo);
     root.path = try a.dupe(u8, rootpath);
     iter: while (itr.next()) |path| {

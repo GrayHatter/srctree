@@ -11,7 +11,7 @@ timestamp: i64 = 0,
 tz: i64 = 0,
 
 pub fn make(data: []const u8) !Actor {
-    var itr = std.mem.splitBackwards(u8, data, " ");
+    var itr = std.mem.splitBackwardsScalar(u8, data, ' ');
     const tzstr = itr.next() orelse return error.ActorParse;
     const epoch = itr.next() orelse return error.ActorParse;
     const epstart = itr.index orelse return error.ActorParse;

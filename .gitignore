@@ -1,5 +1,7 @@
 repos/*
-zig-*/*
+zig-out/*
+zig-cache/*
+.zig-cache/*
 data/*
 
 config.ini

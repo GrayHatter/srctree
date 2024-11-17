@@ -406,7 +406,7 @@ pub const Repo = struct {
             var buf: [2048]u8 = undefined;
             const size = try file.readAll(&buf);
             const b = buf[0..size];
-            var p_itr = std.mem.split(u8, b, "\n");
+            var p_itr = splitScalar(u8, b, '\n');
             _ = p_itr.next();
             while (p_itr.next()) |line| {
                 if (std.mem.indexOf(u8, line, "refs/heads")) |_| {
@@ -732,7 +732,7 @@ pub const Tag = struct {
         var object: ?[]const u8 = null;
         var ttype: ?TagType = null;
         var actor: ?Actor = null;
-        var itr = std.mem.splitScalar(u8, blob, '\n');
+        var itr = splitScalar(u8, blob, '\n');
         while (itr.next()) |line| {
             if (startsWith(u8, line, "object ")) {
                 object = line[7..];
@@ -958,7 +958,7 @@ test "tree decom" {
 
 test "tree child" {
     var a = std.testing.allocator;
-    const child = try std.ChildProcess.run(.{
+    const child = try std.process.Child.run(.{
         .allocator = a,
         .argv = &[_][]const u8{
             "git",

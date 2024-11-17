@@ -68,7 +68,7 @@ fn gitUploadPack(ctx: *Context) Error!void {
     try map.put("GIT_PROTOCOL", "version=2");
     try map.put("GIT_HTTP_EXPORT_ALL", "true");
 
-    var child = std.ChildProcess.init(&[_][]const u8{ "git", "http-backend" }, ctx.alloc);
+    var child = std.process.Child.init(&[_][]const u8{ "git", "http-backend" }, ctx.alloc);
     child.stdin_behavior = .Pipe;
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Ignore;

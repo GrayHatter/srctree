@@ -418,7 +418,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
 
     const count = std.mem.count(u8, blame_txt, "\n\t");
     const lines = try a.alloc(BlameLine, count);
-    var in_lines = std.mem.split(u8, blame_txt, "\n");
+    var in_lines = std.mem.splitScalar(u8, blame_txt, '\n');
     for (lines) |*blm| {
         const line = in_lines.next() orelse break;
         if (line.len < 40) unreachable;
@@ -501,7 +501,7 @@ fn blame(ctx: *Context) Error!void {
         break :fmt pre[28..][0 .. pre.len - 38];
     } else Bleach.sanitizeAlloc(ctx.alloc, source_lines.items, .{}) catch return error.Unknown;
 
-    var litr = std.mem.split(u8, formatted, "\n");
+    var litr = std.mem.splitScalar(u8, formatted, '\n');
     for (parsed.lines) |*line| {
         if (litr.next()) |n| {
             line.line = n;
@@ -553,7 +553,7 @@ fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
     // TODO
 
     var i: usize = 0;
-    var litr = std.mem.split(u8, text, "\n");
+    var litr = std.mem.splitScalar(u8, text, '\n');
     while (litr.next()) |line| {
         var pbuf: [12]u8 = undefined;
         const b = std.fmt.bufPrint(&pbuf, "#L{}", .{i + 1}) catch unreachable;
@@ -664,7 +664,7 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]HTML.E {
     dom = dom.open(HTML.element("readme", null, null));
     dom.push(HTML.element("intro", "README.md", null));
     dom = dom.open(HTML.element("code", null, null));
-    var litr = std.mem.split(u8, readme, "\n");
+    var litr = std.mem.splitScalar(u8, readme, '\n');
     while (litr.next()) |dirty| {
         const clean = Bleach.sanitizeAlloc(a, dirty, .{}) catch return error.Unknown;
         dom.push(HTML.element("ln", clean, null));

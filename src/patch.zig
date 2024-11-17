@@ -6,6 +6,7 @@ const assert = std.debug.assert;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const indexOfPos = std.mem.indexOfPos;
+const splitScalar = std.mem.splitScalar;
 
 const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
@@ -343,25 +344,23 @@ pub fn patchStat(p: Patch) Stat {
 }
 
 fn fetch(a: Allocator, uri: []const u8) ![]u8 {
-    // disabled until tls1.2 is supported
-    // var client = std.http.client{
-    //     .allocator = a,
-    // };
-    // defer client.deinit();
+    var client = std.http.Client{ .allocator = a };
+    //defer client.deinit();
 
-    // var request = client.fetch(a, .{
-    //     .location = .{ .url = uri },
-    // });
-    // if (request) |*req| {
-    //     defer req.deinit();
-    //     std.debug.print("request code {}\n", .{req.status});
-    //     if (req.body) |b| {
-    //         std.debug.print("request body {s}\n", .{b});
-    //         return a.dupe(u8, b);
-    //     }
-    // } else |err| {
-    //     std.debug.print("stdlib request failed with error {}\n", .{err});
-    // }
+    var response = std.ArrayList(u8).init(a);
+    defer response.clearAndFree();
+    const request = client.fetch(.{
+        .location = .{ .url = uri },
+        .response_storage = .{ .dynamic = &response },
+        .max_append_size = 0xffffff,
+    });
+    if (request) |req| {
+        std.debug.print("request code {}\n", .{req.status});
+        std.debug.print("request body {s}\n", .{response.items});
+        return try response.toOwnedSlice();
+    } else |err| {
+        std.debug.print("stdlib request failed with error {}\n", .{err});
+    }
 
     const curl = try CURL.curlRequest(a, uri);
     if (curl.code != 200) return error.UnexpectedResponseCode;
@@ -384,7 +383,7 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
 
     const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
-    var litr = std.mem.split(u8, clean, "\n");
+    var litr = std.mem.splitScalar(u8, clean, '\n');
     const nbsp = "&nbsp;";
 
     const LinePair = struct {
@@ -458,7 +457,7 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
 
     const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
-    var litr = std.mem.split(u8, clean, "\n");
+    var litr = splitScalar(u8, clean, '\n');
     for (0..line_count + 1) |_| {
         const a_add = &HTML.Attr.class("add");
         const a_del = &HTML.Attr.class("del");

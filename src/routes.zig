@@ -14,7 +14,7 @@ const StaticFile = @import("static-file.zig");
 pub const Errors = @import("errors.zig");
 pub const Error = Errors.ServerError || Errors.ClientError || Errors.NetworkError;
 
-pub const UriIter = std.mem.SplitIterator(u8, .sequence);
+pub const UriIter = std.mem.SplitIterator(u8, .scalar);
 
 pub const Router = *const fn (*Context) Error!Callable;
 pub const Callable = *const fn (*Context) Error!void;

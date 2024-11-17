@@ -205,7 +205,7 @@ fn list(ctx: *Context) Error!void {
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
 
-    const meta_head = Template.Structs.MetaHeadHtml{
+    const meta_head = S.MetaHeadHtml{
         .open_graph = .{},
     };
 

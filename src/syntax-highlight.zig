@@ -35,7 +35,7 @@ pub const Language = enum {
 };
 
 pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
-    var child = std.ChildProcess.init(&[_][]const u8{
+    var child = std.process.Child.init(&[_][]const u8{
         "pygmentize",
         "-f",
         "html",

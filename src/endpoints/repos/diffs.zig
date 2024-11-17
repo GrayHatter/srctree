@@ -129,8 +129,9 @@ fn new(ctx: *Context) Error!void {
 }
 
 fn inNetwork(str: []const u8) bool {
-    if (!std.mem.startsWith(u8, str, "https://srctree.gr.ht")) return false;
-    for (str) |c| if (c == '@') return false;
+    //if (!std.mem.startsWith(u8, str, "https://srctree.gr.ht")) return false;
+    //for (str) |c| if (c == '@') return false;
+    _ = str;
     return true;
 }
 
@@ -157,37 +158,36 @@ fn createDiff(ctx: *Context) Error!void {
             }
         }
 
-        var delta = Delta.new(
-            rd.name,
-            udata.title,
-            udata.desc,
-            if (ctx.auth.valid())
-                (ctx.auth.user(ctx.alloc) catch unreachable).username
-            else
-                try allocPrint(ctx.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
-        ) catch unreachable;
-        delta.commit() catch unreachable;
-
         if (inNetwork(udata.patch_uri)) {
-            std.debug.print("src {s}\ntitle {s}\ndesc {s}\naction {s}\n", .{
-                udata.patch_uri,
+            const data = Patch.loadRemote(ctx.alloc, udata.patch_uri) catch unreachable;
+
+            std.debug.print(
+                "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
+                .{ udata.patch_uri, udata.title, udata.desc, "unimplemented" },
+            );
+            var delta = Delta.new(
+                rd.name,
                 udata.title,
                 udata.desc,
-                "unimplemented",
-            });
-            const data = Patch.loadRemote(ctx.alloc, udata.patch_uri) catch unreachable;
-            const filename = std.fmt.allocPrint(
-                ctx.alloc,
-                "data/patch/{s}.{x}.patch",
-                .{ rd.name, delta.index },
+                if (ctx.auth.valid())
+                    (ctx.auth.user(ctx.alloc) catch unreachable).username
+                else
+                    try allocPrint(ctx.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
             ) catch unreachable;
+            delta.commit() catch unreachable;
+            std.debug.print("commit id {x}\n", .{delta.index});
+
+            const filename = allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{
+                rd.name,
+                delta.index,
+            }) catch unreachable;
             var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
             defer file.close();
             file.writer().writeAll(data.blob) catch unreachable;
+            var buf: [2048]u8 = undefined;
+            const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
+            return ctx.response.redirect(loc, true) catch unreachable;
         }
-        var buf: [2048]u8 = undefined;
-        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
-        return ctx.response.redirect(loc, true) catch unreachable;
     }
 
     return try new(ctx);

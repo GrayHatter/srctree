@@ -1,6 +1,6 @@
 pub const std = @import("std");
-
 const Allocator = std.mem.Allocator;
+const splitScalar = std.mem.splitScalar;
 
 const zWSGI = @import("zwsgi.zig");
 const Auth = @import("auth.zig");
@@ -44,7 +44,7 @@ pub fn init(a: Allocator, cfg: ?Config, req: Request, res: Response, reqdata: Re
         .request = req,
         .response = res,
         .reqdata = reqdata,
-        .uri = std.mem.split(u8, req.uri[1..], "/"),
+        .uri = splitScalar(u8, req.uri[1..], '/'),
         .cfg = cfg,
         .auth = Auth.init(req.headers),
         .template_ctx = Template.Context.init(a),

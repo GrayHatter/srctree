@@ -1,5 +1,6 @@
 const std = @import("std");
 const eql = std.mem.eql;
+const splitScalar = std.mem.splitScalar;
 
 const Allocator = std.mem.Allocator;
 
@@ -31,7 +32,7 @@ pub const Namespace = struct {
     pub fn init(
         a: Allocator,
         name: []const u8,
-        itr: *std.mem.SplitIterator(u8, .sequence),
+        itr: *std.mem.SplitIterator(u8, .scalar),
     ) !Namespace {
         var list = std.ArrayList(Setting).init(a);
         const ns_start = itr.index.?;
@@ -142,7 +143,7 @@ pub fn initDupe(a: Allocator, ini: []const u8) !Config {
 
 /// `data` must outlive returned Config, use initDupe otherwise
 pub fn init(a: Allocator, data: []const u8) !Config {
-    var itr = std.mem.split(u8, data, "\n");
+    var itr = std.mem.splitScalar(u8, data, '\n');
 
     var list = std.ArrayList(Namespace).init(a);
 

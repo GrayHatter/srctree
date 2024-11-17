@@ -86,7 +86,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
 
     const udata = ctx.reqdata.post.?.validate(CloneUpstreamReq) catch return error.BadData;
     std.debug.print("repo uri {s}\n", .{udata.repo_uri});
-    var nameitr = std.mem.splitBackwards(u8, udata.repo_uri, "/");
+    var nameitr = std.mem.splitBackwardsScalar(u8, udata.repo_uri, '/');
     const name = nameitr.first();
     std.debug.print("repo uri {s}\n", .{name});
 
