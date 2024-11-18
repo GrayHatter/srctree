@@ -11,17 +11,17 @@
         <commit>
           <data>
             <a href="<Uri ORELSE #>" class=muted><Sha></a>
-            <span><Msg_title ORNULL></span>
+            <span><MsgTitle ORNULL></span>
             <br />
             <Msg>
           </data>
           <foot>
           <author><Author></author>
-            <span>parent <a href="<Parent_uri>"><Parent></a></span>
+          <For CommitParent><span>parent <a href="<Uri>"><Sha></a></span></For>
           </foot>
         </commit>
       </For>
-      <After ORNULL>
+      <With AfterCommits><a href="/repo/<RepoName>/commits/before/<Sha>" class="btn">More</a></With>
     </content>
   </body>
 </html>

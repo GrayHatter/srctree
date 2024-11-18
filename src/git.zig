@@ -65,6 +65,7 @@ pub const SHA = struct {
         } else unreachable;
     }
 
+    /// TODO return error, and validate it's actually hex
     pub fn initPartial(sha: []const u8) SHA {
         var buf: [40]u8 = ("0" ** 40).*;
         for (buf[0..sha.len], sha[0..]) |*dst, src| dst.* = src;
@@ -89,6 +90,18 @@ pub const SHA = struct {
             bin[i] = parseInt(u8, sha[i * 2 .. (i + 1) * 2], 16) catch unreachable;
         }
         return bin;
+    }
+
+    pub fn eql(self: SHA, peer: SHA) bool {
+        if (self.partial == true) @panic("not implemented");
+        if (self.partial != peer.partial) return false;
+        return std.mem.eql(u8, self.bin[0..20], peer.bin[0..20]);
+    }
+
+    pub fn eqlIsh(self: SHA, peer: SHA) bool {
+        if (self.partial == true) @panic("not implemented");
+        if (peer.partial != true) return self.eql(peer);
+        return std.mem.eql(u8, self.bin[0..peer.binlen], peer.bin[0..peer.binlen]);
     }
 };
 

@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const endsWith = std.mem.endsWith;
+const eql = std.mem.eql;
 
 const Diffs = @import("diffs.zig");
 
@@ -21,6 +22,7 @@ const Template = @import("../../template.zig");
 const Types = @import("../../types.zig");
 const RequestData = @import("../../request_data.zig").RequestData;
 
+const S = Template.Structs;
 const Comment = Types.Comment;
 const CommitMap = Types.CommitMap;
 const Delta = Types.Delta;
@@ -32,19 +34,22 @@ const Thread = Types.Thread;
 const UriIter = Route.UriIter;
 
 pub const routes = [_]Route.MatchRouter{
-    ROUTE("", commits),
+    ROUTE("", commitsView),
     GET("before", commitsBefore),
 };
+
+const CommitPage = Template.PageData("commit.html");
+const CommitsListPage = Template.PageData("commit-list.html");
 
 const AddComment = struct {
     text: []const u8,
 };
 
 pub fn router(ctx: *Context) Error!Route.Callable {
-    const rd = RouteData.make(&ctx.uri) orelse return commits;
+    const rd = RouteData.make(&ctx.uri) orelse return commitsView;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return viewCommit;
-    return commits;
+    return commitsView;
 }
 
 fn newComment(ctx: *Context) Error!void {
@@ -67,8 +72,6 @@ pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
 
     return try patch.diffsContextSlice(a);
 }
-
-const CommitPage = Template.PageData("commit.html");
 
 fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
@@ -115,7 +118,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         diffstat.additions,
         diffstat.deletions,
     });
-    const meta_head = Template.Structs.MetaHeadHtml{
+    const meta_head = S.MetaHeadHtml{
         .open_graph = .{
             .title = og_title,
             .desc = Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable,
@@ -185,7 +188,7 @@ pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
 
 pub fn viewCommit(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (rd.verb == null) return commits(ctx);
+    if (rd.verb == null) return commitsView(ctx);
 
     const sha = rd.noun orelse return error.Unrouteable;
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
@@ -278,102 +281,94 @@ pub fn htmlCommit(a: Allocator, c: Git.Commit, repo: []const u8, comptime top: b
     return dom.done();
 }
 
-fn commitContext(a: Allocator, c: Git.Commit, repo: []const u8, comptime _: bool) !Template.Context {
-    var ctx = Template.Context.init(a);
-
-    try ctx.putSlice("Sha", c.sha.hex[0..8]);
-    try ctx.putSlice("Uri", try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha.hex[0..8] }));
-    // TODO handle error.NotImplemented
-    try ctx.putSlice("Msg_title", Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable);
-    try ctx.putSlice("Msg", Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable);
-    //if (top) "top" else "foot", null, null));
-    try ctx.putSlice("Author", c.author.name);
-    const parents = try a.alloc(Template.Context, c.parent.len);
-    errdefer a.free(parents);
-    for (parents, c.parent) |*par, par_cmt| {
-        // TODO leaks on err
-        var pctx = Template.Context.init(a);
-        if (par_cmt == null) continue;
-
-        try pctx.putSlice("Parent", par_cmt.?.hex[0..8]);
-        try pctx.putSlice("Parent_uri", try std.fmt.allocPrint(
-            a,
-            "/repo/{s}/commit/{s}",
-            .{ repo, par_cmt.?.hex[0..8] },
-        ));
-        par.* = pctx;
+fn commitContext(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.Commits {
+    var parcount: usize = 0;
+    for (c.parent) |p| {
+        if (p != null) parcount += 1;
     }
-    try ctx.putBlock("Parents", parents);
-    return ctx;
+    const parents = try a.alloc(S.CommitParent, parcount);
+    errdefer a.free(parents);
+    var par_ptr: [*]const ?Git.SHA = &c.parent;
+    for (0..parcount) |i| {
+        var lim = 9 - i;
+        while (lim > 0 and par_ptr[i] == null) {
+            par_ptr += 1;
+            lim -= 1;
+        }
+        parents[i] = .{
+            .uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo_name, par_ptr[i].?.hex[0..8] }),
+            .sha = try allocPrint(a, "{s}", .{par_ptr[i].?.hex[0..8]}),
+        };
+    }
+    return .{
+        .sha = try allocPrint(a, "{s}", .{c.sha.hex[0..8]}),
+        .uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo_name, c.sha.hex[0..8] }),
+        .msg_title = try Bleach.sanitizeAlloc(a, c.title, .{}),
+        .msg = try Bleach.sanitizeAlloc(a, c.body, .{}),
+        .author = c.author.name,
+        .commit_parent = parents,
+    };
 }
 
 fn buildList(
     a: Allocator,
     repo: Git.Repo,
     name: []const u8,
-    before: ?[]const u8,
-    elms: []Template.Context,
+    before: ?Git.SHA,
+    count: usize,
     outsha: *Git.SHA,
-) ![]Template.Context {
-    return buildListBetween(a, repo, name, null, before, elms, outsha);
+) ![]S.Commits {
+    return buildListBetween(a, repo, name, null, before, count, outsha);
 }
 
 fn buildListBetween(
     a: Allocator,
     repo: Git.Repo,
     name: []const u8,
-    left: ?[]const u8,
-    right: ?[]const u8,
-    elms: []Template.Context,
+    left: ?Git.SHA,
+    right: ?Git.SHA,
+    count: usize,
     outsha: *Git.SHA,
-) ![]Template.Context {
+) ![]S.Commits {
+    var commits = try a.alloc(S.Commits, count);
     var current: Git.Commit = repo.headCommit(a) catch return error.Unknown;
     if (right) |r| {
-        std.debug.assert(r.len <= 40);
-        const min = @min(r.len, current.sha.hex.len);
-        while (!std.mem.eql(u8, r, current.sha.hex[0..min])) {
-            current = current.toParent(a, 0, &repo) catch {
+        while (!current.sha.eqlIsh(r)) {
+            current = current.toParent(a, 0, &repo) catch |err| {
                 std.debug.print("unable to build commit history\n", .{});
-                return elms[0..0];
+                return err;
             };
         }
-        current = current.toParent(a, 0, &repo) catch {
+        current = current.toParent(a, 0, &repo) catch |err| {
             std.debug.print("unable to build commit history\n", .{});
-            return elms[0..0];
+            return err;
         };
     }
-    var count: usize = 0;
-    for (elms, 1..) |*c, i| {
-        count = i;
-        outsha.* = Git.SHA.init(current.sha.bin[0..]);
-        c.* = try commitContext(a, current, name, false);
-        if (left) |l| {
-            const min = @min(l.len, current.sha.hex.len);
-            if (std.mem.eql(u8, l, current.sha.hex[0..min])) break;
-        }
-        current = current.toParent(a, 0, &repo) catch {
-            break;
-        };
+    var found: usize = 0;
+    for (commits, 1..) |*c, i| {
+        c.* = try commitContext(a, current, name);
+        found = i;
+        outsha.* = current.sha;
+        if (left) |l| if (current.sha.eqlIsh(l)) break;
+        current = current.toParent(a, 0, &repo) catch break;
     }
-    return elms[0..count];
+    if (a.resize(commits, found)) {
+        commits.len = found;
+    } else unreachable; // lol, good luck!
+    return commits;
 }
 
-pub fn commits(ctx: *Context) Error!void {
+pub fn commitsView(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     if (ctx.uri.next()) |next| {
         if (!std.mem.eql(u8, next, "commits")) return error.Unrouteable;
     }
 
-    var commitish: ?[]const u8 = null;
-    if (ctx.uri.next()) |next| {
-        if (std.mem.eql(u8, next, "before")) {
-            if (ctx.uri.next()) |before| {
-                if (!Git.commitish(before)) return error.Unrouteable;
-                commitish = before;
-            }
-        }
-    }
+    var commitish: ?Git.SHA = null;
+    if (ctx.uri.next()) |next| if (eql(u8, next, "before")) {
+        if (ctx.uri.next()) |before| commitish = Git.SHA.initPartial(before);
+    };
 
     // TODO use left and right commit finding
     //if (commitish) |cmish| {
@@ -395,15 +390,11 @@ pub fn commits(ctx: *Context) Error!void {
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze();
 
-    const commits_b = try ctx.alloc.alloc(Template.Context, 50);
     var last_sha: Git.SHA = undefined;
-    const cmts_list = try buildList(ctx.alloc, repo, rd.name, commitish, commits_b, &last_sha);
+    const cmts_list = buildList(ctx.alloc, repo, rd.name, commitish, 50, &last_sha) catch
+        return error.Unknown;
 
-    const before_txt = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{
-        rd.name,
-        last_sha.hex[0..8],
-    });
-    return sendCommits(ctx, cmts_list, before_txt);
+    return sendCommits(ctx, cmts_list, rd.name, last_sha.hex[0..8]);
 }
 
 pub fn commitsBefore(ctx: *Context) Error!void {
@@ -417,23 +408,28 @@ pub fn commitsBefore(ctx: *Context) Error!void {
     var repo = Git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
-    const before = ctx.uri.next();
+    const before: Git.SHA = if (ctx.uri.next()) |bf| Git.SHA.initPartial(bf);
     const commits_b = try ctx.alloc.alloc(Template.Context, 50);
-    var last_sha: [8]u8 = undefined;
+    var last_sha: Git.SHA = undefined;
     const cmts_list = try buildList(ctx.alloc, repo, rd.name, before, commits_b, &last_sha);
-    const before_txt = try std.fmt.allocPrint(ctx.alloc, "/repo/{s}/commits/before/{s}", .{ rd.name, last_sha });
-    return sendCommits(ctx, cmts_list, before_txt);
+    return sendCommits(ctx, cmts_list, rd.name, last_sha[0..]);
 }
 
-fn sendCommits(ctx: *Context, list: []Template.Context, before_txt: []const u8) Error!void {
-    var tmpl = Template.find("commit-list.html");
+fn sendCommits(ctx: *Context, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
+    const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    try ctx.putContext("Commits", .{ .block = list });
+    var page = CommitsListPage.init(.{
+        .meta_head = meta_head,
+        .body_header = .{ .nav = .{
+            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_auth = undefined,
+        } },
+        .commits = list,
+        .after_commits = .{
+            .repo_name = repo_name,
+            .sha = sha,
+        },
+    });
 
-    _ = ctx.addElements(ctx.alloc, "After", &[_]HTML.E{
-        try HTML.linkBtnAlloc(ctx.alloc, "More", before_txt),
-    }) catch return error.Unknown;
-
-    ctx.response.status = .ok;
-    ctx.sendTemplate(&tmpl) catch return error.Unknown;
+    try ctx.sendPage(&page);
 }
