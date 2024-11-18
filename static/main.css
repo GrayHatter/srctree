@@ -465,11 +465,12 @@ diff {
 		font-size: 0.8em;
 		border: 1px solid gray;
 		display: block;
-		white-space: pre;
 		text-align: left;
 		background: #333;
 		span {
+			white-space: pre;
 			&.split {
+				white-space: pre;
 				width: 100%;
 				margin: 0;
 				display: inline-block;
@@ -489,7 +490,7 @@ diff {
 			margin: 0 8px;
 			&.del { background: #5b0000 }
 			&.add { background: #003e00 }
-			&.block {
+			.block {
 				background: #4a4a91;
 				display: block;
 				width: auto;

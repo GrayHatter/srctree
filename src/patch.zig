@@ -1,12 +1,11 @@
 const std = @import("std");
-
-const mem = std.mem;
-const Allocator = mem.Allocator;
-const count = mem.count;
-const startsWith = mem.startsWith;
+const Allocator = std.mem.Allocator;
+const count = std.mem.count;
+const startsWith = std.mem.startsWith;
 const assert = std.debug.assert;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
+const indexOfPos = std.mem.indexOfPos;
 
 const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
@@ -233,8 +232,7 @@ pub const Diff = struct {
 
             // Block headers
             if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
-            d = d[4 + (mem.indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid) ..];
-            d = d[(mem.indexOf(u8, d[0..], "\n") orelse return error.BlockContentInvalid)..];
+            _ = indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid;
         }
         self.header = header;
         return d;
@@ -268,20 +266,20 @@ pub fn isValid(_: Patch) bool {
 pub fn parse(self: *Patch, a: Allocator) !void {
     if (self.diffs != null) return; // Assume successful parsing
     const diff_count = count(u8, self.blob, "\ndiff --git a/") +
-        @as(usize, if (mem.startsWith(u8, self.blob, "diff --git a/")) 1 else 0);
+        @as(usize, if (startsWith(u8, self.blob, "diff --git a/")) 1 else 0);
     if (diff_count == 0) return error.PatchInvalid;
     self.diffs = try a.alloc(Diff, diff_count);
     errdefer {
         a.free(self.diffs.?);
         self.diffs = null;
     }
-    var start: usize = mem.indexOfPos(u8, self.blob, 0, "diff --git a/") orelse {
+    var start: usize = indexOfPos(u8, self.blob, 0, "diff --git a/") orelse {
         return error.PatchInvalid;
     };
     var end: usize = start;
     for (self.diffs.?) |*diff| {
         assert(self.blob[start] != '\n');
-        end = if (mem.indexOfPos(u8, self.blob, start + 1, "\ndiff --git a/")) |s| s + 1 else self.blob.len;
+        end = if (indexOfPos(u8, self.blob, start + 1, "\ndiff --git a/")) |s| s + 1 else self.blob.len;
         diff.* = try Diff.init(self.blob[start..end]);
         start = end;
     }
@@ -335,7 +333,7 @@ pub fn patchStat(p: Patch) Stat {
     const a = count(u8, p.blob, "\n+");
     const d = count(u8, p.blob, "\n-");
     const files = count(u8, p.blob, "\ndiff --git a/") +
-        @as(usize, if (mem.startsWith(u8, p.blob, "diff --git a/")) 1 else 0);
+        @as(usize, if (startsWith(u8, p.blob, "diff --git a/")) 1 else 0);
     return .{
         .files = files,
         .additions = a,
@@ -376,7 +374,7 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .blob = try fetch(a, uri) };
 }
 
-pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) []HTML.Element {
+pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
     var dom = DOM.new(a);
 
     const a_splt = &HTML.Attr.class("split");
@@ -387,60 +385,76 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) []HTML.Element {
     const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.split(u8, clean, "\n");
-    var left = std.ArrayList([]const u8).init(a);
+    const nbsp = "&nbsp;";
+
+    const LinePair = struct {
+        text: []const u8,
+        attr: ?[]const HTML.Attr,
+    };
+
+    var left = std.ArrayList(LinePair).init(a);
+    var right = std.ArrayList(LinePair).init(a);
     defer left.clearAndFree();
-    var right = std.ArrayList([]const u8).init(a);
     defer right.clearAndFree();
     for (0..line_count + 1) |_| {
         const line = litr.next().?;
         if (line.len > 0) {
             switch (line[0]) {
-                '-' => left.append(line[1..]) catch unreachable,
-                '+' => right.append(line[1..]) catch unreachable,
+                '-' => {
+                    try left.append(.{
+                        .text = if (line.len > 1) line[1..] else nbsp,
+                        .attr = a_del,
+                    });
+                },
+                '+' => {
+                    try right.append(.{
+                        .text = if (line.len > 1) line[1..] else nbsp,
+                        .attr = a_add,
+                    });
+                },
                 '@' => {
-                    dom = dom.open(HTML.span(null, a_splt));
-                    dom.dupe(HTML.span(line, a_block));
-                    dom = dom.close();
+                    try left.append(.{ .text = line, .attr = a_block });
+                    try right.append(.{ .text = line, .attr = a_block });
                 },
                 else => {
-                    const min = @min(left.items.len, right.items.len);
-                    for (0..min) |i| {
-                        dom = dom.open(HTML.span(null, a_splt));
-                        dom.dupe(HTML.span(left.items[i], a_del));
-                        dom.dupe(HTML.span(right.items[i], a_add));
-                        dom = dom.close();
+                    if (left.items.len > right.items.len) {
+                        const rcount = left.items.len - right.items.len;
+                        for (0..rcount) |_|
+                            try right.append(.{ .text = nbsp, .attr = null });
+                    } else if (left.items.len < right.items.len) {
+                        const lcount = right.items.len - left.items.len;
+                        for (0..lcount) |_|
+                            try left.append(.{ .text = nbsp, .attr = null });
                     }
-                    if (left.items.len > min) {
-                        for (left.items[min..]) |l| {
-                            dom = dom.open(HTML.span(null, a_splt));
-                            dom.dupe(HTML.span(l, a_del));
-                            dom.dupe(HTML.span(null, null));
-                            dom = dom.close();
-                        }
-                    } else if (right.items.len > min) {
-                        for (right.items[min..]) |r| {
-                            dom = dom.open(HTML.span(null, a_splt));
-                            dom.dupe(HTML.span(null, null));
-                            dom.dupe(HTML.span(r, a_add));
-                            dom = dom.close();
-                        }
-                    }
-                    left.clearRetainingCapacity();
-                    right.clearRetainingCapacity();
-                    dom = dom.open(HTML.span(null, a_splt));
-                    dom.dupe(HTML.span(line[1..], null));
-                    dom.dupe(HTML.span(line[1..], null));
-                    dom = dom.close();
+                    try left.append(.{ .text = line[1..], .attr = null });
+                    try right.append(.{ .text = line[1..], .attr = null });
                 },
             }
-        } else dom.dupe(HTML.span(line, null));
+        }
     }
+
+    dom = dom.open(HTML.span(null, a_splt));
+
+    dom = dom.open(HTML.span(null, null));
+    for (left.items) |line| {
+        dom.dupe(HTML.div(line.text, line.attr));
+    }
+    dom = dom.close();
+
+    dom = dom.open(HTML.span(null, null));
+    for (right.items) |line| {
+        dom.dupe(HTML.div(line.text, line.attr));
+    }
+    dom = dom.close();
+
+    dom = dom.close();
 
     return dom.done();
 }
 
 pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
+    dom = dom.open(HTML.span(null, null));
 
     const clean = Bleach.sanitizeAlloc(a, diff, .{}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
@@ -459,9 +473,9 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
                 else => {},
             }
         }
-        dom.dupe(HTML.span(if (line.len > 0) line[1..] else line, attr));
+        dom.dupe(HTML.div(if (line.len > 0) line[1..] else line, attr));
     }
-
+    dom = dom.close();
     return dom.done();
 }
 

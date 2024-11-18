@@ -244,7 +244,7 @@ pub fn patchStruct(a: Allocator, patch: *Patch.Patch, unified: bool) !Template.S
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
         const html_lines = if (unified)
-            Patch.diffLineHtmlSplit(a, body)
+            try Patch.diffLineHtmlSplit(a, body)
         else
             Patch.diffLineHtmlUnified(a, body);
         const diff_lines = try a.alloc([]u8, html_lines.len);
