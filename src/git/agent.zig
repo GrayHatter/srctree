@@ -89,6 +89,7 @@ pub fn show(self: Agent, sha: []const u8) ![]u8 {
     return try self.exec(&[_][]const u8{
         "git",
         "show",
+        "--histogram",
         "--diff-merges=1",
         "-p",
         sha,
@@ -99,6 +100,7 @@ pub fn formatPatch(self: Agent, sha: []const u8) ![]u8 {
     return try self.exec(&[_][]const u8{
         "git",
         "format-patch",
+        "--histogram",
         "--stdout",
         "-1",
         sha,
@@ -110,8 +112,6 @@ pub fn checkPatch(self: Agent, patch: []const u8) !?[]u8 {
         "git",
         "apply",
         "--check",
-        "--index",
-        "--cached",
         "--verbose",
         "--",
     }, patch);
