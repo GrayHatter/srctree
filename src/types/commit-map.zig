@@ -6,11 +6,15 @@ const endian = builtin.cpu.arch.endian();
 
 const Delta = @import("delta.zig");
 
+const Types = @import("../types.zig");
+
 const COMMITMAP_VERSION: usize = 0;
-pub const TYPE_PREFIX = "{s}/commitmap";
+pub const TYPE_PREFIX = "commitmap";
 pub var datad: std.fs.Dir = undefined;
 
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 pub fn raze() void {}
 

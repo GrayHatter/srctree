@@ -1,3 +1,5 @@
+const std = @import("std");
+
 const Types = @import("types.zig");
 
 pub const FileSys = struct {
@@ -14,7 +16,7 @@ pub const Options = struct {
 
 pub fn init(options: Options) !void {
     switch (options.backing) {
-        .filesys => try Types.init("data"),
+        .filesys => |fs| try Types.init(try std.fs.cwd().makeOpenPath(fs.dir, .{ .iterate = true })),
     }
 }
 

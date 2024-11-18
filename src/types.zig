@@ -15,9 +15,9 @@ pub const Viewers = @import("types/viewers.zig");
 
 pub const Writer = std.fs.File.Writer;
 
-pub const TypeStorage = std.fs.Dir;
+pub const Storage = std.fs.Dir;
 
-pub fn init(dir: []const u8) !void {
+pub fn init(dir: Storage) !void {
     inline for (.{
         Comment,
         CommitMap,
@@ -30,10 +30,7 @@ pub fn init(dir: []const u8) !void {
         Thread,
         User,
     }) |inc| {
-        var buf: [2048]u8 = undefined;
-        const filename = try std.fmt.bufPrint(&buf, inc.TYPE_PREFIX, .{dir});
-        inc.datad = try std.fs.cwd().makeOpenPath(filename, .{ .iterate = true });
-        try inc.initType();
+        try inc.initType(try dir.makeOpenPath(inc.TYPE_PREFIX, .{ .iterate = true }));
     }
 }
 

@@ -3,14 +3,18 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 
+const Types = @import("../types.zig");
+
 pub const Read = @This();
 
-pub const TYPE_PREFIX = "{s}/read";
+pub const TYPE_PREFIX = "read";
 const READ_VERSION: usize = 0;
 
-pub var datad: std.fs.Dir = undefined;
+var datad: std.fs.Dir = undefined;
 pub fn init(_: []const u8) !void {}
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 pub fn readVersioned(a: Allocator, file: std.fs.File, _: [20]u8) !Read {
     var reader = file.reader();

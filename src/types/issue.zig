@@ -3,13 +3,17 @@ const Allocator = std.mem.Allocator;
 
 const Comment = @import("comment.zig");
 
+const Types = @import("../types.zig");
+
 pub const Issue = @This();
 
-pub const TYPE_PREFIX = "{s}/issues";
+pub const TYPE_PREFIX = "issues";
 const ISSUE_VERSION: usize = 0;
-pub var datad: std.fs.Dir = undefined;
+var datad: Types.Storage = undefined;
 
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 pub const Status = enum(u1) {
     open = 0,

@@ -11,11 +11,13 @@ const Template = @import("../template.zig");
 
 pub const Delta = @This();
 
-const DELTA_VERSION: usize = 0;
-pub const TYPE_PREFIX = "{s}/deltas";
-pub var datad: Types.TypeStorage = undefined;
+const DELTA_VERSION: usize = 1;
+pub const TYPE_PREFIX = "deltas";
+var datad: Types.Storage = undefined;
 
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 /// while Zig specifies that the logical order of fields is little endian, I'm
 /// not sure that's the layout I want to go use. So don't depend on that yet.
@@ -48,6 +50,25 @@ fn readVersioned(a: Allocator, idx: usize, reader: *std.io.AnyReader) !Delta {
             .message = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             //.author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .author = null,
+            .thread_id = try reader.readInt(usize, endian),
+            .attach = switch (Attach.fromInt(try reader.readInt(u8, endian))) {
+                .nos => .{ .nos = try reader.readInt(usize, endian) },
+                .diff => .{ .diff = try reader.readInt(usize, endian) },
+                .issue => .{ .issue = try reader.readInt(usize, endian) },
+                .commit => .{ .issue = try reader.readInt(usize, endian) },
+                .line => .{ .issue = try reader.readInt(usize, endian) },
+            },
+            .tags_id = try reader.readInt(usize, endian),
+        },
+        1 => Delta{
+            .index = idx,
+            .state = try reader.readStruct(State),
+            .created = try reader.readInt(i64, endian),
+            .updated = try reader.readInt(i64, endian),
+            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .message = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .thread_id = try reader.readInt(usize, endian),
             .attach = switch (Attach.fromInt(try reader.readInt(u8, endian))) {
                 .nos => .{ .nos = try reader.readInt(usize, endian) },
@@ -108,7 +129,7 @@ pub fn commit(self: Delta) !void {
     return self.writeOut(&writer);
 }
 
-pub fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
+fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
     try writer.writeInt(usize, DELTA_VERSION, endian);
     try writer.writeStruct(self.state);
     try writer.writeInt(i64, self.created, endian);
@@ -119,8 +140,8 @@ pub fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
     try writer.writeAll("\x00");
     try writer.writeAll(self.message);
     try writer.writeAll("\x00");
-    //try writer.writeAll(self.author);
-    //try writer.writeAll("\x00");
+    try writer.writeAll(self.author orelse "Unknown");
+    try writer.writeAll("\x00");
     try writer.writeInt(usize, self.thread_id, endian);
 
     try writer.writeInt(u8, @intFromEnum(self.attach), endian);
@@ -136,10 +157,9 @@ pub fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
     if (self.thread) |thread| {
         try writer.writeAll(&thread.hash);
     }
+    //try writer.writeAll("\x00");
 
-    try writer.writeAll("\x00");
-
-    if (self.thread) |t| try t.writeOut();
+    if (self.thread) |t| try t.commit();
 }
 
 pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Delta {
@@ -279,7 +299,7 @@ pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const
 
     var thread = try Thread.new(d);
     try currMaxSet(repo, max + 1);
-    try thread.writeOut();
+    try thread.commit();
     d.thread_id = thread.index;
 
     return d;
@@ -388,4 +408,41 @@ pub fn search(_: std.mem.Allocator, rules: []const SearchRule) SearchList(Delta)
         .rules = rules,
         .iterable = datad.iterate(),
     };
+}
+
+test Delta {
+    const a = std.testing.allocator;
+    var tempdir = std.testing.tmpDir(.{});
+    defer tempdir.cleanup();
+    try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
+
+    var d = try Delta.new("repo_name", "title", "message", "author");
+
+    // LOL, you thought
+    const mask: i64 = ~@as(i64, 0xfffff);
+    d.created = std.time.timestamp() & mask;
+    d.updated = std.time.timestamp() & mask;
+
+    var out = std.ArrayList(u8).init(a);
+    defer out.clearAndFree();
+    var outw = out.writer().any();
+    try d.writeOut(&outw);
+
+    const v0: Delta = undefined;
+    const v0_bin: []const u8 = undefined;
+    const v1: Delta = undefined;
+    // TODO... eventually
+    _ = v0;
+    _ = v0_bin;
+    _ = v1;
+
+    const v1_bin: []const u8 = &[_]u8{
+        0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x30, 0x67, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x67, 0x00, 0x00, 0x00, 0x00,
+        0x72, 0x65, 0x70, 0x6F, 0x5F, 0x6E, 0x61, 0x6D, 0x65, 0x00, 0x74, 0x69, 0x74, 0x6C, 0x65, 0x00,
+        0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x00, 0x61, 0x75, 0x74, 0x68, 0x6F, 0x72, 0x00, 0x01,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    };
+    try std.testing.expectEqualSlices(u8, out.items, v1_bin);
 }

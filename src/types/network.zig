@@ -1,14 +1,18 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+const Types = @import("../types.zig");
+
 pub const Network = @This();
 
-pub const TYPE_PREFIX = "{s}/networks";
+pub const TYPE_PREFIX = "networks";
 const NETWORK_VERSION: usize = 0;
-pub var datad: std.fs.Dir = undefined;
+var datad: std.fs.Dir = undefined;
 
 pub fn init(_: []const u8) !void {}
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 name: []u8,
 location: []u8,

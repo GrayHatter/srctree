@@ -7,14 +7,18 @@ const Comment = @import("comment.zig");
 const Delta = @import("delta.zig");
 const State = Delta.State;
 
+const Types = @import("../types.zig");
+
 pub const Thread = @This();
 
-pub const TYPE_PREFIX = "{s}/threads";
+pub const TYPE_PREFIX = "threads";
 const THREADS_VERSION: usize = 0;
-pub var datad: std.fs.Dir = undefined;
+var datad: Types.Storage = undefined;
 
 pub fn init(_: []const u8) !void {}
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 fn readVersioned(a: Allocator, idx: usize, reader: *std.io.AnyReader) !Thread {
     const int: usize = try reader.readInt(usize, endian);
@@ -45,10 +49,14 @@ hash: [32]u8 = [_]u8{0} ** 32,
 comment_data: ?[]const u8 = null,
 comments: ?[]Comment = null,
 
-pub fn writeOut(self: Thread) !void {
+pub fn commit(self: Thread) !void {
     const file = try openFile(self.index);
     defer file.close();
     const writer = file.writer().any();
+    try self.writeOut(writer);
+}
+
+fn writeOut(self: Thread, writer: std.io.AnyWriter) !void {
     try writer.writeInt(usize, THREADS_VERSION, endian);
     try writer.writeStruct(self.state);
     try writer.writeInt(i64, self.created, endian);
@@ -94,7 +102,7 @@ pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {
     }
     self.comments.?[self.comments.?.len - 1] = c;
     self.updated = std.time.timestamp();
-    try self.writeOut();
+    try self.commit();
 }
 
 pub fn raze(self: Thread, a: std.mem.Allocator) void {

@@ -5,13 +5,17 @@ const Comment = @import("comment.zig");
 const Delta = @import("delta.zig");
 const Thread = @import("thread.zig");
 
+const Types = @import("../types.zig");
+
 pub const Diff = @This();
-pub const TYPE_PREFIX = "{s}/diffs";
-const DIFF_VERSION: usize = 0;
-pub var datad: std.fs.Dir = undefined;
+pub const TYPE_PREFIX = "diffs";
+const DIFF_VERSION: usize = 1;
+var datad: std.fs.Dir = undefined;
 
 pub fn init(_: []const u8) !void {}
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Diff {
     var reader = file.reader();
@@ -23,8 +27,21 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Diff {
             .created = try reader.readIntNative(i64),
             .updated = try reader.readIntNative(i64),
             .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .binsha = null,
             .source_uri = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
 
+            .comment_data = try reader.readAllAlloc(a, 0xFFFF),
+            .file = file,
+        },
+        1 => return Diff{
+            .index = idx,
+            .state = try reader.readIntNative(usize),
+            .created = try reader.readIntNative(i64),
+            .updated = try reader.readIntNative(i64),
+            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .binsha = try reader.readBoundedBytes(20),
+            .source_uri = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .applies = (try reader.readByte() > 0),
             .comment_data = try reader.readAllAlloc(a, 0xFFFF),
             .file = file,
         },
@@ -37,12 +54,14 @@ state: usize,
 created: i64 = 0,
 updated: i64 = 0,
 repo: []const u8,
+binsha: ?[20]u8,
+applies: bool = false,
 delta_hash: [32]u8,
 source_uri: ?[]const u8,
 
 file: std.fs.File,
 
-pub fn writeOut(self: Diff) !void {
+pub fn commit(self: Diff) !void {
     try self.file.seekTo(0);
     var writer = self.file.writer();
     try writer.writeIntNative(usize, DIFF_VERSION);

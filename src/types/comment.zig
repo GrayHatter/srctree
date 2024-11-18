@@ -17,12 +17,14 @@ const Writer = Types.Writer;
 
 const CMMT_VERSION: usize = 0;
 
-pub const TYPE_PREFIX = "{s}/messages";
+pub const TYPE_PREFIX = "messages";
 
-pub var datad: std.fs.Dir = undefined;
+var datad: Types.Storage = undefined;
 
 pub fn init(_: []const u8) !void {}
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 pub fn raze() void {
     datad.close();

@@ -5,7 +5,7 @@ const endian = builtin.cpu.arch.endian();
 
 pub const Viewers = @This();
 
-pub const TYPE_PREFIX = "{s}/read";
+pub const TYPE_PREFIX = "read";
 const READ_VERSION: usize = 0;
 
 pub var datad: std.fs.Dir = undefined;

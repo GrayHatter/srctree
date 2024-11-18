@@ -5,7 +5,7 @@ const endian = builtin.cpu.arch.endian();
 
 pub const Tag = @This();
 
-pub const TYPE_PREFIX = "{s}/tag";
+pub const TYPE_PREFIX = "tag";
 const READ_VERSION: usize = 0;
 
 pub var datad: std.fs.Dir = undefined;

@@ -4,11 +4,13 @@ const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 const Sha256 = std.crypto.hash.sha2.Sha256;
 
+const Types = @import("../types.zig");
+
 pub const Gist = @This();
 
-pub const TYPE_PREFIX = "{s}/gist";
+pub const TYPE_PREFIX = "gist";
 const GIST_VERSION: usize = 0;
-pub var datad: std.fs.Dir = undefined;
+var datad: Types.Storage = undefined;
 
 pub const File = struct {
     name: []const u8,
@@ -21,7 +23,9 @@ created: i64,
 files: []const File,
 
 pub fn init(_: []const u8) !void {}
-pub fn initType() !void {}
+pub fn initType(stor: Types.Storage) !void {
+    datad = stor;
+}
 
 fn readVersioned(a: Allocator, hash: [32]u8, reader: std.io.AnyReader) !Gist {
     const int: usize = try reader.readInt(usize, endian);
