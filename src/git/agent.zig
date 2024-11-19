@@ -160,7 +160,7 @@ fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.proc
         const errstr =
             \\git agent error:
             \\error :: {}
-            \\argv :: 
+            \\argv ::
         ;
         std.debug.print(errstr, .{err});
         for (argv) |arg| std.debug.print("{s} ", .{arg});
@@ -189,7 +189,7 @@ fn execCustom(self: Agent, argv: []const []const u8) !std.process.Child.RunResul
         const errstr =
             \\git agent error:
             \\error :: {}
-            \\argv :: 
+            \\argv ::
         ;
         std.debug.print(errstr, .{err});
         for (argv) |arg| std.debug.print("{s} ", .{arg});
