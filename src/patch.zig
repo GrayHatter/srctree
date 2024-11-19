@@ -473,7 +473,13 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
                 else => {},
             }
         }
-        dom.dupe(HTML.div(if (line.len > 0 and line[0] != '@') line[1..] else line, attr));
+        dom.dupe(HTML.div(
+            if (line.len > 0)
+                if (line[0] != '@') line[1..] else line
+            else
+                "&nbsp;",
+            attr,
+        ));
     }
     dom = dom.close();
     return dom.done();
