@@ -491,7 +491,8 @@ diff {
 			&.del { background: #5b0000 }
 			&.add { background: #003e00 }
 			.block {
-				background: #4a4a91;
+				/* background: #4a4a91; might want to revert to this color */
+				background: #569;
 				display: block;
 				width: auto;
 				margin: 8px auto;
