@@ -412,8 +412,8 @@ patch {
 	border-radius: 4px 4px 0 0;
 	padding: 8px;
 
-	.del { background: #5b0000 }
-	.add { background: #003e00 }
+	.del { background: #633 }
+	.add { background: #353 }
 }
 
 patchrequest {
@@ -558,7 +558,7 @@ comment {
 	text-align: left;
 	display: block;
 	margin-bottom: 1em;
-	max-width: 45em;
+	/* max-width: 45em; */
 
 	context {
 		background: #333;
@@ -592,6 +592,28 @@ comment {
 		display: block;
 		height: 25px;
 		padding: 4px 0 4px 12px;
+	}
+	message {
+		overflow: auto
+	}
+	div.coderef {
+		border-top: 1px solid black;
+		border-left: 1px solid black;
+		border-radius: 6px;
+		border-bottom: 1px solid #737373;
+		border-right: 1px solid #737373;
+		margin: 0 10px;
+		padding: 2px 15px;
+		&.red {
+			background: #433;
+		}
+		&.green {
+			background: #343;
+		}
+		&.yellow {
+
+			background: #333;
+		}
 	}
 }
 

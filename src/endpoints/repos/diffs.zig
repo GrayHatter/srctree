@@ -3,6 +3,10 @@ const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
+const splitScalar = std.mem.splitScalar;
+const indexOf = std.mem.indexOf;
+const indexOfAny = std.mem.indexOfAny;
+const parseInt = std.fmt.parseInt;
 
 const Commits = @import("commits.zig");
 
@@ -21,6 +25,7 @@ const Response = @import("../../response.zig");
 const Route = @import("../../routes.zig");
 const Template = @import("../../template.zig");
 const Types = @import("../../types.zig");
+const Highlighting = @import("../../syntax-highlight.zig");
 
 const Comment = Types.Comment;
 const Delta = Types.Delta;
@@ -213,6 +218,7 @@ fn newComment(ctx: *Context) Error!void {
         const c = Comment.new(username, msg.value) catch unreachable;
         _ = delta.loadThread(ctx.alloc) catch unreachable;
         delta.addComment(ctx.alloc, c) catch unreachable;
+        // TODO record current revision at comment time
         delta.commit() catch unreachable;
         return ctx.response.redirect(loc, true) catch unreachable;
     }
@@ -315,6 +321,143 @@ pub const PatchView = struct {
     @"inline": ?bool = true,
 };
 
+const ParsedHeader = struct {
+    pub const Numbers = struct {
+        start: u32,
+        change: u32,
+    };
+    left: Numbers,
+    right: Numbers,
+};
+
+fn getLineAt(data: []const u8, target: u32, length: u32, right_only: bool) ![]const u8 {
+    std.debug.assert(length == 1); // Not Implemented
+    var itr = splitScalar(u8, data, '\n');
+    const header = try parseBlockHeader(itr.next().?);
+    var i: usize = header.right.start;
+    while (itr.next()) |line| {
+        if (line.len == 0) @panic("unexpected line length");
+        switch (line[0]) {
+            '-' => {
+                if (!right_only) {
+                    if (i == target) return line;
+                    i += 1;
+                }
+            },
+            '+' => {
+                if (right_only) {
+                    if (i == target) return line;
+                    i += 1;
+                }
+            },
+            ' ' => {
+                if (i == target) return line;
+                i += 1;
+            },
+            else => {},
+        }
+    }
+    return error.LineNotFound;
+}
+
+/// TODO move to patch.zig
+fn parseBlockHeader(string: []const u8) !ParsedHeader {
+    const end = indexOf(u8, string[3..], " @@") orelse return error.InvalidBlockHeader;
+    const offsets = string[3 .. end + 3];
+    const mid = indexOf(u8, offsets, " ") orelse unreachable;
+    const left = offsets[1..mid];
+    const right = offsets[mid + 2 ..];
+    const left_mid = indexOf(u8, left, ",") orelse unreachable;
+    const l_low = try parseInt(u32, left[0..left_mid], 10);
+    const l_high = try parseInt(u32, left[left_mid + 1 ..], 10);
+    const right_mid = indexOf(u8, right, ",") orelse unreachable;
+    const r_low = try parseInt(u32, right[0..right_mid], 10);
+    const r_high = try parseInt(u32, right[right_mid + 1 ..], 10);
+    return .{
+        .left = .{ .start = l_low, .change = l_high },
+
+        .right = .{ .start = r_low, .change = r_high },
+    };
+}
+
+fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
+    const Side = enum { del, add };
+
+    var message_lines = std.ArrayList([]const u8).init(a);
+    defer message_lines.clearAndFree();
+
+    var itr = splitScalar(u8, comment, '\n');
+    while (itr.next()) |line_| {
+        // Windows can eat a dick
+        const line = std.mem.trim(u8, line_, "\r ");
+        for (patch.diffs.?) |*diff| {
+            const filename = diff.filename orelse continue;
+            //std.debug.print("files {s}\n", .{filename});
+            if (indexOf(u8, line, filename)) |filepos| {
+                const side: ?Side = if (filepos > 0)
+                    switch (line[filepos - 1]) {
+                        '+' => .add,
+                        '-' => .del,
+                        else => null,
+                    }
+                else
+                    null;
+                if (indexOfAny(u8, line, "#:@")) |h| {
+                    const search = try parseInt(u32, line[h + 1 ..], 10);
+                    const blocks = try diff.blocksAlloc(a);
+                    for (blocks) |block| {
+                        const change = try parseBlockHeader(block);
+                        const in_left = search >= change.left.start and search <= change.left.start + change.left.change;
+                        const in_right = search >= change.right.start and search <= change.right.start + change.right.change;
+                        if (in_left or in_right) {
+                            //try message_lines.append(try allocPrint(a, "found in block {}", .{i}));
+
+                            const sided: bool = if (side) |s|
+                                if (s == .add) true else false
+                            else
+                                true;
+                            const found_line = try getLineAt(block, search, 1, sided);
+                            const color = switch (found_line[0]) {
+                                '+' => "green",
+                                '-' => "red",
+                                ' ' => "yellow",
+                                else => "error",
+                            };
+                            const formatted = if (found_line.len <= 1) "&nbsp;" else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
+                                var pre = try Highlighting.highlight(a, lang, found_line[1..]);
+                                break :fmt pre[28..][0 .. pre.len - 41];
+                            } else try Bleach.sanitizeAlloc(a, found_line[1..], .{});
+
+                            const wrapped_line = try allocPrint(
+                                a,
+                                "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
+                                .{
+                                    try Bleach.sanitizeAlloc(a, line, .{}),
+                                    color,
+                                    formatted,
+                                },
+                            );
+                            try message_lines.append(wrapped_line);
+                            break;
+                        }
+                    } else {
+                        try message_lines.append(try allocPrint(
+                            a,
+                            "<span title=\"line not found in this diff\">{s}</span>",
+                            .{try Bleach.sanitizeAlloc(a, line, .{})},
+                        ));
+                    }
+                }
+                break;
+            }
+        } else {
+            try message_lines.append(try Bleach.sanitizeAlloc(a, line, .{}));
+        }
+    }
+
+    return try std.mem.join(a, "<br />\n", message_lines.items);
+}
+
 const DiffViewPage = Template.PageData("delta-diff.html");
 
 fn view(ctx: *Context) Error!void {
@@ -347,30 +490,16 @@ fn view(ctx: *Context) Error!void {
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
 
-    var comments_: []Template.Structs.Comments = &[0]Template.Structs.Comments{};
-    if (delta.getComments(ctx.alloc)) |comments| {
-        comments_ = try ctx.alloc.alloc(Template.Structs.Comments, comments.len);
-        for (comments, comments_) |comment, *c_ctx| {
-            c_ctx.* = .{ .comment = .{
-                .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
-                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
-                .message = try Bleach.sanitizeAlloc(ctx.alloc, comment.message, .{}),
-            } };
-        }
-    } else |err| {
-        std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
-        @panic("oops");
-    }
-
     const udata = ctx.reqdata.query.validate(PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
 
     var patch_formatted: ?Template.Structs.PatchHtml = null;
     const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     var patch_applies: bool = false;
+    var patch: Patch.Patch = undefined;
     if (std.fs.cwd().openFile(patch_filename, .{})) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
-        var patch = Patch.Patch.init(fdata);
+        patch = Patch.Patch.init(fdata);
         if (patchStruct(ctx.alloc, &patch, !inline_html)) |phtml| {
             patch_formatted = phtml;
         } else |err| {
@@ -392,6 +521,21 @@ fn view(ctx: *Context) Error!void {
         if (applies == null) patch_applies = true;
     } else |err| {
         std.debug.print("Unable to load patch {} {s}\n", .{ err, patch_filename });
+    }
+
+    var comments_: []Template.Structs.Comments = &[0]Template.Structs.Comments{};
+    if (delta.getComments(ctx.alloc)) |comments| {
+        comments_ = try ctx.alloc.alloc(Template.Structs.Comments, comments.len);
+        for (comments, comments_) |comment, *c_ctx| {
+            c_ctx.* = .{ .comment = .{
+                .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
+                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
+                .message = translateComment(ctx.alloc, comment.message, patch) catch unreachable,
+            } };
+        }
+    } else |err| {
+        std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
+        @panic("oops");
     }
 
     const username = if (ctx.auth.valid())

@@ -52,6 +52,7 @@ pub const Diff = struct {
     changes: ?[]const u8 = null,
     stat: Diff.Stat,
     filename: ?[]const u8 = null,
+    blocks: ?[][]const u8 = null,
 
     pub const Stat = struct {
         additions: usize,
@@ -251,6 +252,23 @@ pub const Diff = struct {
         };
         d.changes = try d.parse();
         return d;
+    }
+
+    /// Leaks
+    pub fn blocksAlloc(self: *Diff, a: Allocator) ![]const []const u8 {
+        var acount = count(u8, self.changes.?, "\n@@");
+        if (startsWith(u8, self.changes.?, "@@")) acount += 1 else acount += 0;
+        self.blocks = try a.alloc([]u8, acount);
+        var i: usize = 0;
+        var pos: usize = indexOf(u8, self.changes.?, "@@") orelse return self.blocks.?;
+        while (indexOf(u8, self.changes.?[pos + 1 ..], "\n@@")) |end| {
+            self.blocks.?[i] = self.changes.?[pos..][0 .. end + 1];
+            pos += end + 2;
+            i += 1;
+        }
+        self.blocks.?[i] = self.changes.?[pos..];
+
+        return self.blocks.?;
     }
 };
 
@@ -473,7 +491,7 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
             }
         }
         dom.dupe(HTML.div(
-            if (line.len > 0)
+            if (line.len > 1)
                 if (line[0] != '@') line[1..] else line
             else
                 "&nbsp;",
