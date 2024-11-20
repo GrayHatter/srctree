@@ -1,9 +1,10 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const eql = std.mem.eql;
 
 const Templates = @import("../template.zig");
 const Template = Templates.Template;
-const TemplateRuntime = Templates.TemplateRuntime;
+//const TemplateRuntime = Templates.TemplateRuntime;
 const DataMap = Templates.DataMap;
 const Directive = Templates.Directive;
 
@@ -18,10 +19,10 @@ pub fn PageRuntime(comptime PageDataType: type) type {
     return struct {
         pub const Self = @This();
         pub const Kind = PageDataType;
-        template: TemplateRuntime,
+        template: Template,
         data: PageDataType,
 
-        pub fn init(t: TemplateRuntime, d: PageDataType) PageRuntime(PageDataType) {
+        pub fn init(t: Template, d: PageDataType) PageRuntime(PageDataType) {
             return .{
                 .template = t,
                 .data = d,
@@ -60,9 +61,10 @@ pub fn PageRuntime(comptime PageDataType: type) type {
             drct: Directive,
             out: anytype,
         ) anyerror!void {
-            switch (drct.kind) {
-                .noun => |noun| {
-                    const var_name = ctx.get(noun.vari);
+            switch (drct.verb) {
+                .variable => {
+                    const noun = drct.noun;
+                    const var_name = ctx.get(noun);
                     if (var_name) |v_blob| {
                         switch (v_blob) {
                             .slice => |s_blob| try out.writeAll(s_blob),
@@ -70,8 +72,8 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                             .reader => |_| unreachable,
                         }
                     } else {
-                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
-                        switch (noun.otherwise) {
+                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun});
+                        switch (drct.otherwise) {
                             .str => |str| try out.writeAll(str),
                             // Not really an error, just instruct caller to print original text
                             .ign => return error.IgnoreDirective,
@@ -83,10 +85,11 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                                     unreachable;
                                 };
                             },
+                            .blob => unreachable,
                         }
                     }
                 },
-                .verb => |verb| verb.do(ctx, out) catch unreachable,
+                else => drct.do(ctx, out) catch unreachable,
             }
         }
 
@@ -97,14 +100,15 @@ pub fn PageRuntime(comptime PageDataType: type) type {
             drct: Directive,
             out: anytype,
         ) anyerror!void {
-            switch (drct.kind) {
-                .noun => |noun| {
-                    const var_name = typeField(noun.vari, ctx);
+            switch (drct.verb) {
+                .variable => {
+                    const noun = drct.noun;
+                    const var_name = typeField(noun, ctx);
                     if (var_name) |data_blob| {
                         try out.writeAll(data_blob);
                     } else {
                         if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
-                        switch (noun.otherwise) {
+                        switch (drct.otherwise) {
                             .str => |str| try out.writeAll(str),
                             // Not really an error, just instruct caller to print original text
                             .ign => return error.IgnoreDirective,
@@ -116,7 +120,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                                             if (otype.child == []const u8) continue;
 
                                             var local: [0xff]u8 = undefined;
-                                            const realname = local[0..makeFieldName(noun.vari[1 .. noun.vari.len - 5], &local)];
+                                            const realname = local[0..makeFieldName(noun[1 .. noun.len - 5], &local)];
                                             if (std.mem.eql(u8, field.name, realname)) {
                                                 if (@field(self.data, field.name)) |subdata| {
                                                     var subpage = subt.pageOf(otype.child, subdata);
@@ -137,12 +141,11 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                                         else => {}, //@compileLog(field.type),
                                     };
                             },
+                            .blob => unreachable,
                         }
                     }
                 },
-                .verb => |verb| {
-                    verb.doTyped(PageDataType, ctx, out) catch unreachable;
-                },
+                else => drct.doTyped(PageDataType, ctx, out) catch unreachable,
             }
         }
         pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
@@ -218,9 +221,10 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
             drct: Directive,
             out: anytype,
         ) anyerror!void {
-            switch (drct.kind) {
-                .noun => |noun| {
-                    const var_name = ctx.get(noun.vari);
+            switch (drct.verb) {
+                .variable => {
+                    const noun = drct.noun;
+                    const var_name = ctx.get(noun);
                     if (var_name) |v_blob| {
                         switch (v_blob) {
                             .slice => |s_blob| try out.writeAll(s_blob),
@@ -229,7 +233,7 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                         }
                     } else {
                         if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
-                        switch (noun.otherwise) {
+                        switch (drct.otherwise) {
                             .str => |str| try out.writeAll(str),
                             // Not really an error, just instruct caller to print original text
                             .ign => return error.IgnoreDirective,
@@ -241,10 +245,11 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                                     unreachable;
                                 };
                             },
+                            .blob => unreachable,
                         }
                     }
                 },
-                .verb => |verb| verb.do(ctx, out) catch unreachable,
+                else => drct.do(ctx, out) catch unreachable,
             }
         }
 
@@ -255,14 +260,15 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
             drct: Directive,
             out: anytype,
         ) anyerror!void {
-            switch (drct.kind) {
-                .noun => |noun| {
-                    const var_name = typeField(noun.vari, ctx);
+            switch (drct.verb) {
+                .variable => {
+                    const noun = drct.noun;
+                    const var_name = typeField(noun, ctx);
                     if (var_name) |data_blob| {
                         try out.writeAll(data_blob);
                     } else {
-                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
-                        switch (noun.otherwise) {
+                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun});
+                        switch (drct.otherwise) {
                             .str => |str| try out.writeAll(str),
                             // Not really an error, just instruct caller to print original text
                             .ign => return error.IgnoreDirective,
@@ -274,8 +280,8 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                                             if (otype.child == []const u8) continue;
 
                                             var local: [0xff]u8 = undefined;
-                                            const realname = local[0..makeFieldName(noun.vari[1 .. noun.vari.len - 5], &local)];
-                                            if (std.mem.eql(u8, field.name, realname)) {
+                                            const realname = local[0..makeFieldName(noun[1 .. noun.len - 5], &local)];
+                                            if (eql(u8, field.name, realname)) {
                                                 if (@field(self.data, field.name)) |subdata| {
                                                     var subpage = subt.pageOf(otype.child, subdata);
                                                     try subpage.format(fmts, .{}, out);
@@ -286,7 +292,7 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                                             }
                                         },
                                         .Struct => {
-                                            if (std.mem.eql(u8, field.name, noun.vari)) {
+                                            if (eql(u8, field.name, noun)) {
                                                 const subdata = @field(self.data, field.name);
                                                 var subpage = subt.pageOf(@TypeOf(subdata), subdata);
                                                 try subpage.format(fmts, .{}, out);
@@ -295,11 +301,12 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                                         else => {}, //@compileLog(field.type),
                                     };
                             },
+                            .blob => unreachable,
                         }
                     }
                 },
-                .verb => |verb| {
-                    verb.doTyped(PageDataType, ctx, out) catch unreachable;
+                else => {
+                    drct.doTyped(PageDataType, ctx, out) catch unreachable;
                 },
             }
         }

@@ -119,31 +119,32 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
     while (data.len > 0) {
         if (std.mem.indexOf(u8, data, "<")) |offset| {
             data = data[offset..];
-            if (Template.Directive.init(data)) |drct| switch (drct.kind) {
-                .noun => |noun| {
+            if (Template.Directive.init(data)) |drct| switch (drct.verb) {
+                .variable => |_| {
                     data = data[drct.end..];
-                    switch (noun.otherwise) {
+                    switch (drct.otherwise) {
                         .ign => {
-                            try current.append(makeFieldName(noun.vari), ": []const u8,\n");
+                            try current.append(makeFieldName(drct.noun), ": []const u8,\n");
                         },
                         .str => |str| {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try std.fmt.bufPrint(&buffer, ": []const u8 = \"{s}\",\n", .{str});
-                            try current.append(makeFieldName(noun.vari), kind);
+                            try current.append(makeFieldName(drct.noun), kind);
                         },
                         .del => {
-                            try current.append(makeFieldName(noun.vari), ": ?[]const u8 = null,\n");
+                            try current.append(makeFieldName(drct.noun), ": ?[]const u8 = null,\n");
                         },
                         .template => |_| {
                             var buffer: [0xFF]u8 = undefined;
-                            const kind = try std.fmt.bufPrint(&buffer, ": ?{s},\n", .{makeStructName(noun.vari)});
-                            try current.append(makeFieldName(noun.vari[1 .. noun.vari.len - 5]), kind);
+                            const kind = try std.fmt.bufPrint(&buffer, ": ?{s},\n", .{makeStructName(drct.noun)});
+                            try current.append(makeFieldName(drct.noun[1 .. drct.noun.len - 5]), kind);
                         },
+                        .blob => unreachable,
                     }
                 },
-                .verb => |verb| {
+                else => |verb| {
                     data = data[drct.end..];
-                    const name = makeStructName(verb.vari);
+                    const name = makeStructName(drct.noun);
                     var this = try AbstTree.init(a, name);
                     const gop = try tree.getOrPut(this.name);
                     if (!gop.found_existing) {
@@ -152,25 +153,27 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                         this = gop.value_ptr.*;
                     }
 
-                    switch (verb.word) {
+                    switch (verb) {
+                        .variable => unreachable,
                         .foreach => {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try std.fmt.bufPrint(&buffer, ": []const {s},\n", .{name});
-                            try current.append(makeFieldName(verb.vari), kind);
-                            try emitVars(a, verb.blob, this);
+                            try current.append(makeFieldName(drct.noun), kind);
+                            try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .forrow => {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try std.fmt.bufPrint(&buffer, ": []const []const u8,\n", .{});
-                            try current.append(makeFieldName(verb.vari), kind);
-                            try emitVars(a, verb.blob, this);
+                            try current.append(makeFieldName(drct.noun), kind);
+                            try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .with => {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try std.fmt.bufPrint(&buffer, ": ?{s},\n", .{name});
-                            try current.append(makeFieldName(verb.vari), kind);
-                            try emitVars(a, verb.blob, this);
+                            try current.append(makeFieldName(drct.noun), kind);
+                            try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
+                        .build => unreachable,
                     }
                 },
             } else if (std.mem.indexOfPos(u8, data, 1, "<")) |next| {
