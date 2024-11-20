@@ -27,7 +27,7 @@ hash: [sha256.digest_length]u8 = undefined,
 
 author: []const u8,
 message: []const u8,
-replies: ?[sha256.digest_length]u8 = null,
+replies: ?usize = null,
 
 pub fn init(_: []const u8) !void {}
 pub fn initType(stor: Types.Storage) !void {
@@ -81,41 +81,7 @@ fn readVersioned(a: Allocator, file: std.fs.File, hash: []const u8) !Comment {
             },
             .author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .message = try reader.readAllAlloc(a, 0xFFFF),
-            .replies = null,
-        },
-        1 => return Comment{
-            .state = try reader.readInt(usize, endian),
-            .created = try reader.readInt(i64, endian),
-            .updated = try reader.readInt(i64, endian),
-            .tz = try reader.readInt(i32, endian),
-            .hash = hash[0..sha256.digest_length].*,
-            .target = switch (try reader.readInt(u8, endian)) {
-                0 => .{ .diff = try reader.readInt(usize, endian) },
-                'D' => .{ .diff = try reader.readInt(usize, endian) },
-                'I' => .{ .issue = try reader.readInt(usize, endian) },
-                'r' => .{ .reply = .{
-                    .to = switch (try reader.readInt(u8, endian)) {
-                        'c' => .{ .comment = try reader.readInt(usize, endian) },
-                        'C' => .{ .commit = .{
-                            .number = try reader.readInt(usize, endian),
-                            .meta = try reader.readInt(usize, endian),
-                        } },
-                        'd' => .{ .diff = .{
-                            .number = try reader.readInt(usize, endian),
-                            .file = try reader.readInt(usize, endian),
-                            .revision = try reader.readInt(usize, endian),
-                        } },
-                        else => return error.CommentCorrupted,
-                    },
-                } },
-                else => return error.CommentCorrupted,
-            },
-            .author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .message = try reader.readAllAlloc(a, 0xFFFF),
-            .replies = if (reader.readBoundedBytes(sha256.digest_length)) |bb|
-                bb.slice()[0..sha256.digest_length].*
-            else |_|
-                null,
+            .replies = reader.readInt(usize, endian) catch null,
         },
         else => error.UnsupportedVersion,
     };
@@ -205,7 +171,7 @@ fn writeOut(self: Comment, w: AnyWriter) !void {
     try w.writeAll(self.author);
     try w.writeAll("\x00");
     try w.writeAll(self.message);
-    if (self.replies) |r| try w.writeAll(r[0..]);
+    if (self.replies) |r| try w.writeInt(usize, r, endian);
 }
 
 pub fn readFile(a: std.mem.Allocator, file: std.fs.File, hash: []const u8) !Comment {
