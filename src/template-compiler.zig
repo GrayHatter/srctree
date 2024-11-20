@@ -1,7 +1,8 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const eql = std.mem.eql;
 const compiled = @import("templates-compiled");
 const Template = @import("template.zig");
-const Allocator = std.mem.Allocator;
 
 const AbstTree = struct {
     pub const Member = struct {
@@ -15,14 +16,16 @@ const AbstTree = struct {
         }
     };
 
+    parent: ?*AbstTree,
     alloc: Allocator,
     name: []u8,
     children: []Member,
     child_cap: usize = 0,
 
-    pub fn init(a: Allocator, name: []const u8) !*AbstTree {
+    pub fn init(a: Allocator, name: []const u8, parent: ?*AbstTree) !*AbstTree {
         const self = try a.create(AbstTree);
         self.* = .{
+            .parent = parent,
             .alloc = a,
             .name = try a.dupe(u8, name),
             .children = try a.alloc(Member, 50),
@@ -30,6 +33,13 @@ const AbstTree = struct {
         };
         self.children.len = 0;
         return self;
+    }
+
+    pub fn exists(self: *AbstTree, name: []const u8) bool {
+        for (self.children) |child| {
+            if (eql(u8, child.name, name)) return true;
+        }
+        return false;
     }
 
     pub fn append(self: *AbstTree, name: []const u8, kind: []const u8) !void {
@@ -99,7 +109,7 @@ pub fn main() !void {
         defer a.free(fdata);
 
         const name = makeStructName(tplt.path);
-        const this = try AbstTree.init(a, name);
+        const this = try AbstTree.init(a, name, null);
         const gop = try tree.getOrPut(this.name);
         if (!gop.found_existing) {
             gop.value_ptr.* = this;
@@ -145,7 +155,8 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                 else => |verb| {
                     data = data[drct.end..];
                     const name = makeStructName(drct.noun);
-                    var this = try AbstTree.init(a, name);
+                    const field = makeFieldName(drct.noun);
+                    var this = try AbstTree.init(a, name, current);
                     const gop = try tree.getOrPut(this.name);
                     if (!gop.found_existing) {
                         gop.value_ptr.* = this;
@@ -158,22 +169,28 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                         .foreach => {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try std.fmt.bufPrint(&buffer, ": []const {s},\n", .{name});
-                            try current.append(makeFieldName(drct.noun), kind);
+                            try current.append(field, kind);
                             try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .forrow => {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try std.fmt.bufPrint(&buffer, ": []const []const u8,\n", .{});
-                            try current.append(makeFieldName(drct.noun), kind);
+                            try current.append(field, kind);
                             try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .with => {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try std.fmt.bufPrint(&buffer, ": ?{s},\n", .{name});
-                            try current.append(makeFieldName(drct.noun), kind);
+                            try current.append(field, kind);
                             try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
-                        .build => unreachable,
+                        .build => {
+                            var buffer: [0xFF]u8 = undefined;
+                            const tmpl_name = makeStructName(drct.otherwise.template.name);
+                            const kind = try std.fmt.bufPrint(&buffer, ": {s},\n", .{tmpl_name});
+                            try current.append(field, kind);
+                            //try emitVars(a, drct.otherwise.template.blob, this);
+                        },
                     }
                 },
             } else if (std.mem.indexOfPos(u8, data, 1, "<")) |next| {

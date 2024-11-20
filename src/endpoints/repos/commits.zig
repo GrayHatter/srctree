@@ -125,7 +125,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         },
     };
 
-    var comments: []Template.Structs.Comments = &[0]Template.Structs.Comments{};
+    var thread: []Template.Structs.Thread = &[0]Template.Structs.Thread{};
     if (CommitMap.open(ctx.alloc, repo_name, sha) catch null) |map| {
         var dlt = map.delta(ctx.alloc) catch |err| n: {
             std.debug.print("error generating delta {}\n", .{err});
@@ -134,14 +134,15 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         if (dlt) |*delta| {
             _ = delta.loadThread(ctx.alloc) catch unreachable;
             if (delta.getComments(ctx.alloc)) |thread_comments| {
-                comments = try ctx.alloc.alloc(Template.Structs.Comments, thread_comments.len);
-                for (thread_comments, comments) |thr_cmt, *pg_comment| {
-                    pg_comment.* = .{ .comment = .{
+                thread = try ctx.alloc.alloc(Template.Structs.Thread, thread_comments.len);
+                for (thread_comments, thread) |thr_cmt, *pg_comment| {
+                    pg_comment.* = .{
                         .author = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.author, .{}),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(thr_cmt.updated)}),
                         .message = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.message, .{}),
                         .direct_reply = null,
-                    } };
+                        .sub_thread = null,
+                    };
                 }
             } else |err| {
                 std.debug.print("Unable to load comments for thread {} {}\n", .{ map.attach.delta, err });
@@ -160,7 +161,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
             .nav_auth = undefined,
         } },
         .commit = try commitCtx(ctx.alloc, current, repo_name),
-        .comments = comments,
+        .comments = .{ .thread = thread },
         .patch = Diffs.patchStruct(ctx.alloc, &patch, !inline_html) catch return error.Unknown,
     });
 

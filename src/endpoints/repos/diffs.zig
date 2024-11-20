@@ -539,16 +539,17 @@ fn view(ctx: *Context) Error!void {
         std.debug.print("Unable to load patch {} {s}\n", .{ err, patch_filename });
     }
 
-    var comments_: []Template.Structs.Comments = &[0]Template.Structs.Comments{};
+    var root_thread: []S.Thread = &[0]S.Thread{};
     if (delta.getComments(ctx.alloc)) |comments| {
-        comments_ = try ctx.alloc.alloc(Template.Structs.Comments, comments.len);
-        for (comments, comments_) |comment, *c_ctx| {
-            c_ctx.* = .{ .comment = .{
+        root_thread = try ctx.alloc.alloc(S.Thread, comments.len);
+        for (comments, root_thread) |comment, *c_ctx| {
+            c_ctx.* = .{
                 .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
                 .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
                 .message = translateComment(ctx.alloc, comment.message, patch) catch unreachable,
                 .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
-            } };
+                .sub_thread = null,
+            };
         }
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
@@ -574,7 +575,7 @@ fn view(ctx: *Context) Error!void {
             .header = patch_header,
             .patch = .{ .files = &[0]Template.Structs.Files{} },
         },
-        .comments = comments_,
+        .comments = .{ .thread = root_thread },
         .delta_id = delta_id,
         .patch_does_not_apply = if (patch_applies) null else .{},
         .current_username = username,

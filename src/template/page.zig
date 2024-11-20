@@ -4,7 +4,6 @@ const eql = std.mem.eql;
 
 const Templates = @import("../template.zig");
 const Template = Templates.Template;
-//const TemplateRuntime = Templates.TemplateRuntime;
 const DataMap = Templates.DataMap;
 const Directive = Templates.Directive;
 
@@ -132,7 +131,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                                             }
                                         },
                                         .Struct => {
-                                            if (std.mem.eql(u8, field.name, noun.vari)) {
+                                            if (std.mem.eql(u8, field.name, noun)) {
                                                 const subdata = @field(self.data, field.name);
                                                 var subpage = subt.pageOf(@TypeOf(subdata), subdata);
                                                 try subpage.format(fmts, .{}, out);

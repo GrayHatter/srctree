@@ -269,7 +269,7 @@ pub const Directive = struct {
                     .otherwise = .{ .template = bi },
                     .end = verb.len + 1 + noun.len,
                 };
-            } else unreachable;
+            } else return null;
         } else return null;
 
         // TODO convert to while
