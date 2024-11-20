@@ -419,7 +419,10 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
                 else
                     null;
                 if (indexOfAny(u8, line, "#:@")) |h| {
-                    const search = try parseInt(u32, line[h + 1 ..], 10);
+                    var search_end = h + 2;
+                    while (search_end < line.len and std.ascii.isDigit(line[search_end])) search_end += 1;
+
+                    const search = try parseInt(u32, line[h + 1 .. search_end], 10);
                     const blocks = try diff.blocksAlloc(a);
                     for (blocks) |block| {
                         const change = try parseBlockHeader(block);
