@@ -15,6 +15,7 @@ Good luck!
 ## TODO
 In an unsorted order
   - [ ] srctree
+    - [ ] internal database upgrade scripts
     - [ ] manual code sync
     - [x] view code
     - [x] public http clone

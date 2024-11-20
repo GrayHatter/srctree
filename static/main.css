@@ -575,6 +575,7 @@ comment {
 		border: 1px solid gray;
 		display: block;
 		padding: 8px;
+		overflow: auto
 	}
 	input, textarea {
 		display: block;
@@ -594,8 +595,9 @@ comment {
 		height: 25px;
 		padding: 4px 0 4px 12px;
 	}
-	message {
-		overflow: auto
+	.muted.reply {
+		text-align: right;
+		float: right;
 	}
 	div.coderef {
 		border-top: 1px solid black;

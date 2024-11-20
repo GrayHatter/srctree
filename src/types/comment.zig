@@ -4,22 +4,30 @@ const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
 const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
+const AnyWriter = std.io.AnyWriter;
+const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
+
 const Humanize = @import("../humanize.zig");
-
 const Types = @import("../types.zig");
-
 const Bleach = @import("../bleach.zig");
 const Template = @import("../template.zig");
 
 pub const Comment = @This();
-
-const Writer = Types.Writer;
-
 const CMMT_VERSION: usize = 0;
-
 pub const TYPE_PREFIX = "messages";
-
 var datad: Types.Storage = undefined;
+
+state: usize = 0,
+tz: i32 = 0,
+created: i64 = 0,
+updated: i64 = 0,
+target: Targets = .{ .nos = {} },
+hash: [sha256.digest_length]u8 = undefined,
+
+author: []const u8,
+message: []const u8,
+replies: ?[sha256.digest_length]u8 = null,
 
 pub fn init(_: []const u8) !void {}
 pub fn initType(stor: Types.Storage) !void {
@@ -40,7 +48,7 @@ pub fn charToKind(c: u8) TargetKind {
     };
 }
 
-fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
+fn readVersioned(a: Allocator, file: std.fs.File, hash: []const u8) !Comment {
     var reader = file.reader();
     const ver: usize = try reader.readInt(usize, endian);
     return switch (ver) {
@@ -49,6 +57,7 @@ fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
             .created = try reader.readInt(i64, endian),
             .updated = try reader.readInt(i64, endian),
             .tz = try reader.readInt(i32, endian),
+            .hash = hash[0..sha256.digest_length].*,
             .target = switch (try reader.readInt(u8, endian)) {
                 0 => .{ .diff = try reader.readInt(usize, endian) },
                 'D' => .{ .diff = try reader.readInt(usize, endian) },
@@ -72,6 +81,41 @@ fn readVersioned(a: Allocator, file: std.fs.File) !Comment {
             },
             .author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
             .message = try reader.readAllAlloc(a, 0xFFFF),
+            .replies = null,
+        },
+        1 => return Comment{
+            .state = try reader.readInt(usize, endian),
+            .created = try reader.readInt(i64, endian),
+            .updated = try reader.readInt(i64, endian),
+            .tz = try reader.readInt(i32, endian),
+            .hash = hash[0..sha256.digest_length].*,
+            .target = switch (try reader.readInt(u8, endian)) {
+                0 => .{ .diff = try reader.readInt(usize, endian) },
+                'D' => .{ .diff = try reader.readInt(usize, endian) },
+                'I' => .{ .issue = try reader.readInt(usize, endian) },
+                'r' => .{ .reply = .{
+                    .to = switch (try reader.readInt(u8, endian)) {
+                        'c' => .{ .comment = try reader.readInt(usize, endian) },
+                        'C' => .{ .commit = .{
+                            .number = try reader.readInt(usize, endian),
+                            .meta = try reader.readInt(usize, endian),
+                        } },
+                        'd' => .{ .diff = .{
+                            .number = try reader.readInt(usize, endian),
+                            .file = try reader.readInt(usize, endian),
+                            .revision = try reader.readInt(usize, endian),
+                        } },
+                        else => return error.CommentCorrupted,
+                    },
+                } },
+                else => return error.CommentCorrupted,
+            },
+            .author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
+            .message = try reader.readAllAlloc(a, 0xFFFF),
+            .replies = if (reader.readBoundedBytes(sha256.digest_length)) |bb|
+                bb.slice()[0..sha256.digest_length].*
+            else |_|
+                null,
         },
         else => error.UnsupportedVersion,
     };
@@ -123,17 +167,6 @@ pub const Targets = union(TargetKind) {
     reply: Reply,
 };
 
-state: usize = 0,
-created: i64 = 0,
-tz: i32 = 0,
-updated: i64 = 0,
-target: Targets = .{ .nos = {} },
-
-author: []const u8,
-message: []const u8,
-
-hash: [sha256.digest_length]u8 = undefined,
-
 pub fn toHash(self: *Comment) *const [sha256.digest_length]u8 {
     var h = sha256.init(.{});
     h.update(self.author);
@@ -147,14 +180,14 @@ pub fn toHash(self: *Comment) *const [sha256.digest_length]u8 {
 pub fn writeNew(self: *Comment, d: std.fs.Dir) !void {
     var buf: [2048]u8 = undefined;
     _ = self.toHash();
-    const filename = try std.fmt.bufPrint(&buf, "{x}.comment", .{std.fmt.fmtSliceHexLower(&self.hash)});
+    const filename = try bufPrint(&buf, "{x}.comment", .{fmtSliceHexLower(&self.hash)});
     var file = try d.createFile(filename, .{});
     defer file.close();
-    const w = file.writer();
-    try self.writeStruct(w);
+    const w = file.writer().any();
+    try self.writeOut(w);
 }
 
-fn writeStruct(self: Comment, w: Writer) !void {
+fn writeOut(self: Comment, w: AnyWriter) !void {
     try w.writeInt(usize, CMMT_VERSION, endian);
     try w.writeInt(usize, self.state, endian);
     try w.writeInt(i64, self.created, endian);
@@ -172,10 +205,11 @@ fn writeStruct(self: Comment, w: Writer) !void {
     try w.writeAll(self.author);
     try w.writeAll("\x00");
     try w.writeAll(self.message);
+    if (self.replies) |r| try w.writeAll(r[0..]);
 }
 
-pub fn readFile(a: std.mem.Allocator, file: std.fs.File) !Comment {
-    return readVersioned(a, file);
+pub fn readFile(a: std.mem.Allocator, file: std.fs.File, hash: []const u8) !Comment {
+    return readVersioned(a, file, hash);
 }
 
 pub fn toContext(self: Comment, a: Allocator) !Template.Context {
@@ -194,10 +228,10 @@ pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void
 
 pub fn open(a: Allocator, hash: []const u8) !Comment {
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{x}.comment", .{std.fmt.fmtSliceHexLower(hash)});
+    const filename = try bufPrint(&buf, "{x}.comment", .{fmtSliceHexLower(hash)});
     var file = try datad.openFile(filename, .{});
     defer file.close();
-    return try Comment.readFile(a, file);
+    return try Comment.readFile(a, file, hash);
 }
 
 pub fn new(ath: []const u8, msg: []const u8) !Comment {
@@ -280,4 +314,44 @@ test "comment" {
         blob,
     );
     // zig fmt: on
+}
+
+test Comment {
+    const a = std.testing.allocator;
+    var tempdir = std.testing.tmpDir(.{});
+    defer tempdir.cleanup();
+    try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
+
+    var c = try Comment.new("author", "message");
+
+    // LOL, you thought
+    const mask: i64 = ~@as(i64, 0xfffff);
+    c.created = std.time.timestamp() & mask;
+    c.updated = std.time.timestamp() & mask;
+
+    var out = std.ArrayList(u8).init(a);
+    defer out.clearAndFree();
+    const outw = out.writer().any();
+    try c.writeOut(outw);
+
+    const v0: Comment = undefined;
+    const v0_bin: []const u8 = &[_]u8{
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x30, 0x67, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x67, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x61, 0x75, 0x74,
+        0x68, 0x6F, 0x72, 0x00, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+    };
+    try std.testing.expectEqualSlices(u8, v0_bin, out.items);
+    const v1: Comment = undefined;
+    // TODO... eventually
+    _ = v0;
+    _ = v1;
+
+    const v1_bin: []const u8 = &[_]u8{
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x30, 0x67, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x30, 0x67, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x61, 0x75, 0x74,
+        0x68, 0x6F, 0x72, 0x00, 0x6D, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+    };
+    try std.testing.expectEqualSlices(u8, v1_bin, out.items);
 }

@@ -7,6 +7,7 @@ const splitScalar = std.mem.splitScalar;
 const indexOf = std.mem.indexOf;
 const indexOfAny = std.mem.indexOfAny;
 const parseInt = std.fmt.parseInt;
+const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 
 const Commits = @import("commits.zig");
 
@@ -52,10 +53,18 @@ fn isHex(input: []const u8) ?usize {
 }
 
 pub fn router(ctx: *Context) Error!Route.Callable {
-    std.debug.assert(std.mem.eql(u8, "diffs", ctx.uri.next().?));
+    if (!eql(u8, "diffs", ctx.uri.next() orelse return error.Unrouteable))
+        return error.Unrouteable;
     const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
 
     if (isHex(verb)) |_| {
+        const uri_save = ctx.uri.index;
+        defer ctx.uri.index = uri_save;
+        _ = ctx.uri.next();
+        if (ctx.uri.peek()) |action| {
+            if (eql(u8, action, "direct_reply")) return directReply;
+        }
+
         return view;
     }
 
@@ -222,6 +231,13 @@ fn newComment(ctx: *Context) Error!void {
         delta.commit() catch unreachable;
         return ctx.response.redirect(loc, true) catch unreachable;
     }
+    return error.Unknown;
+}
+
+pub fn directReply(ctx: *Context) Error!void {
+    _ = ctx.uri.next().?;
+    _ = ctx.uri.next().?;
+    std.debug.print("{s}\n", .{ctx.uri.next().?});
     return error.Unknown;
 }
 
@@ -531,6 +547,7 @@ fn view(ctx: *Context) Error!void {
                 .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
                 .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
                 .message = translateComment(ctx.alloc, comment.message, patch) catch unreachable,
+                .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
             } };
         }
     } else |err| {

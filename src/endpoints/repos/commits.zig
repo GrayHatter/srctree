@@ -140,6 +140,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
                         .author = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.author, .{}),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(thr_cmt.updated)}),
                         .message = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.message, .{}),
+                        .direct_reply = null,
                     } };
                 }
             } else |err| {
