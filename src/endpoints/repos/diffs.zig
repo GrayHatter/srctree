@@ -457,6 +457,9 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
                                 },
                             );
                             try message_lines.append(wrapped_line);
+                            if (search_end < line.len) try message_lines.append(
+                                try Bleach.sanitizeAlloc(a, line[search_end..], .{}),
+                            );
                             break;
                         }
                     } else {
