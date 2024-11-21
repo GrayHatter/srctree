@@ -346,7 +346,7 @@ const ParsedHeader = struct {
     right: Numbers,
 };
 
-fn getLineAt(data: []const u8, target: u32, length: u32, right_only: bool) ![]const u8 {
+fn getLineAt(data: []const u8, target: u32, length: u32, right_only: bool) !?[]const u8 {
     std.debug.assert(length == 1); // Not Implemented
     var itr = splitScalar(u8, data, '\n');
     const header = try parseBlockHeader(itr.next().?);
@@ -373,7 +373,7 @@ fn getLineAt(data: []const u8, target: u32, length: u32, right_only: bool) ![]co
             else => {},
         }
     }
-    return error.LineNotFound;
+    return null;
 }
 
 /// TODO move to patch.zig
@@ -396,9 +396,66 @@ fn parseBlockHeader(string: []const u8) !ParsedHeader {
     };
 }
 
-fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
-    const Side = enum { del, add };
+fn resolveLineRef(
+    a: Allocator,
+    line: []const u8,
+    filename: []const u8,
+    diff: *Patch.Diff,
+    h: usize,
+    fpos: usize,
+) !?[][]const u8 {
+    const side: ?Side = if (fpos > 0)
+        switch (line[fpos - 1]) {
+            '+' => .add,
+            '-' => .del,
+            else => null,
+        }
+    else
+        null;
+    var found_lines = std.ArrayList([]const u8).init(a);
+    var search_end = h + 2;
+    while (search_end < line.len and std.ascii.isDigit(line[search_end])) search_end += 1;
 
+    const search = try parseInt(u32, line[h + 1 .. search_end], 10);
+    const blocks = try diff.blocksAlloc(a);
+    for (blocks) |block| {
+        const change = try parseBlockHeader(block);
+        const in_left = search >= change.left.start and search <= change.left.start + change.left.change;
+        const in_right = search >= change.right.start and search <= change.right.start + change.right.change;
+        if (in_left or in_right) {
+            const sided: bool = if (side) |s| if (s == .add) true else false else true;
+            if (try getLineAt(block, search, 1, sided)) |found_line| {
+                const color = switch (found_line[0]) {
+                    '+' => "green",
+                    '-' => "red",
+                    ' ' => "yellow",
+                    else => "error",
+                };
+                const formatted = if (found_line.len <= 1)
+                    "&nbsp;"
+                else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
+                    var pre = try Highlighting.highlight(a, lang, found_line[1..]);
+                    break :fmt pre[28..][0 .. pre.len - 41];
+                } else try Bleach.sanitizeAlloc(a, found_line[1..], .{});
+
+                const wrapped_line = try allocPrint(
+                    a,
+                    "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
+                    .{ try Bleach.sanitizeAlloc(a, line, .{}), color, formatted },
+                );
+                try found_lines.append(wrapped_line);
+                if (search_end < line.len) try found_lines.append(
+                    try Bleach.sanitizeAlloc(a, line[search_end..], .{}),
+                );
+            }
+            break;
+        }
+    } else return null;
+    return try found_lines.toOwnedSlice();
+}
+
+const Side = enum { del, add };
+fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
     var message_lines = std.ArrayList([]const u8).init(a);
     defer message_lines.clearAndFree();
 
@@ -410,58 +467,9 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
             const filename = diff.filename orelse continue;
             //std.debug.print("files {s}\n", .{filename});
             if (indexOf(u8, line, filename)) |filepos| {
-                const side: ?Side = if (filepos > 0)
-                    switch (line[filepos - 1]) {
-                        '+' => .add,
-                        '-' => .del,
-                        else => null,
-                    }
-                else
-                    null;
                 if (indexOfAny(u8, line, "#:@")) |h| {
-                    var search_end = h + 2;
-                    while (search_end < line.len and std.ascii.isDigit(line[search_end])) search_end += 1;
-
-                    const search = try parseInt(u32, line[h + 1 .. search_end], 10);
-                    const blocks = try diff.blocksAlloc(a);
-                    for (blocks) |block| {
-                        const change = try parseBlockHeader(block);
-                        const in_left = search >= change.left.start and search <= change.left.start + change.left.change;
-                        const in_right = search >= change.right.start and search <= change.right.start + change.right.change;
-                        if (in_left or in_right) {
-                            //try message_lines.append(try allocPrint(a, "found in block {}", .{i}));
-
-                            const sided: bool = if (side) |s|
-                                if (s == .add) true else false
-                            else
-                                true;
-                            const found_line = try getLineAt(block, search, 1, sided);
-                            const color = switch (found_line[0]) {
-                                '+' => "green",
-                                '-' => "red",
-                                ' ' => "yellow",
-                                else => "error",
-                            };
-                            const formatted = if (found_line.len <= 1) "&nbsp;" else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
-                                var pre = try Highlighting.highlight(a, lang, found_line[1..]);
-                                break :fmt pre[28..][0 .. pre.len - 41];
-                            } else try Bleach.sanitizeAlloc(a, found_line[1..], .{});
-
-                            const wrapped_line = try allocPrint(
-                                a,
-                                "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
-                                .{
-                                    try Bleach.sanitizeAlloc(a, line, .{}),
-                                    color,
-                                    formatted,
-                                },
-                            );
-                            try message_lines.append(wrapped_line);
-                            if (search_end < line.len) try message_lines.append(
-                                try Bleach.sanitizeAlloc(a, line[search_end..], .{}),
-                            );
-                            break;
-                        }
+                    if (try resolveLineRef(a, line, filename, diff, h, filepos)) |lines| {
+                        try message_lines.appendSlice(lines);
                     } else {
                         try message_lines.append(try allocPrint(
                             a,
