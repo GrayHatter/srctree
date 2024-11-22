@@ -607,6 +607,7 @@ comment {
 		border-right: 1px solid #737373;
 		margin: 0 10px;
 		padding: 2px 15px;
+		background: #333;
 		&.red {
 			background: #433;
 		}
@@ -614,7 +615,6 @@ comment {
 			background: #343;
 		}
 		&.yellow {
-
 			background: #333;
 		}
 	}

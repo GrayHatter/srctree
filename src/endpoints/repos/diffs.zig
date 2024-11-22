@@ -6,6 +6,7 @@ const eql = std.mem.eql;
 const splitScalar = std.mem.splitScalar;
 const indexOf = std.mem.indexOf;
 const indexOfAny = std.mem.indexOfAny;
+const indexOfScalarPos = std.mem.indexOfScalarPos;
 const parseInt = std.fmt.parseInt;
 const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 
@@ -346,6 +347,13 @@ const ParsedHeader = struct {
     right: Numbers,
 };
 
+fn getLineFrom(data: []const u8, target: u32, length: u32) !?[]const u8 {
+    _ = data;
+    _ = target;
+    _ = length;
+    return null;
+}
+
 fn getLineAt(data: []const u8, target: u32, length: u32, right_only: bool) !?[]const u8 {
     std.debug.assert(length == 1); // Not Implemented
     var itr = splitScalar(u8, data, '\n');
@@ -396,12 +404,72 @@ fn parseBlockHeader(string: []const u8) !ParsedHeader {
     };
 }
 
-fn resolveLineRef(
+fn resolveLineRefRepo(
+    a: Allocator,
+    line: []const u8,
+    filename: []const u8,
+    repo: *const Git.Repo,
+    line_number: u32,
+) !?[][]const u8 {
+    var found_lines = std.ArrayList([]const u8).init(a);
+
+    const cmt = try repo.headCommit(a);
+    var files: Git.Tree = try cmt.mkTree(a, repo);
+    var blob_sha: Git.SHA = undefined;
+    var itr = splitScalar(u8, filename, '/');
+    root: while (itr.next()) |dirname| {
+        for (files.blobs) |obj| {
+            if (eql(u8, obj.name, dirname)) {
+                if (obj.isFile()) {
+                    if (itr.peek() != null) return error.InvalidFile;
+                    blob_sha = obj.sha;
+                    break :root;
+                }
+                files = try obj.toTree(a, repo);
+                continue :root;
+            }
+        } else {
+            std.debug.print("unable to resolve file {s} at {s}\n", .{ filename, dirname });
+        }
+    }
+
+    var file = try repo.loadBlob(a, blob_sha);
+    var start: usize = 0;
+    var end: usize = 0;
+    var count: usize = line_number;
+    while (indexOfScalarPos(u8, file.data.?, start + 1, '\n')) |next| {
+        if (count > 1) {
+            start = next;
+        } else if (count == 1) {
+            end = next;
+            break;
+        }
+        count -|= 1;
+    }
+    if (count > 1) return error.LineNotFound;
+    const found_line = file.data.?[start..end];
+    const formatted = if (found_line.len == 0)
+        "&nbsp;"
+    else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
+        var pre = try Highlighting.highlight(a, lang, found_line[1..]);
+        break :fmt pre[28..][0 .. pre.len - 41];
+    } else try Bleach.sanitizeAlloc(a, found_line[1..], .{});
+
+    const wrapped_line = try allocPrint(
+        a,
+        "<div title=\"{s}\" class=\"coderef\">{s}</div>",
+        .{ try Bleach.sanitizeAlloc(a, line, .{}), formatted },
+    );
+    try found_lines.append(wrapped_line);
+    return try found_lines.toOwnedSlice();
+}
+
+fn resolveLineRefDiff(
     a: Allocator,
     line: []const u8,
     filename: []const u8,
     diff: *Patch.Diff,
-    h: usize,
+    line_number: u32,
     fpos: usize,
 ) !?[][]const u8 {
     const side: ?Side = if (fpos > 0)
@@ -413,18 +481,14 @@ fn resolveLineRef(
     else
         null;
     var found_lines = std.ArrayList([]const u8).init(a);
-    var search_end = h + 2;
-    while (search_end < line.len and std.ascii.isDigit(line[search_end])) search_end += 1;
-
-    const search = try parseInt(u32, line[h + 1 .. search_end], 10);
     const blocks = try diff.blocksAlloc(a);
     for (blocks) |block| {
         const change = try parseBlockHeader(block);
-        const in_left = search >= change.left.start and search <= change.left.start + change.left.change;
-        const in_right = search >= change.right.start and search <= change.right.start + change.right.change;
+        const in_left = line_number >= change.left.start and line_number <= change.left.start + change.left.change;
+        const in_right = line_number >= change.right.start and line_number <= change.right.start + change.right.change;
         if (in_left or in_right) {
             const sided: bool = if (side) |s| if (s == .add) true else false else true;
-            if (try getLineAt(block, search, 1, sided)) |found_line| {
+            if (try getLineAt(block, line_number, 1, sided)) |found_line| {
                 const color = switch (found_line[0]) {
                     '+' => "green",
                     '-' => "red",
@@ -444,9 +508,6 @@ fn resolveLineRef(
                     .{ try Bleach.sanitizeAlloc(a, line, .{}), color, formatted },
                 );
                 try found_lines.append(wrapped_line);
-                if (search_end < line.len) try found_lines.append(
-                    try Bleach.sanitizeAlloc(a, line[search_end..], .{}),
-                );
             }
             break;
         }
@@ -455,7 +516,7 @@ fn resolveLineRef(
 }
 
 const Side = enum { del, add };
-fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
+fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *const Git.Repo) ![]u8 {
     var message_lines = std.ArrayList([]const u8).init(a);
     defer message_lines.clearAndFree();
 
@@ -468,7 +529,17 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch) ![]u8 {
             //std.debug.print("files {s}\n", .{filename});
             if (indexOf(u8, line, filename)) |filepos| {
                 if (indexOfAny(u8, line, "#:@")) |h| {
-                    if (try resolveLineRef(a, line, filename, diff, h, filepos)) |lines| {
+                    var search_end = h + 2;
+                    while (search_end < line.len and std.ascii.isDigit(line[search_end])) search_end += 1;
+
+                    const search = try parseInt(u32, line[h + 1 .. search_end], 10);
+
+                    if (try resolveLineRefDiff(a, line, filename, diff, search, filepos)) |lines| {
+                        try message_lines.appendSlice(lines);
+                        if (search_end < line.len) try message_lines.append(
+                            try Bleach.sanitizeAlloc(a, line[search_end..], .{}),
+                        );
+                    } else if (try resolveLineRefRepo(a, line, filename, repo, search)) |lines| {
                         try message_lines.appendSlice(lines);
                     } else {
                         try message_lines.append(try allocPrint(
@@ -492,6 +563,14 @@ const DiffViewPage = Template.PageData("delta-diff.html");
 
 fn view(ctx: *Context) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+
+    var cwd = std.fs.cwd();
+    const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
+    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
+    var repo = Git.Repo.init(dir) catch return error.Unknown;
+    repo.loadData(ctx.alloc) catch return error.Unknown;
+    defer repo.raze();
+
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
 
@@ -537,12 +616,6 @@ fn view(ctx: *Context) Error!void {
         }
         f.close();
 
-        var cwd = std.fs.cwd();
-        const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-        const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-        var repo = Git.Repo.init(dir) catch return error.Unknown;
-        repo.loadData(ctx.alloc) catch return error.Unknown;
-        defer repo.raze();
         var agent = repo.getAgent(ctx.alloc);
         const applies = agent.checkPatch(fdata) catch |err| apl: {
             std.debug.print("git apply failed {any}\n", .{err});
@@ -560,7 +633,7 @@ fn view(ctx: *Context) Error!void {
             c_ctx.* = .{
                 .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
                 .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
-                .message = translateComment(ctx.alloc, comment.message, patch) catch unreachable,
+                .message = translateComment(ctx.alloc, comment.message, patch, &repo) catch unreachable,
                 .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
                 .sub_thread = null,
             };
