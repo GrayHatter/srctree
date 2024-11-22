@@ -539,7 +539,11 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                         if (search_end < line.len) try message_lines.append(
                             try Bleach.sanitizeAlloc(a, line[search_end..], .{}),
                         );
-                    } else if (try resolveLineRefRepo(a, line, filename, repo, search)) |lines| {
+                    } else if (resolveLineRefRepo(a, line, filename, repo, search) catch |err| switch (err) {
+                        error.InvalidFile => null,
+                        error.LineNotFound => null,
+                        else => return err,
+                    }) |lines| {
                         try message_lines.appendSlice(lines);
                     } else {
                         try message_lines.append(try allocPrint(
