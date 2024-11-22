@@ -9,6 +9,8 @@ const indexOfAny = std.mem.indexOfAny;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
 const parseInt = std.fmt.parseInt;
 const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
+const isDigit = std.ascii.isDigit;
+const isWhitespace = std.ascii.isWhitespace;
 
 const Commits = @import("commits.zig");
 
@@ -410,6 +412,7 @@ fn resolveLineRefRepo(
     filename: []const u8,
     repo: *const Git.Repo,
     line_number: u32,
+    line_stride: ?u32,
 ) !?[][]const u8 {
     var found_lines = std.ArrayList([]const u8).init(a);
 
@@ -437,11 +440,16 @@ fn resolveLineRefRepo(
     var start: usize = 0;
     var end: usize = 0;
     var count: usize = line_number;
-    while (indexOfScalarPos(u8, file.data.?, start + 1, '\n')) |next| {
+    var stride: usize = (line_stride orelse line_number) - line_number;
+    while (indexOfScalarPos(u8, file.data.?, @max(end, start) + 1, '\n')) |next| {
         if (count > 1) {
             start = next;
         } else if (count == 1) {
             end = next;
+            if (stride > 0) {
+                stride -= 1;
+                continue;
+            }
             break;
         }
         count -|= 1;
@@ -470,8 +478,10 @@ fn resolveLineRefDiff(
     filename: []const u8,
     diff: *Patch.Diff,
     line_number: u32,
+    line_stride: ?u32,
     fpos: usize,
 ) !?[][]const u8 {
+    _ = line_stride;
     const side: ?Side = if (fpos > 0)
         switch (line[fpos - 1]) {
             '+' => .add,
@@ -515,6 +525,50 @@ fn resolveLineRefDiff(
     return try found_lines.toOwnedSlice();
 }
 
+fn lineNumberStride(target: []const u8) !struct { u32, ?u32 } {
+    std.debug.assert(target.len > 1);
+    switch (target[0]) {
+        '#', ':', '@' => {
+            var search_end: usize = 1;
+            while (search_end < target.len and
+                isDigit(target[search_end]))
+            {
+                search_end += 1;
+            }
+            var stride: ?u32 = null;
+            if (target.len > search_end) {
+                switch (target[search_end]) {
+                    '-' => {
+                        const stride_start = search_end + 1;
+                        var stride_end = stride_start;
+                        while (stride_end < target.len and isDigit(target[stride_end])) {
+                            stride_end += 1;
+                        }
+                        stride = parseInt(u32, target[stride_start..stride_end], 10) catch null;
+                    },
+                    '+' => unreachable, // not implemented
+                    else => {},
+                }
+            }
+
+            const search = try parseInt(u32, target[1..search_end], 10);
+            return .{ search, stride };
+        },
+        else => return error.InvalidSpecifier,
+    }
+    return error.InvalidLineTarget;
+}
+
+test lineNumberStride {
+    const a = try lineNumberStride("#10");
+    try std.testing.expectEqual(10, a[0]);
+    try std.testing.expectEqual(null, a[1]);
+
+    const b = try lineNumberStride("#10-20");
+    try std.testing.expectEqual(10, b[0]);
+    try std.testing.expectEqual(20, b[1]);
+}
+
 const Side = enum { del, add };
 fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *const Git.Repo) ![]u8 {
     var message_lines = std.ArrayList([]const u8).init(a);
@@ -529,17 +583,33 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
             //std.debug.print("files {s}\n", .{filename});
             if (indexOf(u8, line, filename)) |filepos| {
                 if (indexOfAny(u8, line, "#:@")) |h| {
-                    var search_end = h + 2;
-                    while (search_end < line.len and std.ascii.isDigit(line[search_end])) search_end += 1;
+                    const linenums = try lineNumberStride(line[h..]);
 
-                    const search = try parseInt(u32, line[h + 1 .. search_end], 10);
-
-                    if (try resolveLineRefDiff(a, line, filename, diff, search, filepos)) |lines| {
+                    if (try resolveLineRefDiff(
+                        a,
+                        line,
+                        filename,
+                        diff,
+                        linenums[0],
+                        linenums[1],
+                        filepos,
+                    )) |lines| {
                         try message_lines.appendSlice(lines);
-                        if (search_end < line.len) try message_lines.append(
-                            try Bleach.sanitizeAlloc(a, line[search_end..], .{}),
+                        var end: usize = h;
+                        while (end < line.len and !isWhitespace(line[end])) {
+                            end += 1;
+                        }
+                        if (end < line.len) try message_lines.append(
+                            try Bleach.sanitizeAlloc(a, line[end..], .{}),
                         );
-                    } else if (resolveLineRefRepo(a, line, filename, repo, search) catch |err| switch (err) {
+                    } else if (resolveLineRefRepo(
+                        a,
+                        line,
+                        filename,
+                        repo,
+                        linenums[0],
+                        linenums[1],
+                    ) catch |err| switch (err) {
                         error.InvalidFile => null,
                         error.LineNotFound => null,
                         else => return err,

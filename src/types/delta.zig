@@ -123,6 +123,8 @@ hash: [32]u8 = [_]u8{0} ** 32,
 thread: ?*Thread = null,
 
 pub fn commit(self: Delta) !void {
+    if (self.thread) |thr| thr.commit() catch {}; // Save thread as best effort
+
     const file = try openFile(self.repo);
     defer file.close();
     var writer = file.writer().any();

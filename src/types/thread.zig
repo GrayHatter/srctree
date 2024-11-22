@@ -50,6 +50,10 @@ comment_data: ?[]const u8 = null,
 comments: ?[]Comment = null,
 
 pub fn commit(self: Thread) !void {
+    if (self.comments) |cmts| {
+        // Make a best effort to save/protect all data
+        for (cmts) |cmt| cmt.commit() catch continue;
+    }
     const file = try openFile(self.index);
     defer file.close();
     const writer = file.writer().any();

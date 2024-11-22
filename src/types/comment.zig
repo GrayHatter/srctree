@@ -153,6 +153,13 @@ pub fn writeNew(self: *Comment, d: std.fs.Dir) !void {
     try self.writeOut(w);
 }
 
+pub fn commit(self: Comment) !void {
+    var file = try openFile(self.hash[0..]);
+    defer file.close();
+    const writer = file.writer().any();
+    try self.writeOut(writer);
+}
+
 fn writeOut(self: Comment, w: AnyWriter) !void {
     try w.writeInt(usize, CMMT_VERSION, endian);
     try w.writeInt(usize, self.state, endian);
@@ -192,10 +199,14 @@ pub fn contextBuilder(self: Comment, a: Allocator, ctx: *Template.Context) !void
     try ctx.putSlice("Date", try allocPrint(a, "{}", .{Humanize.unix(self.updated)}));
 }
 
-pub fn open(a: Allocator, hash: []const u8) !Comment {
+fn openFile(hash: []const u8) !std.fs.File {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.comment", .{fmtSliceHexLower(hash)});
-    var file = try datad.openFile(filename, .{});
+    return try datad.openFile(filename, .{ .mode = .read_write });
+}
+
+pub fn open(a: Allocator, hash: []const u8) !Comment {
+    var file = try openFile(hash);
     defer file.close();
     return try Comment.readFile(a, file, hash);
 }
@@ -220,8 +231,18 @@ pub fn loadFromData(a: Allocator, cd: []const u8) ![]Comment {
     const count = cd.len / 32;
     if (count == 0) return &[0]Comment{};
     const comments = try a.alloc(Comment, count);
-    for (comments, 0..) |*c, i| {
-        c.* = try Comment.open(a, cd[i * 32 .. (i + 1) * 32]);
+    var data = cd[0..];
+    for (comments, 0..count) |*c, i| {
+        c.* = Comment.open(a, data[0..32]) catch |err| {
+            std.debug.print(
+                \\Error loading comment data {} of {}
+                \\error: {} target {any}
+                \\
+            , .{ i, count, err, data[0..32] });
+            data = data[32..];
+            continue;
+        };
+        data = data[32..];
     }
     return comments;
 }
