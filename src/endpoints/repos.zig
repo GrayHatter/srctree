@@ -579,7 +579,7 @@ fn excludedExt(name: []const u8) bool {
     inline for (exclude_ext) |un| {
         if (std.mem.endsWith(u8, name, un)) return true;
     }
-    return true;
+    return false;
 }
 
 const BlobPage = Template.PageData("blob.html");
