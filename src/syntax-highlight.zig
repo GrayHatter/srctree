@@ -1,11 +1,19 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const endsWith = std.mem.endsWith;
+const eql = std.mem.eql;
 
 pub const Language = enum {
     c,
     cpp,
     h,
     html,
+    ini,
+    kotlin,
+    lua,
+    nginx,
+    python,
+    vim,
     zig,
 
     pub fn toString(l: Language) ![]const u8 {
@@ -13,23 +21,51 @@ pub const Language = enum {
             .c => "c",
             .cpp, .h => "cpp",
             .html => "html",
+            .ini => "ini",
+            .kotlin => "kotlin",
+            .lua => "lua",
+            .nginx => "nginx",
+            .python => "python",
+            .vim => @tagName(l),
             .zig => "zig",
             //else => error.LanguageNotSupported,
         };
     }
 
     pub fn guessFromFilename(name: []const u8) ?Language {
-        if (std.mem.endsWith(u8, name, ".zig")) {
-            return .zig;
-        } else if (std.mem.endsWith(u8, name, ".html")) {
-            return .html;
-        } else if (std.mem.endsWith(u8, name, ".h")) {
-            return .cpp;
-        } else if (std.mem.endsWith(u8, name, ".c")) {
+        if (endsWith(u8, name, ".c")) {
             return .c;
-        } else if (std.mem.endsWith(u8, name, ".cpp")) {
+        } else if (endsWith(u8, name, ".h") or endsWith(u8, name, ".cpp")) {
             return .cpp;
+        } else if (endsWith(u8, name, ".html")) {
+            return .html;
+        } else if (endsWith(u8, name, ".kotlin") or endsWith(u8, name, ".kt")) {
+            return .kotlin;
+        } else if (endsWith(u8, name, ".ini") or
+            endsWith(u8, name, ".cfg") or
+            endsWith(u8, name, ".conf") or
+            endsWith(u8, name, ".config") or
+            endsWith(u8, name, ".editorconfig"))
+        {
+            return .ini;
+        } else if (endsWith(u8, name, ".lua")) {
+            return .lua;
+        } else if (eql(u8, name, "nginx.conf")) {
+            return .nginx;
+        } else if (endsWith(u8, name, ".py") or
+            endsWith(u8, name, ".bzl") or
+            endsWith(u8, name, ".bazel") or
+            eql(u8, name, "BUCK") or
+            eql(u8, name, "BUILD") or
+            eql(u8, name, "WORKSPACE"))
+        {
+            return .python;
+        } else if (endsWith(u8, name, ".vim") or eql(u8, name, ".vimrc")) {
+            return .vim;
+        } else if (endsWith(u8, name, ".zig")) {
+            return .zig;
         }
+
         return null;
     }
 };
