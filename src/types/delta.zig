@@ -7,6 +7,7 @@ const Bleach = @import("../bleach.zig");
 const Types = @import("../types.zig");
 const Comment = Types.Comment;
 const Thread = Types.Thread;
+const Message = Thread.Message;
 const Template = @import("../template.zig");
 
 pub const Delta = @This();
@@ -178,13 +179,13 @@ pub fn loadThread(self: *Delta, a: Allocator) !*Thread {
     return t;
 }
 
-pub fn getComments(self: *Delta, a: Allocator) ![]Comment {
+pub fn getMessages(self: *Delta, a: Allocator) ![]Message {
     if (self.thread) |thread| {
-        if (thread.getComments()) |c| {
-            return c;
+        if (thread.getMessages()) |msgs| {
+            return msgs;
         } else |_| {
-            try thread.loadComments(a);
-            return try thread.getComments();
+            try thread.loadMessages(a);
+            return try thread.getMessages();
         }
     }
     return error.ThreadNotLoaded;
@@ -195,6 +196,25 @@ pub fn addComment(self: *Delta, a: Allocator, c: Comment) !void {
         return thread.addComment(a, c);
     }
     return error.ThreadNotLoaded;
+}
+
+pub fn countComments(self: Delta) struct { count: usize, new: bool } {
+    if (self.thread) |thread| {
+        if (thread.getMessages()) |msgs| {
+            const ts = std.time.timestamp() - 86400;
+            var cmtnew: bool = false;
+            var cmtlen: usize = 0;
+            for (msgs) |m| switch (m) {
+                .comment => |c| {
+                    cmtnew = cmtnew or c.updated > ts;
+                    cmtlen += 1;
+                },
+                else => {},
+            };
+            return .{ .count = cmtlen, .new = cmtnew };
+        } else |_| {}
+    }
+    return .{ .count = 0, .new = false };
 }
 
 pub fn toContext(self: Delta, a: Allocator) !Template.Context {
@@ -216,10 +236,10 @@ pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
         self.index,
     }));
 
-    if (self.thread) |thread| if (thread.getComments()) |comments| {
+    if (self.thread) |thread| if (thread.getMessages()) |messages| {
         try ctx.putSlice(
             "CommentsIcon",
-            try std.fmt.allocPrint(a, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{comments.len}),
+            try std.fmt.allocPrint(a, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{messages.len}),
         );
     } else |_| {};
 }

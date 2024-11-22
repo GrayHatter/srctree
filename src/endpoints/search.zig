@@ -77,7 +77,7 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
         var next: Delta = next_;
 
         if (next.loadThread(ctx.alloc)) |*thread| {
-            _ = thread.*.loadComments(ctx.alloc) catch return error.Unknown;
+            _ = thread.*.loadMessages(ctx.alloc) catch return error.Unknown;
         } else |_| continue;
         try list.append(try next.toContext(ctx.alloc));
     }

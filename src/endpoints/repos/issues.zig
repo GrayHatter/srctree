@@ -135,19 +135,26 @@ fn view(ctx: *Context) Error!void {
     );
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
-    if (delta.getComments(ctx.alloc)) |cm| {
-        const comments: []Template.Context = try ctx.alloc.alloc(Template.Context, cm.len);
-
-        for (cm, comments) |comment, *cctx| {
+    if (delta.getMessages(ctx.alloc)) |msgs| {
+        const comments: []Template.Context = try ctx.alloc.alloc(Template.Context, msgs.len);
+        for (msgs, comments) |msg, *cctx| {
             cctx.* = Template.Context.init(ctx.alloc);
-            const builder = comment.builder();
-            builder.build(ctx.alloc, cctx) catch unreachable;
-            try cctx.put(
-                "Date",
-                .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}) },
-            );
+            switch (msg) {
+                .comment => |comment| {
+                    const builder = comment.builder();
+                    builder.build(ctx.alloc, cctx) catch unreachable;
+                    try cctx.put(
+                        "Date",
+                        .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}) },
+                    );
+                },
+                else => try cctx.put("Message", .{ .slice = "unsupported message found" }),
+            }
         }
-        try ctx.putContext("Comments", .{ .block = comments });
+        const thread: []Template.Context = try ctx.alloc.alloc(Template.Context, 1);
+        thread[0] = Template.Context.init(ctx.alloc);
+        try thread[0].putBlock("Thread", comments);
+        try ctx.putContext("Comments", .{ .block = thread });
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
         @panic("oops");
@@ -164,12 +171,10 @@ fn list(ctx: *Context) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;
-    const ts = std.time.timestamp() - 86400;
 
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     for (0..last) |i| {
         // TODO implement seen
-        var new_comments = false;
         var d = Delta.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
             d.raze(ctx.alloc);
@@ -177,13 +182,7 @@ fn list(ctx: *Context) Error!void {
         }
 
         _ = d.loadThread(ctx.alloc) catch unreachable;
-        var cmtslen: usize = 0;
-        if (d.getComments(ctx.alloc)) |cmts| {
-            cmtslen = cmts.len;
-            for (cmts) |c| {
-                if (c.updated > ts) new_comments = true;
-            }
-        } else |_| {}
+        const cmtsmeta = d.countComments();
 
         try d_list.append(.{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
@@ -196,7 +195,7 @@ fn list(ctx: *Context) Error!void {
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
-                .{ if (new_comments) " new" else "", cmtslen },
+                .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
             .desc = try Bleach.sanitizeAlloc(ctx.alloc, d.message, .{}),
         });

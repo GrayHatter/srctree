@@ -31,7 +31,7 @@ fn readVersioned(a: Allocator, idx: usize, reader: *std.io.AnyReader) !Thread {
                 .updated = try reader.readInt(i64, endian),
             };
             _ = try reader.read(&t.delta_hash);
-            t.comment_data = try reader.readAllAlloc(a, 0xFFFF);
+            t.message_data = try reader.readAllAlloc(a, 0x8FFFF);
             return t;
         },
 
@@ -46,13 +46,26 @@ updated: i64 = 0,
 delta_hash: [32]u8 = [_]u8{0} ** 32,
 hash: [32]u8 = [_]u8{0} ** 32,
 
-comment_data: ?[]const u8 = null,
-comments: ?[]Comment = null,
+message_data: ?[]const u8 = null,
+messages: ?[]Message = null,
+
+pub const MessageTypes = enum {
+    comment,
+    unknown,
+};
+
+pub const Message = union(MessageTypes) {
+    comment: Comment,
+    unknown: void,
+};
 
 pub fn commit(self: Thread) !void {
-    if (self.comments) |cmts| {
+    if (self.messages) |msgs| {
         // Make a best effort to save/protect all data
-        for (cmts) |cmt| cmt.commit() catch continue;
+        for (msgs) |msg| switch (msg) {
+            .comment => |cmt| cmt.commit() catch continue,
+            .unknown => {},
+        };
     }
     const file = try openFile(self.index);
     defer file.close();
@@ -67,10 +80,11 @@ fn writeOut(self: Thread, writer: std.io.AnyWriter) !void {
     try writer.writeInt(i64, self.updated, endian);
     try writer.writeAll(&self.delta_hash);
 
-    if (self.comments) |cmts| {
-        for (cmts) |*c| {
-            try writer.writeAll(c.toHash());
-        }
+    if (self.messages) |msgs| {
+        for (msgs) |*msg| switch (msg.*) {
+            .comment => |*c| try writer.writeAll(c.toHash()),
+            .unknown => {},
+        };
     }
     try writer.writeAll("\x00");
 }
@@ -79,32 +93,57 @@ fn writeOut(self: Thread, writer: std.io.AnyWriter) !void {
 pub fn readFile(a: std.mem.Allocator, idx: usize, reader: *std.io.AnyReader) !Thread {
     // TODO I hate this, but I'm prototyping, plz rewrite
     var thread: Thread = readVersioned(a, idx, reader) catch return error.InputOutput;
-    try thread.loadComments(a);
+    try thread.loadMessages(a);
     return thread;
 }
 
-pub fn loadComments(self: *Thread, a: Allocator) !void {
-    if (self.comment_data) |cd| {
-        self.comments = try Comment.loadFromData(a, cd);
+fn loadFromData(a: Allocator, cd: []const u8) ![]Message {
+    if (cd.len < 32) {
+        if (cd.len != 1) { // ignore single null
+            std.debug.print("unexpected number in comment data {}\n", .{cd.len});
+        }
+        return &[0]Message{};
+    }
+    const count = cd.len / 32;
+    if (count == 0) return &[0]Message{};
+    const msgs = try a.alloc(Message, count);
+    var data = cd[0..];
+    for (msgs, 0..count) |*c, i| {
+        c.* = .{ .comment = Comment.open(a, data[0..32]) catch |err| {
+            std.debug.print(
+                \\Error loading msg data {} of {}
+                \\error: {} target {any}
+                \\
+            , .{ i, count, err, data[0..32] });
+            data = data[32..];
+            continue;
+        } };
+        data = data[32..];
+    }
+    return msgs;
+}
+pub fn loadMessages(self: *Thread, a: Allocator) !void {
+    if (self.message_data) |cd| {
+        self.messages = try loadFromData(a, cd);
     }
 }
 
-pub fn getComments(self: *Thread) ![]Comment {
-    if (self.comments) |c| return c;
+pub fn getMessages(self: Thread) ![]Message {
+    if (self.messages) |c| return c;
     return error.NotLoaded;
 }
 
 pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {
-    if (self.comments) |*comments| {
-        if (a.resize(comments.*, comments.len + 1)) {
-            comments.*.len += 1;
+    if (self.messages) |*messages| {
+        if (a.resize(messages.*, messages.len + 1)) {
+            messages.*.len += 1;
         } else {
-            self.comments = try a.realloc(comments.*, comments.len + 1);
+            self.messages = try a.realloc(messages.*, messages.len + 1);
         }
     } else {
-        self.comments = try a.alloc(Comment, 1);
+        self.messages = try a.alloc(Message, 1);
     }
-    self.comments.?[self.comments.?.len - 1] = c;
+    self.messages.?[self.messages.?.len - 1] = .{ .comment = c };
     self.updated = std.time.timestamp();
     try self.commit();
 }
@@ -113,10 +152,9 @@ pub fn raze(self: Thread, a: std.mem.Allocator) void {
     //if (self.alloc_data) |data| {
     //    a.free(data);
     //}
-    if (self.comments) |c| {
+    if (self.messages) |c| {
         a.free(c);
     }
-    self.file.close();
 }
 
 fn currMaxSet(count: usize) !void {

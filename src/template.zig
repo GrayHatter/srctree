@@ -383,7 +383,7 @@ pub const Directive = struct {
                     std.debug.assert(block.len == 1);
                     try self.with(block[0], out);
                 },
-                .build => unreachable,
+                .build => try self.with(block[0], out),
                 .variable => unreachable,
             }
             return;

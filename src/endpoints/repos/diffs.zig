@@ -701,16 +701,29 @@ fn view(ctx: *Context) Error!void {
     }
 
     var root_thread: []S.Thread = &[0]S.Thread{};
-    if (delta.getComments(ctx.alloc)) |comments| {
-        root_thread = try ctx.alloc.alloc(S.Thread, comments.len);
-        for (comments, root_thread) |comment, *c_ctx| {
-            c_ctx.* = .{
-                .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
-                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
-                .message = translateComment(ctx.alloc, comment.message, patch, &repo) catch unreachable,
-                .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
-                .sub_thread = null,
-            };
+    if (delta.getMessages(ctx.alloc)) |messages| {
+        root_thread = try ctx.alloc.alloc(S.Thread, messages.len);
+        for (messages, root_thread) |msg, *c_ctx| {
+            switch (msg) {
+                .comment => |comment| {
+                    c_ctx.* = .{
+                        .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
+                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
+                        .message = translateComment(ctx.alloc, comment.message, patch, &repo) catch unreachable,
+                        .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
+                        .sub_thread = null,
+                    };
+                },
+                else => {
+                    c_ctx.* = .{
+                        .author = "",
+                        .date = "",
+                        .message = "unsupported message type",
+                        .direct_reply = null,
+                        .sub_thread = null,
+                    };
+                },
+            }
         }
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
@@ -750,11 +763,9 @@ fn list(ctx: *Context) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;
-    const ts = std.time.timestamp() - 86400;
 
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     for (0..last) |i| {
-        var new_comments = false;
         var d = Delta.open(ctx.alloc, rd.name, i) catch continue orelse continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .diff) {
             d.raze(ctx.alloc);
@@ -762,13 +773,7 @@ fn list(ctx: *Context) Error!void {
         }
 
         _ = d.loadThread(ctx.alloc) catch unreachable;
-        var cmtslen: usize = 0;
-        if (d.getComments(ctx.alloc)) |cmts| {
-            cmtslen = cmts.len;
-            for (cmts) |c| {
-                if (c.updated > ts) new_comments = true;
-            }
-        } else |_| unreachable;
+        const cmtsmeta = d.countComments();
         try d_list.append(.{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
             .title_uri = try allocPrint(
@@ -780,7 +785,7 @@ fn list(ctx: *Context) Error!void {
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
-                .{ if (new_comments) " new" else "", cmtslen },
+                .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
             .desc = try Bleach.sanitizeAlloc(ctx.alloc, d.message, .{}),
         });

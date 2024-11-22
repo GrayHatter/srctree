@@ -133,16 +133,29 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
         };
         if (dlt) |*delta| {
             _ = delta.loadThread(ctx.alloc) catch unreachable;
-            if (delta.getComments(ctx.alloc)) |thread_comments| {
-                thread = try ctx.alloc.alloc(Template.Structs.Thread, thread_comments.len);
-                for (thread_comments, thread) |thr_cmt, *pg_comment| {
-                    pg_comment.* = .{
-                        .author = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.author, .{}),
-                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(thr_cmt.updated)}),
-                        .message = try Bleach.sanitizeAlloc(ctx.alloc, thr_cmt.message, .{}),
-                        .direct_reply = null,
-                        .sub_thread = null,
-                    };
+            if (delta.getMessages(ctx.alloc)) |messages| {
+                thread = try ctx.alloc.alloc(Template.Structs.Thread, messages.len);
+                for (messages, thread) |msg, *pg_comment| {
+                    switch (msg) {
+                        .comment => |cmt| {
+                            pg_comment.* = .{
+                                .author = try Bleach.sanitizeAlloc(ctx.alloc, cmt.author, .{}),
+                                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(cmt.updated)}),
+                                .message = try Bleach.sanitizeAlloc(ctx.alloc, cmt.message, .{}),
+                                .direct_reply = null,
+                                .sub_thread = null,
+                            };
+                        },
+                        else => {
+                            pg_comment.* = .{
+                                .author = "",
+                                .date = "",
+                                .message = "unsupported message type",
+                                .direct_reply = null,
+                                .sub_thread = null,
+                            };
+                        },
+                    }
                 }
             } else |err| {
                 std.debug.print("Unable to load comments for thread {} {}\n", .{ map.attach.delta, err });
