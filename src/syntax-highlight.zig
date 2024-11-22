@@ -71,6 +71,32 @@ pub const Language = enum {
 };
 
 pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
+    return switch (lang) {
+        .c,
+        .cpp,
+        .h,
+        .html,
+        .ini,
+        .kotlin,
+        .lua,
+        .nginx,
+        .python,
+        .vim,
+        .zig,
+        => highlightPygmentize(a, lang, text),
+        //else => highlightInternal(a, lang, text),
+
+    };
+}
+
+pub fn highlightInternal(a: Allocator, lang: Language, text: []const u8) ![]u8 {
+    _ = a;
+    _ = lang;
+    _ = text;
+    comptime unreachable;
+}
+
+pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     var child = std.process.Child.init(&[_][]const u8{
         "pygmentize",
         "-f",
