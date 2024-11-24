@@ -120,6 +120,7 @@ code {
 	text-align: left;
 	width: 100%;
 	.blame-line {
+		white-space: nowrap;
 		display: block;
 		.blame-header {
 			color: #aaa;
@@ -128,6 +129,7 @@ code {
 			}
 			.muted {
 				color: #888;
+				max-height: 17px;
 			}
 			display: inline-block;
 			sha {
@@ -144,11 +146,15 @@ code {
 				text-align: right;
 			}
 		}
+		ln {
+			display: inline-block;
+
+		}
 	}
 
 	ln {
 		white-space: pre;
-		display: inline-block;
+		display: block;
 		&:before {
 			content: attr(num);
 			width: 3em;
