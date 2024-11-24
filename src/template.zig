@@ -956,13 +956,12 @@ test "directive For & For" {
         \\    A0
         \\    A1
         \\    A2
-        \\    
+    ++ "\n    \n" ++
         \\  <span>Bob</span>
         \\    B0
         \\    B1
         \\    B2
-        \\    
-        \\  
+    ++ "\n    \n  \n" ++
         \\</div>
     ;
 
@@ -1036,11 +1035,11 @@ test "directive for then for" {
         \\<div>
         \\  <span>Alice</span>
         \\  <span>Bob</span>
-        \\  
+    ++ "\n  \n" ++
         \\  A0
         \\  A1
         \\  A2
-        \\  
+    ++ "\n  \n" ++
         \\</div>
     ;
 
@@ -1094,7 +1093,7 @@ test "directive With" {
 
     const expected_empty: []const u8 =
         \\<div>
-        \\  
+    ++ "\n  \n" ++
         \\</div>
     ;
     // trailing spaces expected and required
@@ -1120,7 +1119,7 @@ test "directive With" {
     const expected_thing: []const u8 =
         \\<div>
         \\  <span>THING</span>
-        \\  
+    ++ "\n  \n" ++
         \\</div>
     ;
 
@@ -1146,7 +1145,7 @@ test "directive ForRow" {
         \\  Bob
         \\  Charlie
         \\  Eve
-        \\  
+    ++ "\n  \n" ++
         \\</div>
         \\
     ;
