@@ -679,11 +679,11 @@ fn view(ctx: *Context) Error!void {
     var patch_formatted: ?Template.Structs.PatchHtml = null;
     const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     var patch_applies: bool = false;
-    var patch: Patch.Patch = undefined;
+    var patch: ?Patch.Patch = null;
     if (std.fs.cwd().openFile(patch_filename, .{})) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
         patch = Patch.Patch.init(fdata);
-        if (patchStruct(ctx.alloc, &patch, !inline_html)) |phtml| {
+        if (patchStruct(ctx.alloc, &patch.?, !inline_html)) |phtml| {
             patch_formatted = phtml;
         } else |err| {
             std.debug.print("Unable to generate patch {any}\n", .{err});
@@ -709,7 +709,10 @@ fn view(ctx: *Context) Error!void {
                     c_ctx.* = .{
                         .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
-                        .message = translateComment(ctx.alloc, comment.message, patch, &repo) catch unreachable,
+                        .message = if (patch) |pt|
+                            translateComment(ctx.alloc, comment.message, pt, &repo) catch unreachable
+                        else
+                            try Bleach.sanitizeAlloc(ctx.alloc, comment.message, .{}),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
                         .sub_thread = null,
                     };
