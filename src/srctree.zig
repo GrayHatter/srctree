@@ -33,7 +33,7 @@ pub const routes = [_]Match{
     GET("", commitFlex),
     ROUTE("admin", admin),
     ROUTE("api", Api.router),
-    ROUTE("diffs", USERS.diffs),
+    //ROUTE("diffs", USERS.diffs),
     ROUTE("gist", Gist.router),
     ROUTE("inbox", search),
     ROUTE("network", network),
@@ -41,7 +41,7 @@ pub const routes = [_]Match{
     ROUTE("repos", Repo.router),
     ROUTE("search", search),
     ROUTE("settings", &settings.endpoints),
-    ROUTE("todo", USERS.todo),
+    //ROUTE("todo", USERS.todo),
     ROUTE("user", commitFlex),
     STATIC("static"),
 };
@@ -52,12 +52,14 @@ fn unroutable(ctx: *Context) Routes.Error!void {
     ctx.sendTemplate(&tmpl) catch unreachable;
 }
 
+const E404Page = Template.PageData("4XX.html");
+
 fn notFound(ctx: *Context) Routes.Error!void {
     // TODO fix this
     @import("std").debug.print("404 for route\n", .{});
     ctx.response.status = .not_found;
-    var tmpl = Template.find("4XX.html");
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    var page = E404Page.init(.{});
+    ctx.sendPage(&page) catch unreachable;
 }
 
 pub fn router(ctx: *Context) Callable {
@@ -68,16 +70,6 @@ pub fn router(ctx: *Context) Callable {
         it.raze(ctx.alloc);
     }
 
-    const inboxcnt = allocPrint(ctx.alloc, "{}", .{i_count}) catch unreachable;
-    const header_nav = ctx.alloc.dupe(Template.Context, &[1]Template.Context{
-        Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
-            .{ .name = "Name", .value = "inbox" },
-            .{ .name = "Url", .value = "/inbox" },
-            .{ .name = "Extra", .value = inboxcnt },
-        }) catch return unroutable,
-    }) catch return unroutable;
-
-    ctx.putContext("NavButtons", .{ .block = header_nav }) catch return unroutable;
     return Routes.router(ctx, &routes);
 }
 
