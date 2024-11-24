@@ -19,9 +19,6 @@ const HTML = @import("html.zig");
 const Pages = @import("template/page.zig");
 pub const DataMap = @import("template/datamap.zig");
 
-/// TODO getting removed at the end of this diff stack
-pub const Context = DataMap;
-
 pub const Page = Pages.Page;
 pub const PageRuntime = Pages.PageRuntime;
 
