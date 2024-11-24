@@ -107,12 +107,12 @@ pub fn navButtons(ctx: *Context) ![2]Template.Structs.NavButtons {
     const btns = [2]Template.Structs.NavButtons{
         .{
             .name = "issues",
-            .extra = try allocPrint(ctx.alloc, "{}", .{i_count}),
+            .extra = i_count,
             .url = try allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name}),
         },
         .{
             .name = "diffs",
-            .extra = try allocPrint(ctx.alloc, "{}", .{d_count}),
+            .extra = d_count,
             .url = try allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name}),
         },
     };
@@ -311,7 +311,7 @@ fn list(ctx: *Context) Error!void {
 
         var btns = [1]Template.Structs.NavButtons{.{
             .name = "inbox",
-            .extra = "0",
+            .extra = 0,
             .url = "/inbox",
         }};
 

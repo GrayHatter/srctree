@@ -98,10 +98,7 @@ fn new(ctx: *Context) Error!void {
 fn edit(ctx: *Context, files: []const Template.Structs.GistFiles) Error!void {
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.NavButtons{
-        .{
-            .name = "inbox",
-            .url = "/inbox",
-        },
+        .{ .name = "inbox", .extra = 0, .url = "/inbox" },
     };
 
     var page = GistNewPage.init(.{
@@ -135,7 +132,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFi
 
 fn view(ctx: *Context) Error!void {
     // TODO move this back into context somehow
-    var btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .url = "/inbox" }};
+    var btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
     if (ctx.uri.next()) |hash| {
         if (hash.len != 64) return error.BadData;

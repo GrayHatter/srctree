@@ -7,6 +7,7 @@ const indexOf = std.mem.indexOf;
 const indexOfScalar = std.mem.indexOfScalar;
 const indexOfPos = std.mem.indexOfPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
+const indexOfAnyPos = std.mem.indexOfAnyPos;
 const lastIndexOf = std.mem.lastIndexOf;
 const startsWith = std.mem.startsWith;
 const count = std.mem.count;
@@ -232,6 +233,7 @@ pub const Directive = struct {
     pub const KnownType = enum {
         usize,
         isize,
+        @"?usize",
     };
 
     const Positions = struct {
@@ -332,54 +334,65 @@ pub const Directive = struct {
     }
 
     pub fn doTyped(self: Directive, T: type, ctx: anytype, out: anytype) anyerror!void {
+        //@compileLog(T);
         var local: [0xff]u8 = undefined;
         const realname = local[0..makeFieldName(self.noun, &local)];
-        inline for (std.meta.fields(T)) |field| {
-            if (field.type == []const u8 or
-                field.type == ?[]const u8) continue;
-            switch (@typeInfo(field.type)) {
-                .Pointer => {
-                    if (eql(u8, field.name, realname)) {
-                        const child = @field(ctx, field.name);
-                        for (child) |each| {
-                            switch (field.type) {
-                                []const []const u8 => {
-                                    std.debug.assert(self.verb == .forrow);
-                                    try out.writeAll(each);
-                                    try out.writeAll(self.otherwise.blob.whitespace);
-                                },
-                                else => {
-                                    std.debug.assert(self.verb == .foreach);
-                                    try self.forEachTyped(@TypeOf(each), each, out);
-                                },
+        switch (@typeInfo(T)) {
+            .Struct => {
+                inline for (std.meta.fields(T)) |field| {
+                    if (field.type == []const u8 or
+                        field.type == ?[]const u8) continue;
+                    switch (@typeInfo(field.type)) {
+                        .Pointer => {
+                            if (eql(u8, field.name, realname)) {
+                                const child = @field(ctx, field.name);
+                                for (child) |each| {
+                                    switch (field.type) {
+                                        []const []const u8 => {
+                                            std.debug.assert(self.verb == .forrow);
+                                            try out.writeAll(each);
+                                            try out.writeAll(self.otherwise.blob.whitespace);
+                                        },
+                                        else => {
+                                            std.debug.assert(self.verb == .foreach);
+                                            try self.forEachTyped(@TypeOf(each), each, out);
+                                        },
+                                    }
+                                }
                             }
-                        }
+                        },
+                        .Optional => {
+                            if (eql(u8, field.name, realname)) {
+                                //@compileLog("optional for {s}\n", field.name, field.type, T);
+                                const child = @field(ctx, field.name);
+                                if (child) |exists| {
+                                    try self.doTyped(@TypeOf(exists), exists, out);
+                                    //try self.withTyped(@TypeOf(exists), exists, out);
+                                }
+                            }
+                        },
+                        .Struct => {
+                            if (eql(u8, field.name, realname)) {
+                                const child = @field(ctx, field.name);
+                                std.debug.assert(self.verb == .build);
+                                try self.withTyped(@TypeOf(child), child, out);
+                            }
+                        },
+                        .Int => |int| {
+                            if (eql(u8, field.name, realname)) {
+                                std.debug.assert(int.bits == 64);
+                                try std.fmt.formatInt(@field(ctx, field.name), 10, .lower, .{}, out);
+                            }
+                        },
+                        else => comptime unreachable,
                     }
-                },
-                .Optional => {
-                    if (eql(u8, field.name, realname)) {
-                        const child = @field(ctx, field.name);
-                        if (child) |exists| {
-                            std.debug.assert(self.verb == .with);
-                            try self.withTyped(@TypeOf(exists), exists, out);
-                        }
-                    }
-                },
-                .Struct => {
-                    if (eql(u8, field.name, realname)) {
-                        const child = @field(ctx, field.name);
-                        std.debug.assert(self.verb == .build);
-                        try self.withTyped(@TypeOf(child), child, out);
-                    }
-                },
-                .Int => |int| {
-                    if (eql(u8, field.name, realname)) {
-                        std.debug.assert(int.bits == 64);
-                        try std.fmt.formatInt(@field(ctx, field.name), 10, .lower, .{}, out);
-                    }
-                },
-                else => comptime unreachable,
-            }
+                }
+            },
+            .Int => {
+                //std.debug.assert(int.bits == 64);
+                try std.fmt.formatInt(ctx, 10, .lower, .{}, out);
+            },
+            else => {},
         }
     }
 
@@ -492,13 +505,16 @@ pub const Directive = struct {
         var known: ?KnownType = null;
         if (indexOfScalar(u8, noun, '=')) |i| {
             if (i >= 4 and eql(u8, noun[i - 4 .. i], "type")) {
-                const i_end = indexOfScalarPos(u8, noun, i, ' ') orelse end - 1;
+                const i_end = indexOfAnyPos(u8, noun, i, " /") orelse end - 1;
                 const requested_type = std.mem.trim(u8, noun[i..i_end], " ='\"");
                 inline for (std.meta.fields(KnownType)) |kt| {
                     if (eql(u8, requested_type, kt.name)) {
                         known = @enumFromInt(kt.value);
                         break;
                     }
+                } else {
+                    std.debug.print("Unable to resolve requested type {s}\n", .{requested_type});
+                    unreachable;
                 }
             }
         }
@@ -1237,6 +1253,40 @@ test "directive typed usize" {
     const page = Page(t, FE);
 
     const slice = FE{ .number = 420 };
+    const p = page.init(slice);
+    const build = try p.build(a);
+    defer a.free(build);
+    try std.testing.expectEqualStrings(expected, build);
+}
+
+test "directive typed ?usize" {
+    var a = std.testing.allocator;
+    const blob = "<Number type=\"?usize\" />";
+    const expected: []const u8 = "420";
+
+    const FE = struct { number: ?usize };
+
+    const t = Template{ .name = "test", .blob = blob };
+    const page = Page(t, FE);
+
+    const slice = FE{ .number = 420 };
+    const p = page.init(slice);
+    const build = try p.build(a);
+    defer a.free(build);
+    try std.testing.expectEqualStrings(expected, build);
+}
+
+test "directive typed ?usize null" {
+    var a = std.testing.allocator;
+    const blob = "<Number type=\"?usize\" />";
+    const expected: []const u8 = "";
+
+    const FE = struct { number: ?usize };
+
+    const t = Template{ .name = "test", .blob = blob };
+    const page = Page(t, FE);
+
+    const slice = FE{ .number = null };
     const p = page.init(slice);
     const build = try p.build(a);
     defer a.free(build);

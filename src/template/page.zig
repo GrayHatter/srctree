@@ -14,6 +14,24 @@ const findTemplate = Templates.findTemplate;
 
 const DEBUG = false;
 
+fn typeField(T: type, name: []const u8, data: T) ?[]const u8 {
+    if (@typeInfo(T) != .Struct) return null;
+    var local: [0xff]u8 = undefined;
+    const realname = local[0..makeFieldName(name, &local)];
+    inline for (std.meta.fields(T)) |field| {
+        if (eql(u8, field.name, realname)) {
+            switch (field.type) {
+                []const u8,
+                ?[]const u8,
+                => return @field(data, field.name),
+
+                else => return null,
+            }
+        }
+    }
+    return null;
+}
+
 pub fn PageRuntime(comptime PageDataType: type) type {
     return struct {
         pub const Self = @This();
@@ -37,23 +55,6 @@ pub fn PageRuntime(comptime PageDataType: type) type {
 
         pub fn build(self: Self, a: Allocator) ![]u8 {
             return std.fmt.allocPrint(a, "{}", .{self});
-        }
-
-        fn typeField(name: []const u8, data: PageDataType) ?[]const u8 {
-            var local: [0xff]u8 = undefined;
-            const realname = local[0..makeFieldName(name, &local)];
-            inline for (std.meta.fields(PageDataType)) |field| {
-                if (eql(u8, field.name, realname)) {
-                    switch (field.type) {
-                        []const u8,
-                        ?[]const u8,
-                        => return @field(data, field.name),
-
-                        else => return null,
-                    }
-                }
-            }
-            return null;
         }
 
         fn formatAny(
@@ -105,7 +106,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
             switch (drct.verb) {
                 .variable => {
                     const noun = drct.noun;
-                    const var_name = typeField(noun, ctx);
+                    const var_name = typeField(PageDataType, noun, ctx);
                     if (var_name) |data_blob| {
                         try out.writeAll(data_blob);
                     } else {
@@ -116,6 +117,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                             .ign => return error.IgnoreDirective,
                             .del => {},
                             .template => |subt| {
+                                if (PageDataType == usize) unreachable;
                                 inline for (std.meta.fields(PageDataType)) |field|
                                     switch (@typeInfo(field.type)) {
                                         .Optional => |otype| {
@@ -150,6 +152,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                 else => drct.doTyped(PageDataType, ctx, out) catch unreachable,
             }
         }
+
         pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
             var ctx = self.data;
             var blob = self.template.blob;
@@ -202,20 +205,6 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
             return std.fmt.allocPrint(a, "{}", .{self});
         }
 
-        fn typeField(name: []const u8, data: PageDataType) ?[]const u8 {
-            var local: [0xff]u8 = undefined;
-            const realname = local[0..makeFieldName(name, &local)];
-            inline for (std.meta.fields(PageDataType)) |field| {
-                if (std.mem.eql(u8, field.name, realname)) {
-                    switch (field.type) {
-                        []const u8, ?[]const u8 => return @field(data, field.name),
-                        else => return null,
-                    }
-                }
-            }
-            return null;
-        }
-
         fn formatAny(
             self: Self,
             comptime fmts: []const u8,
@@ -265,7 +254,7 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
             switch (drct.verb) {
                 .variable => {
                     const noun = drct.noun;
-                    const var_name = typeField(noun, ctx);
+                    const var_name = typeField(PageDataType, noun, ctx);
                     if (var_name) |data_blob| {
                         try out.writeAll(data_blob);
                     } else {
