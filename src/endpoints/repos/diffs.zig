@@ -737,10 +737,9 @@ fn view(ctx: *Context) Error!void {
         (ctx.auth.user(ctx.alloc) catch unreachable).username
     else
         "public";
+
     var page = DiffViewPage.init(.{
-        .meta_head = .{
-            .open_graph = .{},
-        },
+        .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
             .nav_auth = undefined,
@@ -761,7 +760,7 @@ fn view(ctx: *Context) Error!void {
     try ctx.sendPage(&page);
 }
 
-const DeltaListHtml = Template.PageData("delta-list.html");
+const DeltaListPage = Template.PageData("delta-list.html");
 fn list(ctx: *Context) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
@@ -798,7 +797,7 @@ fn list(ctx: *Context) Error!void {
     const meta_head = Template.Structs.MetaHeadHtml{
         .open_graph = .{},
     };
-    var page = DeltaListHtml.init(.{
+    var page = DeltaListPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),

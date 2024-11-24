@@ -2,6 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
+const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 
 const Route = @import("../../routes.zig");
 const DOM = @import("../../dom.zig");
@@ -48,9 +49,18 @@ pub fn router(ctx: *Context) Error!Route.Callable {
     return Route.router(ctx, &routes);
 }
 
+const IssueNewPage = Template.PageData("issue-new.html");
+
 fn new(ctx: *Context) Error!void {
-    var tmpl = comptime Template.find("issue-new.html");
-    try ctx.sendTemplate(&tmpl);
+    const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
+    var page = IssueNewPage.init(.{
+        .meta_head = meta_head,
+        .body_header = .{ .nav = .{
+            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_auth = undefined,
+        } },
+    });
+    try ctx.sendPage(&page);
 }
 
 const IssueCreate = struct {
@@ -114,55 +124,56 @@ fn newComment(ctx: *Context) Error!void {
     return error.Unknown;
 }
 
+const DeltaIssuePage = Template.PageData("delta-issue.html");
+
 fn view(ctx: *Context) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
 
-    var tmpl = Template.find("delta-issue.html");
-
     var delta = (Delta.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
-    try ctx.putContext("Repo", .{ .slice = rd.name });
-
-    try ctx.putContext(
-        "Title",
-        .{ .slice = Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable },
-    );
-
-    try ctx.putContext(
-        "Desc",
-        .{ .slice = Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable },
-    );
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
-    if (delta.getMessages(ctx.alloc)) |msgs| {
-        const comments: []Template.Context = try ctx.alloc.alloc(Template.Context, msgs.len);
-        for (msgs, comments) |msg, *cctx| {
-            cctx.* = Template.Context.init(ctx.alloc);
+    var root_thread: []S.Thread = &[0]S.Thread{};
+    if (delta.getMessages(ctx.alloc)) |messages| {
+        root_thread = try ctx.alloc.alloc(S.Thread, messages.len);
+        for (messages, root_thread) |msg, *c_ctx| {
             switch (msg) {
                 .comment => |comment| {
-                    const builder = comment.builder();
-                    builder.build(ctx.alloc, cctx) catch unreachable;
-                    try cctx.put(
-                        "Date",
-                        .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}) },
-                    );
+                    c_ctx.* = .{
+                        .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
+                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
+                        .message = try Bleach.sanitizeAlloc(ctx.alloc, comment.message, .{}),
+                        .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
+                        .sub_thread = null,
+                    };
                 },
-                else => try cctx.put("Message", .{ .slice = "unsupported message found" }),
+                else => {
+                    c_ctx.* = .{ .author = "", .date = "", .message = "unsupported message type", .direct_reply = null, .sub_thread = null };
+                },
             }
         }
-        const thread: []Template.Context = try ctx.alloc.alloc(Template.Context, 1);
-        thread[0] = Template.Context.init(ctx.alloc);
-        try thread[0].putBlock("Thread", comments);
-        try ctx.putContext("Comments", .{ .block = thread });
     } else |err| {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
         @panic("oops");
     }
 
-    try ctx.putContext("Delta_id", .{ .slice = delta_id });
+    const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
+    var page = DeltaIssuePage.init(.{
+        .meta_head = meta_head,
+        .body_header = .{ .nav = .{
+            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_auth = undefined,
+        } },
+        .title = Bleach.sanitizeAlloc(ctx.alloc, delta.title, .{}) catch unreachable,
+        .desc = Bleach.sanitizeAlloc(ctx.alloc, delta.message, .{}) catch unreachable,
+        .delta_id = delta_id,
+        .comments = .{
+            .thread = root_thread,
+        },
+    });
 
-    try ctx.sendTemplate(&tmpl);
+    try ctx.sendPage(&page);
 }
 
 const DeltaListHtml = Template.PageData("delta-list.html");
@@ -204,9 +215,7 @@ fn list(ctx: *Context) Error!void {
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
 
-    const meta_head = S.MetaHeadHtml{
-        .open_graph = .{},
-    };
+    const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
     var page = DeltaListHtml.init(.{
         .meta_head = meta_head,
