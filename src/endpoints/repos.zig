@@ -540,19 +540,16 @@ fn wrapLineNumbersBlame(
 ) ![]S.BlameLines {
     const b_lines = try a.alloc(S.BlameLines, blames.len);
     for (blames, b_lines, 0..) |src, *dst, i| {
-        const b = allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
         const bcommit = map.get(src.sha) orelse unreachable;
         dst.* = .{
             .repo_name = repo_name,
             .sha = bcommit.sha[0..8],
-            .author = Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable,
             .author_email = .{
+                .author = Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable,
                 .email = Bleach.sanitizeAlloc(a, bcommit.author.email, .{}) catch unreachable,
             },
             .time = try Humanize.unix(bcommit.author.timestamp).printAlloc(a),
-            .num = b[2..],
-            .id = b[1..],
-            .href = b,
+            .num = i + 1,
             .line = src.line,
         };
     }

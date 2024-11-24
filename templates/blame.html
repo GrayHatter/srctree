@@ -11,7 +11,14 @@
         <header><Filename></header>
         <div class="code-block">
         <code>
-<For BlameLines><span class="blame-line"><span class="blame-header"><a href="/repo/<RepoName>/commit/<Sha>"><Sha>&nbsp;</a><author><With AuthorEmail><a href="/user?user=<Email>"></With><Author></a></author><time><Time ORNULL></time></span><ln num="<Num>" id="<Id>" href="<Href>"><Line></ln></span></For>
+          <For BlameLines><span class="blame-line">
+            <span class="blame-header">
+              <time><Time ORNULL></time>
+              <a href="/repo/<RepoName>/commit/<Sha>"><Sha>&nbsp;</a>
+              <With AuthorEmail><author class="muted"><a href="/user?user=<Email>"><Author></a></author></With>
+            </span>
+            <ln num="<Num type=usize >" id="L<Num type=usize >" href="#L<Num type=usize >"><Line></ln>
+          </span></For>
         </code>
         </div>
       </blob>
