@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 const bPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
+const startsWith = std.mem.startsWith;
+const splitScalar = std.mem.splitScalar;
 
 const Context = @import("../context.zig");
 const Response = @import("../response.zig");
@@ -11,6 +13,7 @@ const HTML = @import("../html.zig");
 const elm = HTML.element;
 const DOM = @import("../dom.zig");
 const Template = @import("../template.zig");
+const S = Template.Structs;
 const Route = @import("../routes.zig");
 const Error = Route.Error;
 const UriIter = Route.UriIter;
@@ -29,7 +32,6 @@ const Highlighting = @import("../syntax-highlight.zig");
 const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
 const Issues = @import("repos/issues.zig");
-const commit = Commits.commit;
 const htmlCommit = Commits.htmlCommit;
 
 const Types = @import("../types.zig");
@@ -136,25 +138,23 @@ pub fn router(ctx: *Context) Error!Route.Callable {
             dlt.raze(ctx.alloc);
         }
 
-        try ctx.addRouteVar("Repo_name", rd.name);
-
-        const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
-        const issuecnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{i_count});
-        const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
-        const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
-        const header_nav = try ctx.alloc.dupe(Template.Context, &[2]Template.Context{
-            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
-                .{ .name = "Name", .value = "issues" },
-                .{ .name = "Url", .value = issueurl },
-                .{ .name = "Extra", .value = issuecnt },
-            }) catch return error.OutOfMemory,
-            Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
-                .{ .name = "Name", .value = "diffs" },
-                .{ .name = "Url", .value = diffurl },
-                .{ .name = "Extra", .value = diffcnt },
-            }) catch return error.OutOfMemory,
-        });
-        try ctx.putContext("NavButtons", .{ .block = header_nav });
+        //const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
+        //const issuecnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{i_count});
+        //const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
+        //const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
+        //const header_nav = try ctx.alloc.dupe(Template.Context, &[2]Template.Context{
+        //    Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
+        //        .{ .name = "Name", .value = "issues" },
+        //        .{ .name = "Url", .value = issueurl },
+        //        .{ .name = "Extra", .value = issuecnt },
+        //    }) catch return error.OutOfMemory,
+        //    Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
+        //        .{ .name = "Name", .value = "diffs" },
+        //        .{ .name = "Url", .value = diffurl },
+        //        .{ .name = "Extra", .value = diffcnt },
+        //    }) catch return error.OutOfMemory,
+        //});
+        //try ctx.putContext("NavButtons", .{ .block = header_nav });
 
         if (rd.verb) |_| {
             _ = ctx.uri.next();
@@ -343,10 +343,8 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
 
 const NewRepoPage = Template.PageData("repo-new.html");
 fn newRepo(ctx: *Context) Error!void {
-    ctx.putContext("Files", .{ .slice = "<h3>New Repo!</h3><p>Todo, add content here</p>" }) catch return error.Unknown;
     ctx.response.status = .ok;
 
-    //try ctx.sendTemplate(&tmpl);
     return error.NotImplemented;
 }
 
@@ -362,38 +360,46 @@ fn treeBlob(ctx: *Context) Error!void {
     defer repo.raze();
 
     if (repo.findRemote("upstream") catch return error.Unknown) |remote| {
-        var upstream = [_]Template.Context{
-            Template.Context.init(ctx.alloc),
+        var upstream = [_]Template.DataMap{
+            Template.DataMap.init(ctx.alloc),
         };
         upstream[0].putSlice("URI", remote.url orelse "") catch return error.Unknown;
-        ctx.putContext("Upstream", .{ .block = upstream[0..] }) catch return error.Unknown;
+        //ctx.putContext("Upstream", .{ .block = upstream[0..] }) catch return error.Unknown;
     }
 
-    var opengraph = [_]Template.Context{
-        Template.Context.init(ctx.alloc),
+    const ograph: S.OpenGraph = .{
+        .title = rd.name,
+        .desc = desc: {
+            var d = repo.description(ctx.alloc) catch return error.Unknown;
+            if (startsWith(u8, d, "Unnamed repository; edit this file")) {
+                d = try allocPrint(
+                    ctx.alloc,
+                    "An Indescribable repo with {s} commits",
+                    .{"[todo count commits]"},
+                );
+            }
+            break :desc d;
+        },
     };
 
-    opengraph[0].putSlice("Title", rd.name) catch return error.Unknown;
-    var desc = repo.description(ctx.alloc) catch return error.Unknown;
-    if (std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-        desc = try allocPrint(ctx.alloc, "An Indescribable repo with {s} commits", .{"[todo count commits]"});
-    }
-    try opengraph[0].putSlice("Desc", desc);
-    try ctx.putContext("OpenGraph", .{ .block = opengraph[0..] });
-
+    _ = ograph;
     const cmt = repo.headCommit(ctx.alloc) catch return newRepo(ctx);
-    var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-    if (rd.verb) |blb| {
-        if (std.mem.eql(u8, blb, "blob")) {
+    if (rd.verb) |verb| {
+        if (eql(u8, verb, "blob")) {
+            const files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
             return blob(ctx, &repo, files);
-        } else if (std.mem.eql(u8, blb, "tree")) {
+        } else if (eql(u8, verb, "tree")) {
+            var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
             files = mkTree(ctx.alloc, &repo, &ctx.uri, files) catch return error.Unknown;
             return tree(ctx, &repo, &files);
-        } else if (std.mem.eql(u8, blb, "")) { // There's a better way to do this
-            files = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
+        } else if (eql(u8, verb, "")) {
+            var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
+            return tree(ctx, &repo, &files);
         } else return error.InvalidURI;
-    } else files = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-    return tree(ctx, &repo, &files);
+    } else {
+        var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
+        return tree(ctx, &repo, &files);
+    }
 }
 
 const BlameCommit = struct {
@@ -473,6 +479,8 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
     };
 }
 
+const BlamePage = Template.PageData("blame.html");
+
 fn blame(ctx: *Context) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
@@ -510,63 +518,62 @@ fn blame(ctx: *Context) Error!void {
         }
     }
 
-    const tctx = try wrapLineNumbersBlame(ctx.alloc, parsed.lines, parsed.map);
-    for (tctx) |*c| {
-        try c.putSlice("Repo_name", rd.name);
-    }
+    const wrapped_blames = try wrapLineNumbersBlame(ctx.alloc, parsed.lines, parsed.map, rd.name);
+    var btns = navButtons(ctx) catch return error.Unknown;
 
-    var tmpl = Template.find("blame.html");
-
-    try ctx.putContext("Blame_lines", .{ .block = tctx[0..] });
+    var page = BlamePage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .filename = Bleach.sanitizeAlloc(ctx.alloc, blame_file, .{}) catch unreachable,
+        .blame_lines = wrapped_blames,
+    });
 
     ctx.response.status = .ok;
-
-    try ctx.sendTemplate(&tmpl);
+    try ctx.sendPage(&page);
 }
 
 fn wrapLineNumbersBlame(
     a: Allocator,
     blames: []BlameLine,
     map: std.StringHashMap(BlameCommit),
-) ![]Template.Context {
-    var tctx = try a.alloc(Template.Context, blames.len);
-    for (blames, 0..) |line, i| {
-        var ctx = Template.Context.init(a);
-        const bcommit = map.get(line.sha) orelse unreachable;
-        try ctx.putSlice("Sha", bcommit.sha[0..8]);
-        try ctx.putSlice("Author", Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable);
-        try ctx.putSlice("AuthorEmail", Bleach.sanitizeAlloc(a, bcommit.author.email, .{}) catch unreachable);
-        try ctx.putSlice("Time", try Humanize.unix(bcommit.author.timestamp).printAlloc(a));
-        const b = std.fmt.allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
-        try ctx.putSlice("Num", b[2..]);
-        try ctx.putSlice("Id", b[1..]);
-        try ctx.putSlice("Href", b);
-        try ctx.putSlice("Line", line.line);
-        tctx[i] = ctx;
+    repo_name: []const u8,
+) ![]S.BlameLines {
+    const b_lines = try a.alloc(S.BlameLines, blames.len);
+    for (blames, b_lines, 0..) |src, *dst, i| {
+        const b = allocPrint(a, "#L{}", .{i + 1}) catch unreachable;
+        const bcommit = map.get(src.sha) orelse unreachable;
+        dst.* = .{
+            .repo_name = repo_name,
+            .sha = bcommit.sha[0..8],
+            .author = Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable,
+            .author_email = .{
+                .email = Bleach.sanitizeAlloc(a, bcommit.author.email, .{}) catch unreachable,
+            },
+            .time = try Humanize.unix(bcommit.author.timestamp).printAlloc(a),
+            .num = b[2..],
+            .id = b[1..],
+            .href = b,
+            .line = src.line,
+        };
     }
-    return tctx;
+    return b_lines;
 }
 
-fn wrapLineNumbers(a: Allocator, root_dom: *DOM, text: []const u8) !*DOM {
-    var dom = root_dom;
-    dom = dom.open(HTML.element("code", null, null));
+fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.BlobLines {
     // TODO
 
+    var litr = splitScalar(u8, text, '\n');
+    const count = std.mem.count(u8, text, "\n");
+    const lines = try a.alloc(S.BlobLines, count + 1);
     var i: usize = 0;
-    var litr = std.mem.splitScalar(u8, text, '\n');
     while (litr.next()) |line| {
-        var pbuf: [12]u8 = undefined;
-        const b = std.fmt.bufPrint(&pbuf, "#L{}", .{i + 1}) catch unreachable;
-        const attrs = try HTML.Attribute.alloc(
-            a,
-            &[_][]const u8{ "num", "id", "href" },
-            &[_]?[]const u8{ b[2..], b[1..], b },
-        );
-        dom.push(HTML.element("ln", line, attrs));
+        lines[i] = .{
+            .num = i + 1,
+            .line = line,
+        };
         i += 1;
     }
-
-    return dom.close();
+    return lines;
 }
 
 fn excludedExt(name: []const u8) bool {
@@ -615,15 +622,8 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
         formatted = Bleach.sanitizeAlloc(ctx.alloc, resolve.data.?, .{}) catch return error.Unknown;
     }
 
-    var dom = DOM.new(ctx.alloc);
-    dom = try wrapLineNumbers(ctx.alloc, dom, formatted);
-    const data = dom.done();
+    const wrapped = try wrapLineNumbers(ctx.alloc, formatted);
 
-    const filestr = try allocPrint(
-        ctx.alloc,
-        "{pretty}",
-        .{HTML.div(data, &HTML.Attr.class("code-block"))},
-    );
     ctx.uri.reset();
     _ = ctx.uri.next();
     const uri_repo = ctx.uri.next() orelse return error.Unrouteable;
@@ -640,7 +640,7 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
         .repo = uri_repo,
         .uri_filename = uri_filename,
         .filename = blb.name,
-        .blob = filestr,
+        .blob_lines = wrapped,
     });
 
     try ctx.sendPage(&page);
@@ -733,12 +733,12 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
 const TreePage = Template.PageData("tree.html");
 
 fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
-    const head = if (repo.head) |h| switch (h) {
-        .sha => |s| s.hex[0..],
-        .branch => |b| b.name,
-        else => "unknown",
-    } else "unknown";
-    ctx.putContext("Branch.default", .{ .slice = head }) catch return error.Unknown;
+    //const head = if (repo.head) |h| switch (h) {
+    //    .sha => |s| s.hex[0..],
+    //    .branch => |b| b.name,
+    //    else => "unknown",
+    //} else "unknown";
+    //ctx.putContext("Branch.default", .{ .slice = head }) catch return error.Unknown;
 
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     ctx.uri.reset();
@@ -821,7 +821,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
         .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
         .upstream = null,
         .repo_name = rd.name,
-        .repo = try std.fmt.allocPrint(ctx.alloc, "{s}", .{repo_data[0]}),
+        .repo = try allocPrint(ctx.alloc, "{s}", .{repo_data[0]}),
         .readme = readme,
     });
 

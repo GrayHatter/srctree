@@ -8,11 +8,10 @@
     <_body_header.html>
     <content>
       <blob>
-        <a class="btn" href="<Blame_uri ORNULL>/blame">blame</a>
         <header><Filename></header>
         <div class="code-block">
         <code>
-          <For Blame_lines><span class="blame-line"><span class="blame-header"><a href="/repo/<Repo_name>/commit/<Sha>"><Sha>&nbsp;</a><author><With AuthorEmail><a href="/user?user=<AuthorEmail>"></With><Author></a></author><time><Time ORNULL></time></span><ln num="<Num>" id="<Id>" href="<Href>"><Line></ln></span></For>
+<For BlameLines><span class="blame-line"><span class="blame-header"><a href="/repo/<RepoName>/commit/<Sha>"><Sha>&nbsp;</a><author><With AuthorEmail><a href="/user?user=<Email>"></With><Author></a></author><time><Time ORNULL></time></span><ln num="<Num>" id="<Id>" href="<Href>"><Line></ln></span></For>
         </code>
         </div>
       </blob>
