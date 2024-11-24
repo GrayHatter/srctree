@@ -19,6 +19,8 @@ pub const endpoints = [_]Route.Match{
     ROUTE("", default),
 };
 
+const NetworkPage = Template.PageData("network.html");
+
 fn default(ctx: *Context) Error!void {
     var dom = DOM.new(ctx.alloc);
 
@@ -43,8 +45,16 @@ fn default(ctx: *Context) Error!void {
     }
 
     const data = dom.done();
+    const htmllist = try ctx.alloc.alloc([]u8, data.len);
+    for (htmllist, data) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    const value = try std.mem.join(ctx.alloc, "", htmllist);
 
-    var tmpl = Template.find("network.html");
-    _ = ctx.addElements(ctx.alloc, "Netlist", data) catch unreachable;
-    try ctx.sendTemplate(&tmpl);
+    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    var page = NetworkPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .netlist = value,
+    });
+
+    try ctx.sendPage(&page);
 }
