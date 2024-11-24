@@ -217,7 +217,7 @@ pub const Directive = struct {
             whitespace: []const u8,
         },
     } = .{ .ign = {} },
-
+    known_type: ?KnownType = null,
     end: usize,
 
     pub const Verb = enum {
@@ -226,6 +226,12 @@ pub const Directive = struct {
         forrow,
         with,
         build,
+        typed,
+    };
+
+    pub const KnownType = enum {
+        usize,
+        isize,
     };
 
     const Positions = struct {
@@ -366,6 +372,12 @@ pub const Directive = struct {
                         try self.withTyped(@TypeOf(child), child, out);
                     }
                 },
+                .Int => |int| {
+                    if (eql(u8, field.name, realname)) {
+                        std.debug.assert(int.bits == 64);
+                        try std.fmt.formatInt(@field(ctx, field.name), 10, .lower, .{}, out);
+                    }
+                },
                 else => comptime unreachable,
             }
         }
@@ -385,6 +397,7 @@ pub const Directive = struct {
                 },
                 .build => try self.with(block[0], out),
                 .variable => unreachable,
+                .typed => unreachable,
             }
             return;
         } else {
@@ -472,9 +485,22 @@ pub const Directive = struct {
         }
 
         const noun = tag[verb.len + 1 ..];
-
         if (initVerb(verb, noun, str)) |kind| {
             return kind;
+        }
+
+        var known: ?KnownType = null;
+        if (indexOfScalar(u8, noun, '=')) |i| {
+            if (i >= 4 and eql(u8, noun[i - 4 .. i], "type")) {
+                const i_end = indexOfScalarPos(u8, noun, i, ' ') orelse end - 1;
+                const requested_type = std.mem.trim(u8, noun[i..i_end], " ='\"");
+                inline for (std.meta.fields(KnownType)) |kt| {
+                    if (eql(u8, requested_type, kt.name)) {
+                        known = @enumFromInt(kt.value);
+                        break;
+                    }
+                }
+            }
         }
         if (startsWith(u8, noun, " ORELSE ")) {
             return Directive{
@@ -482,6 +508,7 @@ pub const Directive = struct {
                 .noun = verb,
                 .otherwise = .{ .str = tag[width + 8 .. end - 1] },
                 .end = end,
+                .known_type = known,
             };
         } else if (startsWith(u8, noun, " ORNULL>")) {
             return Directive{
@@ -489,12 +516,21 @@ pub const Directive = struct {
                 .noun = verb,
                 .otherwise = .{ .del = {} },
                 .end = end,
+                .known_type = known,
             };
         } else if (startsWith(u8, noun, " />")) {
             return Directive{
                 .verb = .variable,
                 .noun = verb,
                 .end = end,
+                .known_type = known,
+            };
+        } else if (known != null) {
+            return Directive{
+                .verb = .typed,
+                .noun = verb,
+                .end = end,
+                .known_type = known,
             };
         } else return null;
     }
@@ -1163,7 +1199,6 @@ test "directive Build" {
     };
 
     const t = Template{
-        //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };
@@ -1186,6 +1221,40 @@ test "directive Build" {
             },
         },
     };
+    const p = page.init(slice);
+    const build = try p.build(a);
+    defer a.free(build);
+    try std.testing.expectEqualStrings(expected, build);
+}
+
+test "directive typed usize" {
+    var a = std.testing.allocator;
+    const blob = "<Number type=\"usize\" />";
+    const expected: []const u8 = "420";
+
+    const FE = struct { number: usize };
+
+    const t = Template{ .name = "test", .blob = blob };
+    const page = Page(t, FE);
+
+    const slice = FE{ .number = 420 };
+    const p = page.init(slice);
+    const build = try p.build(a);
+    defer a.free(build);
+    try std.testing.expectEqualStrings(expected, build);
+}
+
+test "directive typed isize" {
+    var a = std.testing.allocator;
+    const blob = "<Number type=\"isize\" />";
+    const expected: []const u8 = "-420";
+
+    const FE = struct { number: isize };
+
+    const t = Template{ .name = "test", .blob = blob };
+    const page = Page(t, FE);
+
+    const slice = FE{ .number = -420 };
     const p = page.init(slice);
     const build = try p.build(a);
     defer a.free(build);

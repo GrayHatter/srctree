@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
+const bufPrint = std.fmt.bufPrint;
 const compiled = @import("templates-compiled");
 const Template = @import("template.zig");
 
@@ -138,7 +139,7 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                         },
                         .str => |str| {
                             var buffer: [0xFF]u8 = undefined;
-                            const kind = try std.fmt.bufPrint(&buffer, ": []const u8 = \"{s}\",\n", .{str});
+                            const kind = try bufPrint(&buffer, ": []const u8 = \"{s}\",\n", .{str});
                             try current.append(makeFieldName(drct.noun), kind);
                         },
                         .del => {
@@ -146,7 +147,7 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                         },
                         .template => |_| {
                             var buffer: [0xFF]u8 = undefined;
-                            const kind = try std.fmt.bufPrint(&buffer, ": ?{s},\n", .{makeStructName(drct.noun)});
+                            const kind = try bufPrint(&buffer, ": ?{s},\n", .{makeStructName(drct.noun)});
                             try current.append(makeFieldName(drct.noun[1 .. drct.noun.len - 5]), kind);
                         },
                         .blob => unreachable,
@@ -168,28 +169,33 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                         .variable => unreachable,
                         .foreach => {
                             var buffer: [0xFF]u8 = undefined;
-                            const kind = try std.fmt.bufPrint(&buffer, ": []const {s},\n", .{name});
+                            const kind = try bufPrint(&buffer, ": []const {s},\n", .{name});
                             try current.append(field, kind);
                             try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .forrow => {
                             var buffer: [0xFF]u8 = undefined;
-                            const kind = try std.fmt.bufPrint(&buffer, ": []const []const u8,\n", .{});
+                            const kind = try bufPrint(&buffer, ": []const []const u8,\n", .{});
                             try current.append(field, kind);
                             try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .with => {
                             var buffer: [0xFF]u8 = undefined;
-                            const kind = try std.fmt.bufPrint(&buffer, ": ?{s},\n", .{name});
+                            const kind = try bufPrint(&buffer, ": ?{s},\n", .{name});
                             try current.append(field, kind);
                             try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .build => {
                             var buffer: [0xFF]u8 = undefined;
                             const tmpl_name = makeStructName(drct.otherwise.template.name);
-                            const kind = try std.fmt.bufPrint(&buffer, ": {s},\n", .{tmpl_name});
+                            const kind = try bufPrint(&buffer, ": {s},\n", .{tmpl_name});
                             try current.append(field, kind);
                             //try emitVars(a, drct.otherwise.template.blob, this);
+                        },
+                        .typed => {
+                            var buffer: [0xFF]u8 = undefined;
+                            const kind = try bufPrint(&buffer, ": {s},\n", .{@tagName(drct.known_type.?)});
+                            try current.append(field, kind);
                         },
                     }
                 },

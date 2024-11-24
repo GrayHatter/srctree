@@ -43,9 +43,12 @@ pub fn PageRuntime(comptime PageDataType: type) type {
             var local: [0xff]u8 = undefined;
             const realname = local[0..makeFieldName(name, &local)];
             inline for (std.meta.fields(PageDataType)) |field| {
-                if (std.mem.eql(u8, field.name, realname)) {
+                if (eql(u8, field.name, realname)) {
                     switch (field.type) {
-                        []const u8, ?[]const u8 => return @field(data, field.name),
+                        []const u8,
+                        ?[]const u8,
+                        => return @field(data, field.name),
+
                         else => return null,
                     }
                 }
@@ -304,9 +307,12 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                         }
                     }
                 },
-                else => {
-                    drct.doTyped(PageDataType, ctx, out) catch unreachable;
-                },
+                .typed,
+                .foreach,
+                .forrow,
+                .with,
+                .build,
+                => drct.doTyped(PageDataType, ctx, out) catch unreachable,
             }
         }
 
