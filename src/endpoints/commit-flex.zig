@@ -1,6 +1,6 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
 
 const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
@@ -10,6 +10,7 @@ const DOM = @import("../dom.zig");
 const HTML = @import("../html.zig");
 const Context = @import("../context.zig");
 const Template = @import("../template.zig");
+const S = Template.Structs;
 
 const Route = @import("../routes.zig");
 const Error = Route.Error;
@@ -22,20 +23,19 @@ const Scribe = struct {
         date: DateTime,
         sha: Git.SHA,
 
-        pub fn toContext(self: Commit, a: Allocator) !Template.Context {
-            var jctx = Template.Context.init(a);
+        pub fn toTemplate(self: Commit, a: Allocator) !S.JournalRows {
             const shahex = try a.dupe(u8, self.sha.hex[0..]);
-            try jctx.putSlice("Name", self.name);
-            try jctx.putSlice("Repo", self.repo);
-            try jctx.putSlice("Title", self.title);
-            try jctx.putSlice("Date", try std.fmt.allocPrint(
-                a,
-                "<span>{Y-m-d}</span><span>{day}</span><span>{time}</span>",
-                .{ self.date, self.date, self.date },
-            ));
-            try jctx.putSlice("ShaLong", shahex[0..]);
-            try jctx.putSlice("Sha", shahex[0..8]);
-            return jctx;
+            return .{
+                //.name = self.name,
+                .repo = self.repo,
+                .title = self.title,
+                .date = try allocPrint(
+                    a,
+                    "<span>{Y-m-d}</span><span>{day}</span><span>{time}</span>",
+                    .{ self.date, self.date, self.date },
+                ),
+                .sha = shahex[0..8],
+            };
         }
     };
 
@@ -207,6 +207,8 @@ const DAY = 60 * 60 * 24;
 const WEEK = DAY * 7;
 const YEAR = 31_536_000;
 
+const UserCommitsPage = Template.PageData("user_commits.html");
+
 pub fn commitFlex(ctx: *Context) Error!void {
     const monthAtt = HTML.Attr.class("month");
 
@@ -334,25 +336,22 @@ pub fn commitFlex(ctx: *Context) Error!void {
 
     const flex = dom.done();
 
-    var tmpl = Template.find("user_commits.html");
+    const current_streak = switch (streak) {
+        0 => "One Day? Or Day One!",
+        1 => "Day One!",
+        else => try std.fmt.allocPrint(ctx.alloc, "{} Days{s}", .{
+            streak,
+            if (!committed_today) "?" else "",
+        }),
+    };
 
-    try ctx.putContext("CurrentStreak", .{
-        .slice = switch (streak) {
-            0 => "One Day? Or Day One!",
-            1 => "Day One!",
-            else => try std.fmt.allocPrint(ctx.alloc, "{} Days{s}", .{
-                streak,
-                if (!committed_today) "?" else "",
-            }),
-        },
-    });
-
-    try ctx.putContext("TotalHits", .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{tcount}) });
-    try ctx.putContext("CheckedRepos", .{ .slice = try std.fmt.allocPrint(ctx.alloc, "{}", .{repo_count}) });
-    _ = ctx.addElements(ctx.alloc, "Flexes", flex) catch return Error.Unknown;
+    const list = try ctx.alloc.alloc([]u8, flex.len);
+    for (list, flex) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    const flexes = try std.mem.join(ctx.alloc, "", list);
 
     std.sort.pdq(Scribe.Commit, scribe_list.items, {}, journalSorted);
 
+    var months = std.ArrayList(Template.Structs.Months).init(ctx.alloc);
     {
         const today = if (tz_offset) |tz|
             DateTime.fromEpoch(DateTime.now().timestamp + tz).removeTime()
@@ -361,38 +360,48 @@ pub fn commitFlex(ctx: *Context) Error!void {
         const yesterday = DateTime.fromEpoch(today.timestamp - 86400);
         const last_week = DateTime.fromEpoch(yesterday.timestamp - 86400 * 7);
 
-        var groups = std.ArrayList(Template.Context).init(ctx.alloc);
-
-        var todays = std.ArrayList(Template.Context).init(ctx.alloc);
-        var yesterdays = std.ArrayList(Template.Context).init(ctx.alloc);
-        var last_weeks = std.ArrayList(Template.Context).init(ctx.alloc);
-        var last_months = std.ArrayList(Template.Context).init(ctx.alloc);
+        var todays = std.ArrayList(S.JournalRows).init(ctx.alloc);
+        var yesterdays = std.ArrayList(S.JournalRows).init(ctx.alloc);
+        var last_weeks = std.ArrayList(S.JournalRows).init(ctx.alloc);
+        var last_months = std.ArrayList(S.JournalRows).init(ctx.alloc);
 
         for (scribe_list.items) |each| {
             if (today.timestamp < each.date.timestamp) {
-                try todays.append(try each.toContext(ctx.alloc));
+                try todays.append(try each.toTemplate(ctx.alloc));
             } else if (yesterday.timestamp < each.date.timestamp) {
-                try yesterdays.append(try each.toContext(ctx.alloc));
+                try yesterdays.append(try each.toTemplate(ctx.alloc));
             } else if (last_week.timestamp < each.date.timestamp) {
-                try last_weeks.append(try each.toContext(ctx.alloc));
+                try last_weeks.append(try each.toTemplate(ctx.alloc));
             } else {
-                try last_months.append(try each.toContext(ctx.alloc));
+                try last_months.append(try each.toTemplate(ctx.alloc));
             }
         }
 
-        var today_grp = Template.Context.init(ctx.alloc);
-        try today_grp.putSlice("Group", "Today");
-        if (todays.items.len > 1) {
-            try today_grp.putSlice("Lead", try std.fmt.allocPrint(
-                ctx.alloc,
-                "{} commits today",
-                .{todays.items.len},
-            ));
-        }
+        try months.append(.{
+            .group = "Today",
+            .lead = try allocPrint(ctx.alloc, "{} commits today", .{todays.items.len}),
+            .journal_rows = try todays.toOwnedSlice(),
+        });
 
-        try today_grp.putBlock("Rows", todays.items);
-        try groups.append(today_grp);
-        var yesterday_grp = Template.Context.init(ctx.alloc);
+        try months.append(.{
+            .group = "Yesterday",
+            .lead = try allocPrint(ctx.alloc, "{} commits yesterday", .{yesterdays.items.len}),
+            .journal_rows = try yesterdays.toOwnedSlice(),
+        });
+
+        try months.append(.{
+            .group = "Last Week",
+            .lead = try allocPrint(ctx.alloc, "{} commits today", .{last_weeks.items.len}),
+            .journal_rows = try last_weeks.toOwnedSlice(),
+        });
+
+        try months.append(.{
+            .group = "Last Month",
+            .lead = try allocPrint(ctx.alloc, "{} commits last month", .{last_months.items.len}),
+            .journal_rows = try last_months.toOwnedSlice(),
+        });
+
+        var yesterday_grp = Template.DataMap.init(ctx.alloc);
         try yesterday_grp.putSlice("Group", "Yesterday");
         if (yesterdays.items.len > 1) {
             try yesterday_grp.putSlice("Lead", try std.fmt.allocPrint(
@@ -401,20 +410,18 @@ pub fn commitFlex(ctx: *Context) Error!void {
                 .{yesterdays.items.len},
             ));
         }
-        try yesterday_grp.putBlock("Rows", yesterdays.items);
-        try groups.append(yesterday_grp);
-        var last_weeks_grp = Template.Context.init(ctx.alloc);
-        try last_weeks_grp.putSlice("Group", "Last Week");
-        try last_weeks_grp.putBlock("Rows", last_weeks.items);
-        try groups.append(last_weeks_grp);
-        var last_months_grp = Template.Context.init(ctx.alloc);
-        try last_months_grp.putSlice("Group", "Last Month");
-        try last_months_grp.putBlock("Rows", last_months.items);
-        try groups.append(last_months_grp);
-
-        // TODO sort by date
-        try ctx.putContext("Months", .{ .block = groups.items });
     }
 
-    return try ctx.sendTemplate(&tmpl);
+    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    var page = UserCommitsPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
+        .flexes = flexes,
+        .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),
+        .current_streak = current_streak,
+        .months = try months.toOwnedSlice(),
+    });
+
+    return try ctx.sendPage(&page);
 }
