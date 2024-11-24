@@ -122,6 +122,9 @@ pub fn sendTemplate(ctx: *Context, t: *Template.Template) Error!void {
     defer ctx.alloc.free(page_compiled);
     ctx.response.send(page_compiled) catch unreachable;
 }
+pub fn sendRawSlice(ctx: *Context, slice: []const u8) Error!void {
+    ctx.response.send(slice) catch unreachable;
+}
 
 pub fn sendError(ctx: *Context, comptime code: std.http.Status) Error!void {
     return Routes.defaultResponse(code)(ctx);
