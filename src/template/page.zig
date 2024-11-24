@@ -298,9 +298,9 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                 },
                 .typed,
                 .foreach,
-                .forrow,
                 .with,
                 .build,
+                .split,
                 => drct.doTyped(PageDataType, ctx, out) catch unreachable,
             }
         }

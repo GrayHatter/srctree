@@ -50,7 +50,7 @@ const AbstTree = struct {
             if (std.mem.eql(u8, child.name, name)) {
                 if (!std.mem.eql(u8, child.kind, kind)) {
                     std.debug.print(
-                        "Error: kind mismatch {s}.{s} :: {s} != {s}\n",
+                        "Error: kind mismatch \n  {s}.{s}\n  {s} != {s}\n",
                         .{ self.name, name, child.kind, kind },
                     );
                     return error.KindMismatch;
@@ -173,11 +173,10 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                             try current.append(field, kind);
                             try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
-                        .forrow => {
+                        .split => {
                             var buffer: [0xFF]u8 = undefined;
                             const kind = try bufPrint(&buffer, ": []const []const u8,\n", .{});
                             try current.append(field, kind);
-                            try emitVars(a, drct.otherwise.blob.trimmed, this);
                         },
                         .with => {
                             var buffer: [0xFF]u8 = undefined;
