@@ -9,27 +9,32 @@ pub const endpoints = [_]Route.Match{
     Route.POST("post", post),
 };
 
+const SettingsPage = Template.PageData("settings.html");
+
 fn default(ctx: *Context) Route.Error!void {
     try ctx.request.auth.validOrError();
-    var tmpl = Template.find("settings.html");
 
-    var blocks = try ctx.alloc.alloc(Template.Context, ctx.cfg.?.ns.len);
+    var blocks = try ctx.alloc.alloc(Template.Structs.ConfigBlocks, ctx.cfg.?.ns.len);
     for (ctx.cfg.?.ns, 0..) |ns, i| {
-        var ns_ctx = Template.Context.init(ctx.alloc);
-        try ns_ctx.put("ConfigName", .{ .slice = ns.name });
-        try ns_ctx.put("ConfigText", .{ .slice = ns.block });
-        try ns_ctx.put("Count", .{ .slice = try std.fmt.allocPrint(
-            ctx.alloc,
-            "{}",
-            .{std.mem.count(u8, ns.block, "\n") + 2},
-        ) });
-
-        blocks[i] = ns_ctx;
+        blocks[i] = .{
+            .config_name = ns.name,
+            .config_text = ns.block,
+            .count = try std.fmt.allocPrint(
+                ctx.alloc,
+                "{}",
+                .{std.mem.count(u8, ns.block, "\n") + 2},
+            ),
+        };
     }
 
-    try ctx.putContext("ConfigBlocks", .{ .block = blocks });
+    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    var page = SettingsPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .config_blocks = blocks[0..],
+    });
 
-    try ctx.sendTemplate(&tmpl);
+    try ctx.sendPage(&page);
 }
 
 const SettingsReq = struct {
