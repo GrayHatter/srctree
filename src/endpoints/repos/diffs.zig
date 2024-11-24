@@ -17,15 +17,12 @@ const Commits = @import("commits.zig");
 const Repos = @import("../repos.zig");
 
 const Git = @import("../../git.zig");
-const RepoUtil = @import("../../repos.zig");
 const Bleach = @import("../../bleach.zig");
-const CURL = @import("../../curl.zig");
 const Context = @import("../../context.zig");
 const DOM = @import("../../dom.zig");
 const HTML = @import("../../html.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
-const Response = @import("../../response.zig");
 const Route = @import("../../routes.zig");
 const Template = @import("../../template.zig");
 const Types = @import("../../types.zig");
