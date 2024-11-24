@@ -34,6 +34,11 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
     _ = try agent.gitInit(dir, .{});
 }
 
+const AdminPage = Template.PageData("admin.html");
+
+/// TODO fix me
+const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+
 fn default(ctx: *Context) Error!void {
     try ctx.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
@@ -52,9 +57,16 @@ fn default(ctx: *Context) Error!void {
 
     const form = dom.done();
 
-    var tmpl = Template.find("admin.html");
-    _ = ctx.addElements(ctx.alloc, "Form", form) catch unreachable;
-    try ctx.sendTemplate(&tmpl);
+    const list = try ctx.alloc.alloc([]u8, form.len);
+    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    const value = try std.mem.join(ctx.alloc, "", list);
+
+    var page = AdminPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .form = value,
+    });
+    try ctx.sendPage(&page);
 }
 
 fn cloneUpstream(ctx: *Context) Error!void {
@@ -71,10 +83,21 @@ fn cloneUpstream(ctx: *Context) Error!void {
     }));
     dom = dom.close();
     const form = dom.done();
+    const list = try ctx.alloc.alloc([]u8, form.len);
+    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    const value = try std.mem.join(ctx.alloc, "", list);
 
-    var tmpl = Template.find("admin.html");
-    _ = ctx.addElements(ctx.alloc, "Form", form) catch unreachable;
-    try ctx.sendTemplate(&tmpl);
+    var page = AdminPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{
+            .nav = .{
+                .nav_auth = undefined,
+                .nav_buttons = &btns,
+            },
+        },
+        .form = value,
+    });
+    try ctx.sendPage(&page);
 }
 
 const CloneUpstreamReq = struct {
@@ -111,10 +134,21 @@ fn postCloneUpstream(ctx: *Context) Error!void {
     }));
     dom = dom.close();
     const form = dom.done();
+    const list = try ctx.alloc.alloc([]u8, form.len);
+    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    const value = try std.mem.join(ctx.alloc, "", list);
 
-    var tmpl = Template.find("admin.html");
-    _ = ctx.addElements(ctx.alloc, "Form", form) catch unreachable;
-    try ctx.sendTemplate(&tmpl);
+    var page = AdminPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{
+            .nav = .{
+                .nav_auth = undefined,
+                .nav_buttons = &btns,
+            },
+        },
+        .form = value,
+    });
+    try ctx.sendPage(&page);
 }
 
 fn postNewRepo(ctx: *Context) Error!void {
@@ -154,10 +188,21 @@ fn postNewRepo(ctx: *Context) Error!void {
     }));
     dom = dom.close();
     const form = dom.done();
+    const list = try ctx.alloc.alloc([]u8, form.len);
+    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    const value = try std.mem.join(ctx.alloc, "", list);
 
-    var tmpl = Template.find("admin.html");
-    _ = ctx.addElements(ctx.alloc, "Form", form) catch unreachable;
-    try ctx.sendTemplate(&tmpl);
+    var page = AdminPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{
+            .nav = .{
+                .nav_auth = undefined,
+                .nav_buttons = &btns,
+            },
+        },
+        .form = value,
+    });
+    try ctx.sendPage(&page);
 }
 
 fn newRepo(ctx: *Context) Error!void {
@@ -176,10 +221,16 @@ fn newRepo(ctx: *Context) Error!void {
     dom = dom.close();
 
     const form = dom.done();
+    const list = try ctx.alloc.alloc([]u8, form.len);
+    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    const value = try std.mem.join(ctx.alloc, "", list);
 
-    var tmpl = Template.find("admin.html");
-    _ = ctx.addElements(ctx.alloc, "Form", form) catch unreachable;
-    try ctx.sendTemplate(&tmpl);
+    var page = AdminPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .form = value,
+    });
+    try ctx.sendPage(&page);
 }
 
 fn view(ctx: *Context) Error!void {
