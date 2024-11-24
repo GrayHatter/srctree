@@ -4,7 +4,6 @@ const eql = std.mem.eql;
 const Allocator = std.mem.Allocator;
 
 const api = @import("api.zig");
-const Template = @import("template.zig");
 const Context = @import("context.zig");
 const Response = @import("response.zig");
 const Request = @import("request.zig");
@@ -121,19 +120,19 @@ pub fn defaultResponse(comptime code: std.http.Status) Callable {
 
 fn notFound(ctx: *Context) Error!void {
     ctx.response.status = .not_found;
-    var tmpl = Template.find("4XX.html");
-    try ctx.sendTemplate(&tmpl);
+    const E4XX = @embedFile("../templates/4XX.html");
+    return ctx.sendRawSlice(E4XX);
 }
 
 fn internalServerError(ctx: *Context) Error!void {
     ctx.response.status = .internal_server_error;
-    var tmpl = Template.find("5XX.html");
-    ctx.sendTemplate(&tmpl) catch unreachable;
+    const E5XX = @embedFile("../templates/5XX.html");
+    return ctx.sendRawSlice(E5XX);
 }
 
 fn default(ctx: *Context) Error!void {
-    var tmpl = Template.find("index.html");
-    ctx.sendTemplate(&tmpl);
+    const index = @embedFile("../templates/index.html");
+    return ctx.sendRawSlice(index);
 }
 
 pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
