@@ -1,6 +1,7 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const splitScalar = std.mem.splitScalar;
+const allocPrint = std.fmt.allocPrint;
 
 const Context = @import("../context.zig");
 const Delta = @import("../types.zig").Delta;
@@ -8,6 +9,7 @@ const Template = @import("../template.zig");
 const Route = @import("../routes.zig");
 const Error = Route.Error;
 const ROUTE = Route.ROUTE;
+const S = Template.Structs;
 
 const Bleach = @import("../bleach.zig");
 
@@ -38,9 +40,9 @@ fn search(ctx: *Context) Error!void {
     return custom(ctx, query_str);
 }
 
-fn custom(ctx: *Context, search_str: []const u8) Error!void {
-    var tmpl = Template.find("delta-list.html");
+const DeltaListPage = Template.PageData("delta-list.html");
 
+fn custom(ctx: *Context, search_str: []const u8) Error!void {
     var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
     var itr = splitScalar(u8, search_str, ' ');
@@ -71,21 +73,50 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
         std.debug.print("rule = {s} : {s}\n", .{ rule.subject, rule.match });
     }
 
-    var list = std.ArrayList(Template.Context).init(ctx.alloc);
+    var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     var search_results = Delta.search(ctx.alloc, rules.items);
     while (search_results.next(ctx.alloc) catch return error.Unknown) |next_| {
-        var next: Delta = next_;
+        var d: Delta = next_;
+        const cmtsmeta = d.countComments();
 
-        if (next.loadThread(ctx.alloc)) |*thread| {
+        if (d.loadThread(ctx.alloc)) |*thread| {
             _ = thread.*.loadMessages(ctx.alloc) catch return error.Unknown;
         } else |_| continue;
-        try list.append(try next.toContext(ctx.alloc));
+        try d_list.append(.{
+            .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
+            .title_uri = try allocPrint(
+                ctx.alloc,
+                "/repo/{s}/{s}/{x}",
+                .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
+            ),
+            .title = try Bleach.sanitizeAlloc(ctx.alloc, d.title, .{}),
+            .comments_icon = try allocPrint(
+                ctx.alloc,
+                "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
+                .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
+            ),
+            .desc = try Bleach.sanitizeAlloc(ctx.alloc, d.message, .{}),
+        });
     }
 
-    try ctx.putContext("DeltaList", .{ .block = list.items });
-    try ctx.putContext(
-        "Search",
-        .{ .slice = Bleach.sanitizeAlloc(ctx.alloc, search_str, .{}) catch unreachable },
-    );
-    try ctx.sendTemplate(&tmpl);
+    const meta_head = Template.Structs.MetaHeadHtml{
+        .open_graph = .{},
+    };
+    const btns = [1]Template.Structs.NavButtons{.{
+        .name = "inbox",
+        .extra = 0,
+        .url = "/inbox",
+    }};
+
+    var page = DeltaListPage.init(.{
+        .meta_head = meta_head,
+        .body_header = .{ .nav = .{
+            .nav_buttons = &btns,
+            .nav_auth = undefined,
+        } },
+        .delta_list = try d_list.toOwnedSlice(),
+        .search = Bleach.sanitizeAlloc(ctx.alloc, search_str, .{}) catch unreachable,
+    });
+
+    try ctx.sendPage(&page);
 }
