@@ -6,13 +6,6 @@ const Templates = @import("../template.zig");
 const Template = Templates.Template;
 const Directive = Templates.Directive;
 
-const makeStructName = Templates.makeStructName;
-const makeFieldName = Templates.makeFieldName;
-
-const findTemplate = Templates.findTemplate;
-
-const DEBUG = false;
-
 pub fn PageRuntime(comptime PageDataType: type) type {
     return struct {
         pub const Self = @This();
