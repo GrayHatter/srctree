@@ -359,14 +359,6 @@ fn treeBlob(ctx: *Context) Error!void {
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze();
 
-    if (repo.findRemote("upstream") catch return error.Unknown) |remote| {
-        var upstream = [_]Template.DataMap{
-            Template.DataMap.init(ctx.alloc),
-        };
-        upstream[0].putSlice("URI", remote.url orelse "") catch return error.Unknown;
-        //ctx.putContext("Upstream", .{ .block = upstream[0..] }) catch return error.Unknown;
-    }
-
     const ograph: S.OpenGraph = .{
         .title = rd.name,
         .desc = desc: {

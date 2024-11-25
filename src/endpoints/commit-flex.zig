@@ -400,16 +400,6 @@ pub fn commitFlex(ctx: *Context) Error!void {
             .lead = try allocPrint(ctx.alloc, "{} commits last month", .{last_months.items.len}),
             .journal_rows = try last_months.toOwnedSlice(),
         });
-
-        var yesterday_grp = Template.DataMap.init(ctx.alloc);
-        try yesterday_grp.putSlice("Group", "Yesterday");
-        if (yesterdays.items.len > 1) {
-            try yesterday_grp.putSlice("Lead", try std.fmt.allocPrint(
-                ctx.alloc,
-                "{} commits yesterday",
-                .{yesterdays.items.len},
-            ));
-        }
     }
 
     const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};

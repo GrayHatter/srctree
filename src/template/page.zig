@@ -4,7 +4,6 @@ const eql = std.mem.eql;
 
 const Templates = @import("../template.zig");
 const Template = Templates.Template;
-const DataMap = Templates.DataMap;
 const Directive = Templates.Directive;
 
 const makeStructName = Templates.makeStructName;
@@ -46,54 +45,8 @@ pub fn PageRuntime(comptime PageDataType: type) type {
             };
         }
 
-        pub fn byName(comptime name: []const u8, d: DataMap) Page {
-            return .{
-                .template = findTemplate(name),
-                .data = d,
-            };
-        }
-
         pub fn build(self: Self, a: Allocator) ![]u8 {
             return std.fmt.allocPrint(a, "{}", .{self});
-        }
-
-        fn formatAny(
-            self: Self,
-            comptime fmts: []const u8,
-            ctx: *DataMap,
-            drct: Directive,
-            out: anytype,
-        ) anyerror!void {
-            switch (drct.verb) {
-                .variable => {
-                    const noun = drct.noun;
-                    const var_name = ctx.get(noun);
-                    if (var_name) |v_blob| {
-                        switch (v_blob) {
-                            .slice => |s_blob| try out.writeAll(s_blob),
-                            .block => |_| unreachable,
-                            .reader => |_| unreachable,
-                        }
-                    } else {
-                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun});
-                        switch (drct.otherwise) {
-                            .str => |str| try out.writeAll(str),
-                            // Not really an error, just instruct caller to print original text
-                            .ign => return error.IgnoreDirective,
-                            .del => {},
-                            .template => |subt| {
-                                var subpage = subt.page(self.data);
-                                subpage.format(fmts, .{}, out) catch |err| {
-                                    std.debug.print("swallowed subpage format error {}\n", .{err});
-                                    unreachable;
-                                };
-                            },
-                            .blob => unreachable,
-                        }
-                    }
-                },
-                else => drct.do(ctx, out) catch unreachable,
-            }
         }
 
         fn formatTyped(
@@ -154,7 +107,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
         }
 
         pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-            var ctx = self.data;
+            //var ctx = self.data;
             var blob = self.template.blob;
             while (blob.len > 0) {
                 if (std.mem.indexOf(u8, blob, "<")) |offset| {
@@ -162,17 +115,17 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                     blob = blob[offset..];
                     if (Directive.init(blob)) |drct| {
                         const end = drct.end;
-                        if (comptime PageDataType == DataMap) {
-                            self.formatAny(fmts, &ctx, drct, out) catch |err| switch (err) {
-                                error.IgnoreDirective => try out.writeAll(blob[0..end]),
-                                else => return err,
-                            };
-                        } else {
-                            self.formatTyped(fmts, ctx, drct, out) catch |err| switch (err) {
-                                error.IgnoreDirective => try out.writeAll(blob[0..end]),
-                                else => return err,
-                            };
-                        }
+                        //if (comptime PageDataType == DataMap) {
+                        //    self.formatAny(fmts, &ctx, drct, out) catch |err| switch (err) {
+                        //        error.IgnoreDirective => try out.writeAll(blob[0..end]),
+                        //        else => return err,
+                        //    };
+                        //} else {
+                        self.formatTyped(fmts, self.data, drct, out) catch |err| switch (err) {
+                            error.IgnoreDirective => try out.writeAll(blob[0..end]),
+                            else => return err,
+                        };
+                        //}
                         blob = blob[end..];
                     } else {
                         if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
@@ -203,45 +156,6 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
 
         pub fn build(self: Self, a: Allocator) ![]u8 {
             return std.fmt.allocPrint(a, "{}", .{self});
-        }
-
-        fn formatAny(
-            self: Self,
-            comptime fmts: []const u8,
-            ctx: *DataMap,
-            drct: Directive,
-            out: anytype,
-        ) anyerror!void {
-            switch (drct.verb) {
-                .variable => {
-                    const noun = drct.noun;
-                    const var_name = ctx.get(noun);
-                    if (var_name) |v_blob| {
-                        switch (v_blob) {
-                            .slice => |s_blob| try out.writeAll(s_blob),
-                            .block => |_| unreachable,
-                            .reader => |_| unreachable,
-                        }
-                    } else {
-                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
-                        switch (drct.otherwise) {
-                            .str => |str| try out.writeAll(str),
-                            // Not really an error, just instruct caller to print original text
-                            .ign => return error.IgnoreDirective,
-                            .del => {},
-                            .template => |subt| {
-                                var subpage = subt.page(self.data);
-                                subpage.format(fmts, .{}, out) catch |err| {
-                                    std.debug.print("swallowed subpage format error {}\n", .{err});
-                                    unreachable;
-                                };
-                            },
-                            .blob => unreachable,
-                        }
-                    }
-                },
-                else => drct.do(ctx, out) catch unreachable,
-            }
         }
 
         fn formatTyped(
@@ -314,12 +228,7 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                     blob = blob[offset..];
                     if (Directive.init(blob)) |drct| {
                         const end = drct.end;
-                        //if (comptime Self.Live) {
-                        //    self.formatAny(fmts, &ctx, drct, out) catch |err| switch (err) {
-                        //        error.IgnoreDirective => try out.writeAll(blob[0..end]),
-                        //        else => return err,
-                        //    };
-                        //} else {
+
                         self.formatTyped(fmts, ctx, drct, out) catch |err| switch (err) {
                             error.IgnoreDirective => try out.writeAll(blob[0..end]),
                             else => return err,

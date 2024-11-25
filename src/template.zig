@@ -17,7 +17,6 @@ const isUpper = std.ascii.isUpper;
 
 const HTML = @import("html.zig");
 const Pages = @import("template/page.zig");
-pub const DataMap = @import("template/datamap.zig");
 
 pub const Page = Pages.Page;
 pub const PageRuntime = Pages.PageRuntime;
@@ -46,10 +45,6 @@ pub const Template = struct {
         for (data) |d| {
             try self.ctx.putSlice(d.name, d.value);
         }
-    }
-
-    pub fn page(self: Template, data: DataMap) PageRuntime(DataMap) {
-        return PageRuntime(DataMap).init(.{ .name = self.name, .blob = self.blob }, data);
     }
 
     pub fn pageOf(self: Template, comptime Kind: type, data: Kind) PageRuntime(Kind) {
@@ -202,6 +197,13 @@ pub const Directive = struct {
         } }, end };
     }
 
+    fn isStringish(t: type) bool {
+        return switch (t) {
+            []const u8, ?[]const u8 => true,
+            else => false,
+        };
+    }
+
     pub fn doTyped(self: Directive, T: type, ctx: anytype, out: anytype) anyerror!void {
         //@compileLog(T);
         var local: [0xff]u8 = undefined;
@@ -209,8 +211,7 @@ pub const Directive = struct {
         switch (@typeInfo(T)) {
             .Struct => {
                 inline for (std.meta.fields(T)) |field| {
-                    if (field.type == []const u8 or
-                        field.type == ?[]const u8) continue;
+                    if (comptime isStringish(field.type)) continue;
                     switch (@typeInfo(field.type)) {
                         .Pointer => {
                             if (eql(u8, field.name, realname)) {
@@ -268,29 +269,6 @@ pub const Directive = struct {
         }
     }
 
-    pub fn do(self: Directive, ctx: *const DataMap, out: anytype) anyerror!void {
-        if (ctx.getBlock(self.noun) catch |err| switch (err) {
-            error.NotABlock => ctx[0..1],
-            else => return err,
-        }) |block| {
-            switch (self.verb) {
-                .foreach => for (block) |s| try self.forEach(s, out),
-                .split => for (block) |s| try self.forEach(s, out),
-                .with => {
-                    std.debug.assert(block.len == 1);
-                    try self.with(block[0], out);
-                },
-                .build => try self.with(block[0], out),
-                .variable => unreachable,
-                .typed => unreachable,
-            }
-            return;
-        } else {
-            if (self.verb != .with)
-                std.debug.print("<For {s}> ctx block missing.\n", .{self.noun});
-        }
-    }
-
     pub fn forEachTyped(self: Directive, T: type, data: T, out: anytype) anyerror!void {
         var p = PageRuntime(T){
             .data = data,
@@ -302,10 +280,6 @@ pub const Directive = struct {
         try p.format("", .{}, out);
     }
 
-    pub fn forEach(self: Directive, block: DataMap, out: anytype) anyerror!void {
-        try self.forEachTyped(DataMap, block, out);
-    }
-
     pub fn withTyped(self: Directive, T: type, block: T, out: anytype) anyerror!void {
         var p = PageRuntime(T){
             .data = block,
@@ -315,10 +289,6 @@ pub const Directive = struct {
             },
         };
         try p.format("", .{}, out);
-    }
-
-    pub fn with(self: Directive, data: DataMap, out: anytype) anyerror!void {
-        return try self.withTyped(DataMap, data, out);
     }
 
     fn getDynamic(name: []const u8) ?Template {
@@ -641,19 +611,34 @@ test "init" {
 }
 
 test "directive something" {
-    var a = std.testing.allocator;
-    var t = Template{
+    const a = std.testing.allocator;
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = "<Something>",
     };
 
-    var ctx = DataMap.init(a);
-    try ctx.putSlice("Something", "Some Text Here");
-    defer ctx.raze();
-    const p = try t.page(ctx).build(a);
-    defer a.free(p);
-    try std.testing.expectEqualStrings("Some Text Here", p);
+    const ctx = .{
+        .something = @as([]const u8, "Some Text Here"),
+    };
+    const p = Page(t, @TypeOf(ctx)).init(ctx);
+    const pg = try p.build(a);
+    defer a.free(pg);
+    try std.testing.expectEqualStrings("Some Text Here", pg);
+
+    const t2 = Template{
+        //.path = "/dev/null",
+        .name = "test",
+        .blob = "<Something />",
+    };
+
+    const ctx2 = .{
+        .something = @as([]const u8, "Some Text Here"),
+    };
+    const p2 = Page(t2, @TypeOf(ctx2)).init(ctx2);
+    const pg2 = try p2.build(a);
+    defer a.free(pg2);
+    try std.testing.expectEqualStrings("Some Text Here", pg2);
 }
 
 test "directive typed something" {
@@ -706,63 +691,77 @@ test "directive typed something /" {
 
 test "directive nothing" {
     var a = std.testing.allocator;
-    var t = Template{
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = "<!-- nothing -->",
     };
 
-    const p = try t.page(DataMap.init(a)).build(a);
+    const ctx = .{};
+    const page = Page(t, @TypeOf(ctx));
+
+    const p = try page.init(ctx).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings("<!-- nothing -->", p);
 }
 
 test "directive nothing new" {
     var a = std.testing.allocator;
-    var t = Template{
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = "<Nothing>",
     };
 
-    const p = try t.page(DataMap.init(a)).build(a);
+    const ctx = .{};
+
+    // TODO is this still the expected behavior
+    const p = try Page(t, @TypeOf(ctx)).init(.{}).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings("<Nothing>", p);
 }
 
 test "directive ORELSE" {
     var a = std.testing.allocator;
-    var t = Template{
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = "<This ORELSE string until end>",
     };
 
-    const p = try t.page(DataMap.init(a)).build(a);
+    const ctx = .{
+        .this = @as(?[]const u8, null),
+    };
+
+    const p = try Page(t, @TypeOf(ctx)).init(ctx).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings("string until end", p);
 }
 
 test "directive ORNULL" {
     var a = std.testing.allocator;
-    var t = Template{
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         // Invalid because 'string until end' is known to be unreachable
         .blob = "<This ORNULL string until end>",
     };
 
-    const p = try t.page(DataMap.init(a)).build(a);
+    const ctx = .{
+        .this = @as(?[]const u8, null),
+    };
+
+    const p = try Page(t, @TypeOf(ctx)).init(ctx).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings("<This ORNULL string until end>", p);
 
-    t = Template{
+    const t2 = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = "<This ORNULL>",
     };
 
-    const nullpage = try t.page(DataMap.init(a)).build(a);
+    const nullpage = try Page(t2, @TypeOf(ctx)).init(ctx).build(a);
     defer a.free(nullpage);
     try std.testing.expectEqualStrings("", nullpage);
 }
@@ -784,44 +783,32 @@ test "directive For" {
         \\<div><span>first</span><span>second</span></div>
     ;
 
-    var t = Template{
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };
 
-    var ctx = DataMap.init(a);
-    defer ctx.raze();
-    var blocks: [1]DataMap = [1]DataMap{
-        DataMap.init(a),
+    var ctx: struct { loop: []const struct { name: []const u8 } } = .{
+        .loop = &.{
+            .{ .name = "not that" },
+        },
     };
-    try blocks[0].putSlice("Name", "not that");
-    // We have to raze because it will be over written
-    defer blocks[0].raze();
-    try ctx.putBlock("Loop", &blocks);
 
-    const p = try t.page(ctx).build(a);
+    const p = try Page(t, @TypeOf(ctx)).init(ctx).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings(expected, p);
 
-    // many
-    var many_blocks: [2]DataMap = [_]DataMap{
-        DataMap.init(a),
-        DataMap.init(a),
+    ctx = .{
+        .loop = &.{
+            .{ .name = "first" },
+            .{ .name = "second" },
+        },
     };
-    // what... 2 is many
 
-    try many_blocks[0].putSlice("Name", "first");
-    try many_blocks[1].putSlice("Name", "second");
-
-    try ctx.putBlock("Loop", &many_blocks);
-
-    const dbl_page = try t.page(ctx).build(a);
+    const dbl_page = try Page(t, @TypeOf(ctx)).init(ctx).build(a);
     defer a.free(dbl_page);
     try std.testing.expectEqualStrings(dbl_expected, dbl_page);
-
-    //many_blocks[0].raze();
-    //many_blocks[1].raze();
 }
 
 test "directive For & For" {
@@ -853,54 +840,41 @@ test "directive For & For" {
         \\</div>
     ;
 
-    var t = Template{
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };
 
-    var ctx = DataMap.init(a);
-    defer ctx.raze();
-    var outer = [2]DataMap{
-        DataMap.init(a),
-        DataMap.init(a),
+    const ctx: struct {
+        loop: []const struct {
+            name: []const u8,
+            numbers: []const struct {
+                number: []const u8,
+            },
+        },
+    } = .{
+        .loop = &.{
+            .{
+                .name = "Alice",
+                .numbers = &.{
+                    .{ .number = "A0" },
+                    .{ .number = "A1" },
+                    .{ .number = "A2" },
+                },
+            },
+            .{
+                .name = "Bob",
+                .numbers = &.{
+                    .{ .number = "B0" },
+                    .{ .number = "B1" },
+                    .{ .number = "B2" },
+                },
+            },
+        },
     };
 
-    try outer[0].putSlice("Name", "Alice");
-    //defer outer[0].raze();
-
-    var arena = std.heap.ArenaAllocator.init(a);
-    defer arena.deinit();
-    const aa = arena.allocator();
-
-    const lput = "Number";
-
-    var alice_inner: [3]DataMap = undefined;
-    try outer[0].putBlock("Numbers", &alice_inner);
-    for (0..3) |i| {
-        alice_inner[i] = DataMap.init(a);
-        try alice_inner[i].putSlice(
-            lput,
-            try std.fmt.allocPrint(aa, "A{}", .{i}),
-        );
-    }
-
-    try outer[1].putSlice("Name", "Bob");
-    //defer outer[1].raze();
-
-    var bob_inner: [3]DataMap = undefined;
-    try outer[1].putBlock("Numbers", &bob_inner);
-    for (0..3) |i| {
-        bob_inner[i] = DataMap.init(a);
-        try bob_inner[i].putSlice(
-            lput,
-            try std.fmt.allocPrint(aa, "B{}", .{i}),
-        );
-    }
-
-    try ctx.putBlock("Loop", &outer);
-
-    const p = try t.page(ctx).build(a);
+    const p = try Page(t, @TypeOf(ctx)).init(ctx).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings(expected, p);
 }
@@ -986,23 +960,28 @@ test "directive With" {
     ;
     // trailing spaces expected and required
     try std.testing.expect(std.mem.count(u8, expected_empty, "  \n") == 1);
-    var t = Template{
+    const t = Template{
         //.path = "/dev/null",
         .name = "test",
         .blob = blob,
     };
 
-    var ctx = DataMap.init(a);
-    defer ctx.raze();
-    const p = try t.page(ctx).build(a);
+    var ctx: struct {
+        thing: ?struct {
+            thing: []const u8,
+        },
+    } = .{
+        .thing = null,
+    };
+
+    const page = Page(t, @TypeOf(ctx));
+    const p = try page.init(ctx).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings(expected_empty, p);
 
-    var thing = [1]DataMap{
-        DataMap.init(a),
+    ctx = .{
+        .thing = .{ .thing = "THING" },
     };
-    try thing[0].putSlice("Thing", "THING");
-    try ctx.putBlock("Thing", &thing);
 
     const expected_thing: []const u8 =
         \\<div>
@@ -1011,9 +990,9 @@ test "directive With" {
         \\</div>
     ;
 
-    const page_thing = try t.page(ctx).build(a);
-    defer a.free(page_thing);
-    try std.testing.expectEqualStrings(expected_thing, page_thing);
+    const p2 = try page.init(ctx).build(a);
+    defer a.free(p2);
+    try std.testing.expectEqualStrings(expected_thing, p2);
 }
 
 test "directive Split" {
