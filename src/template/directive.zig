@@ -61,12 +61,88 @@ const Positions = struct {
     width: usize,
 };
 
-fn validChar(c: u8) bool {
-    return switch (c) {
-        'A'...'Z', 'a'...'z' => true,
-        '-', '_', '.', ':' => true,
-        else => false,
-    };
+pub fn init(str: []const u8) ?Directive {
+    if (str.len < 2) return null;
+    if (!isUpper(str[1]) and str[1] != '_') return null;
+    const end = 1 + (indexOf(u8, str, ">") orelse return null);
+    const tag = str[0..end];
+    const verb = tag[1 .. indexOfScalar(u8, tag, ' ') orelse tag.len - 1];
+
+    if (verb.len == tag.len - 2) {
+        if (verb[0] == '_') {
+            if (getBuiltin(verb)) |bi| {
+                return Directive{
+                    .noun = verb,
+                    .verb = .variable,
+                    .otherwise = .{ .template = bi },
+                    .end = end,
+                };
+            }
+        }
+        return Directive{
+            .verb = .variable,
+            .noun = verb,
+            .end = end,
+        };
+    }
+
+    var width: usize = 1;
+    while (width < str.len and validChar(str[width])) {
+        width += 1;
+    }
+
+    const noun = tag[verb.len + 1 ..];
+    if (initVerb(verb, noun, str)) |kind| {
+        return kind;
+    }
+
+    var known: ?KnownType = null;
+    if (indexOfScalar(u8, noun, '=')) |i| {
+        if (i >= 4 and eql(u8, noun[i - 4 .. i], "type")) {
+            const i_end = indexOfAnyPos(u8, noun, i, " /") orelse end - 1;
+            const requested_type = std.mem.trim(u8, noun[i..i_end], " ='\"");
+            inline for (std.meta.fields(KnownType)) |kt| {
+                if (eql(u8, requested_type, kt.name)) {
+                    known = @enumFromInt(kt.value);
+                    break;
+                }
+            } else {
+                std.debug.print("Unable to resolve requested type {s}\n", .{requested_type});
+                unreachable;
+            }
+        }
+    }
+    if (startsWith(u8, noun, " ORELSE ")) {
+        return Directive{
+            .verb = .variable,
+            .noun = verb,
+            .otherwise = .{ .str = tag[width + 8 .. end - 1] },
+            .end = end,
+            .known_type = known,
+        };
+    } else if (startsWith(u8, noun, " ORNULL>")) {
+        return Directive{
+            .verb = .variable,
+            .noun = verb,
+            .otherwise = .{ .del = {} },
+            .end = end,
+            .known_type = known,
+        };
+    } else if (startsWith(u8, noun, " />")) {
+        return Directive{
+            .verb = .variable,
+            .noun = verb,
+            .end = end,
+            .known_type = known,
+        };
+    } else if (known != null) {
+        return Directive{
+            .verb = .typed,
+            .noun = verb,
+            .end = end,
+            .known_type = known,
+        };
+    } else return null;
 }
 
 pub fn initVerb(verb: []const u8, noun: []const u8, blob: []const u8) ?Directive {
@@ -121,6 +197,14 @@ pub fn initVerb(verb: []const u8, noun: []const u8, blob: []const u8) ?Directive
         .noun = noun[1..start],
         .otherwise = otherw[0],
         .end = otherw[1],
+    };
+}
+
+fn validChar(c: u8) bool {
+    return switch (c) {
+        'A'...'Z', 'a'...'z' => true,
+        '-', '_', '.', ':' => true,
+        else => false,
     };
 }
 
@@ -278,90 +362,6 @@ fn getBuiltin(name: []const u8) ?Template.Template {
         }
     }
     return null;
-}
-
-pub fn init(str: []const u8) ?Directive {
-    if (str.len < 2) return null;
-    if (!isUpper(str[1]) and str[1] != '_') return null;
-    const end = 1 + (indexOf(u8, str, ">") orelse return null);
-    const tag = str[0..end];
-    const verb = tag[1 .. indexOfScalar(u8, tag, ' ') orelse tag.len - 1];
-
-    if (verb.len == tag.len - 2) {
-        if (verb[0] == '_') {
-            if (getBuiltin(verb)) |bi| {
-                return Directive{
-                    .noun = verb,
-                    .verb = .variable,
-                    .otherwise = .{ .template = bi },
-                    .end = end,
-                };
-            }
-        }
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .end = end,
-        };
-    }
-
-    var width: usize = 1;
-    while (width < str.len and validChar(str[width])) {
-        width += 1;
-    }
-
-    const noun = tag[verb.len + 1 ..];
-    if (initVerb(verb, noun, str)) |kind| {
-        return kind;
-    }
-
-    var known: ?KnownType = null;
-    if (indexOfScalar(u8, noun, '=')) |i| {
-        if (i >= 4 and eql(u8, noun[i - 4 .. i], "type")) {
-            const i_end = indexOfAnyPos(u8, noun, i, " /") orelse end - 1;
-            const requested_type = std.mem.trim(u8, noun[i..i_end], " ='\"");
-            inline for (std.meta.fields(KnownType)) |kt| {
-                if (eql(u8, requested_type, kt.name)) {
-                    known = @enumFromInt(kt.value);
-                    break;
-                }
-            } else {
-                std.debug.print("Unable to resolve requested type {s}\n", .{requested_type});
-                unreachable;
-            }
-        }
-    }
-    if (startsWith(u8, noun, " ORELSE ")) {
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .otherwise = .{ .str = tag[width + 8 .. end - 1] },
-            .end = end,
-            .known_type = known,
-        };
-    } else if (startsWith(u8, noun, " ORNULL>")) {
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .otherwise = .{ .del = {} },
-            .end = end,
-            .known_type = known,
-        };
-    } else if (startsWith(u8, noun, " />")) {
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .end = end,
-            .known_type = known,
-        };
-    } else if (known != null) {
-        return Directive{
-            .verb = .typed,
-            .noun = verb,
-            .end = end,
-            .known_type = known,
-        };
-    } else return null;
 }
 
 fn typeField(T: type, name: []const u8, data: T) ?[]const u8 {
