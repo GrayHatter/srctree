@@ -363,3 +363,78 @@ pub fn init(str: []const u8) ?Directive {
         };
     } else return null;
 }
+
+fn typeField(T: type, name: []const u8, data: T) ?[]const u8 {
+    if (@typeInfo(T) != .Struct) return null;
+    var local: [0xff]u8 = undefined;
+    const realname = local[0..makeFieldName(name, &local)];
+    inline for (std.meta.fields(T)) |field| {
+        if (eql(u8, field.name, realname)) {
+            switch (field.type) {
+                []const u8,
+                ?[]const u8,
+                => return @field(data, field.name),
+
+                else => return null,
+            }
+        }
+    }
+    return null;
+}
+
+pub fn format(d: Directive, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+    _ = d;
+    _ = out;
+    unreachable;
+}
+
+pub fn formatTyped(d: Directive, comptime T: type, ctx: T, out: anytype) !void {
+    switch (d.verb) {
+        .variable => {
+            const noun = d.noun;
+            const var_name = typeField(T, noun, ctx);
+            if (var_name) |data_blob| {
+                try out.writeAll(data_blob);
+            } else {
+                //if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
+                switch (d.otherwise) {
+                    .str => |str| try out.writeAll(str),
+                    // Not really an error, just instruct caller to print original text
+                    .ign => return error.IgnoreDirective,
+                    .del => {},
+                    .template => |subt| {
+                        if (T == usize) unreachable;
+                        inline for (std.meta.fields(T)) |field|
+                            switch (@typeInfo(field.type)) {
+                                .Optional => |otype| {
+                                    if (otype.child == []const u8) continue;
+
+                                    var local: [0xff]u8 = undefined;
+                                    const realname = local[0..makeFieldName(noun[1 .. noun.len - 5], &local)];
+                                    if (std.mem.eql(u8, field.name, realname)) {
+                                        if (@field(ctx, field.name)) |subdata| {
+                                            var subpage = subt.pageOf(otype.child, subdata);
+                                            try subpage.format("{}", .{}, out);
+                                        } else std.debug.print(
+                                            "sub template data was null for {s}\n",
+                                            .{field.name},
+                                        );
+                                    }
+                                },
+                                .Struct => {
+                                    if (std.mem.eql(u8, field.name, noun)) {
+                                        const subdata = @field(ctx, field.name);
+                                        var subpage = subt.pageOf(@TypeOf(subdata), subdata);
+                                        try subpage.format("{}", .{}, out);
+                                    }
+                                },
+                                else => {}, //@compileLog(field.type),
+                            };
+                    },
+                    .blob => unreachable,
+                }
+            }
+        },
+        else => d.doTyped(T, ctx, out) catch unreachable,
+    }
+}

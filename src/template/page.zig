@@ -13,24 +13,6 @@ const findTemplate = Templates.findTemplate;
 
 const DEBUG = false;
 
-fn typeField(T: type, name: []const u8, data: T) ?[]const u8 {
-    if (@typeInfo(T) != .Struct) return null;
-    var local: [0xff]u8 = undefined;
-    const realname = local[0..makeFieldName(name, &local)];
-    inline for (std.meta.fields(T)) |field| {
-        if (eql(u8, field.name, realname)) {
-            switch (field.type) {
-                []const u8,
-                ?[]const u8,
-                => return @field(data, field.name),
-
-                else => return null,
-            }
-        }
-    }
-    return null;
-}
-
 pub fn PageRuntime(comptime PageDataType: type) type {
     return struct {
         pub const Self = @This();
@@ -49,64 +31,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
             return std.fmt.allocPrint(a, "{}", .{self});
         }
 
-        fn formatTyped(
-            self: Self,
-            comptime fmts: []const u8,
-            ctx: PageDataType,
-            drct: Directive,
-            out: anytype,
-        ) anyerror!void {
-            switch (drct.verb) {
-                .variable => {
-                    const noun = drct.noun;
-                    const var_name = typeField(PageDataType, noun, ctx);
-                    if (var_name) |data_blob| {
-                        try out.writeAll(data_blob);
-                    } else {
-                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
-                        switch (drct.otherwise) {
-                            .str => |str| try out.writeAll(str),
-                            // Not really an error, just instruct caller to print original text
-                            .ign => return error.IgnoreDirective,
-                            .del => {},
-                            .template => |subt| {
-                                if (PageDataType == usize) unreachable;
-                                inline for (std.meta.fields(PageDataType)) |field|
-                                    switch (@typeInfo(field.type)) {
-                                        .Optional => |otype| {
-                                            if (otype.child == []const u8) continue;
-
-                                            var local: [0xff]u8 = undefined;
-                                            const realname = local[0..makeFieldName(noun[1 .. noun.len - 5], &local)];
-                                            if (std.mem.eql(u8, field.name, realname)) {
-                                                if (@field(self.data, field.name)) |subdata| {
-                                                    var subpage = subt.pageOf(otype.child, subdata);
-                                                    try subpage.format(fmts, .{}, out);
-                                                } else std.debug.print(
-                                                    "sub template data was null for {s}\n",
-                                                    .{field.name},
-                                                );
-                                            }
-                                        },
-                                        .Struct => {
-                                            if (std.mem.eql(u8, field.name, noun)) {
-                                                const subdata = @field(self.data, field.name);
-                                                var subpage = subt.pageOf(@TypeOf(subdata), subdata);
-                                                try subpage.format(fmts, .{}, out);
-                                            }
-                                        },
-                                        else => {}, //@compileLog(field.type),
-                                    };
-                            },
-                            .blob => unreachable,
-                        }
-                    }
-                },
-                else => drct.doTyped(PageDataType, ctx, out) catch unreachable,
-            }
-        }
-
-        pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+        pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
             //var ctx = self.data;
             var blob = self.template.blob;
             while (blob.len > 0) {
@@ -115,17 +40,11 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                     blob = blob[offset..];
                     if (Directive.init(blob)) |drct| {
                         const end = drct.end;
-                        //if (comptime PageDataType == DataMap) {
-                        //    self.formatAny(fmts, &ctx, drct, out) catch |err| switch (err) {
-                        //        error.IgnoreDirective => try out.writeAll(blob[0..end]),
-                        //        else => return err,
-                        //    };
-                        //} else {
-                        self.formatTyped(fmts, self.data, drct, out) catch |err| switch (err) {
+                        drct.formatTyped(PageDataType, self.data, out) catch |err| switch (err) {
                             error.IgnoreDirective => try out.writeAll(blob[0..end]),
                             else => return err,
                         };
-                        //}
+
                         blob = blob[end..];
                     } else {
                         if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
@@ -158,82 +77,20 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
             return std.fmt.allocPrint(a, "{}", .{self});
         }
 
-        fn formatTyped(
-            self: Self,
-            comptime fmts: []const u8,
-            ctx: PageDataType,
-            drct: Directive,
-            out: anytype,
-        ) anyerror!void {
-            switch (drct.verb) {
-                .variable => {
-                    const noun = drct.noun;
-                    const var_name = typeField(PageDataType, noun, ctx);
-                    if (var_name) |data_blob| {
-                        try out.writeAll(data_blob);
-                    } else {
-                        if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun});
-                        switch (drct.otherwise) {
-                            .str => |str| try out.writeAll(str),
-                            // Not really an error, just instruct caller to print original text
-                            .ign => return error.IgnoreDirective,
-                            .del => {},
-                            .template => |subt| {
-                                inline for (std.meta.fields(PageDataType)) |field|
-                                    switch (@typeInfo(field.type)) {
-                                        .Optional => |otype| {
-                                            if (otype.child == []const u8) continue;
-
-                                            var local: [0xff]u8 = undefined;
-                                            const realname = local[0..makeFieldName(noun[1 .. noun.len - 5], &local)];
-                                            if (eql(u8, field.name, realname)) {
-                                                if (@field(self.data, field.name)) |subdata| {
-                                                    var subpage = subt.pageOf(otype.child, subdata);
-                                                    try subpage.format(fmts, .{}, out);
-                                                } else std.debug.print(
-                                                    "sub template data was null for {s}\n",
-                                                    .{field.name},
-                                                );
-                                            }
-                                        },
-                                        .Struct => {
-                                            if (eql(u8, field.name, noun)) {
-                                                const subdata = @field(self.data, field.name);
-                                                var subpage = subt.pageOf(@TypeOf(subdata), subdata);
-                                                try subpage.format(fmts, .{}, out);
-                                            }
-                                        },
-                                        else => {}, //@compileLog(field.type),
-                                    };
-                            },
-                            .blob => unreachable,
-                        }
-                    }
-                },
-                .typed,
-                .foreach,
-                .with,
-                .build,
-                .split,
-                => drct.doTyped(PageDataType, ctx, out) catch unreachable,
-            }
-        }
-
-        pub fn format(self: Self, comptime fmts: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-            const ctx = self.data;
+        pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
             var blob = Self.PageTemplate.blob;
             while (blob.len > 0) {
                 if (std.mem.indexOf(u8, blob, "<")) |offset| {
                     try out.writeAll(blob[0..offset]);
                     blob = blob[offset..];
+
                     if (Directive.init(blob)) |drct| {
                         const end = drct.end;
-
-                        self.formatTyped(fmts, ctx, drct, out) catch |err| switch (err) {
+                        drct.formatTyped(PageDataType, self.data, out) catch |err| switch (err) {
                             error.IgnoreDirective => try out.writeAll(blob[0..end]),
                             else => return err,
                         };
-                        //}
+
                         blob = blob[end..];
                     } else {
                         if (std.mem.indexOfPos(u8, blob, 1, "<")) |next| {
