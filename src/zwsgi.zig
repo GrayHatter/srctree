@@ -83,14 +83,25 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
     std.debug.print("Unix server listening\n", .{});
 
     while (true) {
+        var acpt = try server.accept();
+        defer acpt.stream.close();
+        var timer = try std.time.Timer.start();
+
         var arena = std.heap.ArenaAllocator.init(zwsgi.alloc);
         defer arena.deinit();
         const a = arena.allocator();
 
-        var acpt = try server.accept();
-        defer acpt.stream.close();
-
         var ctx = try zwsgi.buildContextuWSGI(a, &acpt);
+
+        defer {
+            std.log.info("zWSGI: [{d:.3}] {s} - {s}: {s} -- \"{s}\"", .{
+                @as(f64, @floatFromInt(timer.lap())) / 1000000.0,
+                findOr(ctx.request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
+                findOr(ctx.request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
+                findOr(ctx.request.raw_request.zwsgi.vars, "REQUEST_URI"),
+                findOr(ctx.request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
+            });
+        }
 
         const callable = zwsgi.routefn(&ctx);
         zwsgi.buildfn(&ctx, callable) catch |err| {
@@ -378,13 +389,6 @@ fn readuWSGIHeader(a: Allocator, acpt: Server.Connection) !Request {
 
 fn buildContextuWSGI(z: ZWSGI, a: Allocator, conn: *Server.Connection) !Context {
     var request = try readuWSGIHeader(a, conn.*);
-
-    std.log.info("zWSGI: {s} - {s}: {s} -- \"{s}\"", .{
-        findOr(request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
-        findOr(request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
-        findOr(request.raw_request.zwsgi.vars, "REQUEST_URI"),
-        findOr(request.raw_request.zwsgi.vars, "HTTP_USER_AGENT"),
-    });
 
     return z.buildContext(a, &request);
 }
