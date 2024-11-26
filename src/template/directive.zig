@@ -34,7 +34,7 @@ pub const Otherwise = union(enum) {
     ignore: void,
     delete: void,
     default: []const u8,
-    template: Template.Template,
+    template: *const Template.Template,
     blob: []const u8,
 };
 
@@ -396,7 +396,7 @@ pub fn forEachTyped(self: Directive, T: type, data: T, out: anytype) anyerror!vo
 pub fn withTyped(self: Directive, T: type, block: T, out: anytype) anyerror!void {
     var p = PageRuntime(T){
         .data = block,
-        .template = if (self.otherwise == .template) self.otherwise.template else .{
+        .template = if (self.otherwise == .template) self.otherwise.template.* else .{
             .name = self.noun,
             .blob = trim(u8, self.otherwise.blob, whitespace),
         },
@@ -404,19 +404,19 @@ pub fn withTyped(self: Directive, T: type, block: T, out: anytype) anyerror!void
     try p.format("", .{}, out);
 }
 
-fn getDynamic(name: []const u8) ?Template.Template {
+fn getDynamic(name: []const u8) ?*const Template.Template {
     for (0..dynamic.*.len) |i| {
         if (eql(u8, dynamic.*[i].name, name)) {
-            return dynamic.*[i];
+            return &dynamic.*[i];
         }
     }
     return null;
 }
 
-fn getBuiltin(name: []const u8) ?Template.Template {
+fn getBuiltin(name: []const u8) ?*const Template.Template {
     for (0..builtin.len) |i| {
         if (eql(u8, builtin[i].name, name)) {
-            return builtin[i];
+            return &builtin[i];
         }
     }
     return null;
@@ -462,9 +462,10 @@ pub fn formatTyped(d: Directive, comptime T: type, ctx: T, out: anytype) !void {
                     .ignore => return error.IgnoreDirective,
                     .required => return error.VariableMissing,
                     .delete => {},
-                    .template => |subt| {
+                    .template => |template| {
                         if (T == usize) unreachable;
-                        inline for (std.meta.fields(T)) |field|
+                        if (@typeInfo(T) != .Struct) unreachable;
+                        inline for (std.meta.fields(T)) |field| {
                             switch (@typeInfo(field.type)) {
                                 .Optional => |otype| {
                                     if (otype.child == []const u8) continue;
@@ -473,7 +474,7 @@ pub fn formatTyped(d: Directive, comptime T: type, ctx: T, out: anytype) !void {
                                     const realname = local[0..makeFieldName(noun[1 .. noun.len - 5], &local)];
                                     if (std.mem.eql(u8, field.name, realname)) {
                                         if (@field(ctx, field.name)) |subdata| {
-                                            var subpage = subt.pageOf(otype.child, subdata);
+                                            var subpage = template.pageOf(otype.child, subdata);
                                             try subpage.format("{}", .{}, out);
                                         } else std.debug.print(
                                             "sub template data was null for {s}\n",
@@ -484,13 +485,21 @@ pub fn formatTyped(d: Directive, comptime T: type, ctx: T, out: anytype) !void {
                                 .Struct => {
                                     if (std.mem.eql(u8, field.name, noun)) {
                                         const subdata = @field(ctx, field.name);
-                                        var subpage = subt.pageOf(@TypeOf(subdata), subdata);
+                                        var subpage = template.pageOf(@TypeOf(subdata), subdata);
                                         try subpage.format("{}", .{}, out);
                                     }
                                 },
                                 else => {}, //@compileLog(field.type),
-                            };
+                            }
+                        }
                     },
+                    //inline for (std.meta.fields(T)) |field| {
+                    //    if (eql(u8, field.name, noun)) {
+                    //        const subdata = @field(ctx, field.name);
+                    //        var page = template.pageOf(@TypeOf(subdata), subdata);
+                    //        try page.format("{}", .{}, out);
+                    //    }
+                    //}
                     .blob => unreachable,
                 }
             }

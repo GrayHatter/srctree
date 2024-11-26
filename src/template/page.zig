@@ -2,6 +2,7 @@ const std = @import("std");
 const is_test = @import("builtin").is_test;
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
+const indexOfScalar = std.mem.indexOfScalar;
 
 const Templates = @import("../template.zig");
 const Template = Templates.Template;
@@ -29,7 +30,7 @@ pub fn PageRuntime(comptime PageDataType: type) type {
             //var ctx = self.data;
             var blob = self.template.blob;
             while (blob.len > 0) {
-                if (std.mem.indexOf(u8, blob, "<")) |offset| {
+                if (indexOfScalar(u8, blob, '<')) |offset| {
                     try out.writeAll(blob[0..offset]);
                     blob = blob[offset..];
                     if (Directive.init(blob)) |drct| {
@@ -78,7 +79,7 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
         pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
             var blob = Self.PageTemplate.blob;
             while (blob.len > 0) {
-                if (std.mem.indexOf(u8, blob, "<")) |offset| {
+                if (indexOfScalar(u8, blob, '<')) |offset| {
                     try out.writeAll(blob[0..offset]);
                     blob = blob[offset..];
 

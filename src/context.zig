@@ -57,7 +57,7 @@ pub fn sendPage(ctx: *Context, page: anytype) Error!void {
     const loggedin = if (ctx.request.auth.valid()) "<a href=\"#\">Logged In</a>" else "Public";
     const T = @TypeOf(page.*);
     if (@hasField(T, "data") and @hasField(@TypeOf(page.data), "body_header")) {
-        page.data.body_header.nav.nav_auth = loggedin;
+        page.data.body_header.?.nav.?.nav_auth = loggedin;
     }
 
     const page_compiled = try page.build(ctx.alloc);

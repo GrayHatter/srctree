@@ -138,11 +138,11 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
         if (std.mem.indexOf(u8, data, "<")) |offset| {
             data = data[offset..];
             if (Template.Directive.init(data)) |drct| {
+                data = data[drct.tag_block.len..];
                 const s_name = makeStructName(drct.noun);
                 var f_name = makeFieldName(drct.noun);
                 switch (drct.verb) {
                     .variable => |_| {
-                        data = data[drct.tag_block.len..];
                         var buffer: [0xFF]u8 = undefined;
                         var kind = try bufPrint(&buffer, ": []const u8,\n", .{});
 
@@ -155,7 +155,7 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                                 kind = try bufPrint(&buffer, ": ?[]const u8 = null,\n", .{});
                             },
                             .template => |_| {
-                                kind = try bufPrint(&buffer, ": {s},\n", .{s_name});
+                                kind = try bufPrint(&buffer, ": ?{s},\n", .{s_name});
                                 f_name = makeFieldName(drct.noun[1 .. drct.noun.len - 5]);
                             },
                             .blob => unreachable,
@@ -166,7 +166,6 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
                         try current.append(f_name, kind);
                     },
                     else => |verb| {
-                        data = data[drct.tag_block.len..];
                         var this = try AbstTree.init(a, s_name, current);
                         const gop = try tree.getOrPut(this.name);
                         if (!gop.found_existing) {
