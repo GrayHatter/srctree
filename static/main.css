@@ -84,7 +84,7 @@ content {
 	h3 { text-align: left; }
 	&.diff {
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start;
 		gap: 1em;
 		width: unset;
 		max-width: 96%;
