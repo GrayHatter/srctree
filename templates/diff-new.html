@@ -9,7 +9,7 @@
     <content>
         <form class="pretty" action="create" method="POST">
           <context>Suggest New Diff</context>
-          <input name="title" placeholder="Diff Title" value="<Title ORNULL>" />
+          <input name="title" placeholder="Diff Title" value="<Title ornull>" />
           <With Network>
               <div style="display:flex">
               <select name="network">
@@ -25,7 +25,7 @@
               </div>
           </With>
           <With PatchUri><div style="display:flex"><input name="patch_uri" placeholder="Patch URL" /><button name="from_network" value="true" formaction="new">Use Network</button></div></With>
-          <textarea name="desc" placeholder="Additional information about this patch suggestion"><Desc ORNULL></textarea>
+          <textarea name="desc" placeholder="Additional information about this patch suggestion"><Desc ornull></textarea>
           <buttons>
             <button name="submit">Submit</button>
             <button name="preview">Preview (does nothing)</button>

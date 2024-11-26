@@ -1,4 +1,5 @@
 const std = @import("std");
+const is_test = @import("builtin").is_test;
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
 
@@ -32,9 +33,13 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                     try out.writeAll(blob[0..offset]);
                     blob = blob[offset..];
                     if (Directive.init(blob)) |drct| {
-                        const end = drct.end;
+                        const end = drct.tag_block.len;
                         drct.formatTyped(PageDataType, self.data, out) catch |err| switch (err) {
                             error.IgnoreDirective => try out.writeAll(blob[0..end]),
+                            error.VariableMissing => {
+                                if (!is_test) std.debug.print("Template Error, variable missing {{{s}}}\n", .{blob[0..end]});
+                                try out.writeAll(blob[0..end]);
+                            },
                             else => return err,
                         };
 
@@ -78,9 +83,13 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
                     blob = blob[offset..];
 
                     if (Directive.init(blob)) |drct| {
-                        const end = drct.end;
+                        const end = drct.tag_block.len;
                         drct.formatTyped(PageDataType, self.data, out) catch |err| switch (err) {
                             error.IgnoreDirective => try out.writeAll(blob[0..end]),
+                            error.VariableMissing => {
+                                if (!is_test) std.debug.print("Template Error, variable missing {{{s}}}\n", .{blob[0..end]});
+                                try out.writeAll(blob[0..end]);
+                            },
                             else => return err,
                         };
 

@@ -346,7 +346,7 @@ test "directive nothing" {
 }
 
 test "directive nothing new" {
-    var a = std.testing.allocator;
+    const a = std.testing.allocator;
     const t = Template{
         //.path = "/dev/null",
         .name = "test",
@@ -356,6 +356,9 @@ test "directive nothing new" {
     const ctx = .{};
 
     // TODO is this still the expected behavior
+    //const p = Page(t, @TypeOf(ctx)).init(.{}).build(a);
+    //try std.testing.expectError(error.VariableMissing, p);
+
     const p = try Page(t, @TypeOf(ctx)).init(.{}).build(a);
     defer a.free(p);
     try std.testing.expectEqualStrings("<Nothing>", p);
@@ -366,7 +369,7 @@ test "directive ORELSE" {
     const t = Template{
         //.path = "/dev/null",
         .name = "test",
-        .blob = "<This ORELSE string until end>",
+        .blob = "<This default='string until end'>",
     };
 
     const ctx = .{
@@ -384,7 +387,7 @@ test "directive ORNULL" {
         //.path = "/dev/null",
         .name = "test",
         // Invalid because 'string until end' is known to be unreachable
-        .blob = "<This ORNULL string until end>",
+        .blob = "<This ornull string until end>",
     };
 
     const ctx = .{
@@ -393,12 +396,12 @@ test "directive ORNULL" {
 
     const p = try Page(t, @TypeOf(ctx)).init(ctx).build(a);
     defer a.free(p);
-    try std.testing.expectEqualStrings("<This ORNULL string until end>", p);
+    try std.testing.expectEqualStrings("", p);
 
     const t2 = Template{
         //.path = "/dev/null",
         .name = "test",
-        .blob = "<This ORNULL>",
+        .blob = "<This ornull>",
     };
 
     const nullpage = try Page(t2, @TypeOf(ctx)).init(ctx).build(a);
@@ -626,7 +629,6 @@ test "directive With" {
     const expected_thing: []const u8 =
         \\<div>
         \\  <span>THING</span>
-    ++ "\n  \n" ++
         \\</div>
     ;
 

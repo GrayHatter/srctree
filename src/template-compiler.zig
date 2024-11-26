@@ -49,8 +49,15 @@ const AbstTree = struct {
         for (self.children) |child| {
             if (std.mem.eql(u8, child.name, name)) {
                 if (!std.mem.eql(u8, child.kind, kind)) {
+                    std.debug.print("Error: kind mismatch while building ", .{});
+                    var par = self.parent;
+                    while (par != null) {
+                        par = par.?.parent;
+                        std.debug.print("{s}.", .{par.?.name});
+                    }
+
                     std.debug.print(
-                        "Error: kind mismatch \n  {s}.{s}\n  {s} != {s}\n",
+                        "{s}.{s}\n  {s} != {s}\n",
                         .{ self.name, name, child.kind, kind },
                     );
                     return error.KindMismatch;
@@ -130,74 +137,73 @@ fn emitVars(a: Allocator, fdata: []const u8, current: *AbstTree) !void {
     while (data.len > 0) {
         if (std.mem.indexOf(u8, data, "<")) |offset| {
             data = data[offset..];
-            if (Template.Directive.init(data)) |drct| switch (drct.verb) {
-                .variable => |_| {
-                    data = data[drct.end..];
-                    switch (drct.otherwise) {
-                        .ign => {
-                            try current.append(makeFieldName(drct.noun), ": []const u8,\n");
-                        },
-                        .str => |str| {
-                            var buffer: [0xFF]u8 = undefined;
-                            const kind = try bufPrint(&buffer, ": []const u8 = \"{s}\",\n", .{str});
-                            try current.append(makeFieldName(drct.noun), kind);
-                        },
-                        .del => {
-                            try current.append(makeFieldName(drct.noun), ": ?[]const u8 = null,\n");
-                        },
-                        .template => |_| {
-                            var buffer: [0xFF]u8 = undefined;
-                            const kind = try bufPrint(&buffer, ": ?{s},\n", .{makeStructName(drct.noun)});
-                            try current.append(makeFieldName(drct.noun[1 .. drct.noun.len - 5]), kind);
-                        },
-                        .blob => unreachable,
-                    }
-                },
-                else => |verb| {
-                    data = data[drct.end..];
-                    const name = makeStructName(drct.noun);
-                    const field = makeFieldName(drct.noun);
-                    var this = try AbstTree.init(a, name, current);
-                    const gop = try tree.getOrPut(this.name);
-                    if (!gop.found_existing) {
-                        gop.value_ptr.* = this;
-                    } else {
-                        this = gop.value_ptr.*;
-                    }
+            if (Template.Directive.init(data)) |drct| {
+                const s_name = makeStructName(drct.noun);
+                var f_name = makeFieldName(drct.noun);
+                switch (drct.verb) {
+                    .variable => |_| {
+                        data = data[drct.tag_block.len..];
+                        var buffer: [0xFF]u8 = undefined;
+                        var kind = try bufPrint(&buffer, ": []const u8,\n", .{});
 
-                    switch (verb) {
-                        .variable => unreachable,
-                        .foreach => {
-                            var buffer: [0xFF]u8 = undefined;
-                            const kind = try bufPrint(&buffer, ": []const {s},\n", .{name});
-                            try current.append(field, kind);
-                            try emitVars(a, drct.otherwise.blob.trimmed, this);
-                        },
-                        .split => {
-                            var buffer: [0xFF]u8 = undefined;
-                            const kind = try bufPrint(&buffer, ": []const []const u8,\n", .{});
-                            try current.append(field, kind);
-                        },
-                        .with => {
-                            var buffer: [0xFF]u8 = undefined;
-                            const kind = try bufPrint(&buffer, ": ?{s},\n", .{name});
-                            try current.append(field, kind);
-                            try emitVars(a, drct.otherwise.blob.trimmed, this);
-                        },
-                        .build => {
-                            var buffer: [0xFF]u8 = undefined;
-                            const tmpl_name = makeStructName(drct.otherwise.template.name);
-                            const kind = try bufPrint(&buffer, ": {s},\n", .{tmpl_name});
-                            try current.append(field, kind);
-                            //try emitVars(a, drct.otherwise.template.blob, this);
-                        },
-                        .typed => {
-                            var buffer: [0xFF]u8 = undefined;
-                            const kind = try bufPrint(&buffer, ": {s},\n", .{@tagName(drct.known_type.?)});
-                            try current.append(field, kind);
-                        },
-                    }
-                },
+                        switch (drct.otherwise) {
+                            .required, .ignore => {},
+                            .default => |str| {
+                                kind = try bufPrint(&buffer, ": []const u8 = \"{s}\",\n", .{str});
+                            },
+                            .delete => {
+                                kind = try bufPrint(&buffer, ": ?[]const u8 = null,\n", .{});
+                            },
+                            .template => |_| {
+                                kind = try bufPrint(&buffer, ": {s},\n", .{s_name});
+                                f_name = makeFieldName(drct.noun[1 .. drct.noun.len - 5]);
+                            },
+                            .blob => unreachable,
+                        }
+                        if (drct.known_type) |kt| {
+                            kind = try bufPrint(&buffer, ": {s},\n", .{@tagName(kt)});
+                        }
+                        try current.append(f_name, kind);
+                    },
+                    else => |verb| {
+                        data = data[drct.tag_block.len..];
+                        var this = try AbstTree.init(a, s_name, current);
+                        const gop = try tree.getOrPut(this.name);
+                        if (!gop.found_existing) {
+                            gop.value_ptr.* = this;
+                        } else {
+                            this = gop.value_ptr.*;
+                        }
+
+                        switch (verb) {
+                            .variable => unreachable,
+                            .foreach => {
+                                var buffer: [0xFF]u8 = undefined;
+                                const kind = try bufPrint(&buffer, ": []const {s},\n", .{s_name});
+                                try current.append(f_name, kind);
+                                try emitVars(a, drct.otherwise.blob, this);
+                            },
+                            .split => {
+                                var buffer: [0xFF]u8 = undefined;
+                                const kind = try bufPrint(&buffer, ": []const []const u8,\n", .{});
+                                try current.append(f_name, kind);
+                            },
+                            .with => {
+                                var buffer: [0xFF]u8 = undefined;
+                                const kind = try bufPrint(&buffer, ": ?{s},\n", .{s_name});
+                                try current.append(f_name, kind);
+                                try emitVars(a, drct.otherwise.blob, this);
+                            },
+                            .build => {
+                                var buffer: [0xFF]u8 = undefined;
+                                const tmpl_name = makeStructName(drct.otherwise.template.name);
+                                const kind = try bufPrint(&buffer, ": {s},\n", .{tmpl_name});
+                                try current.append(f_name, kind);
+                                //try emitVars(a, drct.otherwise.template.blob, this);
+                            },
+                        }
+                    },
+                }
             } else if (std.mem.indexOfPos(u8, data, 1, "<")) |next| {
                 data = data[next..];
             } else return;

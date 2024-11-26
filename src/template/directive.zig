@@ -9,6 +9,9 @@ const indexOfScalarPos = std.mem.indexOfScalarPos;
 const isUpper = std.ascii.isUpper;
 const count = std.mem.count;
 const isWhitespace = std.ascii.isWhitespace;
+const trim = std.mem.trim;
+const trimLeft = std.mem.trimLeft;
+const whitespace = std.ascii.whitespace[0..];
 
 pub const Directive = @This();
 
@@ -22,20 +25,17 @@ const makeFieldName = Template.makeFieldName;
 
 verb: Verb,
 noun: []const u8,
-otherwise: Otherwise = .{ .ign = {} },
+otherwise: Otherwise,
 known_type: ?KnownType = null,
-end: usize,
+tag_block: []const u8,
 
 pub const Otherwise = union(enum) {
-    ign: void,
-    del: void,
-    str: []const u8,
+    required: void,
+    ignore: void,
+    delete: void,
+    default: []const u8,
     template: Template.Template,
-    blob: Blob,
-    pub const Blob = struct {
-        trimmed: []const u8,
-        whitespace: []const u8,
-    };
+    blob: []const u8,
 };
 
 pub const Verb = enum {
@@ -44,13 +44,19 @@ pub const Verb = enum {
     split,
     with,
     build,
-    typed,
 };
 
 pub const KnownType = enum {
     usize,
     isize,
     @"?usize",
+
+    pub fn nullable(kt: KnownType) bool {
+        return switch (kt) {
+            .usize, .isize => false,
+            .@"?usize" => true,
+        };
+    }
 };
 
 const Positions = struct {
@@ -64,85 +70,80 @@ const Positions = struct {
 pub fn init(str: []const u8) ?Directive {
     if (str.len < 2) return null;
     if (!isUpper(str[1]) and str[1] != '_') return null;
-    const end = 1 + (indexOf(u8, str, ">") orelse return null);
+    const end = findTag(str) catch return null;
     const tag = str[0..end];
-    const verb = tag[1 .. indexOfScalar(u8, tag, ' ') orelse tag.len - 1];
+    const verb = tag[1 .. indexOfAnyPos(u8, tag, 1, " /") orelse tag.len - 1];
 
     if (verb.len == tag.len - 2) {
-        if (verb[0] == '_') {
-            if (getBuiltin(verb)) |bi| {
-                return Directive{
-                    .noun = verb,
-                    .verb = .variable,
-                    .otherwise = .{ .template = bi },
-                    .end = end,
-                };
-            }
-        }
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .end = end,
-        };
+        if (initNoun(verb, tag)) |noun| {
+            return noun;
+        } else unreachable;
     }
 
-    var width: usize = 1;
-    while (width < str.len and validChar(str[width])) {
-        width += 1;
-    }
-
-    const noun = tag[verb.len + 1 ..];
+    const noun = tag[verb.len + 1 .. tag.len - 1];
     if (initVerb(verb, noun, str)) |kind| {
         return kind;
     }
 
-    var known: ?KnownType = null;
-    if (indexOfScalar(u8, noun, '=')) |i| {
-        if (i >= 4 and eql(u8, noun[i - 4 .. i], "type")) {
-            const i_end = indexOfAnyPos(u8, noun, i, " /") orelse end - 1;
-            const requested_type = std.mem.trim(u8, noun[i..i_end], " ='\"");
-            inline for (std.meta.fields(KnownType)) |kt| {
-                if (eql(u8, requested_type, kt.name)) {
-                    known = @enumFromInt(kt.value);
-                    break;
+    if (initNoun(verb, tag)) |kind| {
+        return kind;
+    }
+    return null;
+}
+
+fn initNoun(noun: []const u8, tag: []const u8) ?Directive {
+    //std.debug.print("init noun {s}\n", .{noun});
+    if (noun[0] == '_') if (getBuiltin(noun)) |bi| {
+        return Directive{
+            .noun = noun,
+            .verb = .variable,
+            .otherwise = .{ .template = bi },
+            .tag_block = tag,
+        };
+    };
+
+    var default_str: ?[]const u8 = null;
+    var knownt: ?KnownType = null;
+    var rem_attr = tag[noun.len + 1 .. tag.len - 1];
+    while (indexOfScalar(u8, rem_attr, '=') != null) {
+        if (findAttribute(rem_attr)) |attr| {
+            if (eql(u8, attr.name, "type")) {
+                inline for (std.meta.fields(KnownType)) |kt| {
+                    if (eql(u8, attr.value, kt.name)) {
+                        knownt = @enumFromInt(kt.value);
+                        break;
+                    }
+                } else {
+                    std.debug.print("Unable to resolve requested type '{s}'\n", .{attr.value});
+                    unreachable;
                 }
-            } else {
-                std.debug.print("Unable to resolve requested type {s}\n", .{requested_type});
-                unreachable;
+            } else if (eql(u8, attr.name, "default")) {
+                default_str = attr.value;
             }
+            rem_attr = rem_attr[attr.len..];
+        } else |err| switch (err) {
+            error.AttrInvalid => break,
+            else => unreachable,
         }
     }
-    if (startsWith(u8, noun, " ORELSE ")) {
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .otherwise = .{ .str = tag[width + 8 .. end - 1] },
-            .end = end,
-            .known_type = known,
-        };
-    } else if (startsWith(u8, noun, " ORNULL>")) {
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .otherwise = .{ .del = {} },
-            .end = end,
-            .known_type = known,
-        };
-    } else if (startsWith(u8, noun, " />")) {
-        return Directive{
-            .verb = .variable,
-            .noun = verb,
-            .end = end,
-            .known_type = known,
-        };
-    } else if (known != null) {
-        return Directive{
-            .verb = .typed,
-            .noun = verb,
-            .end = end,
-            .known_type = known,
-        };
-    } else return null;
+
+    return Directive{
+        .verb = .variable,
+        .noun = noun,
+        .otherwise = if (default_str) |str|
+            .{ .default = str }
+        else if (indexOf(u8, tag, " ornull")) |_|
+            .delete
+        else if (knownt) |kn|
+            if (kn.nullable())
+                .delete
+            else
+                .required
+        else
+            .required,
+        .known_type = knownt,
+        .tag_block = tag,
+    };
 }
 
 pub fn initVerb(verb: []const u8, noun: []const u8, blob: []const u8) ?Directive {
@@ -169,14 +170,14 @@ pub fn initVerb(verb: []const u8, noun: []const u8, blob: []const u8) ?Directive
                 .verb = .build,
                 .noun = b_noun,
                 .otherwise = .{ .template = bi },
-                .end = verb.len + 1 + noun.len,
+                .tag_block = blob[0 .. verb.len + 2 + noun.len],
             };
         } else if (getDynamic(b_html)) |bi| {
             return Directive{
                 .verb = .build,
                 .noun = b_noun,
                 .otherwise = .{ .template = bi },
-                .end = verb.len + 1 + noun.len,
+                .tag_block = blob[0 .. verb.len + 2 + noun.len],
             };
         } else return null;
     } else return null;
@@ -190,14 +191,68 @@ pub fn initVerb(verb: []const u8, noun: []const u8, blob: []const u8) ?Directive
     //    }
     //} else return null;
 
-    var start = (indexOf(u8, noun, ">") orelse return null);
-    if (noun[start - 1] == '/') start -= 1;
+    var end = (indexOf(u8, noun, ">") orelse noun.len);
+    if (noun[end - 1] == '/') end -= 1;
     return .{
         .verb = word,
-        .noun = noun[1..start],
+        .noun = noun[1..end],
         .otherwise = otherw[0],
-        .end = otherw[1],
+        .tag_block = blob[0..otherw[1]],
     };
+}
+
+fn findTag(blob: []const u8) !usize {
+    return 1 + (indexOf(u8, blob, ">") orelse return error.TagInvalid);
+}
+
+const TAttr = struct {
+    name: []const u8,
+    value: []const u8,
+    len: usize,
+};
+
+fn findAttribute(tag: []const u8) !TAttr {
+    const equi = indexOfScalar(u8, tag, '=') orelse return error.AttrInvalid;
+    const name = trim(u8, tag[0..equi], whitespace);
+    var value = trim(u8, tag[equi + 1 ..], whitespace);
+
+    var end: usize = equi + 1;
+    while (end < tag.len and isWhitespace(tag[end])) end += 1;
+    while (end < tag.len) {
+        // TODO rewrite with tagged switch syntax
+        switch (tag[end]) {
+            '\n', '\r', '\t', ' ' => end += 1,
+            '\'', '"' => |qut| {
+                end += 1;
+                while (end <= tag.len and tag[end] != qut) end += 1;
+                if (end == tag.len) return error.AttrInvalid;
+                if (tag[end] != qut) return error.AttrInvalid else end += 1;
+                value = trim(u8, tag[equi + 1 .. end], whitespace.* ++ &[_]u8{ qut, '=', '<', '>', '/' });
+                break;
+            },
+            else => {
+                while (end < tag.len and !isWhitespace(tag[end])) end += 1;
+            },
+        }
+    }
+    return .{
+        .name = name,
+        .value = value,
+        .len = end,
+    };
+}
+
+test findAttribute {
+    var attr = try findAttribute("type=\"usize\"");
+    try std.testing.expectEqualDeep(TAttr{ .name = "type", .value = "usize", .len = 12 }, attr);
+    attr = try findAttribute("type=\"isize\"");
+    try std.testing.expectEqualDeep(TAttr{ .name = "type", .value = "isize", .len = 12 }, attr);
+    attr = try findAttribute("type=\"?usize\"");
+    try std.testing.expectEqualDeep(TAttr{ .name = "type", .value = "?usize", .len = 13 }, attr);
+    attr = try findAttribute("default=\"text\"");
+    try std.testing.expectEqualDeep(TAttr{ .name = "default", .value = "text", .len = 14 }, attr);
+    attr = try findAttribute("default=\"text\" />");
+    try std.testing.expectEqualDeep(TAttr{ .name = "default", .value = "text", .len = 14 }, attr);
 }
 
 fn validChar(c: u8) bool {
@@ -210,7 +265,10 @@ fn validChar(c: u8) bool {
 
 fn calcBodyS(comptime _: []const u8, _: []const u8, blob: []const u8, end: usize) ?struct { Otherwise, usize } {
     if (blob.len <= end) return null;
-    return .{ .{ .ign = {} }, end + 1 };
+    return .{
+        .{ .ignore = {} },
+        end + 1,
+    };
 }
 
 fn calcBody(comptime keyword: []const u8, noun: []const u8, blob: []const u8) ?struct { Otherwise, usize } {
@@ -246,10 +304,10 @@ fn calcBody(comptime keyword: []const u8, noun: []const u8, blob: []const u8) ?s
     while (width < noun.len and validChar(noun[width])) {
         width += 1;
     }
-    return .{ .{ .blob = .{
-        .trimmed = blob[start..end_ws],
-        .whitespace = blob[start_ws..end_ws],
-    } }, end };
+    return .{
+        .{ .blob = blob[start_ws..end_ws] },
+        end,
+    };
 }
 
 fn isStringish(t: type) bool {
@@ -329,7 +387,7 @@ pub fn forEachTyped(self: Directive, T: type, data: T, out: anytype) anyerror!vo
         .data = data,
         .template = .{
             .name = self.noun,
-            .blob = self.otherwise.blob.trimmed,
+            .blob = trimLeft(u8, self.otherwise.blob, whitespace),
         },
     };
     try p.format("", .{}, out);
@@ -340,7 +398,7 @@ pub fn withTyped(self: Directive, T: type, block: T, out: anytype) anyerror!void
         .data = block,
         .template = if (self.otherwise == .template) self.otherwise.template else .{
             .name = self.noun,
-            .blob = self.otherwise.blob.trimmed,
+            .blob = trim(u8, self.otherwise.blob, whitespace),
         },
     };
     try p.format("", .{}, out);
@@ -391,6 +449,7 @@ pub fn format(d: Directive, comptime _: []const u8, _: std.fmt.FormatOptions, ou
 pub fn formatTyped(d: Directive, comptime T: type, ctx: T, out: anytype) !void {
     switch (d.verb) {
         .variable => {
+            if (d.known_type) |_| return d.doTyped(T, ctx, out);
             const noun = d.noun;
             const var_name = typeField(T, noun, ctx);
             if (var_name) |data_blob| {
@@ -398,10 +457,11 @@ pub fn formatTyped(d: Directive, comptime T: type, ctx: T, out: anytype) !void {
             } else {
                 //if (DEBUG) std.debug.print("[missing var {s}]\n", .{noun.vari});
                 switch (d.otherwise) {
-                    .str => |str| try out.writeAll(str),
+                    .default => |str| try out.writeAll(str),
                     // Not really an error, just instruct caller to print original text
-                    .ign => return error.IgnoreDirective,
-                    .del => {},
+                    .ignore => return error.IgnoreDirective,
+                    .required => return error.VariableMissing,
+                    .delete => {},
                     .template => |subt| {
                         if (T == usize) unreachable;
                         inline for (std.meta.fields(T)) |field|
