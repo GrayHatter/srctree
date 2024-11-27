@@ -129,7 +129,7 @@ pub fn raze(self: Issue, a: std.mem.Allocator) void {
 }
 
 fn currMaxSet(count: usize) !void {
-    var cnt_file = try datad.createFile("_count", .{});
+    var cnt_file = try datad.createFile("_count", .{ .truncate = false });
     defer cnt_file.close();
     var writer = cnt_file.writer();
     _ = try writer.writeIntNative(usize, count);

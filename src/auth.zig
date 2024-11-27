@@ -8,18 +8,11 @@ const User = @import("types.zig").User;
 
 const Auth = @This();
 
-pub const Method = enum {
+pub const MethodType = enum {
     none,
     unknown,
     invalid,
     mtls,
-
-    pub fn valid(m: Method) bool {
-        return switch (m) {
-            .mtls => true,
-            else => false,
-        };
-    }
 };
 
 const Reason = enum {
@@ -30,9 +23,25 @@ const MTLSPayload = struct {
     status: []const u8,
     fingerprint: []const u8,
     cert: []const u8,
+
+    pub fn valid(m: MTLSPayload) bool {
+        var buffer: [0xffff]u8 = undefined;
+        var fba = std.heap.FixedBufferAllocator.init(&buffer);
+        const a = fba.allocator();
+        const user = User.findMTLSFingerprint(a, m.fingerprint) catch |err| {
+            std.debug.print("Auth failure {}\n", .{err});
+            return false;
+        };
+        const time = std.time.timestamp();
+        if (user.not_before <= time and user.not_after >= time) {
+            return true;
+        } else {
+            return false;
+        }
+    }
 };
 
-const Payload = union(Method) {
+const Method = union(MethodType) {
     none: void,
     unknown: void,
     invalid: Reason,
@@ -40,7 +49,6 @@ const Payload = union(Method) {
 };
 
 method: Method,
-payload: Payload,
 
 pub fn init(h: HeaderList) Auth {
     var status: ?[]const u8 = null;
@@ -60,14 +68,11 @@ pub fn init(h: HeaderList) Auth {
         if (fingerprint) |f| {
             if (cert) |c| {
                 return .{
-                    .method = .mtls,
-                    .payload = .{
-                        .mtls = .{
-                            .status = s,
-                            .fingerprint = f,
-                            .cert = c,
-                        },
-                    },
+                    .method = .{ .mtls = .{
+                        .status = s,
+                        .fingerprint = f,
+                        .cert = c,
+                    } },
                 };
             }
         }
@@ -75,22 +80,24 @@ pub fn init(h: HeaderList) Auth {
 
     return .{
         .method = .none,
-        .payload = .unknown,
     };
 }
 
 pub fn valid(auth: Auth) bool {
-    return auth.method.valid();
+    return switch (auth.method) {
+        .mtls => |m| m.valid(),
+        else => false,
+    };
 }
 
 pub fn validOrError(auth: Auth) !void {
     if (!auth.valid()) return error.Unauthenticated;
 }
 
-pub fn user(auth: Auth, a: Allocator) !User {
+pub fn currentUser(auth: Auth, a: Allocator) !User {
     switch (auth.method) {
-        .mtls => {
-            return try User.findMTLSFingerprint(a, auth.payload.mtls.fingerprint);
+        .mtls => |m| {
+            return try User.findMTLSFingerprint(a, m.fingerprint);
         },
         else => return error.NotImplemted,
     }

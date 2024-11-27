@@ -78,7 +78,7 @@ fn newPost(ctx: *Context) Error!void {
             valid.title,
             valid.desc,
             if (ctx.auth.valid())
-                (ctx.auth.user(ctx.alloc) catch unreachable).username
+                (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
             else
                 try allocPrint(ctx.alloc, "remote_address", .{}),
         ) catch unreachable;
@@ -109,7 +109,7 @@ fn newComment(ctx: *Context) Error!void {
         ) catch unreachable orelse return error.Unrouteable;
         _ = delta.loadThread(ctx.alloc) catch unreachable;
         const username = if (ctx.auth.valid())
-            (ctx.auth.user(ctx.alloc) catch unreachable).username
+            (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
         else
             "public";
         const c = Comment.new(username, msg.value) catch unreachable;

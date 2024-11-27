@@ -251,7 +251,7 @@ pub fn raze(_: Delta, _: std.mem.Allocator) void {
 fn currMaxSet(repo: []const u8, count: usize) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "_{s}_count", .{repo});
-    var cnt_file = try datad.createFile(filename, .{});
+    var cnt_file = try datad.createFile(filename, .{ .truncate = false });
     defer cnt_file.close();
     var writer = cnt_file.writer();
     _ = try writer.writeInt(usize, count, endian);
@@ -302,7 +302,7 @@ fn openFile(repo: []const u8) !std.fs.File {
     const max: usize = currMax(repo) catch 0;
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, max + 1 });
-    return try datad.createFile(filename, .{ .read = true });
+    return try datad.openFile(filename, .{ .mode = .read_write });
 }
 
 pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8) !Delta {

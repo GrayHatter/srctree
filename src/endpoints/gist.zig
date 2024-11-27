@@ -57,7 +57,7 @@ fn post(ctx: *Context) Error!void {
 
     if (udata.file_name.len != udata.file_blob.len) return error.BadData;
     const username = if (ctx.auth.valid())
-        (ctx.auth.user(ctx.alloc) catch unreachable).username
+        (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
     else
         "public";
 
