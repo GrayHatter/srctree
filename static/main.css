@@ -411,12 +411,6 @@ delta.issue {
 	}
 }
 
-patchheader {
-	display: block;
-	width: 100%;
-	margin: auto;
-}
-
 .new {
 	background: white;
 	color: black;
@@ -425,7 +419,11 @@ patchheader {
 
 }
 
-patch {
+gist {
+	white-space: pre;
+}
+
+patch, gist {
 	header {
 		border-radius: 3px 3px 0 0;
 		border-top: 1px solid #780000;
