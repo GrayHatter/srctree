@@ -76,7 +76,9 @@ pub fn router(ctx: *Context) Callable {
 // TODO replace with better API
 pub fn build(ctx: *Context, call: Callable) Routes.Error!void {
     return call(ctx) catch |err| switch (err) {
-        error.InvalidURI => notFound(ctx),
+        error.InvalidURI,
+        error.Unrouteable,
+        => notFound(ctx),
         else => return err,
     };
 }
