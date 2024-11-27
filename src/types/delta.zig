@@ -2,10 +2,10 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
+const AnyReader = std.io.AnyReader;
 
 const Bleach = @import("../bleach.zig");
 const Types = @import("../types.zig");
-const Comment = Types.Comment;
 const Thread = Types.Thread;
 const Message = Thread.Message;
 const Template = @import("../template.zig");
@@ -38,7 +38,7 @@ test State {
     try std.testing.expectEqual(zero, ptr.*);
 }
 
-fn readVersioned(a: Allocator, idx: usize, reader: *std.io.AnyReader) !Delta {
+fn readVersioned(a: Allocator, idx: usize, reader: *AnyReader) !Delta {
     const ver: usize = try reader.readInt(usize, endian);
     return switch (ver) {
         0 => Delta{
@@ -191,12 +191,12 @@ pub fn getMessages(self: *Delta, a: Allocator) ![]Message {
     return error.ThreadNotLoaded;
 }
 
-pub fn addComment(self: *Delta, a: Allocator, c: Comment) !void {
-    if (self.thread) |thread| {
-        return thread.addComment(a, c);
-    }
-    return error.ThreadNotLoaded;
-}
+//pub fn addComment(self: *Delta, a: Allocator, c: Comment) !void {
+//    if (self.thread) |thread| {
+//        return thread.addComment(a, c);
+//    }
+//    return error.ThreadNotLoaded;
+//}
 
 pub fn countComments(self: Delta) struct { count: usize, new: bool } {
     if (self.thread) |thread| {
@@ -204,9 +204,9 @@ pub fn countComments(self: Delta) struct { count: usize, new: bool } {
             const ts = std.time.timestamp() - 86400;
             var cmtnew: bool = false;
             var cmtlen: usize = 0;
-            for (msgs) |m| switch (m) {
-                .comment => |c| {
-                    cmtnew = cmtnew or c.updated > ts;
+            for (msgs) |m| switch (m.kind) {
+                .comment => {
+                    cmtnew = cmtnew or m.updated > ts;
                     cmtlen += 1;
                 },
                 else => {},

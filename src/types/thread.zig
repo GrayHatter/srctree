@@ -2,8 +2,9 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
+const sha256 = std.crypto.hash.sha2.Sha256;
 
-const Comment = @import("comment.zig");
+pub const Message = @import("message.zig");
 const Delta = @import("delta.zig");
 const State = Delta.State;
 
@@ -14,6 +15,8 @@ pub const Thread = @This();
 pub const TYPE_PREFIX = "threads";
 const THREADS_VERSION: usize = 0;
 var datad: Types.Storage = undefined;
+pub const IDType = usize;
+pub const HashType = [sha256.digest_length]u8;
 
 pub fn init(_: []const u8) !void {}
 pub fn initType(stor: Types.Storage) !void {
@@ -39,33 +42,20 @@ fn readVersioned(a: Allocator, idx: usize, reader: *std.io.AnyReader) !Thread {
     };
 }
 
-index: usize,
+index: IDType,
 state: State = .{},
 created: i64 = 0,
 updated: i64 = 0,
-delta_hash: [32]u8 = [_]u8{0} ** 32,
-hash: [32]u8 = [_]u8{0} ** 32,
+delta_hash: HashType = [_]u8{0} ** 32,
+hash: HashType = [_]u8{0} ** 32,
 
 message_data: ?[]const u8 = null,
 messages: ?[]Message = null,
 
-pub const MessageTypes = enum {
-    comment,
-    unknown,
-};
-
-pub const Message = union(MessageTypes) {
-    comment: Comment,
-    unknown: void,
-};
-
 pub fn commit(self: Thread) !void {
     if (self.messages) |msgs| {
         // Make a best effort to save/protect all data
-        for (msgs) |msg| switch (msg) {
-            .comment => |cmt| cmt.commit() catch continue,
-            .unknown => {},
-        };
+        for (msgs) |msg| msg.commit() catch continue;
     }
     const file = try openFile(self.index);
     defer file.close();
@@ -81,10 +71,7 @@ fn writeOut(self: Thread, writer: std.io.AnyWriter) !void {
     try writer.writeAll(&self.delta_hash);
 
     if (self.messages) |msgs| {
-        for (msgs) |*msg| switch (msg.*) {
-            .comment => |*c| try writer.writeAll(c.toHash()),
-            .unknown => {},
-        };
+        for (msgs) |*msg| try writer.writeAll(msg.toHash());
     }
     try writer.writeAll("\x00");
 }
@@ -109,7 +96,7 @@ fn loadFromData(a: Allocator, cd: []const u8) ![]Message {
     const msgs = try a.alloc(Message, count);
     var data = cd[0..];
     for (msgs, 0..count) |*c, i| {
-        c.* = .{ .comment = Comment.open(a, data[0..32]) catch |err| {
+        c.* = Message.open(a, data[0..32].*) catch |err| {
             std.debug.print(
                 \\Error loading msg data {} of {}
                 \\error: {} target {any}
@@ -117,7 +104,7 @@ fn loadFromData(a: Allocator, cd: []const u8) ![]Message {
             , .{ i, count, err, data[0..32] });
             data = data[32..];
             continue;
-        } };
+        };
         data = data[32..];
     }
     return msgs;
@@ -133,7 +120,7 @@ pub fn getMessages(self: Thread) ![]Message {
     return error.NotLoaded;
 }
 
-pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {
+pub fn newComment(self: *Thread, a: Allocator, c: Message.Comment) !void {
     if (self.messages) |*messages| {
         if (a.resize(messages.*, messages.len + 1)) {
             messages.*.len += 1;
@@ -143,7 +130,7 @@ pub fn addComment(self: *Thread, a: Allocator, c: Comment) !void {
     } else {
         self.messages = try a.alloc(Message, 1);
     }
-    self.messages.?[self.messages.?.len - 1] = .{ .comment = c };
+    self.messages.?[self.messages.?.len - 1] = try Message.newComment(self.index, c);
     self.updated = std.time.timestamp();
     try self.commit();
 }
@@ -221,7 +208,7 @@ pub fn new(delta: Delta) !Thread {
     return thread;
 }
 
-fn openFile(index: usize) !std.fs.File {
+fn openFile(index: IDType) !std.fs.File {
     var buf: [2048]u8 = undefined;
     const filename = std.fmt.bufPrint(&buf, "{x}.thread", .{index}) catch return error.InvalidTarget;
     return try datad.openFile(filename, .{ .mode = .read_write });

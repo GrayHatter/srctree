@@ -23,7 +23,6 @@ const Types = @import("../../types.zig");
 const RequestData = @import("../../request_data.zig").RequestData;
 
 const S = Template.Structs;
-const Comment = Types.Comment;
 const CommitMap = Types.CommitMap;
 const Delta = Types.Delta;
 const Error = Route.Error;
@@ -136,11 +135,11 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
             if (delta.getMessages(ctx.alloc)) |messages| {
                 thread = try ctx.alloc.alloc(Template.Structs.Thread, messages.len);
                 for (messages, thread) |msg, *pg_comment| {
-                    switch (msg) {
+                    switch (msg.kind) {
                         .comment => |cmt| {
                             pg_comment.* = .{
                                 .author = try Bleach.sanitizeAlloc(ctx.alloc, cmt.author, .{}),
-                                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(cmt.updated)}),
+                                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
                                 .message = try Bleach.sanitizeAlloc(ctx.alloc, cmt.message, .{}),
                                 .direct_reply = null,
                                 .sub_thread = null,

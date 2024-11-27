@@ -1,6 +1,6 @@
 const std = @import("std");
 
-pub const Comment = @import("types/comment.zig");
+pub const Message = @import("types/message.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
 pub const Diff = @import("types/diff.zig");
@@ -19,7 +19,7 @@ pub const Storage = std.fs.Dir;
 
 pub fn init(dir: Storage) !void {
     inline for (.{
-        Comment,
+        Message,
         CommitMap,
         Delta,
         Diff,

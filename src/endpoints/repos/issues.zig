@@ -20,7 +20,6 @@ const Repos = @import("../repos.zig");
 const CURL = @import("../../curl.zig");
 const Bleach = @import("../../bleach.zig");
 const Types = @import("../../types.zig");
-const Comment = Types.Comment;
 const Delta = Types.Delta;
 const Humanize = @import("../../humanize.zig");
 
@@ -107,14 +106,13 @@ fn newComment(ctx: *Context) Error!void {
             rd.name,
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
-        _ = delta.loadThread(ctx.alloc) catch unreachable;
         const username = if (ctx.auth.valid())
             (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
         else
             "public";
-        const c = Comment.new(username, msg.value) catch unreachable;
 
-        delta.addComment(ctx.alloc, c) catch {};
+        var thread = delta.loadThread(ctx.alloc) catch unreachable;
+        thread.newComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch {};
         delta.commit() catch unreachable;
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
@@ -138,13 +136,16 @@ fn view(ctx: *Context) Error!void {
     if (delta.getMessages(ctx.alloc)) |messages| {
         root_thread = try ctx.alloc.alloc(S.Thread, messages.len);
         for (messages, root_thread) |msg, *c_ctx| {
-            switch (msg) {
+            switch (msg.kind) {
                 .comment => |comment| {
                     c_ctx.* = .{
                         .author = try Bleach.sanitizeAlloc(ctx.alloc, comment.author, .{}),
-                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(comment.updated)}),
+                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
                         .message = try Bleach.sanitizeAlloc(ctx.alloc, comment.message, .{}),
-                        .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ index, fmtSliceHexLower(comment.hash[0..]) }) },
+                        .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
+                            index,
+                            fmtSliceHexLower(msg.hash[0..]),
+                        }) },
                         .sub_thread = null,
                     };
                 },
