@@ -4,8 +4,6 @@ const AnyWriter = std.io.AnyWriter;
 
 const Request = @import("request.zig");
 const Headers = @import("headers.zig");
-//const RequestData = @import("request_data.zig");
-const Template = @import("template").Template;
 
 const Response = @This();
 
