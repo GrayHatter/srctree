@@ -1,7 +1,7 @@
 const std = @import("std");
 const build_mode = @import("builtin").mode;
-const compiled = @import("templates-compiled");
-pub const Structs = @import("templates-compiled-structs");
+const compiled = @import("comptime_templates");
+pub const Structs = @import("comptime_template_structs");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 

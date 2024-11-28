@@ -1,7 +1,4 @@
-const Found = @import("found_templates");
-const PageData = @import("pagedata");
-
-const TEMPLATE_PATH = "templates/";
+const Found = @import("config");
 
 pub const FileData = struct {
     path: []const u8,

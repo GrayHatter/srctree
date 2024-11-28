@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
 const bufPrint = std.fmt.bufPrint;
-const compiled = @import("templates-compiled");
+const compiled = @import("comptime_templates");
 const Template = @import("template.zig");
 
 const AbstTree = struct {

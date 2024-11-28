@@ -11,7 +11,7 @@ pub fn build(b: *std.Build) void {
     var bins = std.ArrayList(*std.Build.Step.Compile).init(b.allocator);
     defer bins.clearAndFree();
 
-    const templates_compiled = try compileTemplates(b);
+    const comptime_templates = try compileTemplates(b);
 
     const exe = b.addExecutable(.{
         .name = "srctree",
@@ -38,7 +38,7 @@ pub fn build(b: *std.Build) void {
     bins.append(unit_tests) catch unreachable;
 
     for (bins.items) |ex| {
-        ex.root_module.addImport("templates-compiled", templates_compiled);
+        ex.root_module.addImport("comptime_templates", comptime_templates);
         ex.root_module.addOptions("config", options);
         if (enable_libcurl) {
             ex.linkSystemLibrary2("curl", .{ .preferred_link_mode = .static });
@@ -57,14 +57,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
     });
 
-    t_compiler.root_module.addImport("templates-compiled", templates_compiled);
+    t_compiler.root_module.addImport("comptime_templates", comptime_templates);
     const tbuild_run = b.addRunArtifact(t_compiler);
-    const tbuild_step = b.step("compile-templates", "Compile templates down into struct");
+    const tbuild_step = b.step("templates", "Compile templates down into struct");
     const tcstructs = tbuild_run.addOutputFileArg("compiled-structs.zig");
     tbuild_step.dependOn(&tbuild_run.step);
 
-    for (bins.items) |bin| bin.root_module.addImport("templates-compiled-structs", b.addModule(
-        "templates-compiled-structs",
+    for (bins.items) |bin| bin.root_module.addImport("comptime_template_structs", b.addModule(
+        "comptime_template_structs",
         .{ .root_source_file = tcstructs },
     ));
 
@@ -91,14 +91,14 @@ pub fn build(b: *std.Build) void {
 //}
 
 fn compileTemplates(b: *std.Build) !*std.Build.Module {
-    const compiled = b.addModule("templates-compiled", .{
-        .root_source_file = b.path("src/template-compiled.zig"),
+    const compiled = b.addModule("comptime_templates", .{
+        .root_source_file = b.path("src/template/comptime.zig"),
     });
 
     const list = buildSrcTemplates(b) catch @panic("unable to build src files");
     const found = b.addOptions();
     found.addOption([]const []const u8, "names", list);
-    compiled.addOptions("found_templates", found);
+    compiled.addOptions("config", found);
 
     for (list) |file| {
         _ = compiled.addAnonymousImport(file, .{
