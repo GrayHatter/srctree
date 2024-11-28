@@ -123,8 +123,8 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFi
     const out = try a.alloc(Template.Structs.GistFiles, files.len);
     for (files, out) |file, *o| {
         o.* = .{
-            .file_name = try Bleach.sanitizeAlloc(a, file.name, .{}),
-            .file_blob = try Bleach.sanitizeAlloc(a, file.blob, .{}),
+            .file_name = try Bleach.Html.sanitizeAlloc(a, file.name),
+            .file_blob = try Bleach.Html.sanitizeAlloc(a, file.blob),
         };
     }
     return out;

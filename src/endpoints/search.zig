@@ -89,13 +89,13 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
                 "/repo/{s}/{s}/{x}",
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
-            .title = try Bleach.sanitizeAlloc(ctx.alloc, d.title, .{}),
+            .title = try Bleach.Html.sanitizeAlloc(ctx.alloc, d.title),
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
                 .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
-            .desc = try Bleach.sanitizeAlloc(ctx.alloc, d.message, .{}),
+            .desc = try Bleach.Html.sanitizeAlloc(ctx.alloc, d.message),
         });
     }
 
@@ -115,7 +115,7 @@ fn custom(ctx: *Context, search_str: []const u8) Error!void {
             .nav_auth = undefined,
         } },
         .delta_list = try d_list.toOwnedSlice(),
-        .search = Bleach.sanitizeAlloc(ctx.alloc, search_str, .{}) catch unreachable,
+        .search = Bleach.Html.sanitizeAlloc(ctx.alloc, search_str) catch unreachable,
     });
 
     try ctx.sendPage(&page);

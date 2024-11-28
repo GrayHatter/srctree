@@ -148,8 +148,8 @@ fn buildJournal(
         if (commit_time < until) break;
         if (std.mem.eql(u8, email.?, commit.author.email)) {
             try list.append(.{
-                .name = try Bleach.sanitizeAlloc(a, commit.author.name, .{}),
-                .title = try Bleach.sanitizeAlloc(a, commit.title, .{}),
+                .name = try Bleach.Html.sanitizeAlloc(a, commit.author.name),
+                .title = try Bleach.Html.sanitizeAlloc(a, commit.title),
                 .date = DateTime.fromEpoch(commit_time),
                 .sha = commit.sha,
                 .repo = try a.dupe(u8, gitdir[8..]),

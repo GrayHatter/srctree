@@ -26,7 +26,7 @@ pub const Rules = enum {
 pub const RuleFn = *const fn (u8, ?[]u8) Error!usize;
 
 pub const Options = struct {
-    rules: Rules = .html,
+    rules: Rules,
     skip_chars: ?[]const u8 = null,
     // when true, sanitizer functions will return an error instead of replacing the char.
     error_on_replace: bool = false,
@@ -34,6 +34,10 @@ pub const Options = struct {
 
 pub const Html = struct {
     text: []const u8,
+
+    pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8) Error![]u8 {
+        return try Bleach.sanitizeAlloc(a, in, .{ .rules = .html });
+    }
 
     pub fn format(self: Html, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         var buf: [6]u8 = undefined;
@@ -46,6 +50,10 @@ pub const Html = struct {
 pub const Filename = struct {
     text: []const u8,
     permit_directories: bool = false,
+
+    pub fn sanitizeAlloc(a: std.mem.Allocator, in: []const u8) Error![]u8 {
+        return try Bleach.sanitizeAlloc(a, in, .{ .rules = .filename });
+    }
 
     pub fn format(self: Filename, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
         const bleach_fn = if (self.permit_directories) bleachPath else bleachFilename;

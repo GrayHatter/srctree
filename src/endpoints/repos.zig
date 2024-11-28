@@ -499,7 +499,7 @@ fn blame(ctx: *Context) Error!void {
     const formatted = if (Highlighting.Language.guessFromFilename(blame_file)) |lang| fmt: {
         var pre = try Highlighting.highlight(ctx.alloc, lang, source_lines.items);
         break :fmt pre[28..][0 .. pre.len - 38];
-    } else Bleach.sanitizeAlloc(ctx.alloc, source_lines.items, .{}) catch return error.Unknown;
+    } else Bleach.Html.sanitizeAlloc(ctx.alloc, source_lines.items) catch return error.Unknown;
 
     var litr = std.mem.splitScalar(u8, formatted, '\n');
     for (parsed.lines) |*line| {
@@ -516,7 +516,7 @@ fn blame(ctx: *Context) Error!void {
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
-        .filename = Bleach.sanitizeAlloc(ctx.alloc, blame_file, .{}) catch unreachable,
+        .filename = Bleach.Html.sanitizeAlloc(ctx.alloc, blame_file) catch unreachable,
         .blame_lines = wrapped_blames,
     });
 
@@ -537,8 +537,8 @@ fn wrapLineNumbersBlame(
             .repo_name = repo_name,
             .sha = bcommit.sha[0..8],
             .author_email = .{
-                .author = Bleach.sanitizeAlloc(a, bcommit.author.name, .{}) catch unreachable,
-                .email = Bleach.sanitizeAlloc(a, bcommit.author.email, .{}) catch unreachable,
+                .author = Bleach.Html.sanitizeAlloc(a, bcommit.author.name) catch unreachable,
+                .email = Bleach.Html.sanitizeAlloc(a, bcommit.author.email) catch unreachable,
             },
             .time = try Humanize.unix(bcommit.author.timestamp).printAlloc(a),
             .num = i + 1,
@@ -608,7 +608,7 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     } else if (excludedExt(blb.name)) {
         formatted = "This file type is currently unsupported";
     } else {
-        formatted = Bleach.sanitizeAlloc(ctx.alloc, resolve.data.?, .{}) catch return error.Unknown;
+        formatted = Bleach.Html.sanitizeAlloc(ctx.alloc, resolve.data.?) catch return error.Unknown;
     }
 
     const wrapped = try wrapLineNumbers(ctx.alloc, formatted);
@@ -617,7 +617,7 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     _ = ctx.uri.next();
     const uri_repo = ctx.uri.next() orelse return error.Unrouteable;
     _ = ctx.uri.next();
-    const uri_filename = Bleach.sanitizeAlloc(ctx.alloc, ctx.uri.rest(), .{}) catch return error.Unknown;
+    const uri_filename = Bleach.Html.sanitizeAlloc(ctx.alloc, ctx.uri.rest()) catch return error.Unknown;
 
     ctx.response.status = .ok;
 
@@ -655,7 +655,7 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]HTML.E {
     dom = dom.open(HTML.element("code", null, null));
     var litr = std.mem.splitScalar(u8, readme, '\n');
     while (litr.next()) |dirty| {
-        const clean = Bleach.sanitizeAlloc(a, dirty, .{}) catch return error.Unknown;
+        const clean = Bleach.Html.sanitizeAlloc(a, dirty) catch return error.Unknown;
         dom.push(HTML.element("ln", clean, null));
     }
     dom = dom.close();

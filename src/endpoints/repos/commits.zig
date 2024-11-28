@@ -111,7 +111,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
 
     const diffstat = patch.patchStat();
     const og_title = try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
-        Bleach.sanitizeAlloc(ctx.alloc, current.author.name, .{}) catch unreachable,
+        Bleach.Html.sanitizeAlloc(ctx.alloc, current.author.name) catch unreachable,
         diffstat.files,
         if (diffstat.files > 1) "s" else "",
         diffstat.additions,
@@ -120,7 +120,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     const meta_head = S.MetaHeadHtml{
         .open_graph = .{
             .title = og_title,
-            .desc = Bleach.sanitizeAlloc(ctx.alloc, current.message, .{}) catch unreachable,
+            .desc = Bleach.Html.sanitizeAlloc(ctx.alloc, current.message) catch unreachable,
         },
     };
 
@@ -138,9 +138,9 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
                     switch (msg.kind) {
                         .comment => |cmt| {
                             pg_comment.* = .{
-                                .author = try Bleach.sanitizeAlloc(ctx.alloc, cmt.author, .{}),
+                                .author = try Bleach.Html.sanitizeAlloc(ctx.alloc, cmt.author),
                                 .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
-                                .message = try Bleach.sanitizeAlloc(ctx.alloc, cmt.message, .{}),
+                                .message = try Bleach.Html.sanitizeAlloc(ctx.alloc, cmt.message),
                                 .direct_reply = null,
                                 .sub_thread = null,
                             };
@@ -242,13 +242,13 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Templa
 
 pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Structs.Commit {
     return .{
-        .author = Bleach.sanitizeAlloc(a, c.author.name, .{}) catch unreachable,
+        .author = Bleach.Html.sanitizeAlloc(a, c.author.name) catch unreachable,
         .parents = try commitCtxParents(a, c, repo),
         .sha_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha.hex[0..8] }),
         .sha_short = try a.dupe(u8, c.sha.hex[0..8]),
         //.sha = try a.dupe(u8, c.sha),
-        .title = Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable,
-        .body = Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable,
+        .title = Bleach.Html.sanitizeAlloc(a, c.title) catch unreachable,
+        .body = Bleach.Html.sanitizeAlloc(a, c.body) catch unreachable,
     };
 }
 
@@ -264,10 +264,10 @@ pub fn htmlCommit(a: Allocator, c: Git.Commit, repo: []const u8, comptime top: b
         try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
     ));
     cd_dom.push(HTML.br());
-    cd_dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.title, .{}) catch unreachable));
+    cd_dom.push(HTML.text(Bleach.Html.sanitizeAlloc(a, c.title) catch unreachable));
     if (c.body.len > 0) {
         cd_dom.push(HTML.br());
-        cd_dom.push(HTML.text(Bleach.sanitizeAlloc(a, c.body, .{}) catch unreachable));
+        cd_dom.push(HTML.text(Bleach.Html.sanitizeAlloc(a, c.body) catch unreachable));
     }
     cd_dom = cd_dom.close();
     const cdata = cd_dom.done();
@@ -317,8 +317,8 @@ fn commitContext(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.Commits 
     return .{
         .sha = try allocPrint(a, "{s}", .{c.sha.hex[0..8]}),
         .uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo_name, c.sha.hex[0..8] }),
-        .msg_title = try Bleach.sanitizeAlloc(a, c.title, .{}),
-        .msg = try Bleach.sanitizeAlloc(a, c.body, .{}),
+        .msg_title = try Bleach.Html.sanitizeAlloc(a, c.title),
+        .msg = try Bleach.Html.sanitizeAlloc(a, c.body),
         .author = c.author.name,
         .commit_parent = parents,
     };
