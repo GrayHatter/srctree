@@ -49,7 +49,7 @@ updated: i64 = 0,
 delta_hash: HashType = [_]u8{0} ** 32,
 hash: HashType = [_]u8{0} ** 32,
 
-message_data: ?[]const u8 = null,
+message_data: ?[]const u8 = &[0]u8{},
 messages: ?[]Message = null,
 
 pub fn commit(self: Thread) !void {
@@ -204,7 +204,7 @@ pub fn new(delta: Delta) !Thread {
         .created = std.time.timestamp(),
         .updated = std.time.timestamp(),
     };
-
+    try thread.writeOut(file.writer().any());
     return thread;
 }
 
@@ -214,9 +214,9 @@ fn openFile(index: IDType) !std.fs.File {
     return try datad.openFile(filename, .{ .mode = .read_write });
 }
 
-pub fn open(a: std.mem.Allocator, index: usize) !?Thread {
+pub fn open(a: std.mem.Allocator, index: usize) !Thread {
     const max = currMax() catch 0;
-    if (index > max) return null;
+    if (index > max) return error.ThreadDoesNotExist;
 
     var file = openFile(index) catch return error.Other;
     defer file.close();

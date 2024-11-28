@@ -161,8 +161,6 @@ fn writeOut(self: Delta, writer: *std.io.AnyWriter) !void {
         try writer.writeAll(&thread.hash);
     }
     //try writer.writeAll("\x00");
-
-    if (self.thread) |t| try t.commit();
 }
 
 pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Delta {
@@ -174,7 +172,19 @@ pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Delta {
 pub fn loadThread(self: *Delta, a: Allocator) !*Thread {
     if (self.thread != null) return error.MemoryAlreadyLoaded;
     const t = try a.create(Thread);
-    t.* = try Thread.open(a, self.thread_id) orelse return error.UnableToLoadThread;
+    t.* = Thread.open(a, self.thread_id) catch |err| t: {
+        std.debug.print("Error loading thread!! {}", .{err});
+        std.debug.print(" old thread_id {};", .{self.thread_id});
+        const thread = Thread.new(self.*) catch |err2| {
+            std.debug.print(" unable to create new {}\n", .{err2});
+            return error.UnableToLoadThread;
+        };
+        std.debug.print("new thread_id {}\n", .{thread.index});
+        self.thread_id = thread.index;
+        try self.commit();
+        break :t thread;
+    };
+
     self.thread = t;
     return t;
 }
