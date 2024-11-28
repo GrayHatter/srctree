@@ -159,14 +159,10 @@ pub fn send(res: *Response, data: []const u8) !void {
     return res.finish();
 }
 
-pub fn writer(res: *const Response) Writer {
-    return .{ .context = res };
-}
-
-pub fn anyWriter(res: *const Response) AnyWriter {
+pub fn writer(res: *const Response) AnyWriter {
     return .{
-        .context = res,
         .writeFn = typeErasedWrite,
+        .context = res,
     };
 }
 

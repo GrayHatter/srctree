@@ -60,9 +60,10 @@ pub fn sendPage(ctx: *Context, page: anytype) Error!void {
         page.data.body_header.?.nav.?.nav_auth = loggedin;
     }
 
-    const page_compiled = try page.build(ctx.alloc);
-    defer ctx.alloc.free(page_compiled);
-    ctx.response.send(page_compiled) catch unreachable;
+    const writer = ctx.response.writer();
+    page.format("{}", .{}, writer) catch |err| switch (err) {
+        else => std.debug.print("Page Build Error {}\n", .{err}),
+    };
 }
 
 pub fn sendRawSlice(ctx: *Context, slice: []const u8) Error!void {

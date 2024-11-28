@@ -1,6 +1,7 @@
 const std = @import("std");
 const is_test = @import("builtin").is_test;
 const Allocator = std.mem.Allocator;
+const AnyWriter = std.io.AnyWriter;
 const eql = std.mem.eql;
 const indexOfScalar = std.mem.indexOfScalar;
 
@@ -20,10 +21,6 @@ pub fn PageRuntime(comptime PageDataType: type) type {
                 .template = t,
                 .data = d,
             };
-        }
-
-        pub fn build(self: Self, a: Allocator) ![]u8 {
-            return std.fmt.allocPrint(a, "{}", .{self});
         }
 
         pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
@@ -70,10 +67,6 @@ pub fn Page(comptime template: Template, comptime PageDataType: type) type {
 
         pub fn init(d: PageDataType) Page(template, PageDataType) {
             return .{ .data = d };
-        }
-
-        pub fn build(self: Self, a: Allocator) ![]u8 {
-            return std.fmt.allocPrint(a, "{}", .{self});
         }
 
         pub fn format(self: Self, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
