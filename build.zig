@@ -58,14 +58,14 @@ pub fn build(b: *std.Build) void {
     });
 
     t_compiler.root_module.addImport("comptime_templates", comptime_templates);
-    const tbuild_run = b.addRunArtifact(t_compiler);
-    const tbuild_step = b.step("templates", "Compile templates down into struct");
-    const tcstructs = tbuild_run.addOutputFileArg("compiled-structs.zig");
-    tbuild_step.dependOn(&tbuild_run.step);
+    const tc_build_run = b.addRunArtifact(t_compiler);
+    const tc_structs = tc_build_run.addOutputFileArg("compiled-structs.zig");
+    const tc_build_step = b.step("templates", "Compile templates down into struct");
+    tc_build_step.dependOn(&tc_build_run.step);
 
     for (bins.items) |bin| bin.root_module.addImport("comptime_template_structs", b.addModule(
         "comptime_template_structs",
-        .{ .root_source_file = tcstructs },
+        .{ .root_source_file = tc_structs },
     ));
 
     // Partner Binaries
@@ -85,10 +85,6 @@ pub fn build(b: *std.Build) void {
         send_email.addArgs(args);
     }
 }
-
-//fn compileTemplatesStruct(b: *std.Build, target: std.Build.ResolvedTarget) *std.Build.Step {
-//    return tbuild_step;
-//}
 
 fn compileTemplates(b: *std.Build) !*std.Build.Module {
     const compiled = b.addModule("comptime_templates", .{
