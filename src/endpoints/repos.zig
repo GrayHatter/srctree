@@ -27,7 +27,7 @@ const Humanize = @import("../humanize.zig");
 const Ini = @import("../ini.zig");
 const Repos = @import("../repos.zig");
 const Git = @import("../git.zig");
-const Highlighting = @import("../syntax-highlight.zig");
+const Highlight = @import("../syntax-highlight.zig");
 
 const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
@@ -496,8 +496,8 @@ fn blame(ctx: *Context) Error!void {
         try source_lines.append('\n');
     }
 
-    const formatted = if (Highlighting.Language.guessFromFilename(blame_file)) |lang| fmt: {
-        var pre = try Highlighting.highlight(ctx.alloc, lang, source_lines.items);
+    const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang| fmt: {
+        var pre = try Highlight.highlight(ctx.alloc, lang, source_lines.items);
         break :fmt pre[28..][0 .. pre.len - 38];
     } else Bleach.Html.sanitizeAlloc(ctx.alloc, source_lines.items) catch return error.Unknown;
 
@@ -602,8 +602,8 @@ fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var resolve = repo.loadBlob(ctx.alloc, blb.sha) catch return error.Unknown;
     if (!resolve.isFile()) return error.Unknown;
     var formatted: []const u8 = undefined;
-    if (Highlighting.Language.guessFromFilename(blb.name)) |lang| {
-        const pre = try Highlighting.highlight(ctx.alloc, lang, resolve.data.?);
+    if (Highlight.Language.guessFromFilename(blb.name)) |lang| {
+        const pre = try Highlight.highlight(ctx.alloc, lang, resolve.data.?);
         formatted = pre[28..][0 .. pre.len - 38];
     } else if (excludedExt(blb.name)) {
         formatted = "This file type is currently unsupported";
@@ -653,10 +653,11 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]HTML.E {
     dom = dom.open(HTML.element("readme", null, null));
     dom.push(HTML.element("intro", "README.md", null));
     dom = dom.open(HTML.element("code", null, null));
-    var litr = std.mem.splitScalar(u8, readme, '\n');
-    while (litr.next()) |dirty| {
-        const clean = Bleach.Html.sanitizeAlloc(a, dirty) catch return error.Unknown;
-        dom.push(HTML.element("ln", clean, null));
+    const clean = Bleach.Html.sanitizeAlloc(a, readme) catch return error.Unknown;
+    const translated = try Highlight.translate(a, .markdown, clean);
+    var litr = std.mem.splitScalar(u8, translated, '\n');
+    while (litr.next()) |line| {
+        dom.push(HTML.element("ln", line, null));
     }
     dom = dom.close();
     dom = dom.close();

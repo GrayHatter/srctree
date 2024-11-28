@@ -3,6 +3,8 @@ const Allocator = std.mem.Allocator;
 const endsWith = std.mem.endsWith;
 const eql = std.mem.eql;
 
+const Markdown = @import("syntax/markdown.zig");
+
 pub const Language = enum {
     c,
     cpp,
@@ -11,6 +13,7 @@ pub const Language = enum {
     ini,
     kotlin,
     lua,
+    markdown,
     nginx,
     python,
     vim,
@@ -24,6 +27,7 @@ pub const Language = enum {
             .ini => "ini",
             .kotlin => "kotlin",
             .lua => "lua",
+            .markdown => "markdown",
             .nginx => "nginx",
             .python => "python",
             .vim => @tagName(l),
@@ -50,6 +54,10 @@ pub const Language = enum {
             return .ini;
         } else if (endsWith(u8, name, ".lua")) {
             return .lua;
+        } else if (endsWith(u8, name, ".md") or
+            endsWith(u8, name, ".markdown"))
+        {
+            return .markdown;
         } else if (eql(u8, name, "nginx.conf")) {
             return .nginx;
         } else if (endsWith(u8, name, ".py") or
@@ -70,6 +78,31 @@ pub const Language = enum {
     }
 };
 
+pub fn translate(a: Allocator, lang: Language, text: []const u8) ![]u8 {
+    return switch (lang) {
+        .c,
+        .cpp,
+        .h,
+        .html,
+        .ini,
+        .kotlin,
+        .lua,
+        .nginx,
+        .python,
+        .vim,
+        .zig,
+        => return error.NotSupported,
+        .markdown => translateInternal(a, lang, text),
+    };
+}
+
+pub fn translateInternal(a: Allocator, lang: Language, text: []const u8) ![]u8 {
+    return switch (lang) {
+        .markdown => try Markdown.translate(a, text),
+        else => unreachable,
+    };
+}
+
 pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     return switch (lang) {
         .c,
@@ -79,6 +112,7 @@ pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
         .ini,
         .kotlin,
         .lua,
+        .markdown,
         .nginx,
         .python,
         .vim,
