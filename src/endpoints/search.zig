@@ -3,24 +3,24 @@ const Allocator = std.mem.Allocator;
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
 
-const Verse = @import("../verse.zig");
+const Verse = @import("verse");
 const Delta = @import("../types.zig").Delta;
-const Template = @import("../template.zig");
-const Route = @import("../routes.zig");
-const Error = Route.Error;
-const ROUTE = Route.ROUTE;
+const Template = Verse.Template;
+const Routes = Verse.Router;
+const Error = Routes.Error;
+const ROUTE = Routes.ROUTE;
 const S = Template.Structs;
 
 const Bleach = @import("../bleach.zig");
 
-pub const routes = [_]Route.Match{
+pub const routes = [_]Routes.Match{
     ROUTE("", search),
     ROUTE("search", search),
     ROUTE("inbox", inbox),
 };
 
-pub fn router(ctx: *Verse) Error!Route.Callable {
-    return Route.router(ctx, &routes);
+pub fn router(ctx: *Verse) Error!Routes.Callable {
+    return Routes.router(ctx, &routes);
 }
 
 const SearchReq = struct {

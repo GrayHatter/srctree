@@ -4,11 +4,11 @@ const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 
-const Route = @import("../../routes.zig");
-const DOM = @import("../../dom.zig");
-const HTML = @import("../../html.zig");
-const Verse = @import("../../verse.zig");
-const Template = @import("../../template.zig");
+const Verse = @import("verse");
+const Route = Verse.Router;
+const DOM = Verse.DOM;
+const HTML = Verse.HTML;
+const Template = Verse.Template;
 const Error = Route.Error;
 const UriIter = Route.Error;
 const ROUTE = Route.ROUTE;

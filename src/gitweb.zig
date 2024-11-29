@@ -2,15 +2,15 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Verse = @import("verse.zig");
-const Response = @import("response.zig");
-const Request = @import("request.zig");
-const HTML = @import("html.zig");
+const Verse = @import("verse");
+const Response = Verse.Response;
+const Request = Verse.Request;
+const HTML = Verse.HTML;
 const elm = HTML.element;
-const DOM = @import("dom.zig");
-const Template = @import("template.zig");
+const DOM = Verse.DOM;
+const Template = Verse.Template;
 
-const Route = @import("routes.zig");
+const Route = Verse.Router;
 const Error = Route.Error;
 const UriIter = Route.UriIter;
 

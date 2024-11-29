@@ -1,18 +1,18 @@
 const std = @import("std");
-pub const Template = @import("../template.zig");
-const Verse = @import("../verse.zig");
-const Route = @import("../routes.zig");
-const RequestData = @import("../request_data.zig").RequestData;
+const Verse = @import("verse");
+const Template = Verse.Template;
+const Router = Verse.Router;
+const RequestData = Verse.RequestData.RequestData;
 
-pub const endpoints = [_]Route.Match{
-    Route.GET("", default),
-    Route.POST("post", post),
+pub const endpoints = [_]Router.Match{
+    Router.GET("", default),
+    Router.POST("post", post),
 };
 
 const SettingsPage = Template.PageData("settings.html");
 
-fn default(ctx: *Verse) Route.Error!void {
-    try ctx.request.auth.validOrError();
+fn default(ctx: *Verse) Router.Error!void {
+    try ctx.auth.validOrError();
 
     var blocks = try ctx.alloc.alloc(Template.Structs.ConfigBlocks, ctx.cfg.?.ns.len);
     for (ctx.cfg.?.ns, 0..) |ns, i| {
@@ -42,8 +42,8 @@ const SettingsReq = struct {
     block_text: [][]const u8,
 };
 
-fn post(ctx: *Verse) Route.Error!void {
-    try ctx.request.auth.validOrError();
+fn post(ctx: *Verse) Router.Error!void {
+    try ctx.auth.validOrError();
 
     const udata = RequestData(SettingsReq).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
 

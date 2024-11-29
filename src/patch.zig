@@ -10,10 +10,10 @@ const splitScalar = std.mem.splitScalar;
 
 const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
-const Response = @import("response.zig");
-const HTML = @import("html.zig");
-const DOM = @import("dom.zig");
-const Verse = @import("template.zig").Verse;
+const Verse = @import("verse");
+const Response = Verse.Response;
+const HTML = Verse.HTML;
+const DOM = Verse.DOM;
 
 pub const Patch = @This();
 

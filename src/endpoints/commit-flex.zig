@@ -6,13 +6,13 @@ const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
 
-const DOM = @import("../dom.zig");
-const HTML = @import("../html.zig");
-const Verse = @import("../verse.zig");
-const Template = @import("../template.zig");
+const Verse = @import("verse");
+const DOM = Verse.DOM;
+const HTML = Verse.HTML;
+const Template = Verse.Template;
 const S = Template.Structs;
 
-const Route = @import("../routes.zig");
+const Route = Verse.Router;
 const Error = Route.Error;
 
 const Scribe = struct {

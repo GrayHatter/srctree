@@ -1,14 +1,14 @@
 const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 
-const DOM = @import("../dom.zig");
-const Verse = @import("../verse.zig");
-const Template = @import("../template.zig");
+const Verse = @import("verse");
+const Template = Verse.Template;
+const DOM = Verse.DOM;
+const HTML = Verse.HTML;
 
-const Route = @import("../routes.zig");
+const Route = Verse.Router;
 const Error = Route.Error;
 const UriIter = Route.UriIter;
-const HTML = @import("../html.zig");
 const Repos = @import("../repos.zig");
 const Ini = @import("../ini.zig");
 const Git = @import("../git.zig");

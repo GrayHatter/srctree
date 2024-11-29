@@ -1,23 +1,23 @@
 const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 
-const Verse = @import("../verse.zig");
-const Template = @import("../template.zig");
-const RequestData = @import("../request_data.zig").RequestData;
+const Verse = @import("verse");
+const Template = Verse.Template;
+const RequestData = Verse.RequestData.RequestData;
 const Bleach = @import("../bleach.zig");
 const Allocator = std.mem.Allocator;
 
 const Gist = @import("../types.zig").Gist;
 
-const Route = @import("../routes.zig");
-const Error = Route.Error;
-const POST = Route.POST;
-const GET = Route.GET;
+const Routes = Verse.Router;
+const Error = Routes.Error;
+const POST = Routes.POST;
+const GET = Routes.GET;
 
 const GistPage = Template.PageData("gist.html");
 const GistNewPage = Template.PageData("gist_new.html");
 
-const endpoints = [_]Route.Match{
+const endpoints = [_]Routes.Match{
     GET("", new),
     GET("gist", view),
     GET("new", new),
@@ -25,7 +25,7 @@ const endpoints = [_]Route.Match{
     POST("post", post),
 };
 
-pub fn router(ctx: *Verse) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Routes.Callable {
     if (!std.mem.eql(u8, ctx.uri.next() orelse "", "gist")) return error.Unrouteable;
 
     if (ctx.uri.peek()) |peek| {
@@ -41,7 +41,7 @@ pub fn router(ctx: *Verse) Error!Route.Callable {
         }
     } else return new;
 
-    return Route.router(ctx, &endpoints);
+    return Routes.router(ctx, &endpoints);
 }
 
 const GistPost = struct {
@@ -51,7 +51,7 @@ const GistPost = struct {
 };
 
 fn post(ctx: *Verse) Error!void {
-    try ctx.request.auth.validOrError();
+    try ctx.auth.validOrError();
 
     const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
 

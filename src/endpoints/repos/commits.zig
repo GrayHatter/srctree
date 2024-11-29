@@ -5,22 +5,23 @@ const bufPrint = std.fmt.bufPrint;
 const endsWith = std.mem.endsWith;
 const eql = std.mem.eql;
 
+const Verse = @import("verse");
+const DOM = Verse.DOM;
+const HTML = Verse.HTML;
+const Response = Verse.Response;
+const Route = Verse.Router;
+const Template = Verse.Template;
+const RequestData = Verse.RequestData;
+
 const Diffs = @import("diffs.zig");
 
 const Repos = @import("../repos.zig");
 
-const Bleach = @import("../../bleach.zig");
-const Verse = @import("../../verse.zig");
-const DOM = @import("../../dom.zig");
 const Git = @import("../../git.zig");
-const HTML = @import("../../html.zig");
+const Bleach = @import("../../bleach.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
-const Response = @import("../../response.zig");
-const Route = @import("../../routes.zig");
-const Template = @import("../../template.zig");
 const Types = @import("../../types.zig");
-const RequestData = @import("../../request_data.zig").RequestData;
 
 const S = Template.Structs;
 const CommitMap = Types.CommitMap;

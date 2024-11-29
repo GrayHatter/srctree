@@ -1,6 +1,6 @@
-const Routes = @import("routes.zig");
-const Verse = @import("verse.zig");
-const Template = @import("template.zig");
+const Verse = @import("verse");
+const Routes = Verse.Router;
+const Template = Verse.Template;
 const Api = @import("api.zig");
 //const Types = @import("types.zig");
 

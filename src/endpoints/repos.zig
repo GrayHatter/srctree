@@ -6,21 +6,21 @@ const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 
-const Verse = @import("../verse.zig");
-const Response = @import("../response.zig");
-const Request = @import("../request.zig");
-const HTML = @import("../html.zig");
-const elm = HTML.element;
-const DOM = @import("../dom.zig");
-const Template = @import("../template.zig");
+const Verse = @import("verse");
+const Response = Verse.Response;
+const Request = Verse.Request;
+const HTML = Verse.HTML;
+const DOM = Verse.DOM;
+const Template = Verse.Template;
+const Route = Verse.Router;
 const S = Template.Structs;
-const Route = @import("../routes.zig");
+const elm = HTML.element;
 const Error = Route.Error;
 const UriIter = Route.UriIter;
 const ROUTE = Route.ROUTE;
 const POST = Route.POST;
 const GET = Route.GET;
-const RequestData = @import("../request_data.zig").RequestData;
+const RequestData = Verse.RequestData.RequestData;
 
 const Bleach = @import("../bleach.zig");
 const Humanize = @import("../humanize.zig");
@@ -295,7 +295,7 @@ fn list(ctx: *Verse) Error!void {
         }, repoSorterNew);
 
         var repo_buttons: []const u8 = "";
-        if (ctx.request.auth.valid()) {
+        if (ctx.auth.valid()) {
             repo_buttons =
                 \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
             ;

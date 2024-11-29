@@ -3,7 +3,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const Git = @import("git.zig");
-const Ini = @import("ini.zig");
+/// TODO FIXME
+const Ini = @import("verse").Ini;
 
 const Repos = @This();
 

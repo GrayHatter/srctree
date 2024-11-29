@@ -1,0 +1,17 @@
+.{
+    .name = "srctree",
+    .version = "0.0.0",
+    .minimum_zig_version = "0.13.0",
+    .dependencies = .{
+        .verse = .{
+            //.url = "git+https://srctree.gr.ht/repo/verse",
+            .path = "../verse",
+        },
+    },
+
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+    },
+}

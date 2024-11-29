@@ -16,15 +16,16 @@ const Commits = @import("commits.zig");
 
 const Repos = @import("../repos.zig");
 
+const Verse = @import("verse");
+
 const Git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
-const Verse = @import("../../verse.zig");
-const DOM = @import("../../dom.zig");
-const HTML = @import("../../html.zig");
+const DOM = Verse.DOM;
+const HTML = Verse.HTML;
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
-const Route = @import("../../routes.zig");
-const Template = @import("../../template.zig");
+const Route = Verse.Router;
+const Template = Verse.Template;
 const Types = @import("../../types.zig");
 const Highlighting = @import("../../syntax-highlight.zig");
 

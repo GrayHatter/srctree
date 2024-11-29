@@ -4,21 +4,21 @@ const Allocator = std.mem.Allocator;
 const API = @import("../api.zig");
 const Bleach = @import("../bleach.zig");
 const Git = @import("../git.zig");
-const Routes = @import("../routes.zig");
+const Router = API.Router;
 
-const ROUTE = Routes.ROUTE;
+const ROUTE = Router.ROUTE;
 
-const endpoints = [_]Routes.Match{
+const endpoints = [_]Router.Match{
     ROUTE("", repo),
     ROUTE("branches", repoBranches),
     ROUTE("tags", repoTags),
 };
 
-pub fn router(ctx: *API.Verse) Routes.Error!Routes.Callable {
+pub fn router(ctx: *API.Verse) Router.Error!Router.Callable {
     const uri_api = ctx.uri.next() orelse return repo;
     if (!std.mem.eql(u8, uri_api, "repo")) return repo;
 
-    return Routes.router(ctx, &endpoints);
+    return Router.router(ctx, &endpoints);
 }
 
 pub const Repo = struct {
@@ -45,7 +45,7 @@ fn openRepo(a: Allocator, raw_name: []const u8) !Git.Repo {
     return gitrepo;
 }
 
-pub fn repo(ctx: *API.Verse) API.Routes.Error!void {
+pub fn repo(ctx: *API.Verse) API.Router.Error!void {
     const req = try ctx.reqdata.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
@@ -84,7 +84,7 @@ pub const RepoBranches = struct {
     branches: []const Branch,
 };
 
-pub fn repoBranches(ctx: *API.Verse) API.Routes.Error!void {
+pub fn repoBranches(ctx: *API.Verse) API.Router.Error!void {
     const req = try ctx.reqdata.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
@@ -121,7 +121,7 @@ pub const RepoTags = struct {
     tags: []const []const u8,
 };
 
-pub fn repoTags(ctx: *API.Verse) API.Routes.Error!void {
+pub fn repoTags(ctx: *API.Verse) API.Router.Error!void {
     const req = try ctx.reqdata.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {

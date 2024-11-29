@@ -1,24 +1,27 @@
 const std = @import("std");
+const Verse = @import("verse");
 
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
 const Server = std.http.Server;
 
 const Database = @import("database.zig");
-const HTML = @import("html.zig");
-const Template = @import("template.zig");
-const Route = @import("routes.zig");
+//const HTML = Verse.HTML;
+const Route = Verse.Router;
 const Repos = @import("repos.zig");
-const HTTP = @import("http.zig");
-const zWSGI = @import("zwsgi.zig");
-const Ini = @import("ini.zig");
+const zWSGI = Verse.zWSGI;
+
+// TODO FIXME revert to internal config instead of Verse version
+// but I don't want to lose track of origin, and that's where the
+// primary version (read: usage) lives currently.
+//const Ini = @import("ini.zig");
+const Ini = Verse.Ini;
 const Cache = @import("cache.zig");
 
 const Srctree = @import("srctree.zig");
 
 test "main" {
     std.testing.refAllDecls(@This());
-    _ = HTML.html(&[0]HTML.Element{});
     std.testing.refAllDecls(@import("git.zig"));
 }
 
@@ -70,9 +73,6 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
     defer _ = gpa.deinit();
     const a = gpa.allocator();
-
-    Template.init(a);
-    defer Template.raze(a);
 
     var runmode: zWSGI.RunMode = .unix;
 

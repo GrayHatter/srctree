@@ -2,11 +2,11 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Verse = @import("../verse.zig");
-const Route = @import("../routes.zig");
-const HTML = @import("../html.zig");
-const DOM = @import("../dom.zig");
-const Template = @import("../template.zig");
+const Verse = @import("verse");
+const Route = Verse.Router;
+const HTML = Verse.HTML;
+const DOM = Verse.DOM;
+const Template = Verse.Template;
 
 const Error = Route.Error;
 const UriIter = Route.UriIter;
@@ -40,7 +40,7 @@ const AdminPage = Template.PageData("admin.html");
 const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
 fn default(ctx: *Verse) Error!void {
-    try ctx.request.auth.validOrError();
+    try ctx.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -70,7 +70,7 @@ fn default(ctx: *Verse) Error!void {
 }
 
 fn cloneUpstream(ctx: *Verse) Error!void {
-    try ctx.request.auth.validOrError();
+    try ctx.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -105,7 +105,7 @@ const CloneUpstreamReq = struct {
 };
 
 fn postCloneUpstream(ctx: *Verse) Error!void {
-    try ctx.request.auth.validOrError();
+    try ctx.auth.validOrError();
 
     const udata = ctx.reqdata.post.?.validate(CloneUpstreamReq) catch return error.BadData;
     std.debug.print("repo uri {s}\n", .{udata.repo_uri});
@@ -152,7 +152,7 @@ fn postCloneUpstream(ctx: *Verse) Error!void {
 }
 
 fn postNewRepo(ctx: *Verse) Error!void {
-    try ctx.request.auth.validOrError();
+    try ctx.auth.validOrError();
     // TODO ini repo dir
     var valid = if (ctx.reqdata.post) |p|
         p.validator()
@@ -206,7 +206,7 @@ fn postNewRepo(ctx: *Verse) Error!void {
 }
 
 fn newRepo(ctx: *Verse) Error!void {
-    try ctx.request.auth.validOrError();
+    try ctx.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -234,7 +234,7 @@ fn newRepo(ctx: *Verse) Error!void {
 }
 
 fn view(ctx: *Verse) Error!void {
-    try ctx.request.auth.validOrError();
+    try ctx.auth.validOrError();
     if (ctx.reqdata.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(ctx);

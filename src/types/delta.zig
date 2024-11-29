@@ -8,7 +8,6 @@ const Bleach = @import("../bleach.zig");
 const Types = @import("../types.zig");
 const Thread = Types.Thread;
 const Message = Thread.Message;
-const Template = @import("../template.zig");
 
 pub const Delta = @This();
 
