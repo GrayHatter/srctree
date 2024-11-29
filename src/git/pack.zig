@@ -123,6 +123,14 @@ pub fn contains(self: Pack, sha: SHA) ?u32 {
     return self.containsPrefix(sha.bin[0..]) catch unreachable;
 }
 
+fn orderSha(lhs: []const u8, rhs: []const u8) std.math.Order {
+    for (lhs, rhs) |l, r| {
+        if (l > r) return .gt;
+        if (l < r) return .lt;
+    }
+    return .eq;
+}
+
 pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
     std.debug.assert(par_sha.len <= 20);
     const count: usize = self.fanOutCount(par_sha[0]);
@@ -132,15 +140,43 @@ pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
 
     const objnames = @as([*][20]u8, @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]))[0..count];
 
-    for (0..count) |i| {
-        const objname = objnames[i];
-        if (eql(u8, par_sha, objname[0..par_sha.len])) {
-            if (objnames.len > i + 1 and eql(u8, par_sha, objnames[i + 1][0..par_sha.len])) {
-                return error.AmbiguousRef;
-            }
-            return @byteSwap(self.offsets[i + start]);
+    var left: usize = 0;
+    var right: usize = objnames.len;
+    //var b_idx: usize = 0;
+    var found: ?usize = null;
+
+    while (left < right) {
+        const mid = left + (right - left) / 2;
+
+        switch (orderSha(par_sha, objnames[mid][0..par_sha.len])) {
+            .eq => {
+                found = mid;
+                break;
+            },
+            .gt => left = mid + 1,
+            .lt => right = mid,
         }
     }
+
+    if (found) |f| {
+        if (objnames.len > f + 1 and eql(u8, par_sha, objnames[f + 1][0..par_sha.len])) {
+            return error.AmbiguousRef;
+        }
+        if (f > 1 and eql(u8, par_sha, objnames[f - 1][0..par_sha.len])) {
+            return error.AmbiguousRef;
+        }
+        return @byteSwap(self.offsets[f + start]);
+    }
+
+    //for (0..count) |i| {
+    //    const objname = objnames[i];
+    //    if (eql(u8, par_sha, objname[0..par_sha.len])) {
+    //        if (objnames.len > i + 1 and eql(u8, par_sha, objnames[i + 1][0..par_sha.len])) {
+    //            return error.AmbiguousRef;
+    //        }
+    //        return @byteSwap(self.offsets[i + start]);
+    //    }
+    //}
     return null;
 }
 
