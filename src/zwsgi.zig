@@ -94,7 +94,7 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
         var ctx = try zwsgi.buildContextuWSGI(a, &acpt);
 
         defer {
-            std.log.info("zWSGI: [{d:.3}] {s} - {s}: {s} -- \"{s}\"", .{
+            std.log.err("zWSGI: [{d:.3}] {s} - {s}: {s} -- \"{s}\"", .{
                 @as(f64, @floatFromInt(timer.lap())) / 1000000.0,
                 findOr(ctx.request.raw_request.zwsgi.vars, "REMOTE_ADDR"),
                 findOr(ctx.request.raw_request.zwsgi.vars, "REQUEST_METHOD"),
