@@ -2,7 +2,7 @@ const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 
 const DOM = @import("../dom.zig");
-const Context = @import("../context.zig");
+const Verse = @import("../verse.zig");
 const Template = @import("../template.zig");
 
 const Route = @import("../routes.zig");
@@ -21,7 +21,7 @@ pub const endpoints = [_]Route.Match{
 
 const NetworkPage = Template.PageData("network.html");
 
-fn default(ctx: *Context) Error!void {
+fn default(ctx: *Verse) Error!void {
     var dom = DOM.new(ctx.alloc);
 
     const list = try Repos.allNames(ctx.alloc);

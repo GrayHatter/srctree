@@ -1,9 +1,9 @@
 const std = @import("std");
 
-const Context = @import("context.zig");
+const Verse = @import("verse.zig");
 const Route = @import("routes.zig");
 
-pub fn fileOnDisk(ctx: *Context) Route.Error!void {
+pub fn fileOnDisk(ctx: *Verse) Route.Error!void {
     _ = ctx.uri.next(); // clear /static
     const fname = ctx.uri.next() orelse return error.Unrouteable;
     if (fname.len == 0) return error.Unrouteable;

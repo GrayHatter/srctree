@@ -1,7 +1,7 @@
 const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 
-const Context = @import("../context.zig");
+const Verse = @import("../verse.zig");
 const Template = @import("../template.zig");
 const RequestData = @import("../request_data.zig").RequestData;
 const Bleach = @import("../bleach.zig");
@@ -25,7 +25,7 @@ const endpoints = [_]Route.Match{
     POST("post", post),
 };
 
-pub fn router(ctx: *Context) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.Callable {
     if (!std.mem.eql(u8, ctx.uri.next() orelse "", "gist")) return error.Unrouteable;
 
     if (ctx.uri.peek()) |peek| {
@@ -50,7 +50,7 @@ const GistPost = struct {
     new_file: ?[]const u8,
 };
 
-fn post(ctx: *Context) Error!void {
+fn post(ctx: *Verse) Error!void {
     try ctx.request.auth.validOrError();
 
     const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
@@ -90,12 +90,12 @@ fn post(ctx: *Context) Error!void {
     return ctx.response.redirect("/gist/" ++ hash_str, true) catch unreachable;
 }
 
-fn new(ctx: *Context) Error!void {
+fn new(ctx: *Verse) Error!void {
     const files = [1]Template.Structs.GistFiles{.{}};
     return edit(ctx, &files);
 }
 
-fn edit(ctx: *Context, files: []const Template.Structs.GistFiles) Error!void {
+fn edit(ctx: *Verse, files: []const Template.Structs.GistFiles) Error!void {
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.NavButtons{
         .{ .name = "inbox", .extra = 0, .url = "/inbox" },
@@ -130,7 +130,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFi
     return out;
 }
 
-fn view(ctx: *Context) Error!void {
+fn view(ctx: *Verse) Error!void {
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 

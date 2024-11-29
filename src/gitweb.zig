@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Context = @import("context.zig");
+const Verse = @import("verse.zig");
 const Response = @import("response.zig");
 const Request = @import("request.zig");
 const HTML = @import("html.zig");
@@ -31,12 +31,12 @@ pub const endpoints = [_]Route.Match{
     .{ .name = "git-upload-pack", .methods = .{ .POST = true }, .match = .{ .call = gitUploadPack } },
 };
 
-pub fn router(ctx: *Context) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.Callable {
     std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
     return Route.router(ctx, &endpoints);
 }
 
-fn gitUploadPack(ctx: *Context) Error!void {
+fn gitUploadPack(ctx: *Verse) Error!void {
     ctx.uri.reset();
     _ = ctx.uri.first();
     const name = ctx.uri.next() orelse return error.Unknown;
@@ -112,7 +112,7 @@ fn gitUploadPack(ctx: *Context) Error!void {
     _ = child.wait() catch unreachable;
 }
 
-fn __objects(ctx: *Context) Error!void {
+fn __objects(ctx: *Verse) Error!void {
     std.debug.print("gitweb objects\n", .{});
 
     const rd = @import("../../REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable.zig");
@@ -146,7 +146,7 @@ fn __objects(ctx: *Context) Error!void {
     ctx.response.finish() catch return Error.Unknown;
 }
 
-fn __info(ctx: *Context) Error!void {
+fn __info(ctx: *Verse) Error!void {
     std.debug.print("gitweb info\n", .{});
 
     const rd = @import("../../REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable.zig");

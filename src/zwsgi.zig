@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Server = std.net.Server;
 
-const Context = @import("context.zig");
+const Verse = @import("verse.zig");
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
@@ -18,9 +18,9 @@ routefn: RouterFn,
 buildfn: BuildFn,
 runmode: RunMode = .unix,
 
-pub const RouterFn = *const fn (*Context) Router.Callable;
+pub const RouterFn = *const fn (*Verse) Router.Callable;
 // TODO provide default for this?
-pub const BuildFn = *const fn (*Context, Router.Callable) Router.Error!void;
+pub const BuildFn = *const fn (*Verse, Router.Callable) Router.Error!void;
 
 const uProtoHeader = packed struct {
     mod1: u8 = 0,
@@ -91,7 +91,7 @@ fn serveUnix(zwsgi: *ZWSGI) !void {
         defer arena.deinit();
         const a = arena.allocator();
 
-        var ctx = try zwsgi.buildContextuWSGI(a, &acpt);
+        var ctx = try zwsgi.buildVerseuWSGI(a, &acpt);
 
         defer {
             std.log.err("zWSGI: [{d:.3}] {s} - {s}: {s} -- \"{s}\"", .{
@@ -170,7 +170,7 @@ fn serveHttp(zwsgi: *ZWSGI) !void {
 
         var hreq = try hsrv.receiveHead();
 
-        var ctx = try zwsgi.buildContextHttp(a, &hreq);
+        var ctx = try zwsgi.buildVerseHttp(a, &hreq);
         var ipbuf: [0x20]u8 = undefined;
         const ipport = try std.fmt.bufPrint(&ipbuf, "{}", .{conn.address});
         if (std.mem.indexOf(u8, ipport, ":")) |i| {
@@ -279,7 +279,7 @@ fn findOr(list: []uWSGIVar, search: []const u8) []const u8 {
     return find(list, search) orelse "[missing]";
 }
 
-fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
+fn buildVerse(z: ZWSGI, a: Allocator, request: *Request) !Verse {
     var post_data: ?RequestData.PostData = null;
     var reqdata: RequestData = undefined;
     switch (request.raw_request) {
@@ -340,7 +340,7 @@ fn buildContext(z: ZWSGI, a: Allocator, request: *Request) !Context {
     }
 
     const response = try Response.init(a, request);
-    return Context.init(a, z.config, request.*, response, reqdata);
+    return Verse.init(a, z.config, request.*, response, reqdata);
 }
 
 fn readHttpHeaders(a: Allocator, req: *std.http.Server.Request) !Request {
@@ -355,10 +355,10 @@ fn readHttpHeaders(a: Allocator, req: *std.http.Server.Request) !Request {
     return try Request.init(a, req);
 }
 
-fn buildContextHttp(z: ZWSGI, a: Allocator, req: *std.http.Server.Request) !Context {
+fn buildVerseHttp(z: ZWSGI, a: Allocator, req: *std.http.Server.Request) !Verse {
     var request = try readHttpHeaders(a, req);
     std.debug.print("http target -> {s}\n", .{request.uri});
-    return z.buildContext(a, &request);
+    return z.buildVerse(a, &request);
 }
 
 fn readuWSGIHeader(a: Allocator, acpt: Server.Connection) !Request {
@@ -387,8 +387,8 @@ fn readuWSGIHeader(a: Allocator, acpt: Server.Connection) !Request {
     );
 }
 
-fn buildContextuWSGI(z: ZWSGI, a: Allocator, conn: *Server.Connection) !Context {
+fn buildVerseuWSGI(z: ZWSGI, a: Allocator, conn: *Server.Connection) !Verse {
     var request = try readuWSGIHeader(a, conn.*);
 
-    return z.buildContext(a, &request);
+    return z.buildVerse(a, &request);
 }

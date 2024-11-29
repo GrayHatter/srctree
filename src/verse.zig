@@ -17,7 +17,7 @@ const Config = @import("ini.zig").Config;
 
 const Error = @import("errors.zig").Error;
 
-pub const Context = @This();
+pub const Verse = @This();
 
 alloc: Allocator,
 request: Request,
@@ -35,10 +35,10 @@ const VarPair = struct {
     []const u8,
 };
 
-pub fn init(a: Allocator, cfg: ?Config, req: Request, res: Response, reqdata: RequestData) !Context {
+pub fn init(a: Allocator, cfg: ?Config, req: Request, res: Response, reqdata: RequestData) !Verse {
     std.debug.assert(req.uri[0] == '/');
     //const reqheader = req.headers
-    return Context{
+    return .{
         .alloc = a,
         .request = req,
         .response = res,
@@ -49,7 +49,7 @@ pub fn init(a: Allocator, cfg: ?Config, req: Request, res: Response, reqdata: Re
     };
 }
 
-pub fn sendPage(ctx: *Context, page: anytype) Error!void {
+pub fn sendPage(ctx: *Verse, page: anytype) Error!void {
     ctx.response.start() catch |err| switch (err) {
         error.BrokenPipe => return error.NetworkCrash,
         else => unreachable,
@@ -66,15 +66,15 @@ pub fn sendPage(ctx: *Context, page: anytype) Error!void {
     };
 }
 
-pub fn sendRawSlice(ctx: *Context, slice: []const u8) Error!void {
+pub fn sendRawSlice(ctx: *Verse, slice: []const u8) Error!void {
     ctx.response.send(slice) catch unreachable;
 }
 
-pub fn sendError(ctx: *Context, comptime code: std.http.Status) Error!void {
+pub fn sendError(ctx: *Verse, comptime code: std.http.Status) Error!void {
     return Routes.defaultResponse(code)(ctx);
 }
 
-pub fn sendJSON(ctx: *Context, json: anytype) Error!void {
+pub fn sendJSON(ctx: *Verse, json: anytype) Error!void {
     ctx.response.start() catch |err| switch (err) {
         error.BrokenPipe => return error.NetworkCrash,
         else => unreachable,

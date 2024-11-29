@@ -10,7 +10,7 @@ const Diffs = @import("diffs.zig");
 const Repos = @import("../repos.zig");
 
 const Bleach = @import("../../bleach.zig");
-const Context = @import("../../context.zig");
+const Verse = @import("../../verse.zig");
 const DOM = @import("../../dom.zig");
 const Git = @import("../../git.zig");
 const HTML = @import("../../html.zig");
@@ -44,21 +44,21 @@ const AddComment = struct {
     text: []const u8,
 };
 
-pub fn router(ctx: *Context) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return commitsView;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return viewCommit;
     return commitsView;
 }
 
-fn newComment(ctx: *Context) Error!void {
+fn newComment(ctx: *Verse) Error!void {
     if (ctx.reqdata.post) |post| {
         _ = post.validate(AddComment) catch return error.BadData;
     }
     return error.BadData;
 }
 
-pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
+pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
@@ -69,10 +69,10 @@ pub fn patchContext(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
         return error.PatchInvalid;
     };
 
-    return try patch.diffsContextSlice(a);
+    return try patch.diffsVerseSlice(a);
 }
 
-fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
+fn commitHtml(ctx: *Verse, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});
         return error.Abusive;
@@ -181,7 +181,7 @@ fn commitHtml(ctx: *Context, sha: []const u8, repo_name: []const u8, repo: Git.R
     return ctx.sendPage(&page) catch unreachable;
 }
 
-pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
+pub fn commitPatch(ctx: *Verse, sha: []const u8, repo: Git.Repo) Error!void {
     var acts = repo.getAgent(ctx.alloc);
     if (endsWith(u8, sha, ".patch")) {
         var rbuf: [0xff]u8 = undefined;
@@ -200,7 +200,7 @@ pub fn commitPatch(ctx: *Context, sha: []const u8, repo: Git.Repo) Error!void {
     }
 }
 
-pub fn viewCommit(ctx: *Context) Error!void {
+pub fn viewCommit(ctx: *Verse) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (rd.verb == null) return commitsView(ctx);
 
@@ -295,7 +295,7 @@ pub fn htmlCommit(a: Allocator, c: Git.Commit, repo: []const u8, comptime top: b
     return dom.done();
 }
 
-fn commitContext(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.Commits {
+fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.Commits {
     var parcount: usize = 0;
     for (c.parent) |p| {
         if (p != null) parcount += 1;
@@ -360,7 +360,7 @@ fn buildListBetween(
     }
     var found: usize = 0;
     for (commits, 1..) |*c, i| {
-        c.* = try commitContext(a, current, name);
+        c.* = try commitVerse(a, current, name);
         found = i;
         outsha.* = current.sha;
         if (left) |l| if (current.sha.eqlIsh(l)) break;
@@ -372,7 +372,7 @@ fn buildListBetween(
     return commits;
 }
 
-pub fn commitsView(ctx: *Context) Error!void {
+pub fn commitsView(ctx: *Verse) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     if (ctx.uri.next()) |next| {
@@ -411,7 +411,7 @@ pub fn commitsView(ctx: *Context) Error!void {
     return sendCommits(ctx, cmts_list, rd.name, last_sha.hex[0..8]);
 }
 
-pub fn commitsBefore(ctx: *Context) Error!void {
+pub fn commitsBefore(ctx: *Verse) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     std.debug.assert(std.mem.eql(u8, "after", ctx.uri.next().?));
@@ -423,13 +423,13 @@ pub fn commitsBefore(ctx: *Context) Error!void {
     repo.loadData(ctx.alloc) catch return error.Unknown;
 
     const before: Git.SHA = if (ctx.uri.next()) |bf| Git.SHA.initPartial(bf);
-    const commits_b = try ctx.alloc.alloc(Template.Context, 50);
+    const commits_b = try ctx.alloc.alloc(Template.Verse, 50);
     var last_sha: Git.SHA = undefined;
     const cmts_list = try buildList(ctx.alloc, repo, rd.name, before, commits_b, &last_sha);
     return sendCommits(ctx, cmts_list, rd.name, last_sha[0..]);
 }
 
-fn sendCommits(ctx: *Context, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
+fn sendCommits(ctx: *Verse, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
     var page = CommitsListPage.init(.{

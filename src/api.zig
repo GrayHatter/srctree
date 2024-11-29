@@ -2,7 +2,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 pub const Routes = @import("routes.zig");
-pub const Context = @import("context.zig");
+pub const Verse = @import("verse.zig");
 
 const ROUTE = Routes.ROUTE;
 
@@ -34,7 +34,7 @@ const APIRouteData = struct {
     }
 };
 
-pub fn router(ctx: *Context) Routes.Error!Routes.Callable {
+pub fn router(ctx: *Verse) Routes.Error!Routes.Callable {
     const uri_api = ctx.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
     const rd = try APIRouteData.init(ctx.alloc);
@@ -47,7 +47,7 @@ const Diff = struct {
     sha: []const u8,
 };
 
-fn diff(ctx: *Context) Routes.Error!void {
+fn diff(ctx: *Verse) Routes.Error!void {
     return try ctx.sendJSON([0]Diff{});
 }
 
@@ -55,7 +55,7 @@ const HeartBeat = struct {
     nice: usize = 0,
 };
 
-fn heartbeat(ctx: *Context) Routes.Error!void {
+fn heartbeat(ctx: *Verse) Routes.Error!void {
     return try ctx.sendJSON(HeartBeat{ .nice = 69 });
 }
 
@@ -63,7 +63,7 @@ const Issue = struct {
     index: usize,
 };
 
-fn issue(ctx: *Context) Routes.Error!void {
+fn issue(ctx: *Verse) Routes.Error!void {
     return try ctx.sendJSON([0]Issue{});
 }
 
@@ -82,7 +82,7 @@ const Network = struct {
     networks: []RemotePeer,
 };
 
-fn network(ctx: *Context) Routes.Error!void {
+fn network(ctx: *Verse) Routes.Error!void {
     return try ctx.sendJSON(Network{ .networks = [0].{} });
 }
 
@@ -90,7 +90,7 @@ const Patch = struct {
     patch: []const u8,
 };
 
-fn patch(ctx: *Context) Routes.Error!void {
+fn patch(ctx: *Verse) Routes.Error!void {
     return try ctx.sendJSON(Patch{ .patch = [0].{} });
 }
 
@@ -102,7 +102,7 @@ const Flex = struct {
     };
 };
 
-fn flex(ctx: *Context) Routes.Error!void {
+fn flex(ctx: *Verse) Routes.Error!void {
     return try ctx.sendJSON([0]Flex{});
 }
 
@@ -111,6 +111,6 @@ const User = struct {
     email: []const u8,
 };
 
-fn user(ctx: *Context) Routes.Error!void {
+fn user(ctx: *Verse) Routes.Error!void {
     return try ctx.sendJSON([0]User{});
 }

@@ -8,7 +8,7 @@ const Git = @import("../git.zig");
 
 const DOM = @import("../dom.zig");
 const HTML = @import("../html.zig");
-const Context = @import("../context.zig");
+const Verse = @import("../verse.zig");
 const Template = @import("../template.zig");
 const S = Template.Structs;
 
@@ -209,7 +209,7 @@ const YEAR = 31_536_000;
 
 const UserCommitsPage = Template.PageData("user_commits.html");
 
-pub fn commitFlex(ctx: *Context) Error!void {
+pub fn commitFlex(ctx: *Verse) Error!void {
     const monthAtt = HTML.Attr.class("month");
 
     var nowish = DateTime.now();

@@ -4,7 +4,7 @@ const eql = std.mem.eql;
 const Allocator = std.mem.Allocator;
 
 const api = @import("api.zig");
-const Context = @import("context.zig");
+const Verse = @import("verse.zig");
 const Response = @import("response.zig");
 const Request = @import("request.zig");
 const HTML = @import("html.zig");
@@ -15,8 +15,8 @@ pub const Error = Errors.ServerError || Errors.ClientError || Errors.NetworkErro
 
 pub const UriIter = std.mem.SplitIterator(u8, .scalar);
 
-pub const Router = *const fn (*Context) Error!Callable;
-pub const Callable = *const fn (*Context) Error!void;
+pub const Router = *const fn (*Verse) Error!Callable;
+pub const Callable = *const fn (*Verse) Error!void;
 
 pub const DEBUG: bool = false;
 
@@ -118,24 +118,24 @@ pub fn defaultResponse(comptime code: std.http.Status) Callable {
     };
 }
 
-fn notFound(ctx: *Context) Error!void {
+fn notFound(ctx: *Verse) Error!void {
     ctx.response.status = .not_found;
     const E4XX = @embedFile("../templates/4XX.html");
     return ctx.sendRawSlice(E4XX);
 }
 
-fn internalServerError(ctx: *Context) Error!void {
+fn internalServerError(ctx: *Verse) Error!void {
     ctx.response.status = .internal_server_error;
     const E5XX = @embedFile("../templates/5XX.html");
     return ctx.sendRawSlice(E5XX);
 }
 
-fn default(ctx: *Context) Error!void {
+fn default(ctx: *Verse) Error!void {
     const index = @embedFile("../templates/index.html");
     return ctx.sendRawSlice(index);
 }
 
-pub fn router(ctx: *Context, comptime routes: []const Match) Callable {
+pub fn router(ctx: *Verse, comptime routes: []const Match) Callable {
     const search = ctx.uri.peek() orelse {
         if (DEBUG) std.debug.print("No endpoint found: URI is empty.\n", .{});
         return notFound;
@@ -171,7 +171,7 @@ const root = [_]Match{
     ROUTE("", default),
 };
 
-pub fn baseRouter(ctx: *Context) Error!void {
+pub fn baseRouter(ctx: *Verse) Error!void {
     if (DEBUG) std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {
@@ -185,7 +185,7 @@ pub fn baseRouter(ctx: *Context) Error!void {
 const root_with_static = root ++
     [_]Match{.{ .name = "static", .match = .{ .call = StaticFile.file } }};
 
-pub fn baseRouterHtml(ctx: *Context) Error!void {
+pub fn baseRouterHtml(ctx: *Verse) Error!void {
     if (DEBUG) std.debug.print("baserouter {s}\n", .{ctx.uri.peek().?});
     if (ctx.uri.peek()) |first| {
         if (first.len > 0) {

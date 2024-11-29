@@ -6,7 +6,7 @@ const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 
-const Context = @import("../context.zig");
+const Verse = @import("../verse.zig");
 const Response = @import("../response.zig");
 const Request = @import("../request.zig");
 const HTML = @import("../html.zig");
@@ -91,7 +91,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn navButtons(ctx: *Context) ![2]Template.Structs.NavButtons {
+pub fn navButtons(ctx: *Verse) ![2]Template.Structs.NavButtons {
     const rd = RouteData.make(&ctx.uri) orelse unreachable;
     if (!rd.exists()) unreachable;
     var i_count: usize = 0;
@@ -122,7 +122,7 @@ pub fn navButtons(ctx: *Context) ![2]Template.Structs.NavButtons {
     return btns;
 }
 
-pub fn router(ctx: *Context) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.Callable {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
@@ -142,19 +142,19 @@ pub fn router(ctx: *Context) Error!Route.Callable {
         //const issuecnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{i_count});
         //const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
         //const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
-        //const header_nav = try ctx.alloc.dupe(Template.Context, &[2]Template.Context{
-        //    Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
+        //const header_nav = try ctx.alloc.dupe(Template.Verse, &[2]Template.Verse{
+        //    Template.Verse.initWith(ctx.alloc, &[3]Template.Verse.Pair{
         //        .{ .name = "Name", .value = "issues" },
         //        .{ .name = "Url", .value = issueurl },
         //        .{ .name = "Extra", .value = issuecnt },
         //    }) catch return error.OutOfMemory,
-        //    Template.Context.initWith(ctx.alloc, &[3]Template.Context.Pair{
+        //    Template.Verse.initWith(ctx.alloc, &[3]Template.Verse.Pair{
         //        .{ .name = "Name", .value = "diffs" },
         //        .{ .name = "Url", .value = diffurl },
         //        .{ .name = "Extra", .value = diffcnt },
         //    }) catch return error.OutOfMemory,
         //});
-        //try ctx.putContext("NavButtons", .{ .block = header_nav });
+        //try ctx.putVerse("NavButtons", .{ .block = header_nav });
 
         if (rd.verb) |_| {
             _ = ctx.uri.next();
@@ -266,7 +266,7 @@ const RepoSortReq = struct {
     sort: ?[]const u8,
 };
 
-fn list(ctx: *Context) Error!void {
+fn list(ctx: *Verse) Error!void {
     var cwd = std.fs.cwd();
 
     const udata = ctx.reqdata.query.validate(RepoSortReq) catch return error.BadData;
@@ -342,13 +342,13 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
 }
 
 const NewRepoPage = Template.PageData("repo-new.html");
-fn newRepo(ctx: *Context) Error!void {
+fn newRepo(ctx: *Verse) Error!void {
     ctx.response.status = .ok;
 
     return error.NotImplemented;
 }
 
-fn treeBlob(ctx: *Context) Error!void {
+fn treeBlob(ctx: *Verse) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     _ = ctx.uri.next();
 
@@ -473,7 +473,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
 
 const BlamePage = Template.PageData("blame.html");
 
-fn blame(ctx: *Context) Error!void {
+fn blame(ctx: *Verse) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
     _ = ctx.uri.next();
@@ -580,7 +580,7 @@ fn excludedExt(name: []const u8) bool {
 
 const BlobPage = Template.PageData("blob.html");
 
-fn blob(ctx: *Context, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
+fn blob(ctx: *Verse, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var blb: Git.Blob = undefined;
 
     var files = pfiles;
@@ -722,13 +722,13 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
 
 const TreePage = Template.PageData("tree.html");
 
-fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
+fn tree(ctx: *Verse, repo: *Git.Repo, files: *Git.Tree) Error!void {
     //const head = if (repo.head) |h| switch (h) {
     //    .sha => |s| s.hex[0..],
     //    .branch => |b| b.name,
     //    else => "unknown",
     //} else "unknown";
-    //ctx.putContext("Branch.default", .{ .slice = head }) catch return error.Unknown;
+    //ctx.putVerse("Branch.default", .{ .slice = head }) catch return error.Unknown;
 
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     ctx.uri.reset();
@@ -820,7 +820,7 @@ fn tree(ctx: *Context, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
 const TagPage = Template.PageData("repo-tags.html");
 
-fn tagsList(ctx: *Context) Error!void {
+fn tagsList(ctx: *Verse) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();

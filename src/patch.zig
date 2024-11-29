@@ -13,7 +13,7 @@ const Bleach = @import("bleach.zig");
 const Response = @import("response.zig");
 const HTML = @import("html.zig");
 const DOM = @import("dom.zig");
-const Context = @import("template.zig").Context;
+const Verse = @import("template.zig").Verse;
 
 pub const Patch = @This();
 
@@ -304,11 +304,11 @@ pub fn parse(self: *Patch, a: Allocator) !void {
     }
 }
 
-pub fn diffsContextSlice(self: Patch, a: Allocator) ![]Context {
+pub fn diffsVerseSlice(self: Patch, a: Allocator) ![]Verse {
     if (self.diffs) |diffs| {
-        const diffs_ctx: []Context = try a.alloc(Context, diffs.len);
+        const diffs_ctx: []Verse = try a.alloc(Verse, diffs.len);
         for (diffs, diffs_ctx) |diff, *dctx| {
-            var ctx: Context = Context.init(a);
+            var ctx: Verse = Verse.init(a);
             switch (diff.header.change) {
                 .none => try ctx.putSlice("Filename", diff.filename orelse "Malformed Patch"),
                 .newfile => {

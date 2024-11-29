@@ -18,7 +18,7 @@ const Repos = @import("../repos.zig");
 
 const Git = @import("../../git.zig");
 const Bleach = @import("../../bleach.zig");
-const Context = @import("../../context.zig");
+const Verse = @import("../../verse.zig");
 const DOM = @import("../../dom.zig");
 const HTML = @import("../../html.zig");
 const Humanize = @import("../../humanize.zig");
@@ -51,7 +51,7 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Context) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.Callable {
     if (!eql(u8, "diffs", ctx.uri.next() orelse return error.Unrouteable))
         return error.Unrouteable;
     const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
@@ -79,7 +79,7 @@ const DiffCreateChangeReq = struct {
     desc: []const u8,
 };
 
-fn new(ctx: *Context) Error!void {
+fn new(ctx: *Verse) Error!void {
     var network: ?S.Network = null;
     var patchuri: ?S.PatchUri = .{};
     var title: ?[]const u8 = null;
@@ -158,7 +158,7 @@ const DiffCreateReq = struct {
     //},
 };
 
-fn createDiff(ctx: *Context) Error!void {
+fn createDiff(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (ctx.reqdata.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.BadData;
@@ -206,7 +206,7 @@ fn createDiff(ctx: *Context) Error!void {
     return try new(ctx);
 }
 
-fn newComment(ctx: *Context) Error!void {
+fn newComment(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.reqdata.post) |post| {
@@ -232,7 +232,7 @@ fn newComment(ctx: *Context) Error!void {
     return error.Unknown;
 }
 
-pub fn directReply(ctx: *Context) Error!void {
+pub fn directReply(ctx: *Verse) Error!void {
     _ = ctx.uri.next().?;
     _ = ctx.uri.next().?;
     std.debug.print("{s}\n", .{ctx.uri.next().?});
@@ -630,7 +630,7 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
 
 const DiffViewPage = Template.PageData("delta-diff.html");
 
-fn view(ctx: *Context) Error!void {
+fn view(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
@@ -759,7 +759,7 @@ fn view(ctx: *Context) Error!void {
 }
 
 const DeltaListPage = Template.PageData("delta-list.html");
-fn list(ctx: *Context) Error!void {
+fn list(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;

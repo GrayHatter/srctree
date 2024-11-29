@@ -3,7 +3,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Server = std.http.Server;
 
-const Context = @import("context.zig");
+const Verse = @import("verse.zig");
 const Request = @import("request.zig");
 const Response = @import("response.zig");
 const Router = @import("routes.zig");
@@ -44,7 +44,7 @@ pub fn serve(a: Allocator, srv: *Server) !void {
             var request = try Request.init(alloc, http_resp);
             const response = Response.init(alloc, &request);
 
-            var ctx = try Context.init(
+            var ctx = try Verse.init(
                 alloc,
                 request,
                 response,

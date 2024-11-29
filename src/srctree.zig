@@ -1,5 +1,5 @@
 const Routes = @import("routes.zig");
-const Context = @import("context.zig");
+const Verse = @import("verse.zig");
 const Template = @import("template.zig");
 const Api = @import("api.zig");
 //const Types = @import("types.zig");
@@ -39,7 +39,7 @@ pub const routes = [_]Match{
 
 const E404Page = Template.PageData("4XX.html");
 
-fn notFound(ctx: *Context) Routes.Error!void {
+fn notFound(ctx: *Verse) Routes.Error!void {
     // TODO fix this
     @import("std").debug.print("404 for route\n", .{});
     ctx.response.status = .not_found;
@@ -47,7 +47,7 @@ fn notFound(ctx: *Context) Routes.Error!void {
     ctx.sendPage(&page) catch unreachable;
 }
 
-pub fn router(ctx: *Context) Callable {
+pub fn router(ctx: *Verse) Callable {
     //    var i_count: usize = 0;
     //    var itr = Types.Delta.iterator(ctx.alloc, "");
     //    while (itr.next()) |it| {
@@ -59,7 +59,7 @@ pub fn router(ctx: *Context) Callable {
 }
 
 // TODO replace with better API
-pub fn build(ctx: *Context, call: Callable) Routes.Error!void {
+pub fn build(ctx: *Verse, call: Callable) Routes.Error!void {
     return call(ctx) catch |err| switch (err) {
         error.InvalidURI,
         error.Unrouteable,

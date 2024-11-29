@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
 
-const Context = @import("../context.zig");
+const Verse = @import("../verse.zig");
 const Delta = @import("../types.zig").Delta;
 const Template = @import("../template.zig");
 const Route = @import("../routes.zig");
@@ -19,7 +19,7 @@ pub const routes = [_]Route.Match{
     ROUTE("inbox", inbox),
 };
 
-pub fn router(ctx: *Context) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.Callable {
     return Route.router(ctx, &routes);
 }
 
@@ -27,11 +27,11 @@ const SearchReq = struct {
     q: ?[]const u8,
 };
 
-fn inbox(ctx: *Context) Error!void {
+fn inbox(ctx: *Verse) Error!void {
     return custom(ctx, "owner:me");
 }
 
-fn search(ctx: *Context) Error!void {
+fn search(ctx: *Verse) Error!void {
     const udata = ctx.reqdata.query.validate(SearchReq) catch return error.BadData;
 
     const query_str = udata.q orelse "null";
@@ -42,7 +42,7 @@ fn search(ctx: *Context) Error!void {
 
 const DeltaListPage = Template.PageData("delta-list.html");
 
-fn custom(ctx: *Context, search_str: []const u8) Error!void {
+fn custom(ctx: *Verse, search_str: []const u8) Error!void {
     var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
     var itr = splitScalar(u8, search_str, ' ');

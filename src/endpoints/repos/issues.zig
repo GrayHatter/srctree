@@ -7,7 +7,7 @@ const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 const Route = @import("../../routes.zig");
 const DOM = @import("../../dom.zig");
 const HTML = @import("../../html.zig");
-const Context = @import("../../context.zig");
+const Verse = @import("../../verse.zig");
 const Template = @import("../../template.zig");
 const Error = Route.Error;
 const UriIter = Route.Error;
@@ -37,7 +37,7 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Context) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.Callable {
     std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
     const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
 
@@ -50,7 +50,7 @@ pub fn router(ctx: *Context) Error!Route.Callable {
 
 const IssueNewPage = Template.PageData("issue-new.html");
 
-fn new(ctx: *Context) Error!void {
+fn new(ctx: *Verse) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -67,7 +67,7 @@ const IssueCreate = struct {
     desc: []const u8,
 };
 
-fn newPost(ctx: *Context) Error!void {
+fn newPost(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.reqdata.post) |post| {
@@ -93,7 +93,7 @@ fn newPost(ctx: *Context) Error!void {
     return ctx.response.redirect(loc, true) catch unreachable;
 }
 
-fn newComment(ctx: *Context) Error!void {
+fn newComment(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (ctx.reqdata.post) |post| {
         var valid = post.validator();
@@ -124,7 +124,7 @@ fn newComment(ctx: *Context) Error!void {
 
 const DeltaIssuePage = Template.PageData("delta-issue.html");
 
-fn view(ctx: *Context) Error!void {
+fn view(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
@@ -179,7 +179,7 @@ fn view(ctx: *Context) Error!void {
 
 const DeltaListHtml = Template.PageData("delta-list.html");
 
-fn list(ctx: *Context) Error!void {
+fn list(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;

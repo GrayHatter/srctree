@@ -2,7 +2,7 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const Context = @import("../context.zig");
+const Verse = @import("../verse.zig");
 const Route = @import("../routes.zig");
 const HTML = @import("../html.zig");
 const DOM = @import("../dom.zig");
@@ -39,7 +39,7 @@ const AdminPage = Template.PageData("admin.html");
 /// TODO fix me
 const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
-fn default(ctx: *Context) Error!void {
+fn default(ctx: *Verse) Error!void {
     try ctx.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
@@ -69,7 +69,7 @@ fn default(ctx: *Context) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn cloneUpstream(ctx: *Context) Error!void {
+fn cloneUpstream(ctx: *Verse) Error!void {
     try ctx.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
@@ -104,7 +104,7 @@ const CloneUpstreamReq = struct {
     repo_uri: []const u8,
 };
 
-fn postCloneUpstream(ctx: *Context) Error!void {
+fn postCloneUpstream(ctx: *Verse) Error!void {
     try ctx.request.auth.validOrError();
 
     const udata = ctx.reqdata.post.?.validate(CloneUpstreamReq) catch return error.BadData;
@@ -151,7 +151,7 @@ fn postCloneUpstream(ctx: *Context) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn postNewRepo(ctx: *Context) Error!void {
+fn postNewRepo(ctx: *Verse) Error!void {
     try ctx.request.auth.validOrError();
     // TODO ini repo dir
     var valid = if (ctx.reqdata.post) |p|
@@ -205,7 +205,7 @@ fn postNewRepo(ctx: *Context) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn newRepo(ctx: *Context) Error!void {
+fn newRepo(ctx: *Verse) Error!void {
     try ctx.request.auth.validOrError();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
@@ -233,7 +233,7 @@ fn newRepo(ctx: *Context) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn view(ctx: *Context) Error!void {
+fn view(ctx: *Verse) Error!void {
     try ctx.request.auth.validOrError();
     if (ctx.reqdata.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});

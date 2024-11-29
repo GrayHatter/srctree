@@ -14,7 +14,7 @@ const endpoints = [_]Routes.Match{
     ROUTE("tags", repoTags),
 };
 
-pub fn router(ctx: *API.Context) Routes.Error!Routes.Callable {
+pub fn router(ctx: *API.Verse) Routes.Error!Routes.Callable {
     const uri_api = ctx.uri.next() orelse return repo;
     if (!std.mem.eql(u8, uri_api, "repo")) return repo;
 
@@ -45,7 +45,7 @@ fn openRepo(a: Allocator, raw_name: []const u8) !Git.Repo {
     return gitrepo;
 }
 
-pub fn repo(ctx: *API.Context) API.Routes.Error!void {
+pub fn repo(ctx: *API.Verse) API.Routes.Error!void {
     const req = try ctx.reqdata.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
@@ -84,7 +84,7 @@ pub const RepoBranches = struct {
     branches: []const Branch,
 };
 
-pub fn repoBranches(ctx: *API.Context) API.Routes.Error!void {
+pub fn repoBranches(ctx: *API.Verse) API.Routes.Error!void {
     const req = try ctx.reqdata.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
@@ -121,7 +121,7 @@ pub const RepoTags = struct {
     tags: []const []const u8,
 };
 
-pub fn repoTags(ctx: *API.Context) API.Routes.Error!void {
+pub fn repoTags(ctx: *API.Verse) API.Routes.Error!void {
     const req = try ctx.reqdata.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {

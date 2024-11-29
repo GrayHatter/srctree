@@ -1,6 +1,6 @@
 const std = @import("std");
 pub const Template = @import("../template.zig");
-const Context = @import("../context.zig");
+const Verse = @import("../verse.zig");
 const Route = @import("../routes.zig");
 const RequestData = @import("../request_data.zig").RequestData;
 
@@ -11,7 +11,7 @@ pub const endpoints = [_]Route.Match{
 
 const SettingsPage = Template.PageData("settings.html");
 
-fn default(ctx: *Context) Route.Error!void {
+fn default(ctx: *Verse) Route.Error!void {
     try ctx.request.auth.validOrError();
 
     var blocks = try ctx.alloc.alloc(Template.Structs.ConfigBlocks, ctx.cfg.?.ns.len);
@@ -42,7 +42,7 @@ const SettingsReq = struct {
     block_text: [][]const u8,
 };
 
-fn post(ctx: *Context) Route.Error!void {
+fn post(ctx: *Verse) Route.Error!void {
     try ctx.request.auth.validOrError();
 
     const udata = RequestData(SettingsReq).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;

@@ -227,33 +227,6 @@ pub fn countComments(self: Delta) struct { count: usize, new: bool } {
     return .{ .count = 0, .new = false };
 }
 
-pub fn toContext(self: Delta, a: Allocator) !Template.Context {
-    return Template.Context.initBuildable(a, self);
-}
-
-pub fn builder(self: Delta) Template.Context.Builder(Delta) {
-    return Template.Context.Builder(Delta).init(self);
-}
-
-pub fn contextBuilder(self: Delta, a: Allocator, ctx: *Template.Context) !void {
-    try ctx.putSlice("Title", try Bleach.sanitizeAlloc(a, self.title, .{}));
-    try ctx.putSlice("Desc", try Bleach.sanitizeAlloc(a, self.message, .{}));
-
-    try ctx.putSlice("Index", try std.fmt.allocPrint(a, "0x{x}", .{self.index}));
-    try ctx.putSlice("TitleUri", try std.fmt.allocPrint(a, "/repo/{s}/{s}/{x}", .{
-        self.repo,
-        if (self.attach == .issue) "issues" else "diffs",
-        self.index,
-    }));
-
-    if (self.thread) |thread| if (thread.getMessages()) |messages| {
-        try ctx.putSlice(
-            "CommentsIcon",
-            try std.fmt.allocPrint(a, "<span class=\"icon\">\xee\xa0\x9c {}</span>", .{messages.len}),
-        );
-    } else |_| {};
-}
-
 pub fn raze(_: Delta, _: std.mem.Allocator) void {
     // TODO implement raze
 }
