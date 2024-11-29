@@ -130,11 +130,12 @@ pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
 
     const start: usize = if (par_sha[0] > 0) self.fanOut(par_sha[0] - 1) else 0;
 
-    const objnames = self.objnames[start * 20 ..][0 .. count * 20];
+    const objnames = @as([*][20]u8, @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]))[0..count];
+
     for (0..count) |i| {
-        const objname = objnames[i * 20 ..][0..20];
-        if (std.mem.eql(u8, par_sha, objname[0..par_sha.len])) {
-            if (objnames.len > i * 20 + 20 and eql(u8, par_sha, objnames[i * 20 + 20 ..][0..par_sha.len])) {
+        const objname = objnames[i];
+        if (eql(u8, par_sha, objname[0..par_sha.len])) {
+            if (objnames.len > i + 1 and eql(u8, par_sha, objnames[i + 1][0..par_sha.len])) {
                 return error.AmbiguousRef;
             }
             return @byteSwap(self.offsets[i + start]);
