@@ -1,6 +1,6 @@
 const std = @import("std");
-
 const Allocator = std.mem.Allocator;
+const POLL = std.posix.POLL;
 
 const Verse = @import("verse");
 const Response = Verse.Response;
@@ -13,8 +13,6 @@ const Template = Verse.Template;
 const Route = Verse.Router;
 const Error = Route.Error;
 const UriIter = Route.UriIter;
-
-const POLL = std.posix.POLL;
 
 const git = @import("git.zig");
 const Ini = @import("ini.zig");
@@ -115,7 +113,7 @@ fn gitUploadPack(ctx: *Verse) Error!void {
 fn __objects(ctx: *Verse) Error!void {
     std.debug.print("gitweb objects\n", .{});
 
-    const rd = @import("../../REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable.zig");
+    const rd = @import("endpoints/repos.zig").RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
     var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
@@ -149,7 +147,7 @@ fn __objects(ctx: *Verse) Error!void {
 fn __info(ctx: *Verse) Error!void {
     std.debug.print("gitweb info\n", .{});
 
-    const rd = @import("../../REPO.RouteData.make(ctx.uri) orelse return error.Unrouteable.zig");
+    const rd = @import("endpoints/repos.zig").RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
     const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
