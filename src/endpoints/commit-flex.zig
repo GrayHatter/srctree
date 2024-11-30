@@ -5,11 +5,12 @@ const allocPrint = std.fmt.allocPrint;
 const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
+const Ini = @import("../ini.zig");
 
 const Verse = @import("verse");
-const DOM = Verse.DOM;
-const HTML = Verse.HTML;
 const Template = Verse.Template;
+const DOM = Template.DOM;
+const HTML = Template.HTML;
 const S = Template.Structs;
 
 const Route = Verse.Router;
@@ -221,7 +222,7 @@ pub fn commitFlex(ctx: *Verse) Error!void {
     if (user) |u| {
         email = u.value;
     } else {
-        if (ctx.cfg) |ini| {
+        if (Ini.global_config) |ini| {
             if (ini.get("owner")) |ns| {
                 if (ns.get("email")) |c_email| {
                     email = c_email;

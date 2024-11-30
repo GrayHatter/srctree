@@ -178,6 +178,8 @@ pub fn fromFile(a: Allocator, file: std.fs.File) !Config {
     return try init(a, data);
 }
 
+pub var global_config: ?*const Config = null;
+
 test "default" {
     const a = std.testing.allocator;
     const expected = Config{

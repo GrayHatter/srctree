@@ -10,18 +10,15 @@ const elm = HTML.element;
 const DOM = Verse.DOM;
 const Template = Verse.Template;
 
-const Route = Verse.Router;
-const Error = Route.Error;
-const UriIter = Route.UriIter;
+const Router = Verse.Router;
+const Error = Router.Error;
+const UriIter = Router.UriIter;
 
 const git = @import("git.zig");
-const Ini = @import("ini.zig");
-const Humanize = @import("humanize.zig");
-const Bleach = @import("bleach.zig");
 
-pub const endpoints = [_]Route.Match{
+pub const endpoints = [_]Router.Match{
     .{ .name = "objects", .match = .{ .build = gitUploadPack } },
-    .{ .name = "info", .match = .{ .simple = &[_]Route.Match{
+    .{ .name = "info", .match = .{ .simple = &[_]Router.Match{
         .{ .name = "", .match = .{ .build = gitUploadPack } },
         .{ .name = "refs", .match = .{ .build = gitUploadPack } },
     } } },
@@ -29,9 +26,9 @@ pub const endpoints = [_]Route.Match{
     .{ .name = "git-upload-pack", .methods = .{ .POST = true }, .match = .{ .build = gitUploadPack } },
 };
 
-pub fn router(ctx: *Verse) Error!Route.BuildFn {
+pub fn router(ctx: *Verse) Error!Router.BuildFn {
     std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
-    return Route.router(ctx, &endpoints);
+    return Router.router(ctx, &endpoints);
 }
 
 fn gitUploadPack(ctx: *Verse) Error!void {

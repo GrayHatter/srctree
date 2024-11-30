@@ -1,8 +1,10 @@
 const std = @import("std");
 const Verse = @import("verse");
 const Template = Verse.Template;
+const S = Verse.Template.Structs;
 const Router = Verse.Router;
 const RequestData = Verse.RequestData.RequestData;
+const Ini = @import("../ini.zig");
 
 pub const endpoints = [_]Router.Match{
     Router.GET("", default),
@@ -14,17 +16,21 @@ const SettingsPage = Template.PageData("settings.html");
 fn default(ctx: *Verse) Router.Error!void {
     try ctx.auth.validOrError();
 
-    var blocks = try ctx.alloc.alloc(Template.Structs.ConfigBlocks, ctx.cfg.?.ns.len);
-    for (ctx.cfg.?.ns, 0..) |ns, i| {
-        blocks[i] = .{
-            .config_name = ns.name,
-            .config_text = ns.block,
-            .count = try std.fmt.allocPrint(
-                ctx.alloc,
-                "{}",
-                .{std.mem.count(u8, ns.block, "\n") + 2},
-            ),
-        };
+    var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
+
+    if (Ini.global_config) |cfg| {
+        blocks = try ctx.alloc.alloc(Template.Structs.ConfigBlocks, cfg.ns.len);
+        for (cfg.ns, 0..) |ns, i| {
+            blocks[i] = .{
+                .config_name = ns.name,
+                .config_text = ns.block,
+                .count = try std.fmt.allocPrint(
+                    ctx.alloc,
+                    "{}",
+                    .{std.mem.count(u8, ns.block, "\n") + 2},
+                ),
+            };
+        }
     }
 
     const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};

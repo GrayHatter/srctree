@@ -10,11 +10,7 @@ const Database = @import("database.zig");
 const Route = Verse.Router;
 const Repos = @import("repos.zig");
 
-// TODO FIXME revert to internal config instead of Verse version
-// but I don't want to lose track of origin, and that's where the
-// primary version (read: usage) lives currently.
-//const Ini = @import("ini.zig");
-const Ini = Verse.Ini;
+const Ini = @import("ini.zig");
 const Cache = @import("cache.zig");
 
 const Srctree = @import("srctree.zig");
@@ -103,6 +99,7 @@ pub fn main() !void {
         //error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
+    Ini.global_config = &config;
 
     defer config.raze();
 

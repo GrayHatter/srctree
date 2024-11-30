@@ -4,9 +4,9 @@ const Allocator = std.mem.Allocator;
 
 const Verse = @import("verse");
 const Route = Verse.Router;
-const HTML = Verse.HTML;
-const DOM = Verse.DOM;
 const Template = Verse.Template;
+const HTML = Template.HTML;
+const DOM = Template.DOM;
 
 const Error = Route.Error;
 const UriIter = Route.UriIter;

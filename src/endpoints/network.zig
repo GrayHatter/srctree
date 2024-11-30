@@ -3,8 +3,8 @@ const allocPrint = std.fmt.allocPrint;
 
 const Verse = @import("verse");
 const Template = Verse.Template;
-const DOM = Verse.DOM;
-const HTML = Verse.HTML;
+const DOM = Template.DOM;
+const HTML = Template.HTML;
 
 const Route = Verse.Router;
 const Error = Route.Error;
