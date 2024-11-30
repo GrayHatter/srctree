@@ -126,7 +126,7 @@ pub fn main() !void {
         a,
         runmode,
         .{ .routefn = Srctree.router, .buildfn = Srctree.build },
-        .{ .file = "./srctree.sock" },
+        .{ .zwsgi = .{ .file = "./srctree.sock" } },
     );
 
     server.serve() catch {

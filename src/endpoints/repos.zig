@@ -138,24 +138,6 @@ pub fn router(ctx: *Verse) Error!Route.BuildFn {
             dlt.raze(ctx.alloc);
         }
 
-        //const issueurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name});
-        //const issuecnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{i_count});
-        //const diffcnt = try std.fmt.allocPrint(ctx.alloc, "{}", .{d_count});
-        //const diffurl = try std.fmt.allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name});
-        //const header_nav = try ctx.alloc.dupe(Template.Verse, &[2]Template.Verse{
-        //    Template.Verse.initWith(ctx.alloc, &[3]Template.Verse.Pair{
-        //        .{ .name = "Name", .value = "issues" },
-        //        .{ .name = "Url", .value = issueurl },
-        //        .{ .name = "Extra", .value = issuecnt },
-        //    }) catch return error.OutOfMemory,
-        //    Template.Verse.initWith(ctx.alloc, &[3]Template.Verse.Pair{
-        //        .{ .name = "Name", .value = "diffs" },
-        //        .{ .name = "Url", .value = diffurl },
-        //        .{ .name = "Extra", .value = diffcnt },
-        //    }) catch return error.OutOfMemory,
-        //});
-        //try ctx.putVerse("NavButtons", .{ .block = header_nav });
-
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();
