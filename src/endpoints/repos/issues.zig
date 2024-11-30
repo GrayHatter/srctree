@@ -37,7 +37,7 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Verse) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.BuildFn {
     std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
     const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
 

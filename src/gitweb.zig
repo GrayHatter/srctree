@@ -22,16 +22,16 @@ const Humanize = @import("humanize.zig");
 const Bleach = @import("bleach.zig");
 
 pub const endpoints = [_]Route.Match{
-    .{ .name = "objects", .match = .{ .call = gitUploadPack } },
+    .{ .name = "objects", .match = .{ .build = gitUploadPack } },
     .{ .name = "info", .match = .{ .simple = &[_]Route.Match{
-        .{ .name = "", .match = .{ .call = gitUploadPack } },
-        .{ .name = "refs", .match = .{ .call = gitUploadPack } },
+        .{ .name = "", .match = .{ .build = gitUploadPack } },
+        .{ .name = "refs", .match = .{ .build = gitUploadPack } },
     } } },
 
-    .{ .name = "git-upload-pack", .methods = .{ .POST = true }, .match = .{ .call = gitUploadPack } },
+    .{ .name = "git-upload-pack", .methods = .{ .POST = true }, .match = .{ .build = gitUploadPack } },
 };
 
-pub fn router(ctx: *Verse) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.BuildFn {
     std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
     return Route.router(ctx, &endpoints);
 }

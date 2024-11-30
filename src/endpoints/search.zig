@@ -19,7 +19,7 @@ pub const routes = [_]Routes.Match{
     ROUTE("inbox", inbox),
 };
 
-pub fn router(ctx: *Verse) Error!Routes.Callable {
+pub fn router(ctx: *Verse) Error!Routes.BuildFn {
     return Routes.router(ctx, &routes);
 }
 

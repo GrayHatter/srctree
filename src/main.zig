@@ -1,15 +1,14 @@
 const std = @import("std");
-const Verse = @import("verse");
-
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
-const Server = std.http.Server;
+const Verse = @import("verse");
+const print = std.debug.print;
+const Server = Verse.Server;
 
 const Database = @import("database.zig");
 //const HTML = Verse.HTML;
 const Route = Verse.Router;
 const Repos = @import("repos.zig");
-const zWSGI = Verse.zWSGI;
 
 // TODO FIXME revert to internal config instead of Verse version
 // but I don't want to lose track of origin, and that's where the
@@ -25,11 +24,11 @@ test "main" {
     std.testing.refAllDecls(@import("git.zig"));
 }
 
-// TODO make thread safe
-const print = std.debug.print;
+pub const std_options = .{
+    .log_level = .info,
+};
 
 var arg0: []const u8 = undefined;
-
 fn usage(long: bool) noreturn {
     print(
         \\{s} [type]
@@ -67,14 +66,12 @@ const Options = struct {
     source_path: []const u8,
 };
 
-// TODO delete me
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    var runmode: zWSGI.RunMode = .unix;
+    var runmode: Verse.Server.RunMode = .unix;
 
     var args = std.process.args();
     arg0 = args.next() orelse "srctree";
@@ -128,15 +125,14 @@ pub fn main() !void {
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
     defer thread.join();
 
-    var zwsgi: zWSGI = .{
-        .alloc = a,
-        .config = config,
-        .routefn = Srctree.router,
-        .buildfn = Srctree.build,
-        .runmode = runmode,
-    };
+    var server = try Verse.Server.init(
+        a,
+        runmode,
+        .{ .routefn = Srctree.router, .buildfn = Srctree.build },
+        .{ .file = "./srctree.sock" },
+    );
 
-    zwsgi.serve() catch {
+    server.serve() catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
         }

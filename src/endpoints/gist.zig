@@ -9,15 +9,15 @@ const Allocator = std.mem.Allocator;
 
 const Gist = @import("../types.zig").Gist;
 
-const Routes = Verse.Router;
-const Error = Routes.Error;
-const POST = Routes.POST;
-const GET = Routes.GET;
+const Router = Verse.Router;
+const Error = Router.Error;
+const POST = Router.POST;
+const GET = Router.GET;
 
 const GistPage = Template.PageData("gist.html");
 const GistNewPage = Template.PageData("gist_new.html");
 
-const endpoints = [_]Routes.Match{
+const endpoints = [_]Router.Match{
     GET("", new),
     GET("gist", view),
     GET("new", new),
@@ -25,7 +25,7 @@ const endpoints = [_]Routes.Match{
     POST("post", post),
 };
 
-pub fn router(ctx: *Verse) Error!Routes.Callable {
+pub fn router(ctx: *Verse) Error!Router.BuildFn {
     if (!std.mem.eql(u8, ctx.uri.next() orelse "", "gist")) return error.Unrouteable;
 
     if (ctx.uri.peek()) |peek| {
@@ -41,7 +41,7 @@ pub fn router(ctx: *Verse) Error!Routes.Callable {
         }
     } else return new;
 
-    return Routes.router(ctx, &endpoints);
+    return Router.router(ctx, &endpoints);
 }
 
 const GistPost = struct {

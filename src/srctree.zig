@@ -1,14 +1,14 @@
 const Verse = @import("verse");
-const Routes = Verse.Router;
+const Router = Verse.Router;
 const Template = Verse.Template;
 const Api = @import("api.zig");
 //const Types = @import("types.zig");
 
-const ROUTE = Routes.ROUTE;
-const GET = Routes.GET;
-const STATIC = Routes.STATIC;
-const Match = Routes.Match;
-const Callable = Routes.Callable;
+const ROUTE = Router.ROUTE;
+const GET = Router.GET;
+const STATIC = Router.STATIC;
+const Match = Router.Match;
+const BuildFn = Router.BuildFn;
 
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
@@ -39,7 +39,7 @@ pub const routes = [_]Match{
 
 const E404Page = Template.PageData("4XX.html");
 
-fn notFound(ctx: *Verse) Routes.Error!void {
+fn notFound(ctx: *Verse) Router.Error!void {
     // TODO fix this
     @import("std").debug.print("404 for route\n", .{});
     ctx.response.status = .not_found;
@@ -47,7 +47,7 @@ fn notFound(ctx: *Verse) Routes.Error!void {
     ctx.sendPage(&page) catch unreachable;
 }
 
-pub fn router(ctx: *Verse) Callable {
+pub fn router(ctx: *Verse) Router.Error!BuildFn {
     //    var i_count: usize = 0;
     //    var itr = Types.Delta.iterator(ctx.alloc, "");
     //    while (itr.next()) |it| {
@@ -55,11 +55,11 @@ pub fn router(ctx: *Verse) Callable {
     //        it.raze(ctx.alloc);
     //    }
 
-    return Routes.router(ctx, &routes);
+    return Router.router(ctx, &routes);
 }
 
 // TODO replace with better API
-pub fn build(ctx: *Verse, call: Callable) Routes.Error!void {
+pub fn build(ctx: *Verse, call: BuildFn) Router.Error!void {
     return call(ctx) catch |err| switch (err) {
         error.InvalidURI,
         error.Unrouteable,

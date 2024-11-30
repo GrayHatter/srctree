@@ -34,37 +34,37 @@ const APIRouteData = struct {
     }
 };
 
-pub fn router(ctx: *Verse) Router.Error!Router.Callable {
-    const uri_api = ctx.uri.next() orelse return heartbeat;
+pub fn router(vrs: *Verse) Router.Error!Router.BuildFn {
+    const uri_api = vrs.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
-    const rd = try APIRouteData.init(ctx.alloc);
-    ctx.route_ctx = rd;
+    const rd = try APIRouteData.init(vrs.alloc);
+    vrs.route_ctx = rd;
 
-    return Router.router(ctx, &endpoints);
+    return Router.router(vrs, &endpoints);
 }
 
 const Diff = struct {
     sha: []const u8,
 };
 
-fn diff(ctx: *Verse) Router.Error!void {
-    return try ctx.sendJSON([0]Diff{});
+fn diff(vrs: *Verse) Router.Error!void {
+    return try vrs.sendJSON([0]Diff{});
 }
 
 const HeartBeat = struct {
     nice: usize = 0,
 };
 
-fn heartbeat(ctx: *Verse) Router.Error!void {
-    return try ctx.sendJSON(HeartBeat{ .nice = 69 });
+fn heartbeat(vrs: *Verse) Router.Error!void {
+    return try vrs.sendJSON(HeartBeat{ .nice = 69 });
 }
 
 const Issue = struct {
     index: usize,
 };
 
-fn issue(ctx: *Verse) Router.Error!void {
-    return try ctx.sendJSON([0]Issue{});
+fn issue(vrs: *Verse) Router.Error!void {
+    return try vrs.sendJSON([0]Issue{});
 }
 
 /// Likely to be renamed
@@ -82,16 +82,16 @@ const Network = struct {
     networks: []RemotePeer,
 };
 
-fn network(ctx: *Verse) Router.Error!void {
-    return try ctx.sendJSON(Network{ .networks = [0].{} });
+fn network(vrs: *Verse) Router.Error!void {
+    return try vrs.sendJSON(Network{ .networks = [0].{} });
 }
 
 const Patch = struct {
     patch: []const u8,
 };
 
-fn patch(ctx: *Verse) Router.Error!void {
-    return try ctx.sendJSON(Patch{ .patch = [0].{} });
+fn patch(vrs: *Verse) Router.Error!void {
+    return try vrs.sendJSON(Patch{ .patch = [0].{} });
 }
 
 const Flex = struct {
@@ -102,8 +102,8 @@ const Flex = struct {
     };
 };
 
-fn flex(ctx: *Verse) Router.Error!void {
-    return try ctx.sendJSON([0]Flex{});
+fn flex(vrs: *Verse) Router.Error!void {
+    return try vrs.sendJSON([0]Flex{});
 }
 
 const User = struct {
@@ -111,6 +111,6 @@ const User = struct {
     email: []const u8,
 };
 
-fn user(ctx: *Verse) Router.Error!void {
-    return try ctx.sendJSON([0]User{});
+fn user(vrs: *Verse) Router.Error!void {
+    return try vrs.sendJSON([0]User{});
 }

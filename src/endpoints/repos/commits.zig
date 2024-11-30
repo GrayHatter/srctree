@@ -45,7 +45,7 @@ const AddComment = struct {
     text: []const u8,
 };
 
-pub fn router(ctx: *Verse) Error!Route.Callable {
+pub fn router(ctx: *Verse) Error!Route.BuildFn {
     const rd = RouteData.make(&ctx.uri) orelse return commitsView;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return viewCommit;

@@ -14,7 +14,7 @@ const endpoints = [_]Router.Match{
     ROUTE("tags", repoTags),
 };
 
-pub fn router(ctx: *API.Verse) Router.Error!Router.Callable {
+pub fn router(ctx: *API.Verse) Router.Error!Router.BuildFn {
     const uri_api = ctx.uri.next() orelse return repo;
     if (!std.mem.eql(u8, uri_api, "repo")) return repo;
 
