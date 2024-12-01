@@ -122,12 +122,10 @@ pub fn main() !void {
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
     defer thread.join();
 
-    var server = try Verse.Server.init(
-        a,
-        runmode,
-        .{ .routefn = Srctree.router, .buildfn = Srctree.build },
-        .{ .zwsgi = .{ .file = "./srctree.sock" } },
-    );
+    var server = try Verse.Server.init(a, runmode, .{
+        .routefn = Srctree.router,
+        .builderfn = Srctree.builder,
+    }, .{ .zwsgi = .{ .file = "./srctree.sock" } });
 
     server.serve() catch {
         if (@errorReturnTrace()) |trace| {

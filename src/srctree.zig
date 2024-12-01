@@ -1,3 +1,4 @@
+const std = @import("std");
 const Verse = @import("verse");
 const Router = Verse.Router;
 const Template = Verse.Template;
@@ -58,12 +59,36 @@ pub fn router(ctx: *Verse) Router.Error!BuildFn {
     return Router.router(ctx, &routes);
 }
 
-// TODO replace with better API
-pub fn build(ctx: *Verse, call: BuildFn) Router.Error!void {
+pub fn builder(ctx: *Verse, call: BuildFn) void {
     return call(ctx) catch |err| switch (err) {
-        error.InvalidURI,
-        error.Unrouteable,
-        => notFound(ctx),
-        else => return err,
+        error.InvalidURI => builder(ctx, notFound), // TODO catch inline
+        error.NetworkCrash => std.debug.print("client disconnect", .{}),
+        error.Unrouteable => {
+            std.debug.print("Unrouteable", .{});
+            if (@errorReturnTrace()) |trace| {
+                std.debug.dumpStackTrace(trace.*);
+            }
+        },
+        error.NotImplemented,
+        error.Unknown,
+        error.OutOfMemory,
+        error.NoSpaceLeft,
+        => {
+            std.debug.print("Unexpected error '{}'", .{err});
+            @panic("not implemented");
+        },
+        error.Abusive,
+        error.Unauthenticated,
+        error.BadData,
+        error.DataMissing,
+        => {
+            std.debug.print("Abusive {} because {}", .{ ctx.request, err });
+            for (ctx.request.raw.zwsgi.vars) |vars| {
+                std.debug.print("Abusive var '{s}' => '''{s}'''", .{ vars.key, vars.val });
+            }
+            if (ctx.reqdata.post) |post_data| {
+                std.debug.print("post data => '''{s}'''", .{post_data.rawpost});
+            }
+        },
     };
 }
