@@ -184,7 +184,7 @@ fn createDiff(ctx: *Verse) Error!void {
                 udata.title,
                 udata.desc,
                 if (ctx.auth.valid())
-                    (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
+                    (ctx.auth.current_user orelse unreachable).username
                 else
                     try allocPrint(ctx.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
             ) catch unreachable;
@@ -221,7 +221,7 @@ fn newComment(ctx: *Verse) Error!void {
 
         var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
         const username = if (ctx.auth.valid())
-            (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
+            (ctx.auth.current_user orelse unreachable).username
         else
             "public";
         var thread = delta.loadThread(ctx.alloc) catch unreachable;
@@ -733,7 +733,7 @@ fn view(ctx: *Verse) Error!void {
     }
 
     const username = if (ctx.auth.valid())
-        (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
+        (ctx.auth.current_user orelse unreachable).username
     else
         "public";
 

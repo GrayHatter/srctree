@@ -14,7 +14,7 @@ pub const endpoints = [_]Router.Match{
 const SettingsPage = Template.PageData("settings.html");
 
 fn default(ctx: *Verse) Router.Error!void {
-    try ctx.auth.validOrError();
+    try ctx.auth.requireValid();
 
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
@@ -49,7 +49,7 @@ const SettingsReq = struct {
 };
 
 fn post(ctx: *Verse) Router.Error!void {
-    try ctx.auth.validOrError();
+    try ctx.auth.requireValid();
 
     const udata = RequestData(SettingsReq).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
 

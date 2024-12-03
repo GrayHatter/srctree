@@ -4,9 +4,9 @@ const Thread = std.Thread;
 const Verse = @import("verse");
 const print = std.debug.print;
 const Server = Verse.Server;
+const log = std.log;
 
 const Database = @import("database.zig");
-//const HTML = Verse.HTML;
 const Route = Verse.Router;
 const Repos = @import("repos.zig");
 
@@ -105,7 +105,7 @@ pub fn main() !void {
 
     if (config.get("owner")) |ns| {
         if (ns.get("email")) |email| {
-            if (false) std.log.info("{s}\n", .{email});
+            log.debug("{s}", .{email});
         }
     }
 
@@ -125,7 +125,7 @@ pub fn main() !void {
     var server = try Verse.Server.init(a, runmode, .{
         .routefn = Srctree.router,
         .builderfn = Srctree.builder,
-    }, .{ .zwsgi = .{ .file = "./srctree.sock" } });
+    }, .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } });
 
     server.serve() catch {
         if (@errorReturnTrace()) |trace| {

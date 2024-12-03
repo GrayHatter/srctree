@@ -77,7 +77,7 @@ fn newPost(ctx: *Verse) Error!void {
             valid.title,
             valid.desc,
             if (ctx.auth.valid())
-                (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
+                (ctx.auth.current_user orelse unreachable).username
             else
                 try allocPrint(ctx.alloc, "remote_address", .{}),
         ) catch unreachable;
@@ -107,7 +107,7 @@ fn newComment(ctx: *Verse) Error!void {
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
         const username = if (ctx.auth.valid())
-            (ctx.auth.currentUser(ctx.alloc) catch unreachable).username
+            (ctx.auth.current_user orelse unreachable).username
         else
             "public";
 
