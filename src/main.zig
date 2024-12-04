@@ -31,8 +31,8 @@ fn usage(long: bool) noreturn {
         \\
         \\ help, usage -h, --help : this message
         \\
-        \\ unix : unix socket [default]
-        \\ http : http server
+        \\ zwsgi : unix socket [default]
+        \\ http  : http server
         \\
         \\ -s [directory] : directory to look for repos
         \\      (not yet implemented)
@@ -67,7 +67,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    var runmode: Verse.Server.RunMode = .unix;
+    var runmode: Verse.Server.RunMode = .zwsgi;
 
     var args = std.process.args();
     arg0 = args.next() orelse "srctree";
@@ -78,8 +78,8 @@ pub fn main() !void {
             std.mem.eql(u8, arg, "usage"))
         {
             usage(!std.mem.eql(u8, arg, "-h"));
-        } else if (std.mem.eql(u8, arg, "unix")) {
-            runmode = .unix;
+        } else if (std.mem.eql(u8, arg, "zwsgi")) {
+            runmode = .zwsgi;
         } else if (std.mem.eql(u8, arg, "http")) {
             runmode = .http;
         } else {
@@ -122,10 +122,10 @@ pub fn main() !void {
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
     defer thread.join();
 
-    var server = try Verse.Server.init(a, runmode, .{
+    var server = try Verse.Server.init(a, .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } }, .{
         .routefn = Srctree.router,
         .builderfn = Srctree.builder,
-    }, .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } });
+    });
 
     server.serve() catch {
         if (@errorReturnTrace()) |trace| {
