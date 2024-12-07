@@ -8,7 +8,6 @@ const eql = std.mem.eql;
 const Verse = @import("verse");
 const DOM = Verse.DOM;
 const HTML = Verse.HTML;
-const Response = Verse.Response;
 const Route = Verse.Router;
 const Template = Verse.Template;
 const RequestData = Verse.RequestData;
@@ -178,7 +177,7 @@ fn commitHtml(ctx: *Verse, sha: []const u8, repo_name: []const u8, repo: Git.Rep
         .patch = Diffs.patchStruct(ctx.alloc, &patch, !inline_html) catch return error.Unknown,
     });
 
-    ctx.response.status = .ok;
+    ctx.status = .ok;
     return ctx.sendPage(&page) catch unreachable;
 }
 
@@ -193,11 +192,10 @@ pub fn commitPatch(ctx: *Verse, sha: []const u8, repo: Git.Repo) Error!void {
         //if (std.mem.indexOf(u8, diff, "diff")) |i| {
         //    diff = diff[i..];
         //}
-        ctx.response.status = .ok;
-        ctx.response.headersAdd("Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
-        ctx.response.start() catch return Error.Unknown;
-        ctx.response.send(diff) catch return Error.Unknown;
-        ctx.response.finish() catch return Error.Unknown;
+        ctx.status = .ok;
+        ctx.headersAdd("Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
+        ctx.quickStart() catch return Error.Unknown;
+        ctx.sendRawSlice(diff) catch return Error.Unknown;
     }
 }
 

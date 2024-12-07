@@ -159,21 +159,17 @@ const DiffCreateReq = struct {
     //},
 };
 
-fn createDiff(ctx: *Verse) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (ctx.reqdata.post) |post| {
+fn createDiff(vrs: *Verse) Error!void {
+    const rd = Repos.RouteData.make(&vrs.uri) orelse return error.Unrouteable;
+    if (vrs.reqdata.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.BadData;
         if (udata.title.len == 0) return error.BadData;
 
         var remote_addr: []const u8 = "unknown";
-        for (ctx.request.headers.items) |head| {
-            if (eql(u8, head.name, "REMOTE_ADDR")) {
-                remote_addr = head.val;
-            }
-        }
+        remote_addr = vrs.request.remote_addr;
 
         if (inNetwork(udata.patch_uri)) {
-            const data = Patch.loadRemote(ctx.alloc, udata.patch_uri) catch unreachable;
+            const data = Patch.loadRemote(vrs.alloc, udata.patch_uri) catch unreachable;
 
             std.debug.print(
                 "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
@@ -183,15 +179,15 @@ fn createDiff(ctx: *Verse) Error!void {
                 rd.name,
                 udata.title,
                 udata.desc,
-                if (ctx.auth.valid())
-                    (ctx.auth.current_user orelse unreachable).username
+                if (vrs.auth.valid())
+                    (vrs.auth.current_user orelse unreachable).username
                 else
-                    try allocPrint(ctx.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
+                    try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
             ) catch unreachable;
             delta.commit() catch unreachable;
             std.debug.print("commit id {x}\n", .{delta.index});
 
-            const filename = allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{
+            const filename = allocPrint(vrs.alloc, "data/patch/{s}.{x}.patch", .{
                 rd.name,
                 delta.index,
             }) catch unreachable;
@@ -200,11 +196,11 @@ fn createDiff(ctx: *Verse) Error!void {
             file.writer().writeAll(data.blob) catch unreachable;
             var buf: [2048]u8 = undefined;
             const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
-            return ctx.response.redirect(loc, true) catch unreachable;
+            return vrs.redirect(loc, true) catch unreachable;
         }
     }
 
-    return try new(ctx);
+    return try new(vrs);
 }
 
 fn newComment(ctx: *Verse) Error!void {
@@ -217,7 +213,7 @@ fn newComment(ctx: *Verse) Error!void {
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta_index });
 
         const msg = try valid.require("comment");
-        if (msg.value.len < 2) return ctx.response.redirect(loc, true) catch unreachable;
+        if (msg.value.len < 2) return ctx.redirect(loc, true) catch unreachable;
 
         var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
         const username = if (ctx.auth.valid())
@@ -228,7 +224,7 @@ fn newComment(ctx: *Verse) Error!void {
         thread.newComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch unreachable;
         // TODO record current revision at comment time
         delta.commit() catch unreachable;
-        return ctx.response.redirect(loc, true) catch unreachable;
+        return ctx.redirect(loc, true) catch unreachable;
     }
     return error.Unknown;
 }

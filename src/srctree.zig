@@ -43,7 +43,7 @@ const E404Page = Template.PageData("4XX.html");
 fn notFound(ctx: *Verse) Router.Error!void {
     // TODO fix this
     @import("std").debug.print("404 for route\n", .{});
-    ctx.response.status = .not_found;
+    ctx.status = .not_found;
     var page = E404Page.init(.{});
     ctx.sendPage(&page) catch unreachable;
 }
@@ -62,7 +62,7 @@ pub fn router(ctx: *Verse) Router.Error!BuildFn {
 pub fn builder(ctx: *Verse, call: BuildFn) void {
     return call(ctx) catch |err| switch (err) {
         error.InvalidURI => builder(ctx, notFound), // TODO catch inline
-        error.NetworkCrash => std.debug.print("client disconnect", .{}),
+        error.BrokenPipe => std.debug.print("client disconnect", .{}),
         error.Unrouteable => {
             std.debug.print("Unrouteable", .{});
             if (@errorReturnTrace()) |trace| {

@@ -86,11 +86,11 @@ fn newPost(ctx: *Verse) Error!void {
         delta.commit() catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
-        return ctx.response.redirect(loc, true) catch unreachable;
+        return ctx.redirect(loc, true) catch unreachable;
     }
 
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
-    return ctx.response.redirect(loc, true) catch unreachable;
+    return ctx.redirect(loc, true) catch unreachable;
 }
 
 fn newComment(ctx: *Verse) Error!void {
@@ -116,7 +116,7 @@ fn newComment(ctx: *Verse) Error!void {
         delta.commit() catch unreachable;
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
-        ctx.response.redirect(loc, true) catch unreachable;
+        ctx.redirect(loc, true) catch unreachable;
         return;
     }
     return error.Unknown;

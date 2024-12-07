@@ -3,7 +3,6 @@ const Allocator = std.mem.Allocator;
 const POLL = std.posix.POLL;
 
 const Verse = @import("verse");
-const Response = Verse.Response;
 const Request = Verse.Request;
 const HTML = Verse.HTML;
 const elm = HTML.element;
@@ -70,7 +69,7 @@ fn gitUploadPack(ctx: *Verse) Error!void {
     child.env_map = &map;
     child.expand_arg0 = .no_expand;
 
-    ctx.response.status = .ok;
+    ctx.status = .ok;
 
     child.spawn() catch unreachable;
 
@@ -96,10 +95,10 @@ fn gitUploadPack(ctx: *Verse) Error!void {
             const amt = std.posix.read(poll_fd[0].fd, buf) catch unreachable;
             if (amt == 0) break;
             if (headers_required) {
-                _ = ctx.response.write("HTTP/1.1 200 OK\r\n") catch unreachable;
+                _ = ctx.sendRawSlice("HTTP/1.1 200 OK\r\n") catch unreachable;
                 headers_required = false;
             }
-            ctx.response.writeAll(buf[0..amt]) catch unreachable;
+            ctx.sendRawSlice(buf[0..amt]) catch unreachable;
         } else if (poll_fd[0].revents & err_mask != 0) {
             break;
         }
@@ -135,10 +134,9 @@ fn __objects(ctx: *Verse) Error!void {
 
     //var data = repo.findBlob(ctx.alloc, &sha) catch unreachable;
 
-    ctx.response.status = .ok;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.write(data) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    ctx.status = .ok;
+    ctx.quickStart() catch return Error.Unknown;
+    ctx.sendRawSlice(data) catch return Error.Unknown;
 }
 
 fn __info(ctx: *Verse) Error!void {
@@ -171,8 +169,8 @@ fn __info(ctx: *Verse) Error!void {
 
     const data = try adata.toOwnedSlice();
 
-    ctx.response.status = .ok;
-    ctx.response.start() catch return Error.Unknown;
-    ctx.response.write(data) catch return Error.Unknown;
-    ctx.response.finish() catch return Error.Unknown;
+    ctx.status = .ok;
+    ctx.start() catch return Error.Unknown;
+    ctx.write(data) catch return Error.Unknown;
+    ctx.finish() catch return Error.Unknown;
 }

@@ -87,7 +87,7 @@ fn post(ctx: *Verse) Error!void {
 
     const hash_str: [64]u8 = Gist.new(username, files) catch return error.Unknown;
 
-    return ctx.response.redirect("/gist/" ++ hash_str, true) catch unreachable;
+    return ctx.redirect("/gist/" ++ hash_str, true) catch unreachable;
 }
 
 fn new(ctx: *Verse) Error!void {

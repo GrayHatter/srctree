@@ -7,7 +7,6 @@ const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 
 const Verse = @import("verse");
-const Response = Verse.Response;
 const Request = Verse.Request;
 const Template = Verse.Template;
 const HTML = Template.HTML;
@@ -325,7 +324,7 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
 
 const NewRepoPage = Template.PageData("repo-new.html");
 fn newRepo(ctx: *Verse) Error!void {
-    ctx.response.status = .ok;
+    ctx.status = .ok;
 
     return error.NotImplemented;
 }
@@ -502,7 +501,7 @@ fn blame(ctx: *Verse) Error!void {
         .blame_lines = wrapped_blames,
     });
 
-    ctx.response.status = .ok;
+    ctx.status = .ok;
     try ctx.sendPage(&page);
 }
 
@@ -601,7 +600,7 @@ fn blob(ctx: *Verse, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     _ = ctx.uri.next();
     const uri_filename = Bleach.Html.sanitizeAlloc(ctx.alloc, ctx.uri.rest()) catch return error.Unknown;
 
-    ctx.response.status = .ok;
+    ctx.status = .ok;
 
     var btns = navButtons(ctx) catch return error.Unknown;
 

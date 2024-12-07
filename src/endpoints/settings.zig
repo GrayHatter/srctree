@@ -57,5 +57,5 @@ fn post(ctx: *Verse) Router.Error!void {
         std.debug.print("block data:\nname '{s}'\ntext '''{s}'''\n", .{ name, text });
     }
 
-    return ctx.response.redirect("/settings", true) catch unreachable;
+    return ctx.redirect("/settings", true) catch unreachable;
 }
