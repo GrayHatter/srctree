@@ -403,10 +403,12 @@ pub fn commitFlex(ctx: *Verse) Error!void {
         });
     }
 
-    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = (ctx.route_data.get(
+            "body_header",
+            *const S.BodyHeaderHtml,
+        ) catch return error.Unknown).*,
         .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
         .flexes = flexes,
         .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),

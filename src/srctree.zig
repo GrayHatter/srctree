@@ -1,4 +1,5 @@
 const std = @import("std");
+const eql = std.mem.eql;
 const Verse = @import("verse");
 const Router = Verse.Router;
 const Template = Verse.Template;
@@ -40,28 +41,30 @@ pub const routes = [_]Match{
 
 const E404Page = Template.PageData("4XX.html");
 
-fn notFound(ctx: *Verse) Router.Error!void {
-    // TODO fix this
-    @import("std").debug.print("404 for route\n", .{});
-    ctx.status = .not_found;
+fn notFound(vrs: *Verse) Router.Error!void {
+    std.debug.print("404 for route\n", .{});
+    vrs.status = .not_found;
     var page = E404Page.init(.{});
-    ctx.sendPage(&page) catch unreachable;
+    vrs.sendPage(&page) catch unreachable;
 }
 
-pub fn router(ctx: *Verse) Router.Error!BuildFn {
+pub fn router(vrs: *Verse) Router.Error!BuildFn {
     //    var i_count: usize = 0;
-    //    var itr = Types.Delta.iterator(ctx.alloc, "");
+    //    var itr = Types.Delta.iterator(vrs.alloc, "");
     //    while (itr.next()) |it| {
     //        i_count += 1;
-    //        it.raze(ctx.alloc);
+    //        it.raze(vrs.alloc);
     //    }
-
-    return Router.router(ctx, &routes);
+    return Router.router(vrs, &routes);
 }
 
-pub fn builder(ctx: *Verse, call: BuildFn) void {
-    return call(ctx) catch |err| switch (err) {
-        error.InvalidURI => builder(ctx, notFound), // TODO catch inline
+pub fn builder(vrs: *Verse, call: BuildFn) void {
+    const bh = vrs.alloc.create(Template.Structs.BodyHeaderHtml) catch unreachable;
+    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    bh.* = .{ .nav = .{ .nav_auth = "Public2", .nav_buttons = &btns } };
+    vrs.route_data.add("body_header", bh) catch {};
+    return call(vrs) catch |err| switch (err) {
+        error.InvalidURI => builder(vrs, notFound), // TODO catch inline
         error.BrokenPipe => std.debug.print("client disconnect", .{}),
         error.Unrouteable => {
             std.debug.print("Unrouteable", .{});
@@ -82,11 +85,11 @@ pub fn builder(ctx: *Verse, call: BuildFn) void {
         error.BadData,
         error.DataMissing,
         => {
-            std.debug.print("Abusive {} because {}", .{ ctx.request, err });
-            for (ctx.request.raw.zwsgi.vars) |vars| {
+            std.debug.print("Abusive {} because {}", .{ vrs.request, err });
+            for (vrs.request.raw.zwsgi.vars) |vars| {
                 std.debug.print("Abusive var '{s}' => '''{s}'''", .{ vars.key, vars.val });
             }
-            if (ctx.reqdata.post) |post_data| {
+            if (vrs.reqdata.post) |post_data| {
                 std.debug.print("post data => '''{s}'''", .{post_data.rawpost});
             }
         },

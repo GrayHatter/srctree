@@ -13,19 +13,19 @@ pub const endpoints = [_]Router.Match{
 
 const SettingsPage = Template.PageData("settings.html");
 
-fn default(ctx: *Verse) Router.Error!void {
-    try ctx.auth.requireValid();
+fn default(vrs: *Verse) Router.Error!void {
+    try vrs.auth.requireValid();
 
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
     if (Ini.global_config) |cfg| {
-        blocks = try ctx.alloc.alloc(Template.Structs.ConfigBlocks, cfg.ns.len);
+        blocks = try vrs.alloc.alloc(Template.Structs.ConfigBlocks, cfg.ns.len);
         for (cfg.ns, 0..) |ns, i| {
             blocks[i] = .{
                 .config_name = ns.name,
                 .config_text = ns.block,
                 .count = try std.fmt.allocPrint(
-                    ctx.alloc,
+                    vrs.alloc,
                     "{}",
                     .{std.mem.count(u8, ns.block, "\n") + 2},
                 ),
@@ -33,14 +33,13 @@ fn default(ctx: *Verse) Router.Error!void {
         }
     }
 
-    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var page = SettingsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = (vrs.route_data.get("body_header", *const S.BodyHeaderHtml) catch return error.Unknown).*,
         .config_blocks = blocks[0..],
     });
 
-    try ctx.sendPage(&page);
+    try vrs.sendPage(&page);
 }
 
 const SettingsReq = struct {
@@ -48,14 +47,14 @@ const SettingsReq = struct {
     block_text: [][]const u8,
 };
 
-fn post(ctx: *Verse) Router.Error!void {
-    try ctx.auth.requireValid();
+fn post(vrs: *Verse) Router.Error!void {
+    try vrs.auth.requireValid();
 
-    const udata = RequestData(SettingsReq).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
+    const udata = RequestData(SettingsReq).initMap(vrs.alloc, vrs.reqdata) catch return error.BadData;
 
     for (udata.block_name, udata.block_text) |name, text| {
         std.debug.print("block data:\nname '{s}'\ntext '''{s}'''\n", .{ name, text });
     }
 
-    return ctx.redirect("/settings", true) catch unreachable;
+    return vrs.redirect("/settings", true) catch unreachable;
 }

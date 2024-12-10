@@ -167,15 +167,14 @@ pub fn init(a: Allocator, data: []const u8) !Config {
 /// I'm not happy with this API. I think I deleted it once already... deleted
 /// twice incoming!
 pub fn initOwned(a: Allocator, data: []u8) !Config {
-    var c =
-        try init(a, data);
+    var c = try init(a, data);
     c.owned = data;
     return c;
 }
 
 pub fn fromFile(a: Allocator, file: std.fs.File) !Config {
     const data = try file.readToEndAlloc(a, 1 <<| 18);
-    return try init(a, data);
+    return try initOwned(a, data);
 }
 
 pub var global_config: ?*const Config = null;

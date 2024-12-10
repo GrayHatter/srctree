@@ -133,4 +133,5 @@ pub fn main() !void {
         }
         std.posix.exit(1);
     };
+    agent_config.running = false;
 }

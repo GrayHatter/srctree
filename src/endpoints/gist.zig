@@ -3,6 +3,7 @@ const allocPrint = std.fmt.allocPrint;
 
 const Verse = @import("verse");
 const Template = Verse.Template;
+const S = Template.Structs;
 const RequestData = Verse.RequestData.RequestData;
 const Bleach = @import("../bleach.zig");
 const Allocator = std.mem.Allocator;
@@ -95,28 +96,21 @@ fn new(ctx: *Verse) Error!void {
     return edit(ctx, &files);
 }
 
-fn edit(ctx: *Verse, files: []const Template.Structs.GistFiles) Error!void {
-    // TODO move this back into context somehow
-    var btns = [1]Template.Structs.NavButtons{
-        .{ .name = "inbox", .extra = 0, .url = "/inbox" },
-    };
-
+fn edit(vrs: *Verse, files: []const Template.Structs.GistFiles) Error!void {
     var page = GistNewPage.init(.{
         .meta_head = .{
             .open_graph = .{
                 .title = "Create A New Gist",
             },
         },
-        .body_header = .{
-            .nav = .{
-                .nav_auth = undefined,
-                .nav_buttons = &btns,
-            },
-        },
+        .body_header = (vrs.route_data.get(
+            "body_header",
+            *const S.BodyHeaderHtml,
+        ) catch return error.Unknown).*,
         .gist_files = files,
     });
 
-    return ctx.sendPage(&page);
+    return vrs.sendPage(&page);
 }
 
 fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFiles {
@@ -130,16 +124,16 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFi
     return out;
 }
 
-fn view(ctx: *Verse) Error!void {
+fn view(vrs: *Verse) Error!void {
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
-    if (ctx.uri.next()) |hash| {
+    if (vrs.uri.next()) |hash| {
         if (hash.len != 64) return error.BadData;
 
-        const gist = Gist.open(ctx.alloc, hash[0..64].*) catch return error.Unknown;
-        const files = toTemplate(ctx.alloc, gist.files) catch return error.Unknown;
-        const og = try std.fmt.allocPrint(ctx.alloc, "A perfect paste from {}", .{Bleach.Html{ .text = gist.owner }});
+        const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.Unknown;
+        const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
+        const og = try std.fmt.allocPrint(vrs.alloc, "A perfect paste from {}", .{Bleach.Html{ .text = gist.owner }});
         var page = GistPage.init(.{
             .meta_head = .{
                 .open_graph = .{
@@ -156,6 +150,6 @@ fn view(ctx: *Verse) Error!void {
             .gist_files = files,
         });
 
-        return ctx.sendPage(&page);
+        return vrs.sendPage(&page);
     } else return error.Unrouteable;
 }

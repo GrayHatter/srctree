@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const sleep = std.time.sleep;
 
 const Git = @import("git.zig");
 const Ini = @import("ini.zig");
@@ -28,8 +29,9 @@ pub fn containsName(name: []const u8) bool {
 }
 
 pub const AgentConfig = struct {
+    const SECONDS = 1000 * 1000 * 1000;
     running: bool = true,
-    sleep_for: usize = 60 * 60 * 1000 * 1000 * 1000,
+    sleep_for: usize = 60 * 60 * SECONDS,
     g_config: *Ini.Config,
 };
 
@@ -76,9 +78,8 @@ pub fn updateThread(cfg: *AgentConfig) void {
         }
     }
 
-    std.time.sleep(cfg.sleep_for);
-    //std.time.sleep(1000 * 1000 * 1000);
-    while (cfg.running) {
+    sleep(cfg.sleep_for / 60 / 6);
+    while (cfg.running) running: {
         for (names) |rname| {
             const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
             const dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
@@ -134,6 +135,13 @@ pub fn updateThread(cfg: *AgentConfig) void {
                 }
             }
         }
-        std.time.sleep(cfg.sleep_for);
+
+        var qi: usize = 60 * 60;
+        while (qi > 0) {
+            qi -|= 1;
+            sleep(cfg.sleep_for / 60 / 60);
+            if (!cfg.running) break :running;
+        }
     }
+    std.debug.print("update thread done!\n", .{});
 }

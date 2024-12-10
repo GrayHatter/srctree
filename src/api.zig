@@ -38,7 +38,7 @@ pub fn router(vrs: *Verse) Router.Error!Router.BuildFn {
     const uri_api = vrs.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
     const rd = try APIRouteData.init(vrs.alloc);
-    vrs.route_ctx = rd;
+    vrs.route_data.add("api", rd) catch unreachable;
 
     return Router.router(vrs, &endpoints);
 }

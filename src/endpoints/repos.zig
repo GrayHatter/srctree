@@ -290,20 +290,19 @@ fn list(ctx: *Verse) Error!void {
             };
         }
 
-        var btns = [1]Template.Structs.NavButtons{.{
-            .name = "inbox",
-            .extra = 0,
-            .url = "/inbox",
-        }};
+        //var btns = [1]Template.Structs.NavButtons{.{
+        //    .name = "inbox",
+        //    .extra = 0,
+        //    .url = "/inbox",
+        //}};
 
         var page = ReposPage.init(.{
             .meta_head = .{ .open_graph = .{} },
-            .body_header = .{
-                .nav = .{
-                    .nav_auth = undefined,
-                    .nav_buttons = &btns,
-                },
-            },
+            .body_header = (ctx.route_data.get(
+                "body_header",
+                *const S.BodyHeaderHtml,
+            ) catch return error.Unknown).*,
+
             .buttons = .{ .buttons = repo_buttons },
             .repo_list = repos_compiled,
         });
@@ -492,11 +491,14 @@ fn blame(ctx: *Verse) Error!void {
     }
 
     const wrapped_blames = try wrapLineNumbersBlame(ctx.alloc, parsed.lines, parsed.map, rd.name);
-    var btns = navButtons(ctx) catch return error.Unknown;
+    //var btns = navButtons(ctx) catch return error.Unknown;
 
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = (ctx.route_data.get(
+            "body_header",
+            *const S.BodyHeaderHtml,
+        ) catch return error.Unknown).*,
         .filename = Bleach.Html.sanitizeAlloc(ctx.alloc, blame_file) catch unreachable,
         .blame_lines = wrapped_blames,
     });
@@ -561,59 +563,64 @@ fn excludedExt(name: []const u8) bool {
 
 const BlobPage = Template.PageData("blob.html");
 
-fn blob(ctx: *Verse, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
+fn blob(vrs: *Verse, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var blb: Git.Blob = undefined;
 
     var files = pfiles;
-    search: while (ctx.uri.next()) |bname| {
+    search: while (vrs.uri.next()) |bname| {
         for (files.blobs) |obj| {
             if (std.mem.eql(u8, bname, obj.name)) {
                 blb = obj;
                 if (obj.isFile()) {
-                    if (ctx.uri.next()) |_| return error.InvalidURI;
+                    if (vrs.uri.next()) |_| return error.InvalidURI;
                     break :search;
                 }
-                const treeobj = repo.loadObject(ctx.alloc, obj.sha) catch return error.Unknown;
-                files = Git.Tree.initOwned(obj.sha, ctx.alloc, treeobj) catch return error.Unknown;
+                const treeobj = repo.loadObject(vrs.alloc, obj.sha) catch return error.Unknown;
+                files = Git.Tree.initOwned(obj.sha, vrs.alloc, treeobj) catch return error.Unknown;
                 continue :search;
             }
         } else return error.InvalidURI;
     }
 
-    var resolve = repo.loadBlob(ctx.alloc, blb.sha) catch return error.Unknown;
+    var resolve = repo.loadBlob(vrs.alloc, blb.sha) catch return error.Unknown;
     if (!resolve.isFile()) return error.Unknown;
     var formatted: []const u8 = undefined;
     if (Highlight.Language.guessFromFilename(blb.name)) |lang| {
-        const pre = try Highlight.highlight(ctx.alloc, lang, resolve.data.?);
+        const pre = try Highlight.highlight(vrs.alloc, lang, resolve.data.?);
         formatted = pre[28..][0 .. pre.len - 38];
     } else if (excludedExt(blb.name)) {
         formatted = "This file type is currently unsupported";
     } else {
-        formatted = Bleach.Html.sanitizeAlloc(ctx.alloc, resolve.data.?) catch return error.Unknown;
+        formatted = Bleach.Html.sanitizeAlloc(vrs.alloc, resolve.data.?) catch return error.Unknown;
     }
 
-    const wrapped = try wrapLineNumbers(ctx.alloc, formatted);
+    const wrapped = try wrapLineNumbers(vrs.alloc, formatted);
 
-    ctx.uri.reset();
-    _ = ctx.uri.next();
-    const uri_repo = ctx.uri.next() orelse return error.Unrouteable;
-    _ = ctx.uri.next();
-    const uri_filename = Bleach.Html.sanitizeAlloc(ctx.alloc, ctx.uri.rest()) catch return error.Unknown;
+    vrs.uri.reset();
+    _ = vrs.uri.next();
+    const uri_repo = vrs.uri.next() orelse return error.Unrouteable;
+    _ = vrs.uri.next();
+    const uri_filename = Bleach.Html.sanitizeAlloc(vrs.alloc, vrs.uri.rest()) catch return error.Unknown;
 
-    ctx.status = .ok;
+    vrs.status = .ok;
 
-    var btns = navButtons(ctx) catch return error.Unknown;
+    var btns = navButtons(vrs) catch return error.Unknown;
+    // TODO fixme
+    _ = &btns;
 
     var page = BlobPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = (vrs.route_data.get(
+            "body_header",
+            *const S.BodyHeaderHtml,
+        ) catch return error.Unknown).*,
         .repo = uri_repo,
         .uri_filename = uri_filename,
         .filename = blb.name,
         .blob_lines = wrapped,
     });
 
-    try ctx.sendPage(&page);
+    try vrs.sendPage(&page);
 }
 
 fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *UriIter, pfiles: Git.Tree) !Git.Tree {
@@ -785,11 +792,14 @@ fn tree(ctx: *Verse, repo: *Git.Repo, files: *Git.Tree) Error!void {
         }
     }
 
-    var btns = navButtons(ctx) catch return error.Unknown;
+    //var btns = navButtons(ctx) catch return error.Unknown;
 
     var page = TreePage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = (ctx.route_data.get(
+            "body_header",
+            *const S.BodyHeaderHtml,
+        ) catch return error.Unknown).*,
         .upstream = null,
         .repo_name = rd.name,
         .repo = try allocPrint(ctx.alloc, "{s}", .{repo_data[0]}),
@@ -819,10 +829,13 @@ fn tagsList(ctx: *Verse) Error!void {
         html.name = tag.name;
     }
 
-    var btns = navButtons(ctx) catch return error.Unknown;
+    //var btns = navButtons(ctx) catch return error.Unknown;
     var page = TagPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = (ctx.route_data.get(
+            "body_header",
+            *const S.BodyHeaderHtml,
+        ) catch return error.Unknown).*,
         .upstream = null,
         .tags = tstack,
     });
