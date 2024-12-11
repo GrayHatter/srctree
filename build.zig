@@ -17,8 +17,11 @@ pub fn build(b: *std.Build) void {
     });
 
     // Set up verse
-    const comptime_templates = Compiler.buildTemplates(b, "templates") catch unreachable;
-    const comptime_structs = Compiler.buildStructs(b, "templates") catch unreachable;
+    var compiler = Compiler.init(b);
+    compiler.addDir("templates");
+    compiler.collect() catch unreachable;
+    const comptime_templates = compiler.buildTemplates() catch unreachable;
+    const comptime_structs = compiler.buildStructs() catch unreachable;
     const verse_module = verse.module("verse");
     verse_module.addImport("comptime_templates", comptime_templates);
     verse_module.addImport("comptime_structs", comptime_structs);
