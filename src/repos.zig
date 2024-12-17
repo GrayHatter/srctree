@@ -3,7 +3,7 @@ const Allocator = std.mem.Allocator;
 const sleep = std.time.sleep;
 
 const Git = @import("git.zig");
-const Ini = @import("ini.zig");
+const SrcConfig = @import("main.zig").SrcConfig;
 
 const Repos = @This();
 
@@ -32,7 +32,7 @@ pub const AgentConfig = struct {
     const SECONDS = 1000 * 1000 * 1000;
     running: bool = true,
     sleep_for: usize = 60 * 60 * SECONDS,
-    g_config: *Ini.Config,
+    g_config: *const SrcConfig,
 };
 
 fn pushUpstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
@@ -72,8 +72,8 @@ pub fn updateThread(cfg: *AgentConfig) void {
     var name_buffer: [2048]u8 = undefined;
 
     var push_upstream: bool = false;
-    if (cfg.g_config.get("agent")) |agent| {
-        if (agent.getBool("push_upstream") orelse false) {
+    if (cfg.g_config.agent) |agent| {
+        if (agent.push_upstream) {
             push_upstream = true;
         }
     }

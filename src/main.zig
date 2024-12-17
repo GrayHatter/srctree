@@ -62,6 +62,20 @@ const Options = struct {
     source_path: []const u8,
 };
 
+pub const SrcConfig = struct {
+    owner: ?struct {
+        email: ?[]const u8,
+        tz: ?[]const u8,
+    },
+    agent: ?struct {
+        push_upstream: bool = false,
+    },
+};
+
+// No, I don't like this
+pub var root_ini: ?Ini.Config(SrcConfig) = null;
+pub var global_config: SrcConfig = undefined;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
     defer _ = gpa.deinit();
@@ -95,11 +109,14 @@ pub fn main() !void {
         cfg_file = try cwd.openFile("./config.ini", .{});
     }
 
-    var config: Ini.Config = Ini.fromFile(a, cfg_file.?) catch |e| switch (e) {
+    var config = Ini.Config(SrcConfig).fromFile(a, cfg_file.?) catch |e| switch (e) {
         //error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
-    Ini.global_config = &config;
+    root_ini = config;
+
+    const src_conf = try config.config();
+    global_config = src_conf;
 
     defer config.raze();
 
@@ -116,7 +133,7 @@ pub fn main() !void {
     defer Cache.raze();
 
     var agent_config: Repos.AgentConfig = .{
-        .g_config = &config,
+        .g_config = &src_conf,
     };
 
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});

@@ -1,18 +1,12 @@
-const std = @import("std");
-const eql = std.mem.eql;
-const splitScalar = std.mem.splitScalar;
-
-const Allocator = std.mem.Allocator;
-
 const Setting = struct {
     name: []const u8,
     val: []const u8,
 
     fn pair(a: Allocator, str: []const u8) !Setting {
-        if (std.mem.indexOf(u8, str, "=")) |i| {
+        if (indexOfScalar(u8, str, '=')) |i| {
             return .{
-                .name = try a.dupe(u8, std.mem.trim(u8, str[0..i], " \n\t")),
-                .val = try a.dupe(u8, std.mem.trim(u8, str[i + 1 ..], " \n\t")),
+                .name = try a.dupe(u8, trim(u8, str[0..i], " \n\t")),
+                .val = try a.dupe(u8, trim(u8, str[i + 1 ..], " \n\t")),
             };
         }
         unreachable;
@@ -29,23 +23,19 @@ pub const Namespace = struct {
     settings: []Setting,
     block: []const u8,
 
-    pub fn init(
-        a: Allocator,
-        name: []const u8,
-        itr: *std.mem.SplitIterator(u8, .scalar),
-    ) !Namespace {
+    pub fn init(a: Allocator, name: []const u8, itr: *ScalarIter) !Namespace {
         var list = std.ArrayList(Setting).init(a);
         const ns_start = itr.index.?;
         const ns_block = itr.buffer[ns_start..];
 
         while (itr.peek()) |peek| {
-            const line = std.mem.trim(u8, peek, " \n\t");
+            const line = trim(u8, peek, " \n\t");
             if (line.len < 3 or line[0] == '#') {
                 _ = itr.next();
                 continue;
             }
             if (line[0] == '[') break;
-            if (std.mem.count(u8, line, "=") == 0) {
+            if (count(u8, line, "=") == 0) {
                 _ = itr.next();
                 continue;
             }
@@ -64,7 +54,7 @@ pub const Namespace = struct {
 
     pub fn get(self: Namespace, name: []const u8) ?[]const u8 {
         for (self.settings) |st| {
-            if (std.mem.eql(u8, name, st.name)) {
+            if (eql(u8, name, st.name)) {
                 return st.val;
             }
         }
@@ -75,7 +65,7 @@ pub const Namespace = struct {
         const set: []const u8 = self.get(name) orelse return null;
         if (set.len > 5) return null;
         var buffer: [6]u8 = undefined;
-        const check = std.ascii.lowerString(buffer[0..], set);
+        const check = lowerString(buffer[0..], set);
         if (eql(u8, check, "false") or eql(u8, check, "0") or eql(u8, check, "f")) {
             return false;
         } else if (eql(u8, check, "true") or eql(u8, check, "1") or eql(u8, check, "t")) {
@@ -92,96 +82,146 @@ pub const Namespace = struct {
     }
 };
 
-pub const Config = struct {
-    alloc: Allocator,
-    ns: []Namespace,
-    data: []const u8,
-    owned: ?[]const u8,
+pub fn Config(Base: anytype) type {
+    return struct {
+        pub const Self = @This();
+        alloc: Allocator,
+        ns: []Namespace,
+        data: []const u8,
+        owned: ?[]const u8,
 
-    pub fn empty() Config {
-        return .{
-            .ns = &[0]Namespace{},
-        };
-    }
-
-    pub fn filter(self: Config, prefix: []const u8, index: usize) ?Namespace {
-        var remaining = index;
-        for (self.ns) |ns| {
-            if (std.mem.startsWith(u8, ns.name, prefix)) {
-                if (remaining == 0) return ns;
-                remaining -= 1;
+        fn buildStruct(self: Self, T: type, name: []const u8) !?T {
+            var namespace: T = undefined;
+            const ns = self.get(name) orelse return null;
+            inline for (@typeInfo(T).Struct.fields) |s| {
+                switch (s.type) {
+                    bool => {
+                        @field(namespace, s.name) = ns.getBool(s.name) orelse return error.SettingMissing;
+                    },
+                    ?bool => {
+                        @field(namespace, s.name) = ns.getBool(s.name);
+                    },
+                    []const u8 => {
+                        @field(namespace, s.name) = ns.get(s.name) orelse return error.SettingMissing;
+                    },
+                    ?[]const u8 => {
+                        @field(namespace, s.name) = ns.get(s.name);
+                    },
+                    else => @compileError("not implemented"),
+                }
             }
-        } else return null;
-    }
+            return namespace;
+        }
 
-    pub fn get(self: Config, name: []const u8) ?Namespace {
-        for (self.ns) |ns| {
-            if (std.mem.eql(u8, ns.name, name)) {
-                return ns;
+        pub fn config(self: Self) !Base {
+            var base: Base = undefined;
+            inline for (@typeInfo(Base).Struct.fields) |f| {
+                if (f.type == []const u8) continue; // Root variable not yet supported
+                switch (@typeInfo(f.type)) {
+                    .Struct => {
+                        @field(base, f.name) = try self.buildStruct(f.type, f.name) orelse return error.NamespaceMissing;
+                    },
+                    .Optional => {
+                        @field(base, f.name) = try self.buildStruct(@typeInfo(f.type).Optional.child, f.name) orelse return error.NamespaceMissing;
+                    },
+                    else => @compileError("not implemented"),
+                }
+            }
+
+            return base;
+        }
+
+        pub fn filter(self: Self, prefix: []const u8, index: usize) ?Namespace {
+            var remaining = index;
+            for (self.ns) |ns| {
+                if (startsWith(u8, ns.name, prefix)) {
+                    if (remaining == 0) return ns;
+                    remaining -= 1;
+                }
+            } else return null;
+        }
+
+        pub fn get(self: Self, name: []const u8) ?Namespace {
+            for (self.ns) |ns| {
+                if (eql(u8, ns.name, name)) {
+                    return ns;
+                }
+            }
+            return null;
+        }
+
+        pub fn raze(self: Self) void {
+            for (self.ns) |ns| {
+                ns.raze(self.alloc);
+            }
+            self.alloc.free(self.ns);
+            if (self.owned) |owned| {
+                self.alloc.free(owned);
             }
         }
-        return null;
-    }
 
-    pub fn raze(self: Config) void {
-        for (self.ns) |ns| {
-            ns.raze(self.alloc);
+        pub fn initDupe(a: Allocator, ini: []const u8) !Self {
+            const owned = try a.dupe(u8, ini);
+            var c = try init(a, owned);
+            c.owned = c.data;
+            return c;
         }
-        self.alloc.free(self.ns);
-        if (self.owned) |owned| {
-            self.alloc.free(owned);
+
+        /// `data` must outlive returned Config, use initDupe otherwise
+        pub fn init(a: Allocator, data: []const u8) !Self {
+            var itr = splitScalar(u8, data, '\n');
+
+            var list = std.ArrayList(Namespace).init(a);
+
+            while (itr.next()) |wide| {
+                const line = trim(u8, wide, " \n\t");
+                if (line.len == 0) continue;
+
+                if (line[0] == '[' and line[line.len - 1] == ']') {
+                    try list.append(try Namespace.init(a, line, &itr));
+                }
+            }
+
+            return .{
+                .alloc = a,
+                .ns = try list.toOwnedSlice(),
+                .data = data,
+                .owned = null,
+            };
         }
-    }
-};
 
-pub fn initDupe(a: Allocator, ini: []const u8) !Config {
-    const owned = try a.dupe(u8, ini);
-    var c = try init(a, owned);
-    c.owned = c.data;
-    return c;
-}
-
-/// `data` must outlive returned Config, use initDupe otherwise
-pub fn init(a: Allocator, data: []const u8) !Config {
-    var itr = std.mem.splitScalar(u8, data, '\n');
-
-    var list = std.ArrayList(Namespace).init(a);
-
-    while (itr.next()) |wide| {
-        const line = std.mem.trim(u8, wide, " \n\t");
-        if (line.len == 0) continue;
-
-        if (line[0] == '[' and line[line.len - 1] == ']') {
-            try list.append(try Namespace.init(a, line, &itr));
+        /// I'm not happy with this API. I think I deleted it once already... deleted
+        /// twice incoming!
+        pub fn initOwned(a: Allocator, data: []u8) !Self {
+            var c = try init(a, data);
+            c.owned = data;
+            return c;
         }
-    }
 
-    return Config{
-        .alloc = a,
-        .ns = try list.toOwnedSlice(),
-        .data = data,
-        .owned = null,
+        pub fn fromFile(a: Allocator, file: std.fs.File) !Self {
+            const data = try file.readToEndAlloc(a, 1 <<| 18);
+            return try initOwned(a, data);
+        }
     };
-}
 
-/// I'm not happy with this API. I think I deleted it once already... deleted
-/// twice incoming!
-pub fn initOwned(a: Allocator, data: []u8) !Config {
-    var c = try init(a, data);
-    c.owned = data;
-    return c;
+    //const RealBase = @Type(.{
+    //    .Struct = .{
+    //        .layout = .auto,
+    //        .is_tuple = false,
+    //        .fields = &[_]std.builtin.Type.StructField{} ++
+    //            @typeInfo(Base).Struct.fields[0..] ++
+    //            @typeInfo(Real).Struct.fields[0..],
+    //        .decls = &[_]std.builtin.Type.Declaration{} ++
+    //            @typeInfo(Base).Struct.decls ++
+    //            @typeInfo(Real).Struct.decls,
+    //    },
+    //});
 }
-
-pub fn fromFile(a: Allocator, file: std.fs.File) !Config {
-    const data = try file.readToEndAlloc(a, 1 <<| 18);
-    return try initOwned(a, data);
-}
-
-pub var global_config: ?*const Config = null;
 
 test "default" {
     const a = std.testing.allocator;
-    const expected = Config{
+
+    const expected = Config(void){
         .alloc = a,
         .ns = @constCast(&[1]Namespace{
             Namespace{
@@ -199,7 +239,7 @@ test "default" {
         .owned = @constCast("[one]\nleft = right"),
     };
 
-    const vtest = try initDupe(a, "[one]\nleft = right");
+    const vtest = try Config(void).initDupe(a, "[one]\nleft = right");
     defer vtest.raze();
 
     try std.testing.expectEqualDeep(expected, vtest);
@@ -220,10 +260,12 @@ test "getBool" {
         \\tenth = failure
         \\
     ;
-    // eight and ninth are expected to have leading & trailing whitespace
+    // eight & ninth are expected to have leading & trailing whitespace
+
+    const Cfg = Config(struct {});
 
     const a = std.testing.allocator;
-    const c = try init(a, data);
+    const c = try Cfg.init(a, data);
     defer c.raze();
     const ns = c.get("test data").?;
 
@@ -251,7 +293,7 @@ test "commented" {
         \\ # but not this
     ;
 
-    const expected = Config{
+    const expected = Config(void){
         .alloc = a,
         .ns = @constCast(&[1]Namespace{
             Namespace{
@@ -269,8 +311,20 @@ test "commented" {
         .owned = @constCast(vut),
     };
 
-    const vtest = try initDupe(a, vut);
+    const vtest = try Config(void).initDupe(a, vut);
     defer vtest.raze();
 
     try std.testing.expectEqualDeep(expected, vtest);
 }
+
+const std = @import("std");
+const eql = std.mem.eql;
+const trim = std.mem.trim;
+const count = std.mem.count;
+const startsWith = std.mem.startsWith;
+const lowerString = std.ascii.lowerString;
+const splitScalar = std.mem.splitScalar;
+const indexOfScalar = std.mem.indexOfScalar;
+const ScalarIter = std.mem.SplitIterator(u8, .scalar);
+
+const Allocator = std.mem.Allocator;

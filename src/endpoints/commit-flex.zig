@@ -5,7 +5,8 @@ const allocPrint = std.fmt.allocPrint;
 const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
-const Ini = @import("../ini.zig");
+
+const global_config = &@import("../main.zig").global_config;
 
 const Verse = @import("verse");
 const Template = Verse.Template;
@@ -222,16 +223,14 @@ pub fn commitFlex(ctx: *Verse) Error!void {
     if (user) |u| {
         email = u.value;
     } else {
-        if (Ini.global_config) |ini| {
-            if (ini.get("owner")) |ns| {
-                if (ns.get("email")) |c_email| {
-                    email = c_email;
-                } else @panic("no email configured");
-                if (ns.get("tz")) |ts| {
-                    if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
-                        tz_offset = tzs;
-                        nowish = DateTime.fromEpoch(nowish.timestamp + tzs);
-                    }
+        if (global_config.owner) |owner| {
+            if (owner.email) |c_email| {
+                email = c_email;
+            } else @panic("no email configured");
+            if (owner.tz) |ts| {
+                if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
+                    tz_offset = tzs;
+                    nowish = DateTime.fromEpoch(nowish.timestamp + tzs);
                 }
             }
         }

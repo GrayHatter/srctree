@@ -1,16 +1,3 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const startsWith = std.mem.startsWith;
-const splitScalar = std.mem.splitScalar;
-const eql = std.mem.eql;
-const indexOf = std.mem.indexOf;
-const zlib = std.compress.zlib;
-const hexLower = std.fmt.fmtSliceHexLower;
-const bufPrint = std.fmt.bufPrint;
-const parseInt = std.fmt.parseInt;
-const allocPrint = std.fmt.allocPrint;
-const AnyReader = std.io.AnyReader;
-
 const Ini = @import("ini.zig");
 
 pub const Actor = @import("git/actor.zig");
@@ -193,7 +180,7 @@ pub const Repo = struct {
         var list = std.ArrayList(Remote).init(a);
         errdefer list.clearAndFree();
         const config_data = try self.dir.readFileAlloc(a, "config", 0xffff);
-        const cfg = try Ini.initOwned(a, config_data);
+        const cfg = try Ini.Config(void).initOwned(a, config_data);
         defer cfg.raze();
         for (0..cfg.ns.len) |i| {
             const ns = cfg.filter("remote", i) orelse break;
@@ -1343,3 +1330,16 @@ test "list remotes" {
     try std.testing.expectEqualStrings("github", remotes[0].name);
     try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const startsWith = std.mem.startsWith;
+const splitScalar = std.mem.splitScalar;
+const eql = std.mem.eql;
+const indexOf = std.mem.indexOf;
+const zlib = std.compress.zlib;
+const hexLower = std.fmt.fmtSliceHexLower;
+const bufPrint = std.fmt.bufPrint;
+const parseInt = std.fmt.parseInt;
+const allocPrint = std.fmt.allocPrint;
+const AnyReader = std.io.AnyReader;

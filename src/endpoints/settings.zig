@@ -4,7 +4,7 @@ const Template = Verse.Template;
 const S = Verse.Template.Structs;
 const Router = Verse.Router;
 const RequestData = Verse.RequestData.RequestData;
-const Ini = @import("../ini.zig");
+const global_ini = &@import("../main.zig").root_ini;
 
 pub const endpoints = [_]Router.Match{
     Router.GET("", default),
@@ -18,7 +18,7 @@ fn default(vrs: *Verse) Router.Error!void {
 
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
-    if (Ini.global_config) |cfg| {
+    if (global_ini.*) |cfg| {
         blocks = try vrs.alloc.alloc(Template.Structs.ConfigBlocks, cfg.ns.len);
         for (cfg.ns, 0..) |ns, i| {
             blocks[i] = .{
