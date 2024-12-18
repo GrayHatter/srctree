@@ -72,7 +72,16 @@ pub fn initCache(a: Allocator) void {
     cached_emails = CACHED_EMAIL.init(a);
 }
 
-pub fn razeCache() void {
+pub fn razeCache(a: Allocator) void {
+    var itr = cached_emails.iterator();
+    while (itr.next()) |next| {
+        a.free(next.key_ptr.*);
+        var ritr = next.value_ptr.*.iterator();
+        while (ritr.next()) |rnext| {
+            a.free(rnext.key_ptr.*);
+        }
+        next.value_ptr.*.deinit();
+    }
     cached_emails.deinit();
 }
 

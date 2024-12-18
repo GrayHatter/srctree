@@ -19,6 +19,6 @@ pub fn init(a: Allocator) !Cache {
     };
 }
 
-pub fn raze() void {
-    COMMIT_FLEX.razeCache();
+pub fn raze(c: Cache) void {
+    COMMIT_FLEX.razeCache(c.alloc);
 }

@@ -129,8 +129,8 @@ pub fn main() !void {
     try Database.init(.{});
     defer Database.raze();
 
-    _ = try Cache.init(a);
-    defer Cache.raze();
+    const cache = try Cache.init(a);
+    defer cache.raze();
 
     var agent_config: Repos.AgentConfig = .{
         .g_config = &src_conf,
