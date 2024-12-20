@@ -112,7 +112,6 @@ fn custom(ctx: *Verse, search_str: []const u8) Error!void {
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &btns,
-            .nav_auth = undefined,
         } },
         .delta_list = try d_list.toOwnedSlice(),
         .search = Bleach.Html.sanitizeAlloc(ctx.alloc, search_str) catch unreachable,

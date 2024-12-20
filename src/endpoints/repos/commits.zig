@@ -170,7 +170,6 @@ fn commitHtml(ctx: *Verse, sha: []const u8, repo_name: []const u8, repo: Git.Rep
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
         .commit = try commitCtx(ctx.alloc, current, repo_name),
         .comments = .{ .thread = thread },
@@ -435,7 +434,6 @@ fn sendCommits(ctx: *Verse, list: []const S.Commits, repo_name: []const u8, sha:
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
         .commits = list,
         .after_commits = .{

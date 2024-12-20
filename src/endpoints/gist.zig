@@ -143,7 +143,6 @@ fn view(vrs: *Verse) Error!void {
             },
             .body_header = .{
                 .nav = .{
-                    .nav_auth = undefined,
                     .nav_buttons = &btns,
                 },
             },

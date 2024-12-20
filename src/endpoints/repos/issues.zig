@@ -56,7 +56,6 @@ fn new(ctx: *Verse) Error!void {
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
     });
     try ctx.sendPage(&page);
@@ -164,7 +163,6 @@ fn view(ctx: *Verse) Error!void {
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
         .title = Bleach.Html.sanitizeAlloc(ctx.alloc, delta.title) catch unreachable,
         .desc = Bleach.Html.sanitizeAlloc(ctx.alloc, delta.message) catch unreachable,
@@ -222,7 +220,6 @@ fn list(ctx: *Verse) Error!void {
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
         .delta_list = try d_list.toOwnedSlice(),
         .search = def_search,

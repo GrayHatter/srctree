@@ -52,7 +52,7 @@ fn default(ctx: *Verse) Error!void {
     const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
         .netlist = value,
     });
 

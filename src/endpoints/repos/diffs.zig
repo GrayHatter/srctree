@@ -131,7 +131,6 @@ fn new(ctx: *Verse) Error!void {
         },
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
         .title = title,
         .desc = desc,
@@ -737,7 +736,6 @@ fn view(ctx: *Verse) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
         .patch = if (patch_formatted) |pf| .{
             .header = patch_header,
@@ -796,7 +794,6 @@ fn list(ctx: *Verse) Error!void {
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
-            .nav_auth = undefined,
         } },
         .delta_list = try d_list.toOwnedSlice(),
         .search = def_search,

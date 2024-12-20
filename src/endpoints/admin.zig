@@ -63,7 +63,7 @@ fn default(ctx: *Verse) Error!void {
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
         .form = value,
     });
     try ctx.sendPage(&page);
@@ -91,7 +91,6 @@ fn cloneUpstream(ctx: *Verse) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{
             .nav = .{
-                .nav_auth = undefined,
                 .nav_buttons = &btns,
             },
         },
@@ -142,7 +141,6 @@ fn postCloneUpstream(ctx: *Verse) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{
             .nav = .{
-                .nav_auth = undefined,
                 .nav_buttons = &btns,
             },
         },
@@ -196,7 +194,6 @@ fn postNewRepo(ctx: *Verse) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{
             .nav = .{
-                .nav_auth = undefined,
                 .nav_buttons = &btns,
             },
         },
@@ -227,7 +224,7 @@ fn newRepo(ctx: *Verse) Error!void {
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_auth = undefined, .nav_buttons = &btns } },
+        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
         .form = value,
     });
     try ctx.sendPage(&page);
