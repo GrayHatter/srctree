@@ -54,7 +54,7 @@ const GistPost = struct {
 fn post(ctx: *Verse) Error!void {
     try ctx.auth.requireValid();
 
-    const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.reqdata) catch return error.BadData;
+    const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.request.data) catch return error.BadData;
 
     if (udata.file_name.len != udata.file_blob.len) return error.BadData;
     const username = if (ctx.auth.valid())

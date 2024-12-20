@@ -226,7 +226,7 @@ pub fn commitFlex(ctx: *Verse) Error!void {
     var nowish = DateTime.now();
     var email: []const u8 = undefined;
     var tz_offset: ?i32 = null;
-    var query = ctx.reqdata.query.validator();
+    var query = ctx.request.data.query.validator();
     const user = query.optional("user");
 
     if (user) |u| {

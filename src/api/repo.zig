@@ -46,7 +46,7 @@ fn openRepo(a: Allocator, raw_name: []const u8) !Git.Repo {
 }
 
 pub fn repo(ctx: *API.Verse) API.Router.Error!void {
-    const req = try ctx.reqdata.validate(RepoRequest);
+    const req = try ctx.request.data.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
         error.InvalidName => return error.Abusive,
@@ -85,7 +85,7 @@ pub const RepoBranches = struct {
 };
 
 pub fn repoBranches(ctx: *API.Verse) API.Router.Error!void {
-    const req = try ctx.reqdata.validate(RepoRequest);
+    const req = try ctx.request.data.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
         error.InvalidName => return error.Abusive,
@@ -122,7 +122,7 @@ pub const RepoTags = struct {
 };
 
 pub fn repoTags(ctx: *API.Verse) API.Router.Error!void {
-    const req = try ctx.reqdata.validate(RepoRequest);
+    const req = try ctx.request.data.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
         error.InvalidName => return error.Abusive,

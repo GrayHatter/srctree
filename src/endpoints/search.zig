@@ -32,7 +32,7 @@ fn inbox(ctx: *Verse) Error!void {
 }
 
 fn search(ctx: *Verse) Error!void {
-    const udata = ctx.reqdata.query.validate(SearchReq) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(SearchReq) catch return error.BadData;
 
     const query_str = udata.q orelse "null";
     std.debug.print("query {s}\n", .{query_str});

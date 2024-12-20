@@ -85,7 +85,7 @@ fn new(ctx: *Verse) Error!void {
     var patchuri: ?S.PatchUri = .{};
     var title: ?[]const u8 = null;
     var desc: ?[]const u8 = null;
-    if (ctx.reqdata.post) |post| {
+    if (ctx.request.data.post) |post| {
         const udata = post.validate(DiffCreateChangeReq) catch return error.BadData;
         title = udata.title;
         desc = udata.desc;
@@ -160,7 +160,7 @@ const DiffCreateReq = struct {
 
 fn createDiff(vrs: *Verse) Error!void {
     const rd = Repos.RouteData.make(&vrs.uri) orelse return error.Unrouteable;
-    if (vrs.reqdata.post) |post| {
+    if (vrs.request.data.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.BadData;
         if (udata.title.len == 0) return error.BadData;
 
@@ -205,7 +205,7 @@ fn createDiff(vrs: *Verse) Error!void {
 fn newComment(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.reqdata.post) |post| {
+    if (ctx.request.data.post) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const delta_index = isHex(delta_id.value) orelse return error.Unrouteable;
@@ -664,7 +664,7 @@ fn view(ctx: *Verse) Error!void {
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
 
-    const udata = ctx.reqdata.query.validate(PatchView) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
 
     var patch_formatted: ?Template.Structs.PatchHtml = null;

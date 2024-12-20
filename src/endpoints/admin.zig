@@ -106,7 +106,7 @@ const CloneUpstreamReq = struct {
 fn postCloneUpstream(ctx: *Verse) Error!void {
     try ctx.auth.requireValid();
 
-    const udata = ctx.reqdata.post.?.validate(CloneUpstreamReq) catch return error.BadData;
+    const udata = ctx.request.data.post.?.validate(CloneUpstreamReq) catch return error.BadData;
     std.debug.print("repo uri {s}\n", .{udata.repo_uri});
     var nameitr = std.mem.splitBackwardsScalar(u8, udata.repo_uri, '/');
     const name = nameitr.first();
@@ -152,7 +152,7 @@ fn postCloneUpstream(ctx: *Verse) Error!void {
 fn postNewRepo(ctx: *Verse) Error!void {
     try ctx.auth.requireValid();
     // TODO ini repo dir
-    var valid = if (ctx.reqdata.post) |p|
+    var valid = if (ctx.request.data.post) |p|
         p.validator()
     else
         return error.Unknown;
@@ -232,7 +232,7 @@ fn newRepo(ctx: *Verse) Error!void {
 
 fn view(ctx: *Verse) Error!void {
     try ctx.auth.requireValid();
-    if (ctx.reqdata.post) |pd| {
+    if (ctx.request.data.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(ctx);
     }

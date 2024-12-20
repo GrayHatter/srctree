@@ -69,7 +69,7 @@ const IssueCreate = struct {
 fn newPost(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.reqdata.post) |post| {
+    if (ctx.request.data.post) |post| {
         const valid = post.validate(IssueCreate) catch return error.BadData;
         var delta = Delta.new(
             rd.name,
@@ -94,7 +94,7 @@ fn newPost(ctx: *Verse) Error!void {
 
 fn newComment(ctx: *Verse) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (ctx.reqdata.post) |post| {
+    if (ctx.request.data.post) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const msg = try valid.require("comment");

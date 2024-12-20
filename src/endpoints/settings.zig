@@ -50,7 +50,7 @@ const SettingsReq = struct {
 fn post(vrs: *Verse) Router.Error!void {
     try vrs.auth.requireValid();
 
-    const udata = RequestData(SettingsReq).initMap(vrs.alloc, vrs.reqdata) catch return error.BadData;
+    const udata = RequestData(SettingsReq).initMap(vrs.alloc, vrs.request.data) catch return error.BadData;
 
     for (udata.block_name, udata.block_text) |name, text| {
         std.debug.print("block data:\nname '{s}'\ntext '''{s}'''\n", .{ name, text });

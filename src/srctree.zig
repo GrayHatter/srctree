@@ -89,7 +89,7 @@ pub fn builder(vrs: *Verse, call: BuildFn) void {
             for (vrs.request.raw.zwsgi.vars) |vars| {
                 std.debug.print("Abusive var '{s}' => '''{s}'''", .{ vars.key, vars.val });
             }
-            if (vrs.reqdata.post) |post_data| {
+            if (vrs.request.data.post) |post_data| {
                 std.debug.print("post data => '''{s}'''", .{post_data.rawpost});
             }
         },

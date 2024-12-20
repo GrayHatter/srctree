@@ -250,7 +250,7 @@ const RepoSortReq = struct {
 fn list(ctx: *Verse) Error!void {
     var cwd = std.fs.cwd();
 
-    const udata = ctx.reqdata.query.validate(RepoSortReq) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.BadData;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
     if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {

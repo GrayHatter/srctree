@@ -52,7 +52,7 @@ pub fn router(ctx: *Verse) Error!Route.BuildFn {
 }
 
 fn newComment(ctx: *Verse) Error!void {
-    if (ctx.reqdata.post) |post| {
+    if (ctx.request.data.post) |post| {
         _ = post.validate(AddComment) catch return error.BadData;
     }
     return error.BadData;
@@ -163,7 +163,7 @@ fn commitHtml(ctx: *Verse, sha: []const u8, repo_name: []const u8, repo: Git.Rep
         }
     }
 
-    const udata = ctx.reqdata.query.validate(Diffs.PatchView) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(Diffs.PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
 
     var page = CommitPage.init(.{
