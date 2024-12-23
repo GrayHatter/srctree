@@ -16,16 +16,15 @@ const UriIter = Router.UriIter;
 const git = @import("git.zig");
 
 pub const endpoints = [_]Router.Match{
-    .{ .name = "objects", .match = .{ .build = gitUploadPack } },
-    .{ .name = "info", .match = .{ .simple = &[_]Router.Match{
-        .{ .name = "", .match = .{ .build = gitUploadPack } },
-        .{ .name = "refs", .match = .{ .build = gitUploadPack } },
-    } } },
-
-    .{ .name = "git-upload-pack", .methods = .{ .POST = true }, .match = .{ .build = gitUploadPack } },
+    Router.ANY("objects", gitUploadPack),
+    Router.ROUTE("info", &[_]Router.Match{
+        Router.ANY("", gitUploadPack),
+        Router.ANY("refs", gitUploadPack),
+    }),
+    Router.ANY("git-upload-pack", gitUploadPack),
 };
 
-pub fn router(ctx: *Verse) Error!Router.BuildFn {
+pub fn router(ctx: *Verse) Router.RoutingError!Router.BuildFn {
     std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
     return Router.router(ctx, &endpoints);
 }

@@ -34,10 +34,10 @@ const APIRouteData = struct {
     }
 };
 
-pub fn router(vrs: *Verse) Router.Error!Router.BuildFn {
+pub fn router(vrs: *Verse) Router.RoutingError!Router.BuildFn {
     const uri_api = vrs.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
-    const rd = try APIRouteData.init(vrs.alloc);
+    const rd = APIRouteData.init(vrs.alloc) catch @panic("OOM");
     vrs.route_data.add("api", rd) catch unreachable;
 
     return Router.router(vrs, &endpoints);

@@ -44,7 +44,7 @@ const AddComment = struct {
     text: []const u8,
 };
 
-pub fn router(ctx: *Verse) Error!Route.BuildFn {
+pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
     const rd = RouteData.make(&ctx.uri) orelse return commitsView;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return viewCommit;
@@ -435,6 +435,7 @@ fn sendCommits(ctx: *Verse, list: []const S.Commits, repo_name: []const u8, sha:
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
         } },
+
         .commits = list,
         .after_commits = .{
             .repo_name = repo_name,

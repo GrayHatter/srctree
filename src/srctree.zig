@@ -48,7 +48,7 @@ fn notFound(vrs: *Verse) Router.Error!void {
     vrs.sendPage(&page) catch unreachable;
 }
 
-pub fn router(vrs: *Verse) Router.Error!BuildFn {
+pub fn router(vrs: *Verse) Router.RoutingError!BuildFn {
     //    var i_count: usize = 0;
     //    var itr = Types.Delta.iterator(vrs.alloc, "");
     //    while (itr.next()) |it| {

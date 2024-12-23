@@ -26,7 +26,7 @@ const endpoints = [_]Router.Match{
     POST("post", post),
 };
 
-pub fn router(ctx: *Verse) Error!Router.BuildFn {
+pub fn router(ctx: *Verse) Router.RoutingError!Router.BuildFn {
     if (!std.mem.eql(u8, ctx.uri.next() orelse "", "gist")) return error.Unrouteable;
 
     if (ctx.uri.peek()) |peek| {

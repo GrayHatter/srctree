@@ -121,7 +121,7 @@ pub fn navButtons(ctx: *Verse) ![2]Template.Structs.NavButtons {
     return btns;
 }
 
-pub fn router(ctx: *Verse) Error!Route.BuildFn {
+pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {

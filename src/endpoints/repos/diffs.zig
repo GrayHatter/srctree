@@ -52,7 +52,7 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Verse) Error!Route.BuildFn {
+pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
     if (!eql(u8, "diffs", ctx.uri.next() orelse return error.Unrouteable))
         return error.Unrouteable;
     const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
