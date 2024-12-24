@@ -1,23 +1,156 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const allocPrint = std.fmt.allocPrint;
+const Journal = struct {
+    alloc: Allocator,
+    email: []const u8,
+    repos: []JRepo,
+    hits: HeatMapArray,
+    list: std.ArrayList(Scribe.Commit),
 
-const Bleach = @import("../bleach.zig");
-const DateTime = @import("../datetime.zig");
-const Git = @import("../git.zig");
+    pub const JRepo = struct {
+        name: []const u8,
+        sha: Git.Sha,
+    };
 
-const global_config = &@import("../main.zig").global_config;
+    pub fn init(a: Allocator, email: []const u8) !*Journal {
+        const j = try a.create(Journal);
 
-const Verse = @import("verse");
-const Template = Verse.Template;
-const DOM = Template.DOM;
-const HTML = Template.HTML;
-const S = Template.Structs;
+        j.* = .{
+            .alloc = a,
+            .email = try a.dupe(email),
+            .repos = &[0].{},
+            .hits = .{0} ** (366 + 6),
+            .list = std.ArrayList(Scribe.Commit).init(a),
+        };
 
-const Route = Verse.Router;
-const Error = Route.Error;
+        return j;
+    }
+
+    pub fn raze(j: *Journal) void {
+        j.alloc.free(j.email);
+        j.list.deinit();
+        j.alloc.destroy(j);
+    }
+
+    pub fn build(
+        a: Allocator,
+        list: *std.ArrayList(Scribe.Commit),
+        email: ?[]const u8,
+        gitdir: []const u8,
+    ) !void {
+        const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
+        var repo = try Git.Repo.init(repo_dir);
+        try repo.loadData(a);
+        defer repo.raze();
+
+        var lseen = std.BufSet.init(a);
+        const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
+        var commit = try repo.headCommit(a);
+
+        while (true) {
+            if (lseen.contains(commit.sha.bin[0..])) break;
+            var commit_time = commit.author.timestamp;
+            if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
+                commit_time += tzs;
+            }
+            if (commit_time < until) break;
+            if (std.mem.eql(u8, email.?, commit.author.email)) {
+                try list.append(.{
+                    .name = try Bleach.Html.sanitizeAlloc(a, commit.author.name),
+                    .title = try Bleach.Html.sanitizeAlloc(a, commit.title),
+                    .date = DateTime.fromEpoch(commit_time),
+                    .sha = commit.sha,
+                    .repo = try a.dupe(u8, gitdir[8..]),
+                });
+            }
+
+            commit = commit.toParent(a, 0, &repo) catch |err| switch (err) {
+                error.NoParent => break,
+                else => |e| return e,
+            };
+        }
+    }
+
+    pub fn buildCommitList(
+        a: Allocator,
+        seen: *std.BufSet,
+        until: i64,
+        gitdir: []const u8,
+        email: []const u8,
+    ) !*HeatMapArray {
+        const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
+        var repo = try Git.Repo.init(repo_dir);
+        try repo.loadData(a);
+        defer repo.raze();
+
+        // TODO return empty hits here
+        const commit = repo.headCommit(a) catch unreachable;
+
+        const email_gop = try cached_emails.getOrPut(email);
+        if (!email_gop.found_existing) {
+            email_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, email);
+            email_gop.value_ptr.* = CachedRepo.init(cached_emails.allocator);
+        }
+
+        const repo_gop = try email_gop.value_ptr.*.getOrPut(gitdir);
+        var heatmap: *HeatMap = repo_gop.value_ptr;
+
+        var hits: *HeatMapArray = &heatmap.hits;
+
+        if (!repo_gop.found_existing) {
+            repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, gitdir);
+            @memset(hits[0..], 0);
+        }
+
+        if (!eql(u8, heatmap.shahex[0..], commit.sha.hex[0..])) {
+            heatmap.shahex = commit.sha.hex;
+            @memset(hits[0..], 0);
+            try countCommits(a, hits, seen, until, commit, &repo, email);
+        }
+
+        return hits;
+    }
+
+    pub fn countCommits(
+        a: Allocator,
+        hits: *HeatMapArray,
+        seen: *std.BufSet,
+        until: i64,
+        root_cmt: Git.Commit,
+        repo: *const Git.Repo,
+        email: []const u8,
+    ) !void {
+        var commit = root_cmt;
+        while (true) {
+            const search_time = @max(commit.author.timestamp, commit.committer.timestamp);
+            if (search_time < until) return;
+            if (seen.contains(commit.sha.bin[0..])) return;
+
+            seen.insert(commit.sha.bin[0..]) catch unreachable;
+            if (eql(u8, email, commit.author.email)) {
+                var commit_time = commit.author.timestamp;
+                if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
+                    commit_time += tzs;
+                }
+
+                const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
+                hits[day_off] += 1;
+            }
+            for (commit.parent[1..], 1..) |par, pidx| {
+                if (par != null) {
+                    const parent = try commit.toParent(a, @truncate(pidx), repo);
+                    try countCommits(a, hits, seen, until, parent, repo, email);
+                }
+            }
+            commit = commit.toParent(a, 0, repo) catch |err| switch (err) {
+                error.NoParent => break,
+                else => |e| return e,
+            };
+        }
+    }
+};
 
 const Scribe = struct {
+    thing: Option,
+
     const Commit = struct {
         name: []const u8,
         repo: []const u8,
@@ -45,7 +178,16 @@ const Scribe = struct {
         commit: Commit,
     };
 
-    thing: Option,
+    pub fn sorted(_: void, left: Commit, right: Commit) bool {
+        return !lessThan({}, left, right);
+    }
+
+    fn lessThan(_: void, left: Commit, right: Commit) bool {
+        if (left.date.timestamp < right.date.timestamp) return true;
+        if (left.date.timestamp > right.date.timestamp) return false;
+        if (left.repo.len < right.repo.len) return true;
+        return false;
+    }
 };
 
 const Day = struct {
@@ -85,136 +227,7 @@ pub fn razeCache(a: Allocator) void {
     cached_emails.deinit();
 }
 
-fn countAll(
-    a: Allocator,
-    hits: *HeatMapArray,
-    seen: *std.BufSet,
-    until: i64,
-    root_cmt: Git.Commit,
-    repo: *const Git.Repo,
-    email: []const u8,
-) !*HeatMapArray {
-    var commit = root_cmt;
-    while (true) {
-        if (seen.contains(commit.sha.bin[0..])) return hits;
-        var commit_time = commit.author.timestamp;
-        if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
-            commit_time += tzs;
-        }
-
-        if (commit_time < until or commit.committer.timestamp < until) return hits;
-        const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
-        if (std.mem.eql(u8, email, commit.author.email)) {
-            hits[day_off] += 1;
-        }
-        for (commit.parent[1..], 1..) |par, pidx| {
-            if (par) |p| {
-                seen.insert(p.bin[0..]) catch unreachable;
-                const parent = try commit.toParent(a, @truncate(pidx), repo);
-                //defer parent.raze(a);
-                _ = try countAll(a, hits, seen, until, parent, repo, email);
-            }
-        }
-        commit = commit.toParent(a, 0, repo) catch |err| switch (err) {
-            error.NoParent => {
-                return hits;
-            },
-            else => |e| return e,
-        };
-    }
-}
-
-fn journalLessThan(_: void, left: Scribe.Commit, right: Scribe.Commit) bool {
-    if (left.date.timestamp < right.date.timestamp) return true;
-    if (left.date.timestamp > right.date.timestamp) return false;
-    if (left.repo.len < right.repo.len) return true;
-    return false;
-}
-
-fn journalSorted(_: void, left: Scribe.Commit, right: Scribe.Commit) bool {
-    return !journalLessThan({}, left, right);
-}
-
-fn buildJournal(
-    a: Allocator,
-    list: *std.ArrayList(Scribe.Commit),
-    email: ?[]const u8,
-    gitdir: []const u8,
-) !void {
-    const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
-    var repo = try Git.Repo.init(repo_dir);
-    try repo.loadData(a);
-    defer repo.raze();
-
-    var lseen = std.BufSet.init(a);
-    const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
-    var commit = try repo.headCommit(a);
-
-    while (true) {
-        if (lseen.contains(commit.sha.bin[0..])) break;
-        var commit_time = commit.author.timestamp;
-        if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
-            commit_time += tzs;
-        }
-        if (commit_time < until) break;
-        if (std.mem.eql(u8, email.?, commit.author.email)) {
-            try list.append(.{
-                .name = try Bleach.Html.sanitizeAlloc(a, commit.author.name),
-                .title = try Bleach.Html.sanitizeAlloc(a, commit.title),
-                .date = DateTime.fromEpoch(commit_time),
-                .sha = commit.sha,
-                .repo = try a.dupe(u8, gitdir[8..]),
-            });
-        }
-
-        commit = commit.toParent(a, 0, &repo) catch |err| switch (err) {
-            error.NoParent => break,
-            else => |e| return e,
-        };
-    }
-}
-
-fn buildCommitList(
-    a: Allocator,
-    seen: *std.BufSet,
-    until: i64,
-    gitdir: []const u8,
-    email: []const u8,
-) !*HeatMapArray {
-    const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
-    var repo = try Git.Repo.init(repo_dir);
-    try repo.loadData(a);
-    defer repo.raze();
-
-    // TODO return empty hits here
-    const commit = repo.headCommit(a) catch unreachable;
-
-    const email_gop = try cached_emails.getOrPut(email);
-    if (!email_gop.found_existing) {
-        email_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, email);
-        email_gop.value_ptr.* = CachedRepo.init(cached_emails.allocator);
-    }
-
-    const repo_gop = try email_gop.value_ptr.*.getOrPut(gitdir);
-    var heatmap: *HeatMap = repo_gop.value_ptr;
-
-    var hits: *HeatMapArray = &heatmap.hits;
-
-    if (!repo_gop.found_existing) {
-        repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, gitdir);
-        @memset(hits[0..], 0);
-    }
-
-    if (!std.mem.eql(u8, heatmap.shahex[0..], commit.sha.hex[0..])) {
-        heatmap.shahex = commit.sha.hex;
-        @memset(hits[0..], 0);
-        _ = try countAll(a, hits, seen, until, commit, &repo, email);
-    }
-
-    return hits;
-}
-
-const DAY = 60 * 60 * 24;
+const DAY = 86400;
 const WEEK = DAY * 7;
 const YEAR = 31_536_000;
 
@@ -267,8 +280,8 @@ pub fn commitFlex(ctx: *Verse) Error!void {
         switch (file.kind) {
             .directory, .sym_link => {
                 const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                const count_repo = buildCommitList(ctx.alloc, &seen, until, repo, email) catch unreachable;
-                buildJournal(ctx.alloc, &scribe_list, email, repo) catch {
+                const count_repo = Journal.buildCommitList(ctx.alloc, &seen, until, repo, email) catch unreachable;
+                Journal.build(ctx.alloc, &scribe_list, email, repo) catch {
                     return error.Unknown;
                 };
                 repo_count +|= 1;
@@ -358,7 +371,7 @@ pub fn commitFlex(ctx: *Verse) Error!void {
     for (list, flex) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
     const flexes = try std.mem.join(ctx.alloc, "", list);
 
-    std.sort.pdq(Scribe.Commit, scribe_list.items, {}, journalSorted);
+    std.sort.pdq(Scribe.Commit, scribe_list.items, {}, Scribe.sorted);
 
     var months = std.ArrayList(Template.Structs.Months).init(ctx.alloc);
     {
@@ -426,3 +439,23 @@ pub fn commitFlex(ctx: *Verse) Error!void {
 
     return try ctx.sendPage(&page);
 }
+
+const std = @import("std");
+const eql = std.mem.eql;
+const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
+
+const Bleach = @import("../bleach.zig");
+const DateTime = @import("../datetime.zig");
+const Git = @import("../git.zig");
+
+const global_config = &@import("../main.zig").global_config;
+
+const Verse = @import("verse");
+const Template = Verse.Template;
+const DOM = Template.DOM;
+const HTML = Template.HTML;
+const S = Template.Structs;
+
+const Route = Verse.Router;
+const Error = Route.Error;
