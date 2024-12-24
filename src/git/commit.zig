@@ -1,17 +1,4 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const AnyReader = std.io.AnyReader;
-
-const Git = @import("../git.zig");
-const SHA = Git.SHA;
-const Repo = Git.Repo;
-const Tree = Git.Tree;
-const Actor = @import("actor.zig");
-
 pub const Commit = @This();
-
-// TODO not currently implemented
-pub const GPGSig = struct {};
 
 alloc: ?Allocator = null,
 memory: ?[]const u8 = null,
@@ -19,7 +6,7 @@ sha: SHA,
 tree: SHA,
 /// 9 ought to be enough for anyone... or at least robinli ... at least for a while
 /// TODO fix and make this dynamic
-parent: [9]?SHA,
+parent: [9]?SHA = .{null} ** 9,
 author: Actor,
 committer: Actor,
 /// Raw message including the title and body
@@ -30,32 +17,8 @@ gpgsig: ?GPGSig,
 
 ptr_parent: ?*Commit = null, // TOOO multiple parents
 
-fn header(self: *Commit, data: []const u8) !void {
-    if (std.mem.indexOf(u8, data, " ")) |brk| {
-        const name = data[0..brk];
-        const payload = data[brk + 1 ..];
-        if (std.mem.eql(u8, name, "tree")) {
-            self.tree = SHA.init(payload[0..40]);
-        } else if (std.mem.eql(u8, name, "parent")) {
-            for (&self.parent) |*parr| {
-                if (parr.* == null) {
-                    parr.* = SHA.init(payload[0..40]);
-                    return;
-                }
-            }
-        } else if (std.mem.eql(u8, name, "author")) {
-            self.author = try Actor.make(payload);
-        } else if (std.mem.eql(u8, name, "committer")) {
-            self.committer = try Actor.make(payload);
-        } else {
-            std.debug.print("unknown header: {any}\n", .{name});
-            return error.UnknownHeader;
-        }
-    } else return error.MalformedHeader;
-}
-
 /// TODO this
-fn gpgSig(_: *Commit, itr: *std.mem.SplitIterator(u8, .sequence)) !void {
+fn gpgSig(itr: *std.mem.SplitIterator(u8, .sequence)) !void {
     while (itr.next()) |line| {
         if (std.mem.indexOf(u8, line, "-----END PGP SIGNATURE-----") != null) return;
         if (std.mem.indexOf(u8, line, "-----END SSH SIGNATURE-----") != null) return;
@@ -66,12 +29,16 @@ fn gpgSig(_: *Commit, itr: *std.mem.SplitIterator(u8, .sequence)) !void {
 pub fn init(sha: SHA, data: []const u8) !Commit {
     if (std.mem.startsWith(u8, data, "commit")) unreachable;
     var lines = std.mem.splitSequence(u8, data, "\n");
-    var self: Commit = undefined;
     // I don't like it either, but... lazy
-    self.parent = .{ null, null, null, null, null, null, null, null, null };
+    var p_idx: usize = 0;
+    var parent: [9]?SHA = .{ null, null, null, null, null, null, null, null, null };
+    var tree: ?SHA = null;
+    var author: ?Actor = null;
+    var committer: ?Actor = null;
+
     while (lines.next()) |line| {
-        if (std.mem.startsWith(u8, line, "gpgsig")) {
-            self.gpgSig(&lines) catch |e| {
+        if (startsWith(u8, line, "gpgsig")) {
+            gpgSig(&lines) catch |e| {
                 std.debug.print("GPG sig failed {}\n", .{e});
                 std.debug.print("full stack '''\n{s}\n'''\n", .{data});
                 return e;
@@ -80,24 +47,44 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
         }
         if (line.len == 0) break;
         // Seen in GPG headers set by github... thanks github :<
-        if (std.mem.trim(u8, line, " \t").len != line.len) continue;
-
-        self.header(line) catch |e| {
-            std.debug.print("header failed {} on {} '{s}'\n", .{ e, lines.index.?, line });
-            std.debug.print("full stack '''\n{s}\n'''\n", .{data});
-            return e;
-        };
+        if (trim(u8, line, " \t").len != line.len) continue;
+        if (indexOf(u8, line, " ")) |brk| {
+            const name = line[0..brk];
+            const payload = line[brk + 1 ..];
+            if (eql(u8, name, "tree")) {
+                tree = SHA.init(payload[0..40]);
+            } else if (eql(u8, name, "parent")) {
+                if (p_idx >= parent.len) return error.TooManyParents;
+                parent[p_idx] = SHA.init(payload[0..40]);
+                p_idx += 1;
+            } else if (eql(u8, name, "author")) {
+                author = try Actor.make(payload);
+            } else if (eql(u8, name, "committer")) {
+                committer = try Actor.make(payload);
+            } else {
+                std.debug.print("unknown header: {any}\n", .{name});
+                return error.UnknownHeader;
+            }
+        } else return error.MalformedHeader;
     }
-    self.message = lines.rest();
-    if (std.mem.indexOf(u8, self.message, "\n\n")) |nl| {
-        self.title = self.message[0..nl];
-        self.body = self.message[nl + 2 ..];
-    } else {
-        self.title = self.message;
-        self.body = self.message[0..0];
+    var message = lines.rest();
+    var title: ?[]const u8 = null;
+    var body: ?[]const u8 = null;
+    if (indexOf(u8, message, "\n\n")) |nl| {
+        title = message[0..nl];
+        body = message[nl + 2 ..];
     }
-    self.sha = sha;
-    return self;
+    return .{
+        .sha = sha,
+        .tree = tree orelse return error.TreeMissing,
+        .parent = parent,
+        .author = author orelse return error.AuthorMissing,
+        .committer = committer orelse return error.CommitterMissing,
+        .message = message,
+        .title = title orelse message,
+        .body = body orelse "",
+        .gpgsig = null, // TODO still unimplemented
+    };
 }
 
 pub fn initOwned(sha: SHA, a: Allocator, object: Git.Object) !Commit {
@@ -177,3 +164,20 @@ pub fn format(
         \\}}
     , .{ self.author, self.committer, self.message });
 }
+
+const std = @import("std");
+const eql = std.mem.eql;
+const indexOf = std.mem.indexOf;
+const startsWith = std.mem.startsWith;
+const trim = std.mem.trim;
+const Allocator = std.mem.Allocator;
+const AnyReader = std.io.AnyReader;
+
+const Git = @import("../git.zig");
+const SHA = Git.SHA;
+const Repo = Git.Repo;
+const Tree = Git.Tree;
+const Actor = @import("actor.zig");
+
+// TODO not currently implemented
+pub const GPGSig = struct {};
