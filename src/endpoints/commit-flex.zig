@@ -240,7 +240,7 @@ pub fn commitFlex(ctx: *Verse) Error!void {
     var email: []const u8 = undefined;
     var tz_offset: ?i32 = null;
     var query = ctx.request.data.query.validator();
-    const user = query.optional("user");
+    const user = query.optionalItem("user");
 
     if (user) |u| {
         email = u.value;
