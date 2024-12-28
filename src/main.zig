@@ -81,7 +81,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    var runmode: Verse.Server.RunMode = .zwsgi;
+    var runmode: Verse.Server.RunModes = .zwsgi;
 
     var args = std.process.args();
     arg0 = args.next() orelse "srctree";
@@ -139,9 +139,12 @@ pub fn main() !void {
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
     defer thread.join();
 
-    var server = try Verse.Server.init(a, .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } }, .{
-        .routefn = Srctree.router,
-        .builderfn = Srctree.builder,
+    var server = try Verse.Server.init(a, .{
+        .mode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } },
+        .router = .{
+            .routefn = Srctree.router,
+            .builderfn = Srctree.builder,
+        },
     });
 
     server.serve() catch {
