@@ -27,6 +27,7 @@ pub const routes = [_]Match{
     ROUTE("admin", &Admin.endpoints),
     ROUTE("api", Api.router),
     //ROUTE("diffs", USERS.diffs),
+    GET("debug", debug),
     ROUTE("gist", Gist.router),
     ROUTE("inbox", Search.router),
     ROUTE("network", &Network.endpoints),
@@ -58,6 +59,10 @@ pub fn router(vrs: *Verse) Router.RoutingError!BuildFn {
     return Router.router(vrs, &routes);
 }
 
+fn debug(_: *Verse) Router.Error!void {
+    return error.Abusive;
+}
+
 pub fn builder(vrs: *Verse, call: BuildFn) void {
     const bh = vrs.alloc.create(Template.Structs.BodyHeaderHtml) catch unreachable;
     const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
@@ -85,12 +90,12 @@ pub fn builder(vrs: *Verse, call: BuildFn) void {
         error.BadData,
         error.DataMissing,
         => {
-            std.debug.print("Abusive {} because {}", .{ vrs.request, err });
+            std.debug.print("Abusive {} because {}\n", .{ vrs.request, err });
             for (vrs.request.raw.zwsgi.vars) |vars| {
-                std.debug.print("Abusive var '{s}' => '''{s}'''", .{ vars.key, vars.val });
+                std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
             }
             if (vrs.request.data.post) |post_data| {
-                std.debug.print("post data => '''{s}'''", .{post_data.rawpost});
+                std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
             }
         },
     };
