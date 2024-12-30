@@ -37,7 +37,7 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
     std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
     const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
 
@@ -50,7 +50,7 @@ pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
 
 const IssueNewPage = Template.PageData("issue-new.html");
 
-fn new(ctx: *Verse) Error!void {
+fn new(ctx: *Verse.Frame) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -66,7 +66,7 @@ const IssueCreate = struct {
     desc: []const u8,
 };
 
-fn newPost(ctx: *Verse) Error!void {
+fn newPost(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.request.data.post) |post| {
@@ -75,8 +75,8 @@ fn newPost(ctx: *Verse) Error!void {
             rd.name,
             valid.title,
             valid.desc,
-            if (ctx.auth.valid())
-                (ctx.auth.current_user orelse unreachable).username
+            if (ctx.user.?.valid())
+                (ctx.user orelse unreachable).username
             else
                 try allocPrint(ctx.alloc, "remote_address", .{}),
         ) catch unreachable;
@@ -92,7 +92,7 @@ fn newPost(ctx: *Verse) Error!void {
     return ctx.redirect(loc, true) catch unreachable;
 }
 
-fn newComment(ctx: *Verse) Error!void {
+fn newComment(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (ctx.request.data.post) |post| {
         var valid = post.validator();
@@ -105,8 +105,8 @@ fn newComment(ctx: *Verse) Error!void {
             rd.name,
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
-        const username = if (ctx.auth.valid())
-            (ctx.auth.current_user orelse unreachable).username
+        const username = if (ctx.user.?.valid())
+            (ctx.user orelse unreachable).username
         else
             "public";
 
@@ -123,7 +123,7 @@ fn newComment(ctx: *Verse) Error!void {
 
 const DeltaIssuePage = Template.PageData("delta-issue.html");
 
-fn view(ctx: *Verse) Error!void {
+fn view(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
@@ -177,7 +177,7 @@ fn view(ctx: *Verse) Error!void {
 
 const DeltaListHtml = Template.PageData("delta-list.html");
 
-fn list(ctx: *Verse) Error!void {
+fn list(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;

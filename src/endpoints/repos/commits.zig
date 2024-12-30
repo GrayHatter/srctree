@@ -44,14 +44,14 @@ const AddComment = struct {
     text: []const u8,
 };
 
-pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
     const rd = RouteData.make(&ctx.uri) orelse return commitsView;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return viewCommit;
     return commitsView;
 }
 
-fn newComment(ctx: *Verse) Error!void {
+fn newComment(ctx: *Verse.Frame) Error!void {
     if (ctx.request.data.post) |post| {
         _ = post.validate(AddComment) catch return error.BadData;
     }
@@ -72,7 +72,7 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     return try patch.diffsVerseSlice(a);
 }
 
-fn commitHtml(ctx: *Verse, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
+fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});
         return error.Abusive;
@@ -180,7 +180,7 @@ fn commitHtml(ctx: *Verse, sha: []const u8, repo_name: []const u8, repo: Git.Rep
     return ctx.sendPage(&page) catch unreachable;
 }
 
-pub fn commitPatch(ctx: *Verse, sha: []const u8, repo: Git.Repo) Error!void {
+pub fn commitPatch(ctx: *Verse.Frame, sha: []const u8, repo: Git.Repo) Error!void {
     var acts = repo.getAgent(ctx.alloc);
     if (endsWith(u8, sha, ".patch")) {
         var rbuf: [0xff]u8 = undefined;
@@ -198,7 +198,7 @@ pub fn commitPatch(ctx: *Verse, sha: []const u8, repo: Git.Repo) Error!void {
     }
 }
 
-pub fn viewCommit(ctx: *Verse) Error!void {
+pub fn viewCommit(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (rd.verb == null) return commitsView(ctx);
 
@@ -370,7 +370,7 @@ fn buildListBetween(
     return commits;
 }
 
-pub fn commitsView(ctx: *Verse) Error!void {
+pub fn commitsView(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     if (ctx.uri.next()) |next| {
@@ -409,7 +409,7 @@ pub fn commitsView(ctx: *Verse) Error!void {
     return sendCommits(ctx, cmts_list, rd.name, last_sha.hex[0..8]);
 }
 
-pub fn commitsBefore(ctx: *Verse) Error!void {
+pub fn commitsBefore(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     std.debug.assert(std.mem.eql(u8, "after", ctx.uri.next().?));
@@ -427,7 +427,7 @@ pub fn commitsBefore(ctx: *Verse) Error!void {
     return sendCommits(ctx, cmts_list, rd.name, last_sha[0..]);
 }
 
-fn sendCommits(ctx: *Verse, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
+fn sendCommits(ctx: *Verse.Frame, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
     var page = CommitsListPage.init(.{

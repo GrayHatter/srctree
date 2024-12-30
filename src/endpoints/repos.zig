@@ -9,8 +9,8 @@ const splitScalar = std.mem.splitScalar;
 const Verse = @import("verse");
 const Request = Verse.Request;
 const Template = Verse.Template;
-const HTML = Template.HTML;
-const DOM = Template.DOM;
+const HTML = Verse.html;
+const DOM = Verse.html.DOM;
 const Route = Verse.Router;
 const S = Template.Structs;
 const elm = HTML.element;
@@ -90,7 +90,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn navButtons(ctx: *Verse) ![2]Template.Structs.NavButtons {
+pub fn navButtons(ctx: *Verse.Frame) ![2]Template.Structs.NavButtons {
     const rd = RouteData.make(&ctx.uri) orelse unreachable;
     if (!rd.exists()) unreachable;
     var i_count: usize = 0;
@@ -121,7 +121,7 @@ pub fn navButtons(ctx: *Verse) ![2]Template.Structs.NavButtons {
     return btns;
 }
 
-pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
@@ -247,7 +247,7 @@ const RepoSortReq = struct {
     sort: ?[]const u8,
 };
 
-fn list(ctx: *Verse) Error!void {
+fn list(ctx: *Verse.Frame) Error!void {
     var cwd = std.fs.cwd();
 
     const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.BadData;
@@ -276,7 +276,7 @@ fn list(ctx: *Verse) Error!void {
         }, repoSorterNew);
 
         var repo_buttons: []const u8 = "";
-        if (ctx.auth.valid()) {
+        if (ctx.user.?.valid()) {
             repo_buttons =
                 \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
             ;
@@ -322,13 +322,13 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
 }
 
 const NewRepoPage = Template.PageData("repo-new.html");
-fn newRepo(ctx: *Verse) Error!void {
+fn newRepo(ctx: *Verse.Frame) Error!void {
     ctx.status = .ok;
 
     return error.NotImplemented;
 }
 
-fn treeBlob(ctx: *Verse) Error!void {
+fn treeBlob(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     _ = ctx.uri.next();
 
@@ -453,7 +453,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
 
 const BlamePage = Template.PageData("blame.html");
 
-fn blame(ctx: *Verse) Error!void {
+fn blame(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
     _ = ctx.uri.next();
@@ -563,7 +563,7 @@ fn excludedExt(name: []const u8) bool {
 
 const BlobPage = Template.PageData("blob.html");
 
-fn blob(vrs: *Verse, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
+fn blob(vrs: *Verse.Frame, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var blb: Git.Blob = undefined;
 
     var files = pfiles;
@@ -710,7 +710,7 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
 
 const TreePage = Template.PageData("tree.html");
 
-fn tree(ctx: *Verse, repo: *Git.Repo, files: *Git.Tree) Error!void {
+fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
     //const head = if (repo.head) |h| switch (h) {
     //    .sha => |s| s.hex[0..],
     //    .branch => |b| b.name,
@@ -811,7 +811,7 @@ fn tree(ctx: *Verse, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
 const TagPage = Template.PageData("repo-tags.html");
 
-fn tagsList(ctx: *Verse) Error!void {
+fn tagsList(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();

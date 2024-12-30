@@ -24,12 +24,12 @@ pub const endpoints = [_]Router.Match{
     Router.ANY("git-upload-pack", gitUploadPack),
 };
 
-pub fn router(ctx: *Verse) Router.RoutingError!Router.BuildFn {
+pub fn router(ctx: *Verse.Frame) Router.RoutingError!Router.BuildFn {
     std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
     return Router.router(ctx, &endpoints);
 }
 
-fn gitUploadPack(ctx: *Verse) Error!void {
+fn gitUploadPack(ctx: *Verse.Frame) Error!void {
     ctx.uri.reset();
     _ = ctx.uri.first();
     const name = ctx.uri.next() orelse return error.Unknown;
@@ -105,7 +105,7 @@ fn gitUploadPack(ctx: *Verse) Error!void {
     _ = child.wait() catch unreachable;
 }
 
-fn __objects(ctx: *Verse) Error!void {
+fn __objects(ctx: *Verse.Frame) Error!void {
     std.debug.print("gitweb objects\n", .{});
 
     const rd = @import("endpoints/repos.zig").RouteData.make(&ctx.uri) orelse return error.Unrouteable;
@@ -138,7 +138,7 @@ fn __objects(ctx: *Verse) Error!void {
     ctx.sendRawSlice(data) catch return Error.Unknown;
 }
 
-fn __info(ctx: *Verse) Error!void {
+fn __info(ctx: *Verse.Frame) Error!void {
     std.debug.print("gitweb info\n", .{});
 
     const rd = @import("endpoints/repos.zig").RouteData.make(&ctx.uri) orelse return error.Unrouteable;

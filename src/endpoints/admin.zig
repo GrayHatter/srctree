@@ -5,8 +5,8 @@ const Allocator = std.mem.Allocator;
 const Verse = @import("verse");
 const Route = Verse.Router;
 const Template = Verse.Template;
-const HTML = Template.HTML;
-const DOM = Template.DOM;
+const HTML = Verse.html;
+const DOM = HTML.DOM;
 
 const Error = Route.Error;
 const UriIter = Route.UriIter;
@@ -39,8 +39,8 @@ const AdminPage = Template.PageData("admin.html");
 /// TODO fix me
 const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
-fn default(ctx: *Verse) Error!void {
-    try ctx.auth.requireValid();
+fn default(ctx: *Verse.Frame) Error!void {
+    //try ctx.auth.requireValid();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -69,8 +69,8 @@ fn default(ctx: *Verse) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn cloneUpstream(ctx: *Verse) Error!void {
-    try ctx.auth.requireValid();
+fn cloneUpstream(ctx: *Verse.Frame) Error!void {
+    //try ctx.auth.requireValid();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -103,8 +103,8 @@ const CloneUpstreamReq = struct {
     repo_uri: []const u8,
 };
 
-fn postCloneUpstream(ctx: *Verse) Error!void {
-    try ctx.auth.requireValid();
+fn postCloneUpstream(ctx: *Verse.Frame) Error!void {
+    //try ctx.auth.requireValid();
 
     const udata = ctx.request.data.post.?.validate(CloneUpstreamReq) catch return error.BadData;
     std.debug.print("repo uri {s}\n", .{udata.repo_uri});
@@ -149,8 +149,8 @@ fn postCloneUpstream(ctx: *Verse) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn postNewRepo(ctx: *Verse) Error!void {
-    try ctx.auth.requireValid();
+fn postNewRepo(ctx: *Verse.Frame) Error!void {
+    //try ctx.auth.requireValid();
     // TODO ini repo dir
     var valid = if (ctx.request.data.post) |p|
         p.validator()
@@ -202,8 +202,8 @@ fn postNewRepo(ctx: *Verse) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn newRepo(ctx: *Verse) Error!void {
-    try ctx.auth.requireValid();
+fn newRepo(ctx: *Verse.Frame) Error!void {
+    //try ctx.auth.requireValid();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -230,8 +230,8 @@ fn newRepo(ctx: *Verse) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn view(ctx: *Verse) Error!void {
-    try ctx.auth.requireValid();
+fn view(ctx: *Verse.Frame) Error!void {
+    //try ctx.auth.requireValid();
     if (ctx.request.data.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(ctx);

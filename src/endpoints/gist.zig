@@ -26,7 +26,7 @@ const endpoints = [_]Router.Match{
     POST("post", post),
 };
 
-pub fn router(ctx: *Verse) Router.RoutingError!Router.BuildFn {
+pub fn router(ctx: *Verse.Frame) Router.RoutingError!Router.BuildFn {
     if (!std.mem.eql(u8, ctx.uri.next() orelse "", "gist")) return error.Unrouteable;
 
     if (ctx.uri.peek()) |peek| {
@@ -51,14 +51,14 @@ const GistPost = struct {
     new_file: ?[]const u8,
 };
 
-fn post(ctx: *Verse) Error!void {
-    try ctx.auth.requireValid();
+fn post(ctx: *Verse.Frame) Error!void {
+    //try ctx.auth.requireValid();
 
     const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.request.data) catch return error.BadData;
 
     if (udata.file_name.len != udata.file_blob.len) return error.BadData;
-    const username = if (ctx.auth.valid())
-        (ctx.auth.current_user orelse unreachable).username
+    const username = if (ctx.user.?.valid())
+        (ctx.user orelse unreachable).username
     else
         "public";
 
@@ -91,12 +91,12 @@ fn post(ctx: *Verse) Error!void {
     return ctx.redirect("/gist/" ++ hash_str, true) catch unreachable;
 }
 
-fn new(ctx: *Verse) Error!void {
+fn new(ctx: *Verse.Frame) Error!void {
     const files = [1]Template.Structs.GistFiles{.{}};
     return edit(ctx, &files);
 }
 
-fn edit(vrs: *Verse, files: []const Template.Structs.GistFiles) Error!void {
+fn edit(vrs: *Verse.Frame, files: []const Template.Structs.GistFiles) Error!void {
     var page = GistNewPage.init(.{
         .meta_head = .{
             .open_graph = .{
@@ -124,7 +124,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFi
     return out;
 }
 
-fn view(vrs: *Verse) Error!void {
+fn view(vrs: *Verse.Frame) Error!void {
     // TODO move this back into context somehow
     var btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 

@@ -34,7 +34,7 @@ const APIRouteData = struct {
     }
 };
 
-pub fn router(vrs: *Verse) Router.RoutingError!Router.BuildFn {
+pub fn router(vrs: *Verse.Frame) Router.RoutingError!Router.BuildFn {
     const uri_api = vrs.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
     const rd = APIRouteData.init(vrs.alloc) catch @panic("OOM");
@@ -47,7 +47,7 @@ const Diff = struct {
     sha: []const u8,
 };
 
-fn diff(vrs: *Verse) Router.Error!void {
+fn diff(vrs: *Verse.Frame) Router.Error!void {
     return try vrs.sendJSON([0]Diff{}, .ok);
 }
 
@@ -55,7 +55,7 @@ const HeartBeat = struct {
     nice: usize = 0,
 };
 
-fn heartbeat(vrs: *Verse) Router.Error!void {
+fn heartbeat(vrs: *Verse.Frame) Router.Error!void {
     return try vrs.sendJSON(HeartBeat{ .nice = 69 }, .ok);
 }
 
@@ -63,7 +63,7 @@ const Issue = struct {
     index: usize,
 };
 
-fn issue(vrs: *Verse) Router.Error!void {
+fn issue(vrs: *Verse.Frame) Router.Error!void {
     return try vrs.sendJSON([0]Issue{}, .ok);
 }
 
@@ -82,7 +82,7 @@ const Network = struct {
     networks: []RemotePeer,
 };
 
-fn network(vrs: *Verse) Router.Error!void {
+fn network(vrs: *Verse.Frame) Router.Error!void {
     return try vrs.sendJSON(Network{ .networks = [0].{} }, .ok);
 }
 
@@ -90,7 +90,7 @@ const Patch = struct {
     patch: []const u8,
 };
 
-fn patch(vrs: *Verse) Router.Error!void {
+fn patch(vrs: *Verse.Frame) Router.Error!void {
     return try vrs.sendJSON(Patch{ .patch = [0].{} }, .ok);
 }
 
@@ -102,7 +102,7 @@ const Flex = struct {
     };
 };
 
-fn flex(vrs: *Verse) Router.Error!void {
+fn flex(vrs: *Verse.Frame) Router.Error!void {
     return try vrs.sendJSON([0]Flex{}, .ok);
 }
 
@@ -111,6 +111,6 @@ const User = struct {
     email: []const u8,
 };
 
-fn user(vrs: *Verse) Router.Error!void {
+fn user(vrs: *Verse.Frame) Router.Error!void {
     return try vrs.sendJSON([0]User{}, .ok);
 }

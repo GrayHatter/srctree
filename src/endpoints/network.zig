@@ -3,8 +3,7 @@ const allocPrint = std.fmt.allocPrint;
 
 const Verse = @import("verse");
 const Template = Verse.Template;
-const DOM = Template.DOM;
-const HTML = Template.HTML;
+const DOM = Verse.html.DOM;
 
 const Route = Verse.Router;
 const Error = Route.Error;
@@ -21,7 +20,7 @@ pub const endpoints = [_]Route.Match{
 
 const NetworkPage = Template.PageData("network.html");
 
-fn default(ctx: *Verse) Error!void {
+fn default(ctx: *Verse.Frame) Error!void {
     var dom = DOM.new(ctx.alloc);
 
     const list = try Repos.allNames(ctx.alloc);
@@ -35,10 +34,10 @@ fn default(ctx: *Verse) Error!void {
         defer repo.raze();
         if (repo.findRemote("upstream") catch continue) |remote| {
             if (remote.url) |_| {
-                dom = dom.open(HTML.h3(null, &HTML.Attr.class("upstream")));
-                dom.push(HTML.text("Upstream: "));
+                dom = dom.open(Verse.html.h3(null, &Verse.html.Attr.class("upstream")));
+                dom.push(Verse.html.text("Upstream: "));
                 const purl = try allocPrint(ctx.alloc, "{link}", .{remote});
-                dom.push(HTML.anch(purl, try HTML.Attr.create(ctx.alloc, "href", purl)));
+                dom.push(Verse.html.anch(purl, try Verse.html.Attr.create(ctx.alloc, "href", purl)));
                 dom = dom.close();
             }
         }

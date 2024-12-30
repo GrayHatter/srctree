@@ -233,7 +233,7 @@ const YEAR = 31_536_000;
 
 const UserCommitsPage = Template.PageData("user_commits.html");
 
-pub fn commitFlex(ctx: *Verse) Error!void {
+pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     const monthAtt = HTML.Attr.class("month");
 
     var nowish = DateTime.now();
@@ -453,8 +453,8 @@ const global_config = &@import("../main.zig").global_config;
 
 const Verse = @import("verse");
 const Template = Verse.Template;
-const DOM = Template.DOM;
-const HTML = Template.HTML;
+const DOM = Verse.html.DOM;
+const HTML = Verse.html;
 const S = Template.Structs;
 
 const Route = Verse.Router;

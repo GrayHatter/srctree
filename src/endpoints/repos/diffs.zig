@@ -52,7 +52,7 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Verse) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
     if (!eql(u8, "diffs", ctx.uri.next() orelse return error.Unrouteable))
         return error.Unrouteable;
     const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
@@ -80,7 +80,7 @@ const DiffCreateChangeReq = struct {
     desc: []const u8,
 };
 
-fn new(ctx: *Verse) Error!void {
+fn new(ctx: *Verse.Frame) Error!void {
     var network: ?S.Network = null;
     var patchuri: ?S.PatchUri = .{};
     var title: ?[]const u8 = null;
@@ -158,7 +158,7 @@ const DiffCreateReq = struct {
     //},
 };
 
-fn createDiff(vrs: *Verse) Error!void {
+fn createDiff(vrs: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&vrs.uri) orelse return error.Unrouteable;
     if (vrs.request.data.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.BadData;
@@ -178,8 +178,8 @@ fn createDiff(vrs: *Verse) Error!void {
                 rd.name,
                 udata.title,
                 udata.desc,
-                if (vrs.auth.valid())
-                    (vrs.auth.current_user orelse unreachable).username
+                if (vrs.user.?.valid())
+                    (vrs.user orelse unreachable).username
                 else
                     try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
             ) catch unreachable;
@@ -202,7 +202,7 @@ fn createDiff(vrs: *Verse) Error!void {
     return try new(vrs);
 }
 
-fn newComment(ctx: *Verse) Error!void {
+fn newComment(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.request.data.post) |post| {
@@ -215,8 +215,8 @@ fn newComment(ctx: *Verse) Error!void {
         if (msg.value.len < 2) return ctx.redirect(loc, true) catch unreachable;
 
         var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
-        const username = if (ctx.auth.valid())
-            (ctx.auth.current_user orelse unreachable).username
+        const username = if (ctx.user.?.valid())
+            (ctx.user orelse unreachable).username
         else
             "public";
         var thread = delta.loadThread(ctx.alloc) catch unreachable;
@@ -228,7 +228,7 @@ fn newComment(ctx: *Verse) Error!void {
     return error.Unknown;
 }
 
-pub fn directReply(ctx: *Verse) Error!void {
+pub fn directReply(ctx: *Verse.Frame) Error!void {
     _ = ctx.uri.next().?;
     _ = ctx.uri.next().?;
     std.debug.print("{s}\n", .{ctx.uri.next().?});
@@ -626,7 +626,7 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
 
 const DiffViewPage = Template.PageData("delta-diff.html");
 
-fn view(ctx: *Verse) Error!void {
+fn view(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
@@ -727,8 +727,8 @@ fn view(ctx: *Verse) Error!void {
         @panic("oops");
     }
 
-    const username = if (ctx.auth.valid())
-        (ctx.auth.current_user orelse unreachable).username
+    const username = if (ctx.user.?.valid())
+        (ctx.user orelse unreachable).username
     else
         "public";
 
@@ -754,7 +754,7 @@ fn view(ctx: *Verse) Error!void {
 }
 
 const DeltaListPage = Template.PageData("delta-list.html");
-fn list(ctx: *Verse) Error!void {
+fn list(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;

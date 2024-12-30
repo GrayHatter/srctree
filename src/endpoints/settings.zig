@@ -13,8 +13,8 @@ pub const endpoints = [_]Router.Match{
 
 const SettingsPage = Template.PageData("settings.html");
 
-fn default(vrs: *Verse) Router.Error!void {
-    try vrs.auth.requireValid();
+fn default(vrs: *Verse.Frame) Router.Error!void {
+    //try vrs.auth.requireValid();
 
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
@@ -47,8 +47,8 @@ const SettingsReq = struct {
     block_text: [][]const u8,
 };
 
-fn post(vrs: *Verse) Router.Error!void {
-    try vrs.auth.requireValid();
+fn post(vrs: *Verse.Frame) Router.Error!void {
+    //try vrs.auth.requireValid();
 
     const udata = RequestData(SettingsReq).initMap(vrs.alloc, vrs.request.data) catch return error.BadData;
 

@@ -19,7 +19,7 @@ pub const routes = [_]Routes.Match{
     ROUTE("inbox", inbox),
 };
 
-pub fn router(ctx: *Verse) Routes.RoutingError!Routes.BuildFn {
+pub fn router(ctx: *Verse.Frame) Routes.RoutingError!Routes.BuildFn {
     return Routes.router(ctx, &routes);
 }
 
@@ -27,11 +27,11 @@ const SearchReq = struct {
     q: ?[]const u8,
 };
 
-fn inbox(ctx: *Verse) Error!void {
+fn inbox(ctx: *Verse.Frame) Error!void {
     return custom(ctx, "owner:me");
 }
 
-fn search(ctx: *Verse) Error!void {
+fn search(ctx: *Verse.Frame) Error!void {
     const udata = ctx.request.data.query.validate(SearchReq) catch return error.BadData;
 
     const query_str = udata.q orelse "null";
@@ -42,7 +42,7 @@ fn search(ctx: *Verse) Error!void {
 
 const DeltaListPage = Template.PageData("delta-list.html");
 
-fn custom(ctx: *Verse, search_str: []const u8) Error!void {
+fn custom(ctx: *Verse.Frame, search_str: []const u8) Error!void {
     var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
     var itr = splitScalar(u8, search_str, ' ');

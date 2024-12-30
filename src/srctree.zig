@@ -42,14 +42,14 @@ pub const routes = [_]Match{
 
 const E404Page = Template.PageData("4XX.html");
 
-fn notFound(vrs: *Verse) Router.Error!void {
+fn notFound(vrs: *Verse.Frame) Router.Error!void {
     std.debug.print("404 for route\n", .{});
     vrs.status = .not_found;
     var page = E404Page.init(.{});
     vrs.sendPage(&page) catch unreachable;
 }
 
-pub fn router(vrs: *Verse) Router.RoutingError!BuildFn {
+pub fn router(vrs: *Verse.Frame) Router.RoutingError!BuildFn {
     //    var i_count: usize = 0;
     //    var itr = Types.Delta.iterator(vrs.alloc, "");
     //    while (itr.next()) |it| {
@@ -59,11 +59,11 @@ pub fn router(vrs: *Verse) Router.RoutingError!BuildFn {
     return Router.router(vrs, &routes);
 }
 
-fn debug(_: *Verse) Router.Error!void {
+fn debug(_: *Verse.Frame) Router.Error!void {
     return error.Abusive;
 }
 
-pub fn builder(vrs: *Verse, call: BuildFn) void {
+pub fn builder(vrs: *Verse.Frame, call: BuildFn) void {
     const bh = vrs.alloc.create(Template.Structs.BodyHeaderHtml) catch unreachable;
     const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     bh.* = .{ .nav = .{ .nav_auth = "Public2", .nav_buttons = &btns } };

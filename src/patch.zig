@@ -12,8 +12,8 @@ const CURL = @import("curl.zig");
 const Bleach = @import("bleach.zig");
 const Verse = @import("verse");
 const Response = Verse.Response;
-const HTML = Verse.Template.HTML;
-const DOM = Verse.Template.DOM;
+const HTML = Verse.html;
+const DOM = Verse.html.DOM;
 
 pub const Patch = @This();
 
