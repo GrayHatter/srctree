@@ -8,14 +8,13 @@ const splitScalar = std.mem.splitScalar;
 
 const Verse = @import("verse");
 const Request = Verse.Request;
-const Template = Verse.Template;
-const HTML = Verse.html;
-const DOM = Verse.html.DOM;
+const template = Verse.template;
+const html = template.html;
+const DOM = html.DOM;
 const Route = Verse.Router;
-const S = Template.Structs;
-const elm = HTML.element;
+const S = template.Structs;
+const elm = html.element;
 const Error = Route.Error;
-const UriIter = Route.UriIter;
 const ROUTE = Route.ROUTE;
 const POST = Route.POST;
 const GET = Route.GET;
@@ -65,7 +64,7 @@ pub const RouteData = struct {
         return null;
     }
 
-    pub fn make(uri: *UriIter) ?RouteData {
+    pub fn make(uri: *Route.UriIterator) ?RouteData {
         const index = uri.index;
         defer uri.index = index;
         uri.reset();
@@ -90,7 +89,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn navButtons(ctx: *Verse.Frame) ![2]Template.Structs.NavButtons {
+pub fn navButtons(ctx: *Verse.Frame) ![2]template.Structs.NavButtons {
     const rd = RouteData.make(&ctx.uri) orelse unreachable;
     if (!rd.exists()) unreachable;
     var i_count: usize = 0;
@@ -105,7 +104,7 @@ pub fn navButtons(ctx: *Verse.Frame) ![2]Template.Structs.NavButtons {
         dlt.raze(ctx.alloc);
     }
 
-    const btns = [2]Template.Structs.NavButtons{
+    const btns = [2]template.Structs.NavButtons{
         .{
             .name = "issues",
             .extra = i_count,
@@ -200,7 +199,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.RepoList {
+fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !template.Structs.RepoList {
     var desc: ?[]const u8 = try repo.description(a);
     if (std.mem.startsWith(u8, desc.?, "Unnamed repository; edit this file")) {
         desc = null;
@@ -221,7 +220,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.R
         );
     } else |_| {}
 
-    var tag: ?Template.Structs.Tag = null;
+    var tag: ?template.Structs.Tag = null;
 
     if (repo.tags) |tags| {
         tag = .{
@@ -241,7 +240,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !Template.Structs.R
     };
 }
 
-const ReposPage = Template.PageData("repos.html");
+const ReposPage = template.PageData("repos.html");
 
 const RepoSortReq = struct {
     sort: ?[]const u8,
@@ -282,7 +281,7 @@ fn list(ctx: *Verse.Frame) Error!void {
             ;
         }
 
-        const repos_compiled = try ctx.alloc.alloc(Template.Structs.RepoList, repos.items.len);
+        const repos_compiled = try ctx.alloc.alloc(template.Structs.RepoList, repos.items.len);
         for (repos.items, repos_compiled) |*repo, *compiled| {
             defer repo.raze();
             compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
@@ -290,7 +289,7 @@ fn list(ctx: *Verse.Frame) Error!void {
             };
         }
 
-        //var btns = [1]Template.Structs.NavButtons{.{
+        //var btns = [1]template.Structs.NavButtons{.{
         //    .name = "inbox",
         //    .extra = 0,
         //    .url = "/inbox",
@@ -321,7 +320,7 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
     return out;
 }
 
-const NewRepoPage = Template.PageData("repo-new.html");
+const NewRepoPage = template.PageData("repo-new.html");
 fn newRepo(ctx: *Verse.Frame) Error!void {
     ctx.status = .ok;
 
@@ -451,7 +450,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
     };
 }
 
-const BlamePage = Template.PageData("blame.html");
+const BlamePage = template.PageData("blame.html");
 
 fn blame(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
@@ -561,7 +560,7 @@ fn excludedExt(name: []const u8) bool {
     return false;
 }
 
-const BlobPage = Template.PageData("blob.html");
+const BlobPage = template.PageData("blob.html");
 
 fn blob(vrs: *Verse.Frame, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var blb: Git.Blob = undefined;
@@ -623,7 +622,7 @@ fn blob(vrs: *Verse.Frame, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     try vrs.sendPage(&page);
 }
 
-fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *UriIter, pfiles: Git.Tree) !Git.Tree {
+fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *Route.UriIterator, pfiles: Git.Tree) !Git.Tree {
     var files: Git.Tree = pfiles;
     if (uri.next()) |udir| for (files.blobs) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
@@ -635,17 +634,17 @@ fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *UriIter, pfiles: Git.Tree) 
     return files;
 }
 
-fn htmlReadme(a: Allocator, readme: []const u8) ![]HTML.E {
+fn htmlReadme(a: Allocator, readme: []const u8) ![]html.E {
     var dom = DOM.new(a);
 
-    dom = dom.open(HTML.element("readme", null, null));
-    dom.push(HTML.element("intro", "README.md", null));
-    dom = dom.open(HTML.element("code", null, null));
+    dom = dom.open(html.element("readme", null, null));
+    dom.push(html.element("intro", "README.md", null));
+    dom = dom.open(html.element("code", null, null));
     const clean = Bleach.Html.sanitizeAlloc(a, readme) catch return error.Unknown;
     const translated = try Highlight.translate(a, .markdown, clean);
     var litr = std.mem.splitScalar(u8, translated, '\n');
     while (litr.next()) |line| {
-        dom.push(HTML.element("ln", line, null));
+        dom.push(html.element("ln", line, null));
     }
     dom = dom.close();
     dom = dom.close();
@@ -675,40 +674,40 @@ fn drawFileLine(
     }
 
     // I know... I KNOW!!!
-    dom = dom.open(HTML.div(null, null));
+    dom = dom.open(html.div(null, null));
     const commit_href = try allocPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha.hex[0..8] });
-    dom.push(try HTML.aHrefAlloc(a, ch.commit_title, commit_href));
-    dom.dupe(HTML.span(try allocPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
+    dom.push(try html.aHrefAlloc(a, ch.commit_title, commit_href));
+    dom.dupe(html.span(try allocPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
     dom = dom.close();
     return dom.close();
 }
 
 fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
-    var dom = ddom.open(HTML.element("file", null, null));
+    var dom = ddom.open(html.element("file", null, null));
     const file_link = try allocPrint(a, "/repo/{s}/blob/{s}{s}", .{ rname, base, obj.name });
 
-    const href = &[_]HTML.Attribute{.{
+    const href = &[_]html.Attribute{.{
         .key = "href",
         .value = file_link,
     }};
-    dom.dupe(HTML.anch(obj.name, href));
+    dom.dupe(html.anch(obj.name, href));
 
     return dom;
 }
 
 fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
-    var dom = ddom.open(HTML.element("tree", null, null));
+    var dom = ddom.open(html.element("tree", null, null));
     const file_link = try allocPrint(a, "/repo/{s}/tree/{s}{s}/", .{ rname, base, obj.name });
 
-    const href = &[_]HTML.Attribute{.{
+    const href = &[_]html.Attribute{.{
         .key = "href",
         .value = file_link,
     }};
-    dom.dupe(HTML.anch(try dupeDir(a, obj.name), href));
+    dom.dupe(html.anch(try dupeDir(a, obj.name), href));
     return dom;
 }
 
-const TreePage = Template.PageData("tree.html");
+const TreePage = template.PageData("tree.html");
 
 fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
     //const head = if (repo.head) |h| switch (h) {
@@ -727,28 +726,28 @@ fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
     var dom = DOM.new(ctx.alloc);
 
-    dom = dom.open(HTML.element("repo", null, &HTML.Attr.class("landing")));
+    dom = dom.open(html.element("repo", null, &html.Attr.class("landing")));
 
-    dom = dom.open(HTML.element("intro", null, null));
-    dom.push(HTML.h3(rd.name, null));
+    dom = dom.open(html.element("intro", null, null));
+    dom.push(html.h3(rd.name, null));
     const branches = try allocPrint(ctx.alloc, "{} branches", .{repo.refs.len});
-    dom.push(HTML.span(branches, null));
+    dom.push(html.span(branches, null));
 
     const c = repo.headCommit(ctx.alloc) catch return error.Unknown;
-    dom.push(HTML.span(c.title[0..@min(c.title.len, 50)], null));
+    dom.push(html.span(c.title[0..@min(c.title.len, 50)], null));
     const commit_time = try allocPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
-    dom = dom.open(HTML.span(null, &HTML.Attr.class("muted")));
+    dom = dom.open(html.span(null, &html.Attr.class("muted")));
     const commit_href = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha.hex[0..8] });
-    dom.push(HTML.text(commit_time));
-    dom.push(try HTML.aHrefAlloc(ctx.alloc, c.sha.hex[0..8], commit_href));
+    dom.push(html.text(commit_time));
+    dom.push(try html.aHrefAlloc(ctx.alloc, c.sha.hex[0..8], commit_href));
     dom = dom.close();
     dom = dom.close();
 
-    dom = dom.open(HTML.div(null, &HTML.Attr.class("treelist")));
+    dom = dom.open(html.div(null, &html.Attr.class("treelist")));
     if (uri_base.len > 0) {
         const end = std.mem.lastIndexOf(u8, uri_base[0 .. uri_base.len - 1], "/") orelse 0;
-        dom = dom.open(HTML.element("tree", null, null));
-        const dd_href = &[_]HTML.Attribute{.{
+        dom = dom.open(html.element("tree", null, null));
+        const dd_href = &[_]html.Attribute{.{
             .key = "href",
             .value = try allocPrint(
                 ctx.alloc,
@@ -756,7 +755,7 @@ fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
                 .{ rd.name, uri_base[0..end] },
             ),
         }};
-        dom.dupe(HTML.anch("..", dd_href));
+        dom.dupe(html.anch("..", dd_href));
         dom = dom.close();
     }
     try files.pushPath(ctx.alloc, uri_base);
@@ -772,7 +771,7 @@ fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
         }
     } else |err| switch (err) {
         error.PathNotFound => {
-            dom.push(HTML.h3("unable to find this file", null));
+            dom.push(html.h3("unable to find this file", null));
         },
         else => return error.Unrouteable,
     }
@@ -809,7 +808,7 @@ fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
     try ctx.sendPage(&page);
 }
 
-const TagPage = Template.PageData("repo-tags.html");
+const TagPage = template.PageData("repo-tags.html");
 
 fn tagsList(ctx: *Verse.Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
@@ -823,10 +822,10 @@ fn tagsList(ctx: *Verse.Frame) Error!void {
 
     std.sort.heap(Git.Tag, repo.tags.?, {}, tagSorter);
 
-    const tstack = try ctx.alloc.alloc(Template.Structs.Tags, repo.tags.?.len);
+    const tstack = try ctx.alloc.alloc(template.Structs.Tags, repo.tags.?.len);
 
-    for (repo.tags.?, tstack) |tag, *html| {
-        html.name = tag.name;
+    for (repo.tags.?, tstack) |tag, *html_| {
+        html_.name = tag.name;
     }
 
     //var btns = navButtons(ctx) catch return error.Unknown;

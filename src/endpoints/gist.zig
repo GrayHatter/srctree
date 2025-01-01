@@ -2,7 +2,7 @@ const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 
 const Verse = @import("verse");
-const Template = Verse.Template;
+const Template = Verse.template;
 const S = Template.Structs;
 const RequestData = Verse.RequestData.RequestData;
 const Bleach = @import("../bleach.zig");

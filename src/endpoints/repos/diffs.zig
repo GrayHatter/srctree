@@ -25,7 +25,7 @@ const HTML = Verse.HTML;
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
 const Route = Verse.Router;
-const Template = Verse.Template;
+const Template = Verse.template;
 const Types = @import("../../types.zig");
 const Highlighting = @import("../../syntax-highlight.zig");
 

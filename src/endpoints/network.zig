@@ -2,8 +2,9 @@ const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 
 const Verse = @import("verse");
-const Template = Verse.Template;
-const DOM = Verse.html.DOM;
+const template = Verse.template;
+const html = template.html;
+const DOM = html.DOM;
 
 const Route = Verse.Router;
 const Error = Route.Error;
@@ -18,7 +19,7 @@ pub const endpoints = [_]Route.Match{
     ROUTE("", default),
 };
 
-const NetworkPage = Template.PageData("network.html");
+const NetworkPage = template.PageData("network.html");
 
 fn default(ctx: *Verse.Frame) Error!void {
     var dom = DOM.new(ctx.alloc);
@@ -34,10 +35,10 @@ fn default(ctx: *Verse.Frame) Error!void {
         defer repo.raze();
         if (repo.findRemote("upstream") catch continue) |remote| {
             if (remote.url) |_| {
-                dom = dom.open(Verse.html.h3(null, &Verse.html.Attr.class("upstream")));
-                dom.push(Verse.html.text("Upstream: "));
+                dom = dom.open(html.h3(null, &html.Attr.class("upstream")));
+                dom.push(html.text("Upstream: "));
                 const purl = try allocPrint(ctx.alloc, "{link}", .{remote});
-                dom.push(Verse.html.anch(purl, try Verse.html.Attr.create(ctx.alloc, "href", purl)));
+                dom.push(html.anch(purl, try html.Attr.create(ctx.alloc, "href", purl)));
                 dom = dom.close();
             }
         }
@@ -48,7 +49,7 @@ fn default(ctx: *Verse.Frame) Error!void {
     for (htmllist, data) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
     const value = try std.mem.join(ctx.alloc, "", htmllist);
 
-    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    const btns = [1]template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &btns } },

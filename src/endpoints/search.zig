@@ -5,7 +5,7 @@ const allocPrint = std.fmt.allocPrint;
 
 const Verse = @import("verse");
 const Delta = @import("../types.zig").Delta;
-const Template = Verse.Template;
+const Template = Verse.template;
 const Routes = Verse.Router;
 const Error = Routes.Error;
 const ROUTE = Routes.ROUTE;

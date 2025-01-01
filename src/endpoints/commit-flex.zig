@@ -452,9 +452,9 @@ const Git = @import("../git.zig");
 const global_config = &@import("../main.zig").global_config;
 
 const Verse = @import("verse");
-const Template = Verse.Template;
-const DOM = Verse.html.DOM;
-const HTML = Verse.html;
+const Template = Verse.template;
+const DOM = Verse.template.html.DOM;
+const HTML = Verse.template.html;
 const S = Template.Structs;
 
 const Route = Verse.Router;

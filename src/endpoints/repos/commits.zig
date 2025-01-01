@@ -9,7 +9,7 @@ const Verse = @import("verse");
 const DOM = Verse.DOM;
 const HTML = Verse.HTML;
 const Route = Verse.Router;
-const Template = Verse.Template;
+const Template = Verse.template;
 const RequestData = Verse.RequestData;
 
 const Diffs = @import("diffs.zig");

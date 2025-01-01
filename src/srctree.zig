@@ -2,7 +2,7 @@ const std = @import("std");
 const eql = std.mem.eql;
 const Verse = @import("verse");
 const Router = Verse.Router;
-const Template = Verse.Template;
+const Template = Verse.template;
 const Api = @import("api.zig");
 //const Types = @import("types.zig");
 
