@@ -1,14 +1,15 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
-const Verse = @import("verse");
+const verse = @import("verse");
 const print = std.debug.print;
-const Server = Verse.Server;
+const Server = verse.Server;
 const log = std.log;
 
 const Database = @import("database.zig");
-const Route = Verse.Router;
+const Route = verse.Router;
 const Repos = @import("repos.zig");
+const Types = @import("types.zig");
 
 const Ini = @import("ini.zig");
 const Cache = @import("cache.zig");
@@ -76,12 +77,39 @@ pub const SrcConfig = struct {
 pub var root_ini: ?Ini.Config(SrcConfig) = null;
 pub var global_config: SrcConfig = undefined;
 
+const Auth = struct {
+    alloc: Allocator,
+    pub fn provider(self: *Auth) verse.auth.Provider {
+        return .{
+            .ctx = self,
+            .vtable = .{
+                .authenticate = null,
+                .valid = null,
+                .create_session = null,
+                .get_cookie = null,
+                .lookup_user = lookupUser,
+            },
+        };
+    }
+
+    pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
+        const auth: *Auth = @ptrCast(@alignCast(ptr));
+        const user = Types.User.findMTLSFingerprint(auth.alloc, user_id) catch |err| {
+            std.debug.print("error {}\n", .{err});
+            return error.UnknownUser;
+        };
+        return .{
+            .username = user.username,
+        };
+    }
+};
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
-    var runmode: Verse.Server.RunModes = .zwsgi;
+    var runmode: verse.Server.RunModes = .zwsgi;
 
     var args = std.process.args();
     arg0 = args.next() orelse "srctree";
@@ -139,12 +167,18 @@ pub fn main() !void {
     const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
     defer thread.join();
 
-    var server = try Verse.Server.init(a, .{
+    var auth = Auth{ .alloc = a };
+    var mtls = verse.auth.MTLS{
+        .base = auth.provider(),
+    };
+
+    var server = try verse.Server.init(a, .{
         .mode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } },
         .router = .{
             .routefn = Srctree.router,
             .builderfn = Srctree.builder,
         },
+        .auth = mtls.provider(),
     });
 
     server.serve() catch {
