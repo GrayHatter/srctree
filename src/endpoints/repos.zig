@@ -275,7 +275,7 @@ fn list(ctx: *Verse.Frame) Error!void {
         }, repoSorterNew);
 
         var repo_buttons: []const u8 = "";
-        if (ctx.user.?.valid()) {
+        if (ctx.user != null and ctx.user.?.valid()) {
             repo_buttons =
                 \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
             ;

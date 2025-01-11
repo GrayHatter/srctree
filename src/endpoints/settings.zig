@@ -56,5 +56,5 @@ fn post(vrs: *Verse.Frame) Router.Error!void {
         std.debug.print("block data:\nname '{s}'\ntext '''{s}'''\n", .{ name, text });
     }
 
-    return vrs.redirect("/settings", true) catch unreachable;
+    return vrs.redirect("/settings", .see_other) catch unreachable;
 }

@@ -71,6 +71,7 @@ pub fn builder(vrs: *Verse.Frame, call: BuildFn) void {
     return call(vrs) catch |err| switch (err) {
         error.InvalidURI => builder(vrs, notFound), // TODO catch inline
         error.BrokenPipe => std.debug.print("client disconnect", .{}),
+        error.IOWriteFailure => @panic("Unexpected IOWrite"),
         error.Unrouteable => {
             std.debug.print("Unrouteable", .{});
             if (@errorReturnTrace()) |trace| {

@@ -178,10 +178,7 @@ fn createDiff(vrs: *Verse.Frame) Error!void {
                 rd.name,
                 udata.title,
                 udata.desc,
-                if (vrs.user.?.valid())
-                    (vrs.user orelse unreachable).username
-                else
-                    try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
+                if (vrs.user) |usr| usr.username.? else try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
             ) catch unreachable;
             delta.commit() catch unreachable;
             std.debug.print("commit id {x}\n", .{delta.index});
@@ -195,7 +192,7 @@ fn createDiff(vrs: *Verse.Frame) Error!void {
             file.writer().writeAll(data.blob) catch unreachable;
             var buf: [2048]u8 = undefined;
             const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
-            return vrs.redirect(loc, true) catch unreachable;
+            return vrs.redirect(loc, .see_other) catch unreachable;
         }
     }
 
@@ -212,18 +209,15 @@ fn newComment(ctx: *Verse.Frame) Error!void {
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta_index });
 
         const msg = try valid.require("comment");
-        if (msg.value.len < 2) return ctx.redirect(loc, true) catch unreachable;
+        if (msg.value.len < 2) return ctx.redirect(loc, .see_other) catch unreachable;
 
         var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
-        const username = if (ctx.user.?.valid())
-            (ctx.user orelse unreachable).username
-        else
-            "public";
+        const username = if (ctx.user) |usr| usr.username.? else "public";
         var thread = delta.loadThread(ctx.alloc) catch unreachable;
         thread.newComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch unreachable;
         // TODO record current revision at comment time
         delta.commit() catch unreachable;
-        return ctx.redirect(loc, true) catch unreachable;
+        return ctx.redirect(loc, .see_other) catch unreachable;
     }
     return error.Unknown;
 }
@@ -727,10 +721,7 @@ fn view(ctx: *Verse.Frame) Error!void {
         @panic("oops");
     }
 
-    const username = if (ctx.user.?.valid())
-        (ctx.user orelse unreachable).username
-    else
-        "public";
+    const username = if (ctx.user) |usr| usr.username.? else "public";
 
     var page = DiffViewPage.init(.{
         .meta_head = .{ .open_graph = .{} },

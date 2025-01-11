@@ -75,21 +75,18 @@ fn newPost(ctx: *Verse.Frame) Error!void {
             rd.name,
             valid.title,
             valid.desc,
-            if (ctx.user.?.valid())
-                (ctx.user orelse unreachable).username
-            else
-                try allocPrint(ctx.alloc, "remote_address", .{}),
+            if (ctx.user) |usr| usr.username.? else try allocPrint(ctx.alloc, "remote_address", .{}),
         ) catch unreachable;
 
         delta.attach = .{ .issue = 0 };
         delta.commit() catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
-        return ctx.redirect(loc, true) catch unreachable;
+        return ctx.redirect(loc, .see_other) catch unreachable;
     }
 
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
-    return ctx.redirect(loc, true) catch unreachable;
+    return ctx.redirect(loc, .see_other) catch unreachable;
 }
 
 fn newComment(ctx: *Verse.Frame) Error!void {
@@ -105,17 +102,14 @@ fn newComment(ctx: *Verse.Frame) Error!void {
             rd.name,
             issue_index,
         ) catch unreachable orelse return error.Unrouteable;
-        const username = if (ctx.user.?.valid())
-            (ctx.user orelse unreachable).username
-        else
-            "public";
+        const username = if (ctx.user) |usr| usr.username.? else "public";
 
         var thread = delta.loadThread(ctx.alloc) catch unreachable;
         thread.newComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch {};
         delta.commit() catch unreachable;
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
-        ctx.redirect(loc, true) catch unreachable;
+        ctx.redirect(loc, .see_other) catch unreachable;
         return;
     }
     return error.Unknown;

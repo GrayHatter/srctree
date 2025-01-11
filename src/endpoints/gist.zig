@@ -57,10 +57,7 @@ fn post(ctx: *Verse.Frame) Error!void {
     const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.request.data) catch return error.BadData;
 
     if (udata.file_name.len != udata.file_blob.len) return error.BadData;
-    const username = if (ctx.user.?.valid())
-        (ctx.user orelse unreachable).username
-    else
-        "public";
+    const username = if (ctx.user) |usr| usr.username.? else "public";
 
     if (udata.new_file != null) {
         const files = try ctx.alloc.alloc(Template.Structs.GistFiles, udata.file_name.len + 1);
@@ -88,7 +85,7 @@ fn post(ctx: *Verse.Frame) Error!void {
 
     const hash_str: [64]u8 = Gist.new(username, files) catch return error.Unknown;
 
-    return ctx.redirect("/gist/" ++ hash_str, true) catch unreachable;
+    return ctx.redirect("/gist/" ++ hash_str, .see_other) catch unreachable;
 }
 
 fn new(ctx: *Verse.Frame) Error!void {
