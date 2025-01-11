@@ -426,10 +426,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     var page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = (ctx.route_data.get(
-            "body_header",
-            *const S.BodyHeaderHtml,
-        ) catch return error.Unknown).*,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
         .flexes = flexes,
         .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),

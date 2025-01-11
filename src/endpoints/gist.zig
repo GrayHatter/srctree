@@ -100,10 +100,7 @@ fn edit(vrs: *Verse.Frame, files: []const Template.Structs.GistFiles) Error!void
                 .title = "Create A New Gist",
             },
         },
-        .body_header = (vrs.route_data.get(
-            "body_header",
-            *const S.BodyHeaderHtml,
-        ) catch return error.Unknown).*,
+        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .gist_files = files,
     });
 

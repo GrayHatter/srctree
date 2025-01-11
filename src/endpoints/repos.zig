@@ -124,17 +124,12 @@ pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
-        var i_count: usize = 0;
-        var d_count: usize = 0;
-        var itr = Types.Delta.iterator(ctx.alloc, rd.name);
-        while (itr.next()) |dlt| {
-            switch (dlt.attach) {
-                .diff => d_count += 1,
-                .issue => i_count += 1,
-                else => {},
-            }
-            dlt.raze(ctx.alloc);
-        }
+        var bh: S.BodyHeaderHtml = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
+            .nav_auth = "Error",
+            .nav_buttons = undefined,
+        } };
+        bh.nav.nav_buttons = ctx.alloc.dupe(S.NavButtons, &(navButtons(ctx) catch @panic("unreachable"))) catch unreachable;
+        ctx.response_data.add(bh) catch unreachable;
 
         if (rd.verb) |_| {
             _ = ctx.uri.next();
@@ -297,10 +292,7 @@ fn list(ctx: *Verse.Frame) Error!void {
 
         var page = ReposPage.init(.{
             .meta_head = .{ .open_graph = .{} },
-            .body_header = (ctx.route_data.get(
-                "body_header",
-                *const S.BodyHeaderHtml,
-            ) catch return error.Unknown).*,
+            .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
 
             .buttons = .{ .buttons = repo_buttons },
             .repo_list = repos_compiled,
@@ -494,10 +486,7 @@ fn blame(ctx: *Verse.Frame) Error!void {
 
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = (ctx.route_data.get(
-            "body_header",
-            *const S.BodyHeaderHtml,
-        ) catch return error.Unknown).*,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .filename = Bleach.Html.sanitizeAlloc(ctx.alloc, blame_file) catch unreachable,
         .blame_lines = wrapped_blames,
     });
@@ -609,10 +598,7 @@ fn blob(vrs: *Verse.Frame, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
 
     var page = BlobPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = (vrs.route_data.get(
-            "body_header",
-            *const S.BodyHeaderHtml,
-        ) catch return error.Unknown).*,
+        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .repo = uri_repo,
         .uri_filename = uri_filename,
         .filename = blb.name,
@@ -795,10 +781,7 @@ fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
     var page = TreePage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = (ctx.route_data.get(
-            "body_header",
-            *const S.BodyHeaderHtml,
-        ) catch return error.Unknown).*,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .upstream = null,
         .repo_name = rd.name,
         .repo = try allocPrint(ctx.alloc, "{s}", .{repo_data[0]}),
@@ -831,10 +814,7 @@ fn tagsList(ctx: *Verse.Frame) Error!void {
     //var btns = navButtons(ctx) catch return error.Unknown;
     var page = TagPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = (ctx.route_data.get(
-            "body_header",
-            *const S.BodyHeaderHtml,
-        ) catch return error.Unknown).*,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .upstream = null,
         .tags = tstack,
     });

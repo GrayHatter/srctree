@@ -35,7 +35,7 @@ fn default(vrs: *Verse.Frame) Router.Error!void {
 
     var page = SettingsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = (vrs.route_data.get("body_header", *const S.BodyHeaderHtml) catch return error.Unknown).*,
+        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .config_blocks = blocks[0..],
     });
 

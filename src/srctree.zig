@@ -3,6 +3,7 @@ const eql = std.mem.eql;
 const Verse = @import("verse");
 const Router = Verse.Router;
 const Template = Verse.template;
+const S = Template.Structs;
 const Api = @import("api.zig");
 //const Types = @import("types.zig");
 
@@ -64,10 +65,16 @@ fn debug(_: *Verse.Frame) Router.Error!void {
 }
 
 pub fn builder(vrs: *Verse.Frame, call: BuildFn) void {
-    const bh = vrs.alloc.create(Template.Structs.BodyHeaderHtml) catch unreachable;
     const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
-    bh.* = .{ .nav = .{ .nav_auth = "Public2", .nav_buttons = &btns } };
-    vrs.route_data.add("body_header", bh) catch {};
+    var bh: S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
+        .nav_auth = "Error",
+        .nav_buttons = &btns,
+    } };
+
+    bh.nav.nav_auth = if (vrs.user) |usr| n: {
+        break :n if (usr.username) |un| un else "Error No Username";
+    } else "Public";
+    vrs.response_data.add(bh) catch {};
     return call(vrs) catch |err| switch (err) {
         error.InvalidURI => builder(vrs, notFound), // TODO catch inline
         error.BrokenPipe => std.debug.print("client disconnect", .{}),

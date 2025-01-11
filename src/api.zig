@@ -25,12 +25,10 @@ const APIRouteData = struct {
     alloc: Allocator,
     version: usize = 0,
 
-    pub fn init(a: Allocator) !*APIRouteData {
-        const rd = try a.create(APIRouteData);
-        rd.* = .{
+    pub fn init(a: Allocator) !APIRouteData {
+        return .{
             .alloc = a,
         };
-        return rd;
     }
 };
 
@@ -38,7 +36,7 @@ pub fn router(vrs: *Verse.Frame) Router.RoutingError!Router.BuildFn {
     const uri_api = vrs.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
     const rd = APIRouteData.init(vrs.alloc) catch @panic("OOM");
-    vrs.route_data.add("api", rd) catch unreachable;
+    vrs.response_data.add(rd) catch unreachable;
 
     return Router.router(vrs, &endpoints);
 }
