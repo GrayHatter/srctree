@@ -23,17 +23,16 @@ const Settings = @import("endpoints/settings.zig");
 const Gist = @import("endpoints/gist.zig");
 
 pub const routes = [_]Match{
-    //GET("", commitFlex),
     ROUTE("admin", &Admin.endpoints),
     ROUTE("api", Api.router),
     GET("debug", debug),
     ROUTE("gist", Gist.router),
-    ROUTE("inbox", Search.router),
+    //TODO add alias support
+    //ROUTE("inbox", Search.router),
     ROUTE("repo", Repo.router),
     ROUTE("repos", Repo.router),
-    ROUTE("search", &Search.router),
+    //ROUTE("search", &Search.router),
     ROUTE("settings", &Settings.endpoints),
-    //ROUTE("todo", USERS.todo),
     ROUTE("user", commitFlex),
     STATIC("static"),
 };
@@ -46,6 +45,7 @@ const endpoints = verse.Endpoints(.{
         pub const index = commitFlex;
     },
     @import("endpoints/network.zig"),
+    @import("endpoints/search.zig"),
 });
 
 const E404Page = Template.PageData("4XX.html");

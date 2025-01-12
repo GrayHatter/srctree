@@ -1,37 +1,19 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const splitScalar = std.mem.splitScalar;
-const allocPrint = std.fmt.allocPrint;
+pub const verse_name = .search;
 
-const Verse = @import("verse");
-const Delta = @import("../types.zig").Delta;
-const Template = Verse.template;
-const Routes = Verse.Router;
-const Error = Routes.Error;
-const ROUTE = Routes.ROUTE;
-const S = Template.Structs;
-
-const Bleach = @import("../bleach.zig");
-
-pub const routes = [_]Routes.Match{
-    ROUTE("", search),
-    ROUTE("search", search),
+pub const verse_routes = [_]Routes.Match{
+    ROUTE("search", index),
     ROUTE("inbox", inbox),
 };
-
-pub fn router(ctx: *Verse.Frame) Routes.RoutingError!Routes.BuildFn {
-    return Routes.router(ctx, &routes);
-}
 
 const SearchReq = struct {
     q: ?[]const u8,
 };
 
-fn inbox(ctx: *Verse.Frame) Error!void {
+fn inbox(ctx: *Frame) Error!void {
     return custom(ctx, "owner:me");
 }
 
-fn search(ctx: *Verse.Frame) Error!void {
+pub fn index(ctx: *Frame) Error!void {
     const udata = ctx.request.data.query.validate(SearchReq) catch return error.BadData;
 
     const query_str = udata.q orelse "null";
@@ -42,7 +24,7 @@ fn search(ctx: *Verse.Frame) Error!void {
 
 const DeltaListPage = Template.PageData("delta-list.html");
 
-fn custom(ctx: *Verse.Frame, search_str: []const u8) Error!void {
+fn custom(ctx: *Frame, search_str: []const u8) Error!void {
     var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
 
     var itr = splitScalar(u8, search_str, ' ');
@@ -119,3 +101,19 @@ fn custom(ctx: *Verse.Frame, search_str: []const u8) Error!void {
 
     try ctx.sendPage(&page);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const splitScalar = std.mem.splitScalar;
+const allocPrint = std.fmt.allocPrint;
+
+const verse = @import("verse");
+const Frame = verse.Frame;
+const Template = verse.template;
+const Routes = verse.Router;
+const Error = Routes.Error;
+const ROUTE = Routes.ROUTE;
+const S = Template.Structs;
+
+const Delta = @import("../types.zig").Delta;
+const Bleach = @import("../bleach.zig");
