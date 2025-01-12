@@ -31,8 +31,6 @@ pub const routes = [_]Match{
     //ROUTE("inbox", Search.router),
     ROUTE("repo", Repo.router),
     ROUTE("repos", Repo.router),
-    //ROUTE("search", &Search.router),
-    ROUTE("settings", &Settings.endpoints),
     ROUTE("user", commitFlex),
     STATIC("static"),
 };
@@ -46,6 +44,7 @@ const endpoints = verse.Endpoints(.{
     },
     @import("endpoints/network.zig"),
     @import("endpoints/search.zig"),
+    @import("endpoints/settings.zig"),
 });
 
 const E404Page = Template.PageData("4XX.html");

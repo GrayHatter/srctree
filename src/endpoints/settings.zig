@@ -1,25 +1,18 @@
-const std = @import("std");
-const Verse = @import("verse");
-const Template = Verse.template;
-const S = Verse.template.Structs;
-const Router = Verse.Router;
-const RequestData = Verse.RequestData.RequestData;
-const global_ini = &@import("../main.zig").root_ini;
+pub const verse_name = .settings;
 
-pub const endpoints = [_]Router.Match{
-    Router.GET("", default),
+pub const verse_routes = [_]Router.Match{
     Router.POST("post", post),
 };
 
-const SettingsPage = Template.PageData("settings.html");
+const SettingsPage = template.PageData("settings.html");
 
-fn default(vrs: *Verse.Frame) Router.Error!void {
+pub fn index(vrs: *Frame) Router.Error!void {
     //try vrs.auth.requireValid();
 
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
     if (global_ini.*) |cfg| {
-        blocks = try vrs.alloc.alloc(Template.Structs.ConfigBlocks, cfg.ns.len);
+        blocks = try vrs.alloc.alloc(S.ConfigBlocks, cfg.ns.len);
         for (cfg.ns, 0..) |ns, i| {
             blocks[i] = .{
                 .config_name = ns.name,
@@ -47,7 +40,7 @@ const SettingsReq = struct {
     block_text: [][]const u8,
 };
 
-fn post(vrs: *Verse.Frame) Router.Error!void {
+fn post(vrs: *Frame) Router.Error!void {
     //try vrs.auth.requireValid();
 
     const udata = RequestData(SettingsReq).initMap(vrs.alloc, vrs.request.data) catch return error.BadData;
@@ -58,3 +51,12 @@ fn post(vrs: *Verse.Frame) Router.Error!void {
 
     return vrs.redirect("/settings", .see_other) catch unreachable;
 }
+
+const std = @import("std");
+const verse = @import("verse");
+const Frame = verse.Frame;
+const template = verse.template;
+const S = template.Structs;
+const Router = verse.Router;
+const RequestData = verse.RequestData.RequestData;
+const global_ini = &@import("../main.zig").root_ini;
