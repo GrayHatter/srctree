@@ -193,7 +193,7 @@ pub fn commitPatch(ctx: *Verse.Frame, sha: []const u8, repo: Git.Repo) Error!voi
         //}
         ctx.status = .ok;
         ctx.headersAdd("Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
-        ctx.quickStart() catch return Error.Unknown;
+        ctx.sendHeaders() catch return Error.Unknown;
         ctx.sendRawSlice(diff) catch return Error.Unknown;
     }
 }

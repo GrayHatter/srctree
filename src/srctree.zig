@@ -1,11 +1,12 @@
 const std = @import("std");
 const eql = std.mem.eql;
-const Verse = @import("verse");
-const Router = Verse.Router;
-const Template = Verse.template;
+const verse = @import("verse");
+const Frame = verse.Frame;
+
+const Router = verse.Router;
+const Template = verse.template;
 const S = Template.Structs;
 const Api = @import("api.zig");
-//const Types = @import("types.zig");
 
 const ROUTE = Router.ROUTE;
 const GET = Router.GET;
@@ -43,28 +44,36 @@ pub const routes = [_]Match{
 
 const E404Page = Template.PageData("4XX.html");
 
-fn notFound(vrs: *Verse.Frame) Router.Error!void {
+fn notFound(vrs: *Frame) Router.Error!void {
     std.debug.print("404 for route\n", .{});
     vrs.status = .not_found;
     var page = E404Page.init(.{});
     vrs.sendPage(&page) catch unreachable;
 }
 
-pub fn router(vrs: *Verse.Frame) Router.RoutingError!BuildFn {
-    //    var i_count: usize = 0;
-    //    var itr = Types.Delta.iterator(vrs.alloc, "");
-    //    while (itr.next()) |it| {
-    //        i_count += 1;
-    //        it.raze(vrs.alloc);
-    //    }
+pub const router = Router{
+    .routefn = srouter,
+    .builderfn = builder,
+    .routerfn = defaultRouter,
+};
+
+pub fn srouter(vrs: *Frame) Router.RoutingError!BuildFn {
     return Router.router(vrs, &routes);
 }
 
-fn debug(_: *Verse.Frame) Router.Error!void {
+pub fn defaultRouter(frm: *Frame, rt: Router.RouteFn) BuildFn {
+    return rt(frm) catch |err| switch (err) {
+        error.MethodNotAllowed => notFound,
+        error.NotFound => notFound,
+        error.Unrouteable => notFound,
+    };
+}
+
+fn debug(_: *Frame) Router.Error!void {
     return error.Abusive;
 }
 
-pub fn builder(vrs: *Verse.Frame, call: BuildFn) void {
+pub fn builder(vrs: *Frame, call: BuildFn) void {
     const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var bh: S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
         .nav_auth = "Error",

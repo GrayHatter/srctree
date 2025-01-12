@@ -46,7 +46,7 @@ const Diff = struct {
 };
 
 fn diff(vrs: *Verse.Frame) Router.Error!void {
-    return try vrs.sendJSON([0]Diff{}, .ok);
+    return try vrs.sendJSON(.ok, [0]Diff{});
 }
 
 const HeartBeat = struct {
@@ -54,7 +54,7 @@ const HeartBeat = struct {
 };
 
 fn heartbeat(vrs: *Verse.Frame) Router.Error!void {
-    return try vrs.sendJSON(HeartBeat{ .nice = 69 }, .ok);
+    return try vrs.sendJSON(.ok, HeartBeat{ .nice = 69 });
 }
 
 const Issue = struct {
@@ -62,7 +62,7 @@ const Issue = struct {
 };
 
 fn issue(vrs: *Verse.Frame) Router.Error!void {
-    return try vrs.sendJSON([0]Issue{}, .ok);
+    return try vrs.sendJSON(.ok, [0]Issue{});
 }
 
 /// Likely to be renamed
@@ -81,7 +81,7 @@ const Network = struct {
 };
 
 fn network(vrs: *Verse.Frame) Router.Error!void {
-    return try vrs.sendJSON(Network{ .networks = [0].{} }, .ok);
+    return try vrs.sendJSON(.ok, Network{ .networks = [0].{} });
 }
 
 const Patch = struct {
@@ -89,7 +89,7 @@ const Patch = struct {
 };
 
 fn patch(vrs: *Verse.Frame) Router.Error!void {
-    return try vrs.sendJSON(Patch{ .patch = [0].{} }, .ok);
+    return try vrs.sendJSON(.ok, Patch{ .patch = [0].{} });
 }
 
 const Flex = struct {
@@ -101,7 +101,7 @@ const Flex = struct {
 };
 
 fn flex(vrs: *Verse.Frame) Router.Error!void {
-    return try vrs.sendJSON([0]Flex{}, .ok);
+    return try vrs.sendJSON(.ok, [0]Flex{});
 }
 
 const User = struct {
@@ -110,5 +110,5 @@ const User = struct {
 };
 
 fn user(vrs: *Verse.Frame) Router.Error!void {
-    return try vrs.sendJSON([0]User{}, .ok);
+    return try vrs.sendJSON(.ok, [0]User{});
 }

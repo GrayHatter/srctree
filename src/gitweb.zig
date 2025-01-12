@@ -134,7 +134,7 @@ fn __objects(ctx: *Verse.Frame) Error!void {
     //var data = repo.findBlob(ctx.alloc, &sha) catch unreachable;
 
     ctx.status = .ok;
-    ctx.quickStart() catch return Error.Unknown;
+    ctx.sendHeaders() catch return Error.Unknown;
     ctx.sendRawSlice(data) catch return Error.Unknown;
 }
 

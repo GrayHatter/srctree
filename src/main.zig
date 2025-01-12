@@ -172,12 +172,8 @@ pub fn main() !void {
         .base = auth.provider(),
     };
 
-    var server = try verse.Server.init(a, .{
+    var server = try verse.Server.init(a, Srctree.router, .{
         .mode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } },
-        .router = .{
-            .routefn = Srctree.router,
-            .builderfn = Srctree.builder,
-        },
         .auth = mtls.provider(),
     });
 
