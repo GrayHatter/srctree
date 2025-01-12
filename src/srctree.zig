@@ -16,7 +16,6 @@ const BuildFn = Router.BuildFn;
 
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
-//const USERS = @import("endpoints/users.zig");
 const Repo = @import("endpoints/repos.zig");
 const Admin = @import("endpoints/admin.zig");
 const Network = @import("endpoints/network.zig");
@@ -25,7 +24,7 @@ const Settings = @import("endpoints/settings.zig");
 const Gist = @import("endpoints/gist.zig");
 
 pub const routes = [_]Match{
-    GET("", commitFlex),
+    //GET("", commitFlex),
     ROUTE("admin", &Admin.endpoints),
     ROUTE("api", Api.router),
     //ROUTE("diffs", USERS.diffs),
@@ -42,6 +41,15 @@ pub const routes = [_]Match{
     STATIC("static"),
 };
 
+const endpoints = verse.Endpoints(.{
+    struct {
+        pub const verse_name = .root;
+        pub const verse_routes = routes;
+        pub const verse_builder = &builder;
+        pub const index = commitFlex;
+    },
+});
+
 const E404Page = Template.PageData("4XX.html");
 
 fn notFound(vrs: *Frame) Router.Error!void {
@@ -51,7 +59,9 @@ fn notFound(vrs: *Frame) Router.Error!void {
     vrs.sendPage(&page) catch unreachable;
 }
 
-pub const router = Router{
+pub const router = endpoints.router;
+
+pub const router2 = Router{
     .routefn = srouter,
     .builderfn = builder,
     .routerfn = defaultRouter,
