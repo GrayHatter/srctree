@@ -1,27 +1,8 @@
-const std = @import("std");
-const allocPrint = std.fmt.allocPrint;
-
-const Verse = @import("verse");
-const template = Verse.template;
-const html = template.html;
-const DOM = html.DOM;
-
-const Route = Verse.Router;
-const Error = Route.Error;
-const UriIter = Route.UriIter;
-const Repos = @import("../repos.zig");
-const Ini = @import("../ini.zig");
-const Git = @import("../git.zig");
-
-const ROUTE = Route.ROUTE;
-
-pub const endpoints = [_]Route.Match{
-    ROUTE("", default),
-};
+pub const verse_name = .network;
 
 const NetworkPage = template.PageData("network.html");
 
-fn default(ctx: *Verse.Frame) Error!void {
+pub fn index(ctx: *Frame) Error!void {
     var dom = DOM.new(ctx.alloc);
 
     const list = try Repos.allNames(ctx.alloc);
@@ -58,3 +39,17 @@ fn default(ctx: *Verse.Frame) Error!void {
 
     try ctx.sendPage(&page);
 }
+
+const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
+
+const verse = @import("verse");
+const Frame = verse.Frame;
+const template = verse.template;
+const html = template.html;
+const DOM = html.DOM;
+
+const Error = verse.Router.Error;
+const Repos = @import("../repos.zig");
+const Ini = @import("../ini.zig");
+const Git = @import("../git.zig");

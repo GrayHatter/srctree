@@ -18,7 +18,6 @@ const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
 const Repo = @import("endpoints/repos.zig");
 const Admin = @import("endpoints/admin.zig");
-const Network = @import("endpoints/network.zig");
 const Search = @import("endpoints/search.zig");
 const Settings = @import("endpoints/settings.zig");
 const Gist = @import("endpoints/gist.zig");
@@ -27,11 +26,9 @@ pub const routes = [_]Match{
     //GET("", commitFlex),
     ROUTE("admin", &Admin.endpoints),
     ROUTE("api", Api.router),
-    //ROUTE("diffs", USERS.diffs),
     GET("debug", debug),
     ROUTE("gist", Gist.router),
     ROUTE("inbox", Search.router),
-    ROUTE("network", &Network.endpoints),
     ROUTE("repo", Repo.router),
     ROUTE("repos", Repo.router),
     ROUTE("search", &Search.router),
@@ -48,6 +45,7 @@ const endpoints = verse.Endpoints(.{
         pub const verse_builder = &builder;
         pub const index = commitFlex;
     },
+    @import("endpoints/network.zig"),
 });
 
 const E404Page = Template.PageData("4XX.html");
