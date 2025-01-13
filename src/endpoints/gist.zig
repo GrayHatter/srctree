@@ -1,32 +1,20 @@
-const std = @import("std");
-const allocPrint = std.fmt.allocPrint;
+pub const verse_name = .gist;
 
-const Verse = @import("verse");
-const Template = Verse.template;
-const S = Template.Structs;
-const RequestData = Verse.RequestData.RequestData;
-const Bleach = @import("../bleach.zig");
-const Allocator = std.mem.Allocator;
+pub const verse_router = &router;
 
-const Gist = @import("../types.zig").Gist;
-
-const Router = Verse.Router;
-const Error = Router.Error;
-const POST = Router.POST;
-const GET = Router.GET;
-
-const GistPage = Template.PageData("gist.html");
-const GistNewPage = Template.PageData("gist_new.html");
-
-const endpoints = [_]Router.Match{
-    GET("", new),
+const routes = [_]Router.Match{
     GET("gist", view),
     GET("new", new),
     POST("new", post),
     POST("post", post),
 };
 
-pub fn router(ctx: *Verse.Frame) Router.RoutingError!Router.BuildFn {
+pub const index = new;
+
+const GistPage = template.PageData("gist.html");
+const GistNewPage = template.PageData("gist_new.html");
+
+pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
     if (!std.mem.eql(u8, ctx.uri.next() orelse "", "gist")) return error.Unrouteable;
 
     if (ctx.uri.peek()) |peek| {
@@ -42,7 +30,7 @@ pub fn router(ctx: *Verse.Frame) Router.RoutingError!Router.BuildFn {
         }
     } else return new;
 
-    return Router.router(ctx, &endpoints);
+    return Router.router(ctx, &routes);
 }
 
 const GistPost = struct {
@@ -51,7 +39,7 @@ const GistPost = struct {
     new_file: ?[]const u8,
 };
 
-fn post(ctx: *Verse.Frame) Error!void {
+fn post(ctx: *Frame) Error!void {
     //try ctx.auth.requireValid();
 
     const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.request.data) catch return error.BadData;
@@ -60,7 +48,7 @@ fn post(ctx: *Verse.Frame) Error!void {
     const username = if (ctx.user) |usr| usr.username.? else "public";
 
     if (udata.new_file != null) {
-        const files = try ctx.alloc.alloc(Template.Structs.GistFiles, udata.file_name.len + 1);
+        const files = try ctx.alloc.alloc(S.GistFiles, udata.file_name.len + 1);
         for (files[0 .. files.len - 1], udata.file_name, udata.file_blob) |*file, name, blob| {
             file.* = .{
                 .name = name,
@@ -88,12 +76,12 @@ fn post(ctx: *Verse.Frame) Error!void {
     return ctx.redirect("/gist/" ++ hash_str, .see_other) catch unreachable;
 }
 
-fn new(ctx: *Verse.Frame) Error!void {
-    const files = [1]Template.Structs.GistFiles{.{}};
+fn new(ctx: *Frame) Error!void {
+    const files = [1]S.GistFiles{.{}};
     return edit(ctx, &files);
 }
 
-fn edit(vrs: *Verse.Frame, files: []const Template.Structs.GistFiles) Error!void {
+fn edit(vrs: *Frame, files: []const S.GistFiles) Error!void {
     var page = GistNewPage.init(.{
         .meta_head = .{
             .open_graph = .{
@@ -107,8 +95,8 @@ fn edit(vrs: *Verse.Frame, files: []const Template.Structs.GistFiles) Error!void
     return vrs.sendPage(&page);
 }
 
-fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFiles {
-    const out = try a.alloc(Template.Structs.GistFiles, files.len);
+fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
+    const out = try a.alloc(S.GistFiles, files.len);
     for (files, out) |file, *o| {
         o.* = .{
             .file_name = try Bleach.Html.sanitizeAlloc(a, file.name),
@@ -118,9 +106,9 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]Template.Structs.GistFi
     return out;
 }
 
-fn view(vrs: *Verse.Frame) Error!void {
+fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
-    var btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    var btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
     if (vrs.uri.next()) |hash| {
         if (hash.len != 64) return error.BadData;
@@ -146,3 +134,21 @@ fn view(vrs: *Verse.Frame) Error!void {
         return vrs.sendPage(&page);
     } else return error.Unrouteable;
 }
+
+const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
+
+const verse = @import("verse");
+const Frame = verse.Frame;
+const template = verse.template;
+const S = template.Structs;
+const RequestData = verse.RequestData.RequestData;
+const Bleach = @import("../bleach.zig");
+const Allocator = std.mem.Allocator;
+
+const Gist = @import("../types.zig").Gist;
+
+const Router = verse.Router;
+const Error = Router.Error;
+const POST = Router.POST;
+const GET = Router.GET;
