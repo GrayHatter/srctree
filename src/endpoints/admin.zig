@@ -1,21 +1,7 @@
-const std = @import("std");
+pub const verse_name = .admin;
 
-const Allocator = std.mem.Allocator;
-
-const Verse = @import("verse");
-const Route = Verse.Router;
-const Template = Verse.template;
-const HTML = Verse.template.html;
-const DOM = HTML.DOM;
-
-const Error = Route.Error;
-const UriIter = Route.UriIter;
-
-const git = @import("../git.zig");
-
-pub const endpoints = [_]Route.Match{
-    Route.ROUTE("", view),
-    Route.POST("post", view),
+pub const verse_routes = [_]Route.Match{
+    Route.ANY("post", index),
     Route.ROUTE("new-repo", newRepo),
     Route.POST("new-repo", postNewRepo),
     Route.ROUTE("clone-upstream", cloneUpstream),
@@ -34,12 +20,12 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
     _ = try agent.gitInit(dir, .{});
 }
 
-const AdminPage = Template.PageData("admin.html");
+const AdminPage = template.PageData("admin.html");
 
 /// TODO fix me
-const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+const btns = [1]template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
-fn default(ctx: *Verse.Frame) Error!void {
+fn default(ctx: *Frame) Error!void {
     //try ctx.auth.requireValid();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
@@ -69,7 +55,7 @@ fn default(ctx: *Verse.Frame) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn cloneUpstream(ctx: *Verse.Frame) Error!void {
+fn cloneUpstream(ctx: *Frame) Error!void {
     //try ctx.auth.requireValid();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
@@ -103,7 +89,7 @@ const CloneUpstreamReq = struct {
     repo_uri: []const u8,
 };
 
-fn postCloneUpstream(ctx: *Verse.Frame) Error!void {
+fn postCloneUpstream(ctx: *Frame) Error!void {
     //try ctx.auth.requireValid();
 
     const udata = ctx.request.data.post.?.validate(CloneUpstreamReq) catch return error.BadData;
@@ -149,7 +135,7 @@ fn postCloneUpstream(ctx: *Verse.Frame) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn postNewRepo(ctx: *Verse.Frame) Error!void {
+fn postNewRepo(ctx: *Frame) Error!void {
     //try ctx.auth.requireValid();
     // TODO ini repo dir
     var valid = if (ctx.request.data.post) |p|
@@ -202,7 +188,7 @@ fn postNewRepo(ctx: *Verse.Frame) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn newRepo(ctx: *Verse.Frame) Error!void {
+fn newRepo(ctx: *Frame) Error!void {
     //try ctx.auth.requireValid();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
@@ -230,7 +216,7 @@ fn newRepo(ctx: *Verse.Frame) Error!void {
     try ctx.sendPage(&page);
 }
 
-fn view(ctx: *Verse.Frame) Error!void {
+pub fn index(ctx: *Frame) Error!void {
     //try ctx.auth.requireValid();
     if (ctx.request.data.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
@@ -238,3 +224,17 @@ fn view(ctx: *Verse.Frame) Error!void {
     }
     return default(ctx);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+const verse = @import("verse");
+const Frame = verse.Frame;
+const Route = verse.Router;
+const template = verse.template;
+const HTML = template.html;
+const DOM = HTML.DOM;
+
+const Error = Route.Error;
+
+const git = @import("../git.zig");

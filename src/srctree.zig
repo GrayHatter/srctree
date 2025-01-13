@@ -17,13 +17,11 @@ const BuildFn = Router.BuildFn;
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
 const Repo = @import("endpoints/repos.zig");
-const Admin = @import("endpoints/admin.zig");
 const Search = @import("endpoints/search.zig");
 const Settings = @import("endpoints/settings.zig");
 const Gist = @import("endpoints/gist.zig");
 
 pub const routes = [_]Match{
-    ROUTE("admin", &Admin.endpoints),
     ROUTE("api", Api.router),
     GET("debug", debug),
     ROUTE("gist", Gist.router),
@@ -42,6 +40,7 @@ const endpoints = verse.Endpoints(.{
         pub const verse_builder = &builder;
         pub const index = commitFlex;
     },
+    @import("endpoints/admin.zig"),
     @import("endpoints/network.zig"),
     @import("endpoints/search.zig"),
     @import("endpoints/settings.zig"),
