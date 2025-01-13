@@ -4,8 +4,8 @@ const verse = @import("verse");
 const Frame = verse.Frame;
 
 const Router = verse.Router;
-const Template = verse.template;
-const S = Template.Structs;
+const template = verse.template;
+const S = template.Structs;
 
 const ROUTE = Router.ROUTE;
 const GET = Router.GET;
@@ -27,16 +27,16 @@ pub const endpoints = verse.Endpoints(.{
         pub const verse_builder = &builder;
         pub const index = commitFlex;
     },
+    @import("api.zig"),
     @import("endpoints/admin.zig"),
+    @import("endpoints/gist.zig"),
     @import("endpoints/network.zig"),
+    @import("endpoints/repos.zig"),
     @import("endpoints/search.zig"),
     @import("endpoints/settings.zig"),
-    @import("endpoints/gist.zig"),
-    @import("endpoints/repos.zig"),
-    @import("api.zig"),
 });
 
-const E404Page = Template.PageData("4XX.html");
+const E404Page = template.PageData("4XX.html");
 
 fn robots(frame: *Frame) Router.Error!void {
     frame.status = .ok;
@@ -65,8 +65,8 @@ fn debug(_: *Frame) Router.Error!void {
     return error.Abusive;
 }
 
-pub fn builder(vrs: *Frame, call: BuildFn) void {
-    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+fn builder(vrs: *Frame, call: BuildFn) void {
+    const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var bh: S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
         .nav_auth = "Error",
         .nav_buttons = &btns,
