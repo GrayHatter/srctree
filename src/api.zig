@@ -1,13 +1,3 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-
-pub const Verse = @import("verse");
-pub const Router = Verse.Router;
-
-const ROUTE = Router.ROUTE;
-
-const Repo = @import("api/repo.zig");
-
 const endpoints = [_]Router.Match{
     ROUTE("v0", router),
     ROUTE("v1", router),
@@ -32,7 +22,7 @@ const APIRouteData = struct {
     }
 };
 
-pub fn router(vrs: *Verse.Frame) Router.RoutingError!Router.BuildFn {
+pub fn router(vrs: *Frame) Router.RoutingError!Router.BuildFn {
     const uri_api = vrs.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
     const rd = APIRouteData.init(vrs.alloc) catch @panic("OOM");
@@ -45,7 +35,7 @@ const Diff = struct {
     sha: []const u8,
 };
 
-fn diff(vrs: *Verse.Frame) Router.Error!void {
+fn diff(vrs: *Frame) Router.Error!void {
     return try vrs.sendJSON(.ok, [0]Diff{});
 }
 
@@ -53,7 +43,7 @@ const HeartBeat = struct {
     nice: usize = 0,
 };
 
-fn heartbeat(vrs: *Verse.Frame) Router.Error!void {
+fn heartbeat(vrs: *Frame) Router.Error!void {
     return try vrs.sendJSON(.ok, HeartBeat{ .nice = 69 });
 }
 
@@ -61,7 +51,7 @@ const Issue = struct {
     index: usize,
 };
 
-fn issue(vrs: *Verse.Frame) Router.Error!void {
+fn issue(vrs: *Frame) Router.Error!void {
     return try vrs.sendJSON(.ok, [0]Issue{});
 }
 
@@ -80,7 +70,7 @@ const Network = struct {
     networks: []RemotePeer,
 };
 
-fn network(vrs: *Verse.Frame) Router.Error!void {
+fn network(vrs: *Frame) Router.Error!void {
     return try vrs.sendJSON(.ok, Network{ .networks = [0].{} });
 }
 
@@ -88,7 +78,7 @@ const Patch = struct {
     patch: []const u8,
 };
 
-fn patch(vrs: *Verse.Frame) Router.Error!void {
+fn patch(vrs: *Frame) Router.Error!void {
     return try vrs.sendJSON(.ok, Patch{ .patch = [0].{} });
 }
 
@@ -100,7 +90,7 @@ const Flex = struct {
     };
 };
 
-fn flex(vrs: *Verse.Frame) Router.Error!void {
+fn flex(vrs: *Frame) Router.Error!void {
     return try vrs.sendJSON(.ok, [0]Flex{});
 }
 
@@ -109,6 +99,17 @@ const User = struct {
     email: []const u8,
 };
 
-fn user(vrs: *Verse.Frame) Router.Error!void {
+fn user(vrs: *Frame) Router.Error!void {
     return try vrs.sendJSON(.ok, [0]User{});
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+pub const verse = @import("verse");
+const Frame = verse.Frame;
+pub const Router = verse.Router;
+
+const ROUTE = Router.ROUTE;
+
+const Repo = @import("api/repo.zig");
