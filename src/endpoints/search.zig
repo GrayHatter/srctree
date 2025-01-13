@@ -1,5 +1,9 @@
 pub const verse_name = .search;
 
+pub const verse_alias = .{
+    .inbox,
+};
+
 pub const verse_routes = [_]Routes.Match{
     ROUTE("search", index),
     ROUTE("inbox", inbox),

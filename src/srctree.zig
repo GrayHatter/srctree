@@ -19,8 +19,6 @@ const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 pub const routes = [_]Match{
     ROUTE("api", Api.router),
     GET("debug", debug),
-    //TODO add alias support
-    //ROUTE("inbox", Search.router),
     ROUTE("user", commitFlex),
     STATIC("static"),
 };
