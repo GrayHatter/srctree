@@ -1,3 +1,7 @@
+pub const verse_name = .api;
+
+pub const verse_router = &router;
+
 const endpoints = [_]Router.Match{
     ROUTE("v0", router),
     ROUTE("v1", router),

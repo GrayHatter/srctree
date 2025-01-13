@@ -6,7 +6,6 @@ const Frame = verse.Frame;
 const Router = verse.Router;
 const Template = verse.template;
 const S = Template.Structs;
-const Api = @import("api.zig");
 
 const ROUTE = Router.ROUTE;
 const GET = Router.GET;
@@ -17,7 +16,6 @@ const BuildFn = Router.BuildFn;
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
 pub const routes = [_]Match{
-    ROUTE("api", Api.router),
     GET("debug", debug),
     ROUTE("user", commitFlex),
     STATIC("static"),
@@ -37,6 +35,7 @@ const endpoints = verse.Endpoints(.{
     @import("endpoints/settings.zig"),
     @import("endpoints/gist.zig"),
     @import("endpoints/repos.zig"),
+    @import("api.zig"),
 });
 
 const E404Page = Template.PageData("4XX.html");
