@@ -15,17 +15,15 @@ const BuildFn = Router.BuildFn;
 
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
-pub const routes = [_]Match{
-    GET("debug", debug),
-    ROUTE("user", commitFlex),
-    STATIC("static"),
-    GET("robots.txt", robots),
-};
-
-const endpoints = verse.Endpoints(.{
+pub const endpoints = verse.Endpoints(.{
     struct {
         pub const verse_name = .root;
-        pub const verse_routes = routes;
+        pub const verse_routes = [_]Match{
+            GET("debug", debug),
+            ROUTE("user", commitFlex),
+            STATIC("static"),
+            GET("robots.txt", robots),
+        };
         pub const verse_builder = &builder;
         pub const index = commitFlex;
     },
@@ -61,26 +59,6 @@ fn notFound(vrs: *Frame) Router.Error!void {
     vrs.status = .not_found;
     var page = E404Page.init(.{});
     vrs.sendPage(&page) catch unreachable;
-}
-
-pub const router = endpoints.router;
-
-pub const router2 = Router{
-    .routefn = srouter,
-    .builderfn = builder,
-    .routerfn = defaultRouter,
-};
-
-pub fn srouter(vrs: *Frame) Router.RoutingError!BuildFn {
-    return Router.router(vrs, &routes);
-}
-
-pub fn defaultRouter(frm: *Frame, rt: Router.RouteFn) BuildFn {
-    return rt(frm) catch |err| switch (err) {
-        error.MethodNotAllowed => notFound,
-        error.NotFound => notFound,
-        error.Unrouteable => notFound,
-    };
 }
 
 fn debug(_: *Frame) Router.Error!void {

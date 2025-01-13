@@ -90,7 +90,6 @@ pub fn navButtons(ctx: *Frame) ![2]template.Structs.NavButtons {
 }
 
 pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
-    std.debug.print("called\n", .{});
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {

@@ -172,12 +172,11 @@ pub fn main() !void {
         .base = auth.provider(),
     };
 
-    var server = try verse.Server.init(a, Srctree.router, .{
+    var endpoints = Srctree.endpoints.init(a);
+    endpoints.serve(.{
         .mode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } },
         .auth = mtls.provider(),
-    });
-
-    server.serve() catch {
+    }) catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
         }
