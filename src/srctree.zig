@@ -21,6 +21,7 @@ pub const routes = [_]Match{
     GET("debug", debug),
     ROUTE("user", commitFlex),
     STATIC("static"),
+    GET("robots.txt", robots),
 };
 
 const endpoints = verse.Endpoints(.{
@@ -39,6 +40,22 @@ const endpoints = verse.Endpoints(.{
 });
 
 const E404Page = Template.PageData("4XX.html");
+
+fn robots(frame: *Frame) Router.Error!void {
+    frame.status = .ok;
+    frame.content_type = .{ .base = .{ .text = .plain } };
+    frame.sendHeaders() catch |err| switch (err) {
+        error.HeadersFinished => unreachable,
+        inline else => |e| return e,
+    };
+
+    try frame.sendRawSlice("\r\n");
+    try frame.sendRawSlice(
+        \\User-agent: *
+        \\Allow: /
+        \\
+    );
+}
 
 fn notFound(vrs: *Frame) Router.Error!void {
     std.debug.print("404 for route\n", .{});
