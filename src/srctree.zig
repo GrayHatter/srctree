@@ -16,15 +16,11 @@ const BuildFn = Router.BuildFn;
 
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
-const Repo = @import("endpoints/repos.zig");
-
 pub const routes = [_]Match{
     ROUTE("api", Api.router),
     GET("debug", debug),
     //TODO add alias support
     //ROUTE("inbox", Search.router),
-    ROUTE("repo", Repo.router),
-    ROUTE("repos", Repo.router),
     ROUTE("user", commitFlex),
     STATIC("static"),
 };
@@ -41,6 +37,7 @@ const endpoints = verse.Endpoints(.{
     @import("endpoints/search.zig"),
     @import("endpoints/settings.zig"),
     @import("endpoints/gist.zig"),
+    @import("endpoints/repos.zig"),
 });
 
 const E404Page = Template.PageData("4XX.html");

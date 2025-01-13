@@ -1,43 +1,12 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const allocPrint = std.fmt.allocPrint;
-const bPrint = std.fmt.bufPrint;
-const eql = std.mem.eql;
-const startsWith = std.mem.startsWith;
-const splitScalar = std.mem.splitScalar;
+pub const verse_name = .repos;
 
-const Verse = @import("verse");
-const Request = Verse.Request;
-const template = Verse.template;
-const html = template.html;
-const DOM = html.DOM;
-const Route = Verse.Router;
-const S = template.Structs;
-const elm = html.element;
-const Error = Route.Error;
-const ROUTE = Route.ROUTE;
-const POST = Route.POST;
-const GET = Route.GET;
-const RequestData = Verse.RequestData.RequestData;
+pub const verse_alias = .{
+    .repo,
+};
 
-const Bleach = @import("../bleach.zig");
-const Humanize = @import("../humanize.zig");
-const Ini = @import("../ini.zig");
-const Repos = @import("../repos.zig");
-const Git = @import("../git.zig");
-const Highlight = @import("../syntax-highlight.zig");
+pub const verse_router = &router;
 
-const Commits = @import("repos/commits.zig");
-const Diffs = @import("repos/diffs.zig");
-const Issues = @import("repos/issues.zig");
-const htmlCommit = Commits.htmlCommit;
-
-const Types = @import("../types.zig");
-
-const gitweb = @import("../gitweb.zig");
-
-const endpoints = [_]Route.Match{
-    ROUTE("", treeBlob),
+pub const routes = [_]Router.Match{
     ROUTE("blame", blame),
     ROUTE("blob", treeBlob),
     ROUTE("commit", &Commits.router),
@@ -64,9 +33,9 @@ pub const RouteData = struct {
         return null;
     }
 
-    pub fn make(uri: *Route.UriIterator) ?RouteData {
-        const index = uri.index;
-        defer uri.index = index;
+    pub fn make(uri: *Router.UriIterator) ?RouteData {
+        const idx = uri.index;
+        defer uri.index = idx;
         uri.reset();
         _ = uri.next() orelse return null;
         return .{
@@ -89,7 +58,7 @@ pub const RouteData = struct {
     }
 };
 
-pub fn navButtons(ctx: *Verse.Frame) ![2]template.Structs.NavButtons {
+pub fn navButtons(ctx: *Frame) ![2]template.Structs.NavButtons {
     const rd = RouteData.make(&ctx.uri) orelse unreachable;
     if (!rd.exists()) unreachable;
     var i_count: usize = 0;
@@ -120,7 +89,8 @@ pub fn navButtons(ctx: *Verse.Frame) ![2]template.Structs.NavButtons {
     return btns;
 }
 
-pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
+    std.debug.print("called\n", .{});
     const rd = RouteData.make(&ctx.uri) orelse return list;
 
     if (rd.exists()) {
@@ -134,7 +104,7 @@ pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();
-            return Route.router(ctx, &endpoints);
+            return Router.router(ctx, &routes);
         } else return treeBlob;
     }
     return error.Unrouteable;
@@ -241,7 +211,7 @@ const RepoSortReq = struct {
     sort: ?[]const u8,
 };
 
-fn list(ctx: *Verse.Frame) Error!void {
+fn list(ctx: *Frame) Error!void {
     var cwd = std.fs.cwd();
 
     const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.BadData;
@@ -313,13 +283,13 @@ fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
 }
 
 const NewRepoPage = template.PageData("repo-new.html");
-fn newRepo(ctx: *Verse.Frame) Error!void {
+fn newRepo(ctx: *Frame) Error!void {
     ctx.status = .ok;
 
     return error.NotImplemented;
 }
 
-fn treeBlob(ctx: *Verse.Frame) Error!void {
+fn treeBlob(ctx: *Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     _ = ctx.uri.next();
 
@@ -444,7 +414,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
 
 const BlamePage = template.PageData("blame.html");
 
-fn blame(ctx: *Verse.Frame) Error!void {
+fn blame(ctx: *Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
     _ = ctx.uri.next();
@@ -551,7 +521,7 @@ fn excludedExt(name: []const u8) bool {
 
 const BlobPage = template.PageData("blob.html");
 
-fn blob(vrs: *Verse.Frame, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
+fn blob(vrs: *Frame, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     var blb: Git.Blob = undefined;
 
     var files = pfiles;
@@ -608,7 +578,7 @@ fn blob(vrs: *Verse.Frame, repo: *Git.Repo, pfiles: Git.Tree) Error!void {
     try vrs.sendPage(&page);
 }
 
-fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *Route.UriIterator, pfiles: Git.Tree) !Git.Tree {
+fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, pfiles: Git.Tree) !Git.Tree {
     var files: Git.Tree = pfiles;
     if (uri.next()) |udir| for (files.blobs) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
@@ -695,7 +665,7 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
 
 const TreePage = template.PageData("tree.html");
 
-fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
+fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
     //const head = if (repo.head) |h| switch (h) {
     //    .sha => |s| s.hex[0..],
     //    .branch => |b| b.name,
@@ -793,7 +763,7 @@ fn tree(ctx: *Verse.Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
 
 const TagPage = template.PageData("repo-tags.html");
 
-fn tagsList(ctx: *Verse.Frame) Error!void {
+fn tagsList(ctx: *Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
@@ -821,3 +791,41 @@ fn tagsList(ctx: *Verse.Frame) Error!void {
 
     try ctx.sendPage(&page);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
+const bPrint = std.fmt.bufPrint;
+const eql = std.mem.eql;
+const startsWith = std.mem.startsWith;
+const splitScalar = std.mem.splitScalar;
+
+const verse = @import("verse");
+const Frame = verse.Frame;
+const template = verse.template;
+const html = template.html;
+const DOM = html.DOM;
+const Router = verse.Router;
+const S = template.Structs;
+const elm = html.element;
+const Error = Router.Error;
+const ROUTE = Router.ROUTE;
+const POST = Router.POST;
+const GET = Router.GET;
+const RequestData = verse.RequestData.RequestData;
+
+const Bleach = @import("../bleach.zig");
+const Humanize = @import("../humanize.zig");
+const Ini = @import("../ini.zig");
+const Repos = @import("../repos.zig");
+const Git = @import("../git.zig");
+const Highlight = @import("../syntax-highlight.zig");
+
+const Commits = @import("repos/commits.zig");
+const Diffs = @import("repos/diffs.zig");
+const Issues = @import("repos/issues.zig");
+const htmlCommit = Commits.htmlCommit;
+
+const Types = @import("../types.zig");
+
+const gitweb = @import("../gitweb.zig");
