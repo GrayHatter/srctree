@@ -413,7 +413,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
         try months.append(.{
             .group = "Last Week",
-            .lead = try allocPrint(ctx.alloc, "{} commits today", .{last_weeks.items.len}),
+            .lead = try allocPrint(ctx.alloc, "{} commits last week", .{last_weeks.items.len}),
             .journal_rows = try last_weeks.toOwnedSlice(),
         });
 
