@@ -69,7 +69,11 @@ pub const SrcConfig = struct {
         tz: ?[]const u8,
     },
     agent: ?struct {
+        enabled: bool = false,
         push_upstream: bool = false,
+    },
+    server: ?struct {
+        sock: ?[]const u8,
     },
 };
 
@@ -132,8 +136,7 @@ pub fn main() !void {
     var cwd = std.fs.cwd();
     var cfg_file: ?std.fs.File = null;
     if (findConfig("./config.ini")) |cfg| {
-        std.debug.print("config not implemented\n", .{});
-        std.debug.print("should read '{s}'\n", .{cfg});
+        std.debug.print("reading from '{s}'\n", .{cfg});
         cfg_file = try cwd.openFile("./config.ini", .{});
     }
 
@@ -141,12 +144,11 @@ pub fn main() !void {
         //error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
+    defer config.raze();
     root_ini = config;
 
     const src_conf = try config.config();
     global_config = src_conf;
-
-    defer config.raze();
 
     if (config.get("owner")) |ns| {
         if (ns.get("email")) |email| {
@@ -164,13 +166,21 @@ pub fn main() !void {
         .g_config = &src_conf,
     };
 
-    const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
-    defer thread.join();
+    if (src_conf.agent.?.enabled) {
+        const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
+        defer thread.join();
+    }
 
     var auth = Auth{ .alloc = a };
     var mtls = verse.auth.MTLS{
         .base = auth.provider(),
     };
+
+    if (src_conf.server) |srvcfg| {
+        if (srvcfg.sock) |sock| {
+            std.debug.print("sock: {s}\n", .{sock});
+        }
+    }
 
     var endpoints = Srctree.endpoints.init(a);
     endpoints.serve(.{

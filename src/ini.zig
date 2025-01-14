@@ -25,6 +25,10 @@ pub const Namespace = struct {
 
     pub fn init(a: Allocator, name: []const u8, itr: *ScalarIter) !Namespace {
         var list = std.ArrayList(Setting).init(a);
+        errdefer {
+            for (list.items) |itm| itm.raze(a);
+            list.deinit();
+        }
         const ns_start = itr.index.?;
         const ns_block = itr.buffer[ns_start..];
 
@@ -96,7 +100,11 @@ pub fn Config(Base: anytype) type {
             inline for (@typeInfo(T).Struct.fields) |s| {
                 switch (s.type) {
                     bool => {
-                        @field(namespace, s.name) = ns.getBool(s.name) orelse return error.SettingMissing;
+                        @field(namespace, s.name) = ns.getBool(s.name) orelse brk: {
+                            if (s.default_value) |dv| {
+                                break :brk @as(*const s.type, @ptrCast(@alignCast(dv))).*;
+                            } else return error.SettingMissing;
+                        };
                     },
                     ?bool => {
                         @field(namespace, s.name) = ns.getBool(s.name);
@@ -122,7 +130,7 @@ pub fn Config(Base: anytype) type {
                         @field(base, f.name) = try self.buildStruct(f.type, f.name) orelse return error.NamespaceMissing;
                     },
                     .Optional => {
-                        @field(base, f.name) = try self.buildStruct(@typeInfo(f.type).Optional.child, f.name) orelse return error.NamespaceMissing;
+                        @field(base, f.name) = self.buildStruct(@typeInfo(f.type).Optional.child, f.name) catch null;
                     },
                     else => @compileError("not implemented"),
                 }
@@ -172,6 +180,10 @@ pub fn Config(Base: anytype) type {
             var itr = splitScalar(u8, data, '\n');
 
             var list = std.ArrayList(Namespace).init(a);
+            errdefer {
+                for (list.items) |itm| itm.raze(a);
+                list.deinit();
+            }
 
             while (itr.next()) |wide| {
                 const line = trim(u8, wide, " \n\t");
