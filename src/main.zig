@@ -84,6 +84,15 @@ pub var global_config: SrcConfig = undefined;
 
 const Auth = struct {
     alloc: Allocator,
+
+    pub fn init(a: Allocator) Auth {
+        return .{
+            .alloc = a,
+        };
+    }
+
+    pub fn raze(_: Auth) void {}
+
     pub fn provider(self: *Auth) verse.auth.Provider {
         return .{
             .ctx = self,
@@ -181,7 +190,11 @@ pub fn main() !void {
         defer thread.join();
     }
 
-    var auth = Auth{ .alloc = a };
+    var arena = std.heap.ArenaAllocator.init(a);
+    defer arena.deinit();
+    const auth_alloc = arena.allocator();
+    var auth = Auth.init(auth_alloc);
+    defer auth.raze();
     var mtls = verse.auth.MTLS{
         .base = auth.provider(),
     };
