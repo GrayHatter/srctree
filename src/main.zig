@@ -74,6 +74,7 @@ pub const SrcConfig = struct {
     },
     server: ?struct {
         sock: ?[]const u8,
+        remove_on_start: bool = false,
     },
 };
 
@@ -165,6 +166,15 @@ pub fn main() !void {
     var agent_config: Repos.AgentConfig = .{
         .g_config = &src_conf,
     };
+
+    if (src_conf.server) |srv| {
+        if (srv.remove_on_start) {
+            cwd.deleteFile("./srctree.sock") catch |err| switch (err) {
+                error.FileNotFound => {},
+                else => return err,
+            };
+        }
+    }
 
     if (src_conf.agent.?.enabled) {
         const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
