@@ -7,7 +7,6 @@ const Server = verse.Server;
 const log = std.log;
 
 const Database = @import("database.zig");
-const Route = verse.Router;
 const Repos = @import("repos.zig");
 const Types = @import("types.zig");
 
@@ -21,7 +20,7 @@ test "main" {
     std.testing.refAllDecls(@import("git.zig"));
 }
 
-pub const std_options = .{
+pub const std_options: std.Options = .{
     .log_level = .info,
 };
 

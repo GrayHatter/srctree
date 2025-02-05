@@ -97,12 +97,12 @@ pub fn Config(Base: anytype) type {
         fn buildStruct(self: Self, T: type, name: []const u8) !?T {
             var namespace: T = undefined;
             const ns = self.get(name) orelse return null;
-            inline for (@typeInfo(T).Struct.fields) |s| {
+            inline for (@typeInfo(T).@"struct".fields) |s| {
                 switch (s.type) {
                     bool => {
                         @field(namespace, s.name) = ns.getBool(s.name) orelse brk: {
-                            if (s.default_value) |dv| {
-                                break :brk @as(*const s.type, @ptrCast(@alignCast(dv))).*;
+                            if (s.defaultValue()) |dv| {
+                                break :brk dv;
                             } else return error.SettingMissing;
                         };
                     },
@@ -123,14 +123,14 @@ pub fn Config(Base: anytype) type {
 
         pub fn config(self: Self) !Base {
             var base: Base = undefined;
-            inline for (@typeInfo(Base).Struct.fields) |f| {
+            inline for (@typeInfo(Base).@"struct".fields) |f| {
                 if (f.type == []const u8) continue; // Root variable not yet supported
                 switch (@typeInfo(f.type)) {
-                    .Struct => {
+                    .@"struct" => {
                         @field(base, f.name) = try self.buildStruct(f.type, f.name) orelse return error.NamespaceMissing;
                     },
-                    .Optional => {
-                        @field(base, f.name) = self.buildStruct(@typeInfo(f.type).Optional.child, f.name) catch null;
+                    .optional => {
+                        @field(base, f.name) = self.buildStruct(@typeInfo(f.type).optional.child, f.name) catch null;
                     },
                     else => @compileError("not implemented"),
                 }

@@ -138,7 +138,7 @@ fn bleachPath(in: u8, out: ?[]u8) Error!usize {
         '\n', '\t', '\\' => "",
         else => "",
     };
-    if (comptime out) |o| {
+    if (out) |o| {
         if (replace.len > o.len) return error.NoSpaceLeft;
         @memcpy(o[0..replace.len], replace);
     }
@@ -151,7 +151,7 @@ fn bleachFilename(in: u8, out: ?[]u8) Error!usize {
         '/' => "-",
         else => return bleachPath(in, out),
     };
-    if (comptime out) |o| {
+    if (out) |o| {
         if (replace.len > o.len) return error.NoSpaceLeft;
         @memcpy(o[0..replace.len], replace);
     }

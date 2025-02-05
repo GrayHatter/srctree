@@ -258,7 +258,7 @@ pub const Diff = struct {
     pub fn blocksAlloc(self: *Diff, a: Allocator) ![]const []const u8 {
         var acount = count(u8, self.changes.?, "\n@@");
         if (startsWith(u8, self.changes.?, "@@")) acount += 1 else acount += 0;
-        self.blocks = try a.alloc([]u8, acount);
+        self.blocks = try a.alloc([]const u8, acount);
         var i: usize = 0;
         var pos: usize = indexOf(u8, self.changes.?, "@@") orelse return self.blocks.?;
         while (indexOf(u8, self.changes.?[pos + 1 ..], "\n@@")) |end| {

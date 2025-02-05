@@ -56,7 +56,7 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
         try map.put("REQUEST_METHOD", "POST");
     }
     try map.put("REMOTE_USER", "");
-    try map.put("REMOTE_ADDR", "");
+    try map.put("REMOTE_ADDR", ctx.request.remote_addr);
     try map.put("CONTENT_TYPE", "application/x-git-upload-pack-request");
     try map.put("GIT_PROTOCOL", "version=2");
     try map.put("GIT_HTTP_EXPORT_ALL", "true");

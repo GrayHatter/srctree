@@ -7,7 +7,7 @@ const Journal = struct {
 
     pub const JRepo = struct {
         name: []const u8,
-        sha: Git.Sha,
+        sha: Git.SHA,
     };
 
     pub fn init(a: Allocator, email: []const u8) !*Journal {
