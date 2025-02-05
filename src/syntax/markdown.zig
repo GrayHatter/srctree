@@ -9,13 +9,13 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     var idx: usize = 0;
     var backtick: bool = false;
     while (idx < blob.len) : (idx += 1) {
-        switch (blob[idx]) {
-            '\n' => |c| {
+        sw: switch (blob[idx]) {
+            '\n' => {
                 newline +|= 1;
                 if (newline % 2 == 0) {
                     try output.appendSlice("<br>");
                 }
-                try output.append(c);
+                try output.append('\n');
             },
             '#' => |c| {
                 if (newline == 0) {
@@ -56,6 +56,19 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
                 }
             },
             '`' => {
+                if (blob.len > idx + 7) {
+                    if (blob[idx + 1] == '`' and blob[idx + 2] == '`') {
+                        if (std.mem.indexOfPos(u8, blob, idx + 3, "\n```")) |i| {
+                            try output.appendSlice("<div class=\"codeblock\">");
+                            idx += 3;
+                            try output.appendSlice(blob[idx..i]);
+                            try output.appendSlice("\n</div>");
+                            idx = i + 4;
+                            if (idx >= blob.len) break :sw;
+                            continue :sw blob[idx];
+                        }
+                    }
+                }
                 if (backtick) {
                     backtick = false;
                     try output.appendSlice("</span>");
@@ -135,4 +148,26 @@ test "backtick" {
     defer a.free(html);
 
     try std.testing.expectEqualStrings(expected, html);
+}
+
+test "backtick block" {
+    const a = std.testing.allocator;
+    {
+        const blob = "```backtick block\n```";
+        const expected = "<div class=\"codeblock\">backtick block\n</div>";
+
+        const html = try translate(a, blob);
+        defer a.free(html);
+
+        try std.testing.expectEqualStrings(expected, html);
+    }
+    {
+        const blob = "```backtick```";
+        const expected = "<span class=\"coderef\"></span><span class=\"coderef\">backtick</span><span class=\"coderef\"></span>";
+
+        const html = try translate(a, blob);
+        defer a.free(html);
+
+        try std.testing.expectEqualStrings(expected, html);
+    }
 }

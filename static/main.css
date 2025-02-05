@@ -112,7 +112,7 @@ lines {
 	width: 50px;
 }
 
-.code-block { background: #333; }
+.codeblock { background: #333; }
 
 code {
 	display: inline-block;
@@ -259,6 +259,9 @@ readme {
 		justify-content: space-between;
 		align-items: baseline;
 		text-align: left;
+	}
+	.codeblock {
+		white-space: pre
 	}
 }
 
@@ -694,7 +697,7 @@ blob {
 		height: 1.5em;
 		padding: 4px 12px;
 	}
-	.code-block {
+	.codeblock {
 		padding: 4px 12px;
 		border: 1px gray solid;
 		border-bottom: 0px;
