@@ -261,7 +261,11 @@ readme {
 		text-align: left;
 	}
 	.codeblock {
-		white-space: pre
+		white-space: pre;
+	}
+	/* TODO remove */
+	code {
+		white-space: pre;
 	}
 }
 
