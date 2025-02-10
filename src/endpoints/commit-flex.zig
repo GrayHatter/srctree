@@ -54,8 +54,8 @@ const Journal = struct {
             if (commit_time < until) break;
             if (std.mem.eql(u8, email.?, commit.author.email)) {
                 try list.append(.{
-                    .name = try Bleach.Html.sanitizeAlloc(a, commit.author.name),
-                    .title = try Bleach.Html.sanitizeAlloc(a, commit.title),
+                    .name = try Verse.abx.Html.cleanAlloc(a, commit.author.name),
+                    .title = try Verse.abx.Html.cleanAlloc(a, commit.title),
                     .date = DateTime.fromEpoch(commit_time),
                     .sha = commit.sha,
                     .repo = try a.dupe(u8, gitdir[8..]),
@@ -442,7 +442,6 @@ const eql = std.mem.eql;
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 
-const Bleach = @import("../bleach.zig");
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
 

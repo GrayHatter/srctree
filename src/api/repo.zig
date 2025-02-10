@@ -16,8 +16,7 @@ pub const RepoRequest = struct {
 };
 
 fn openRepo(a: Allocator, raw_name: []const u8) !Git.Repo {
-    const dname = try a.alloc(u8, raw_name.len);
-    const rname = Bleach.sanitize(raw_name, dname, .{ .rules = .filename }) catch return error.InvalidName;
+    const rname = verse.abx.Filename.cleanAlloc(a, raw_name) catch return error.InvalidName;
     if (!std.mem.eql(u8, raw_name, rname)) return error.InvalidName;
 
     var cwd = std.fs.cwd();
@@ -137,9 +136,9 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 
 const API = @import("../api.zig");
-const Bleach = @import("../bleach.zig");
 const Git = @import("../git.zig");
 const Router = API.Router;
+const verse = @import("verse");
 
 const ROUTE = Router.ROUTE;
 

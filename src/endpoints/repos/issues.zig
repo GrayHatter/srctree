@@ -18,7 +18,6 @@ const S = Template.Structs;
 const Repos = @import("../repos.zig");
 
 const CURL = @import("../../curl.zig");
-const Bleach = @import("../../bleach.zig");
 const Types = @import("../../types.zig");
 const Delta = Types.Delta;
 const Humanize = @import("../../humanize.zig");
@@ -132,9 +131,9 @@ fn view(ctx: *Verse.Frame) Error!void {
             switch (msg.kind) {
                 .comment => |comment| {
                     c_ctx.* = .{
-                        .author = try Bleach.Html.sanitizeAlloc(ctx.alloc, comment.author),
+                        .author = try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.author),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
-                        .message = try Bleach.Html.sanitizeAlloc(ctx.alloc, comment.message),
+                        .message = try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.message),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
                             index,
                             fmtSliceHexLower(msg.hash[0..]),
@@ -158,8 +157,8 @@ fn view(ctx: *Verse.Frame) Error!void {
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
         } },
-        .title = Bleach.Html.sanitizeAlloc(ctx.alloc, delta.title) catch unreachable,
-        .desc = Bleach.Html.sanitizeAlloc(ctx.alloc, delta.message) catch unreachable,
+        .title = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
+        .desc = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
         .delta_id = delta_id,
         .comments = .{
             .thread = root_thread,
@@ -195,13 +194,13 @@ fn list(ctx: *Verse.Frame) Error!void {
                 "/repo/{s}/{s}/{x}",
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
-            .title = try Bleach.Html.sanitizeAlloc(ctx.alloc, d.title),
+            .title = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
                 .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
-            .desc = try Bleach.Html.sanitizeAlloc(ctx.alloc, d.message),
+            .desc = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
 

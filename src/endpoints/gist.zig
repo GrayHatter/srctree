@@ -99,8 +99,8 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
     const out = try a.alloc(S.GistFiles, files.len);
     for (files, out) |file, *o| {
         o.* = .{
-            .file_name = try Bleach.Html.sanitizeAlloc(a, file.name),
-            .file_blob = try Bleach.Html.sanitizeAlloc(a, file.blob),
+            .file_name = try verse.abx.Html.cleanAlloc(a, file.name),
+            .file_blob = try verse.abx.Html.cleanAlloc(a, file.blob),
         };
     }
     return out;
@@ -115,7 +115,7 @@ fn view(vrs: *Frame) Error!void {
 
         const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.Unknown;
         const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
-        const og = try std.fmt.allocPrint(vrs.alloc, "A perfect paste from {}", .{Bleach.Html{ .text = gist.owner }});
+        const og = try std.fmt.allocPrint(vrs.alloc, "A perfect paste from {}", .{verse.abx.Html{ .text = gist.owner }});
         var page = GistPage.init(.{
             .meta_head = .{
                 .open_graph = .{
@@ -143,7 +143,6 @@ const Frame = verse.Frame;
 const template = verse.template;
 const S = template.Structs;
 const RequestData = verse.RequestData.RequestData;
-const Bleach = @import("../bleach.zig");
 const Allocator = std.mem.Allocator;
 
 const Gist = @import("../types.zig").Gist;

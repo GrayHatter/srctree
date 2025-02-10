@@ -9,7 +9,6 @@ const indexOfPos = std.mem.indexOfPos;
 const splitScalar = std.mem.splitScalar;
 
 const CURL = @import("curl.zig");
-const Bleach = @import("bleach.zig");
 const Verse = @import("verse");
 const Response = Verse.Response;
 const HTML = Verse.template.html;
@@ -399,7 +398,7 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
     const a_del = &HTML.Attr.class("del");
     const a_block = &HTML.Attr.class("block");
 
-    const clean = Bleach.Html.sanitizeAlloc(a, diff) catch unreachable;
+    const clean = Verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.splitScalar(u8, clean, '\n');
     const nbsp = "&nbsp;";
@@ -473,7 +472,7 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
     dom = dom.open(HTML.span(null, null));
 
-    const clean = Bleach.Html.sanitizeAlloc(a, diff) catch unreachable;
+    const clean = Verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = splitScalar(u8, clean, '\n');
     for (0..line_count + 1) |_| {

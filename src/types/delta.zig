@@ -4,7 +4,6 @@ const Allocator = std.mem.Allocator;
 const endian = builtin.cpu.arch.endian();
 const AnyReader = std.io.AnyReader;
 
-const Bleach = @import("../bleach.zig");
 const Types = @import("../types.zig");
 const Thread = Types.Thread;
 const Message = Thread.Message;

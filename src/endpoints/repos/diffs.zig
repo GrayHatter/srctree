@@ -19,7 +19,6 @@ const Repos = @import("../repos.zig");
 const Verse = @import("verse");
 
 const Git = @import("../../git.zig");
-const Bleach = @import("../../bleach.zig");
 const DOM = Verse.DOM;
 const HTML = Verse.HTML;
 const Humanize = @import("../../humanize.zig");
@@ -446,12 +445,12 @@ fn resolveLineRefRepo(
     else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
         var pre = try Highlighting.highlight(a, lang, found_line[1..]);
         break :fmt pre[28..][0 .. pre.len - 41];
-    } else try Bleach.Html.sanitizeAlloc(a, found_line[1..]);
+    } else try Verse.abx.Html.cleanAlloc(a, found_line[1..]);
 
     const wrapped_line = try allocPrint(
         a,
         "<div title=\"{s}\" class=\"coderef\">{s}</div>",
-        .{ try Bleach.Html.sanitizeAlloc(a, line), formatted },
+        .{ try Verse.abx.Html.cleanAlloc(a, line), formatted },
     );
     try found_lines.append(wrapped_line);
     return try found_lines.toOwnedSlice();
@@ -495,12 +494,12 @@ fn resolveLineRefDiff(
                 else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
                     var pre = try Highlighting.highlight(a, lang, found_line[1..]);
                     break :fmt pre[28..][0 .. pre.len - 41];
-                } else try Bleach.Html.sanitizeAlloc(a, found_line[1..]);
+                } else try Verse.abx.Html.cleanAlloc(a, found_line[1..]);
 
                 const wrapped_line = try allocPrint(
                     a,
                     "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
-                    .{ try Bleach.Html.sanitizeAlloc(a, line), color, formatted },
+                    .{ try Verse.abx.Html.cleanAlloc(a, line), color, formatted },
                 );
                 try found_lines.append(wrapped_line);
             }
@@ -585,7 +584,7 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                             end += 1;
                         }
                         if (end < line.len) try message_lines.append(
-                            try Bleach.Html.sanitizeAlloc(a, line[end..]),
+                            try Verse.abx.Html.cleanAlloc(a, line[end..]),
                         );
                     } else if (resolveLineRefRepo(
                         a,
@@ -604,14 +603,14 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                         try message_lines.append(try allocPrint(
                             a,
                             "<span title=\"line not found in this diff\">{s}</span>",
-                            .{try Bleach.Html.sanitizeAlloc(a, line)},
+                            .{try Verse.abx.Html.cleanAlloc(a, line)},
                         ));
                     }
                 }
                 break;
             }
         } else {
-            try message_lines.append(try Bleach.Html.sanitizeAlloc(a, line));
+            try message_lines.append(try Verse.abx.Html.cleanAlloc(a, line));
         }
     }
 
@@ -641,8 +640,8 @@ fn view(ctx: *Verse.Frame) Error!void {
     } orelse return error.Unrouteable;
 
     const patch_header = S.Header{
-        .title = Bleach.Html.sanitizeAlloc(ctx.alloc, delta.title) catch unreachable,
-        .message = Bleach.Html.sanitizeAlloc(ctx.alloc, delta.message) catch unreachable,
+        .title = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
+        .message = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
     };
 
     // meme saved to protect history
@@ -692,12 +691,12 @@ fn view(ctx: *Verse.Frame) Error!void {
             switch (msg.kind) {
                 .comment => |comment| {
                     c_ctx.* = .{
-                        .author = try Bleach.Html.sanitizeAlloc(ctx.alloc, comment.author),
+                        .author = try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.author),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
                         .message = if (patch) |pt|
                             translateComment(ctx.alloc, comment.message, pt, &repo) catch unreachable
                         else
-                            try Bleach.Html.sanitizeAlloc(ctx.alloc, comment.message),
+                            try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.message),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
                             index,
                             fmtSliceHexLower(msg.hash[0..]),
@@ -767,13 +766,13 @@ fn list(ctx: *Verse.Frame) Error!void {
                 "/repo/{s}/{s}/{x}",
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
-            .title = try Bleach.Html.sanitizeAlloc(ctx.alloc, d.title),
+            .title = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
                 .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
-            .desc = try Bleach.Html.sanitizeAlloc(ctx.alloc, d.message),
+            .desc = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
     var default_search_buf: [0xFF]u8 = undefined;
