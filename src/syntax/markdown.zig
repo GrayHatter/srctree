@@ -1,6 +1,3 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-
 pub fn highlight() void {}
 
 pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
@@ -58,7 +55,13 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
             '`' => {
                 if (blob.len > idx + 7) {
                     if (blob[idx + 1] == '`' and blob[idx + 2] == '`') {
+                        // TODO does the closing ``` need a \n prefix
                         if (std.mem.indexOfPos(u8, blob, idx + 3, "\n```")) |i| {
+                            var bt_code_flavor: ?[]const u8 = null;
+                            if (blob[idx + 3] >= 'a' and blob[idx + 3] <= 'z') {
+                                bt_code_flavor = parseCodeblockFlavor(blob[idx + 3 ..]);
+                            }
+
                             try output.appendSlice("<div class=\"codeblock\">");
                             idx += 3;
                             try output.appendSlice(blob[idx..i]);
@@ -85,6 +88,15 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     }
 
     return try output.toOwnedSlice();
+}
+
+/// Returns a slice into the given string IFF it's a supported language
+fn parseCodeblockFlavor(str: []const u8) ?[]const u8 {
+    if (eql(u8, str, "zig")) {
+        return str[0..3];
+    }
+
+    return null;
 }
 
 test "title 0" {
@@ -171,3 +183,7 @@ test "backtick block" {
         try std.testing.expectEqualStrings(expected, html);
     }
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const eql = std.mem.eql;
