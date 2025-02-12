@@ -94,6 +94,8 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
 fn parseCodeblockFlavor(str: []const u8) ?[]const u8 {
     if (eql(u8, str, "zig")) {
         return str[0..3];
+    } else if (eql(u8, str, "html")) {
+        return str[0..4];
     }
 
     return null;
