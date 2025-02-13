@@ -64,7 +64,8 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
 
                             try output.appendSlice("<div class=\"codeblock\">");
                             idx += 3;
-                            try output.appendSlice(blob[idx..i]);
+                            const highlighted = try highlightLangBlock(blob[idx..i], bt_code_flavor);
+                            try output.appendSlice(highlighted);
                             try output.appendSlice("\n</div>");
                             idx = i + 4;
                             if (idx >= blob.len) break :sw;
@@ -88,6 +89,11 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     }
 
     return try output.toOwnedSlice();
+}
+
+fn highlightLangBlock(src: []const u8, lang: ?[]const u8) ![]const u8 {
+    _ = lang;
+    return src;
 }
 
 /// Returns a slice into the given string IFF it's a supported language
