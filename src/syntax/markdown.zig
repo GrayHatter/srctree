@@ -6,118 +6,176 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     var idx: usize = 0;
     var backtick: bool = false;
     var esc = true;
-    while (idx < blob.len) : (idx += 1) {
-        sw: switch (blob[idx]) {
-            '\n' => {
-                newline +|= 1;
-                if (newline % 2 == 0) {
-                    try output.appendSlice("<br>");
+    var open_list = false;
+    var indent: usize = 0;
+    sw: switch (blob[idx]) {
+        '\n' => {
+            indent = 0;
+            newline +|= 1;
+            if (newline % 2 == 0) {
+                if (open_list) {
+                    try output.appendSlice("</ul>");
+                    open_list = false;
+                    idx += 1;
+                    if (idx < blob.len) continue :sw blob[idx];
                 }
-                try output.append('\n');
-            },
-            '#' => |c| {
-                if (newline == 0) {
-                    try output.append(c);
-                    continue;
-                }
-
-                newline = 0;
-                var hlvl: u8 = 0;
-                while (idx < blob.len) : (idx += 1) {
-                    switch (blob[idx]) {
-                        '#' => hlvl +|= 1,
-                        else => break,
-                    }
-                }
-                const tag = switch (hlvl) {
-                    1 => "<h1>",
-                    2 => "<h2>",
-                    3 => "<h3>",
-                    4 => "<h4>",
-                    5 => "<h5>",
-                    6 => "<h6>",
-                    else => t: {
-                        for (0..hlvl) |_| try output.append('#');
-                        break :t "";
-                    },
-                };
-
-                try output.appendSlice(tag);
-                while (idx < blob.len and blob[idx] == ' ') idx += 1;
-                while (idx < blob.len and blob[idx] != '\n') : (idx += 1) {
-                    try output.append(blob[idx]);
-                }
-                if (idx != blob.len) idx -= 1;
-                if (tag.len > 1) {
-                    try output.appendSlice("</");
-                    try output.appendSlice(tag[1..]);
-                }
-            },
-            '`' => {
-                if (blob.len > idx + 7) {
-                    if (blob[idx + 1] == '`' and blob[idx + 2] == '`') {
-                        // TODO does the closing ``` need a \n prefix
-                        if (std.mem.indexOfPos(u8, blob, idx + 3, "\n```")) |i| {
-                            var highlighted: ?[]const u8 = null;
-                            defer if (highlighted) |hl| a.free(hl);
-
-                            if (blob[idx + 3] >= 'a' and blob[idx + 3] <= 'z') {
-                                var lang_len = idx + 3;
-                                while (lang_len < i and blob[lang_len] >= 'a' and blob[lang_len] <= 'z') {
-                                    lang_len += 1;
-                                }
-                                if (parseCodeblockFlavor(blob[idx + 3 .. lang_len])) |flavor| {
-                                    highlighted = try syntax.highlight(a, flavor, blob[lang_len..i]);
-                                }
-                            }
-
-                            try output.appendSlice("<div class=\"codeblock\">");
-                            idx += 3;
-                            try output.appendSlice(highlighted orelse blob[idx..i]);
-                            try output.appendSlice("\n</div>");
-                            idx = i + 4;
-                            if (idx >= blob.len) break :sw;
-                            continue :sw blob[idx];
-                        }
-                    }
-                }
-                if (backtick) {
-                    backtick = false;
-                    try output.appendSlice("</span>");
-                } else {
-                    backtick = true;
-                    try output.appendSlice("<span class=\"coderef\">");
-                }
-            },
-            '\\' => {
-                if (idx + 1 >= blob.len) {
-                    try output.append('\\');
-                    break;
-                }
+                try output.appendSlice("<br>");
+            }
+            try output.append('\n');
+            idx += 1;
+            if (idx < blob.len) continue :sw blob[idx];
+        },
+        '#' => |c| {
+            if (newline == 0) {
+                try output.append(c);
                 idx += 1;
+                if (idx < blob.len) continue :sw blob[idx];
+            }
+
+            newline = 0;
+            var hlvl: u8 = 0;
+            while (idx < blob.len) : (idx += 1) {
                 switch (blob[idx]) {
-                    '\\' => {
-                        try output.append('\\');
-                        idx += 1;
-                    },
-                    '`' => |c| {
-                        try output.append(c);
-                        idx += 1;
-                    },
-                    else => {},
+                    '#' => hlvl +|= 1,
+                    else => break,
                 }
-                continue :sw blob[idx];
-            },
-            else => |c| {
-                newline = 0;
-                esc = false;
-                if (abx.Html.clean(c)) |clean| {
-                    try output.appendSlice(clean);
-                } else {
+            }
+            const tag = switch (hlvl) {
+                1 => "<h1>",
+                2 => "<h2>",
+                3 => "<h3>",
+                4 => "<h4>",
+                5 => "<h5>",
+                6 => "<h6>",
+                else => t: {
+                    for (0..hlvl) |_| try output.append('#');
+                    break :t "";
+                },
+            };
+
+            while (idx < blob.len and blob[idx] == ' ') idx += 1;
+            try output.appendSlice(tag);
+            if (indexOfScalarPos(u8, blob, idx, '\n')) |eol| {
+                var i = eol;
+                while (blob[i] == '#' or blob[i] == ' ' or blob[i] == '\n') i -= 1;
+                try output.appendSlice(blob[idx .. i + 1]);
+                idx = eol;
+            } else {
+                try output.appendSlice(blob[idx..]);
+                idx = blob.len - 1;
+            }
+            if (tag.len > 1) {
+                try output.appendSlice("</");
+                try output.appendSlice(tag[1..]);
+            }
+            if (blob[idx] != '\n') idx += 1;
+            if (idx < blob.len) continue :sw blob[idx];
+        },
+        '`' => {
+            if (blob.len > idx + 7) {
+                if (blob[idx + 1] == '`' and blob[idx + 2] == '`') {
+                    // TODO does the closing ``` need a \n prefix
+                    if (std.mem.indexOfPos(u8, blob, idx + 3, "\n```")) |i| {
+                        var highlighted: ?[]const u8 = null;
+                        defer if (highlighted) |hl| a.free(hl);
+
+                        if (blob[idx + 3] >= 'a' and blob[idx + 3] <= 'z') {
+                            var lang_len = idx + 3;
+                            while (lang_len < i and blob[lang_len] >= 'a' and blob[lang_len] <= 'z') {
+                                lang_len += 1;
+                            }
+                            if (parseCodeblockFlavor(blob[idx + 3 .. lang_len])) |flavor| {
+                                highlighted = try syntax.highlight(a, flavor, blob[lang_len..i]);
+                            }
+                        }
+
+                        try output.appendSlice("<div class=\"codeblock\">");
+                        idx += 3;
+                        try output.appendSlice(highlighted orelse blob[idx..i]);
+                        try output.appendSlice("\n</div>");
+                        idx = i + 4;
+                        if (idx < blob.len) continue :sw blob[idx];
+                        break :sw;
+                    }
+                }
+            }
+            if (backtick) {
+                backtick = false;
+                try output.appendSlice("</span>");
+            } else {
+                backtick = true;
+                try output.appendSlice("<span class=\"coderef\">");
+            }
+            idx += 1;
+            if (idx < blob.len) continue :sw blob[idx];
+        },
+        '\\' => {
+            if (idx + 1 >= blob.len) {
+                try output.append('\\');
+                idx += 1;
+                if (idx < blob.len) continue :sw blob[idx];
+            }
+            idx += 1;
+            switch (blob[idx]) {
+                '\\' => {
+                    try output.append('\\');
+                    idx += 1;
+                },
+                '`' => |c| {
                     try output.append(c);
+                    idx += 1;
+                },
+                else => {},
+            }
+            if (idx < blob.len) continue :sw blob[idx];
+        },
+        '-', '+', '*' => |c| {
+            if ((newline > 0 or indent > 0) and idx + 1 < blob.len and blob[idx + 1] == ' ') {
+                if (!open_list) {
+                    try output.appendSlice("<ul>");
+                    open_list = true;
                 }
-            },
-        }
+                if (indexOfScalarPos(u8, blob, idx, '\n')) |eol| {
+                    try output.appendSlice("<li>");
+                    try output.appendSlice(blob[idx + 1 .. eol]);
+                    try output.appendSlice("</li>\n");
+                    idx = eol;
+                } else {
+                    idx = blob.len;
+                }
+            } else {
+                try output.append(c);
+            }
+            idx += 1;
+            if (idx < blob.len) continue :sw blob[idx];
+        },
+        ' ' => {
+            newline = 0;
+            indent = 0;
+            while (idx < blob.len and blob[idx] == ' ') {
+                idx += 1;
+                indent += 1;
+                try output.append(' ');
+            }
+            if (idx < blob.len) continue :sw blob[idx];
+        },
+        else => |c| {
+            newline = 0;
+            esc = false;
+            if (indent == 0) {
+                if (open_list) {
+                    try output.appendSlice("</ul>");
+                    open_list = false;
+                }
+            }
+            if (abx.Html.clean(c)) |clean| {
+                try output.appendSlice(clean);
+            } else {
+                try output.append(c);
+            }
+            idx += 1;
+            if (idx < blob.len) continue :sw blob[idx];
+        },
     }
 
     return try output.toOwnedSlice();
@@ -219,3 +277,4 @@ const abx = @import("verse").abx;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
+const indexOfScalarPos = std.mem.indexOfScalarPos;
