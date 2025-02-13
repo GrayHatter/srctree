@@ -36,6 +36,10 @@ pub const Language = enum {
         };
     }
 
+    pub fn fromString(str: []const u8) ?Language {
+        return std.meta.stringToEnum(Language, str);
+    }
+
     pub fn guessFromFilename(name: []const u8) ?Language {
         if (endsWith(u8, name, ".c")) {
             return .c;

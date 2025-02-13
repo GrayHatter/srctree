@@ -57,15 +57,22 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
                     if (blob[idx + 1] == '`' and blob[idx + 2] == '`') {
                         // TODO does the closing ``` need a \n prefix
                         if (std.mem.indexOfPos(u8, blob, idx + 3, "\n```")) |i| {
-                            var bt_code_flavor: ?[]const u8 = null;
+                            var highlighted: ?[]const u8 = null;
+                            defer if (highlighted) |hl| a.free(hl);
+
                             if (blob[idx + 3] >= 'a' and blob[idx + 3] <= 'z') {
-                                bt_code_flavor = parseCodeblockFlavor(blob[idx + 3 ..]);
+                                var lang_len = idx + 3;
+                                while (lang_len < i and blob[lang_len] >= 'a' and blob[lang_len] <= 'z') {
+                                    lang_len += 1;
+                                }
+                                if (parseCodeblockFlavor(blob[idx + 3 .. lang_len])) |flavor| {
+                                    highlighted = try syntax.highlight(a, flavor, blob[lang_len..i]);
+                                }
                             }
 
                             try output.appendSlice("<div class=\"codeblock\">");
                             idx += 3;
-                            const highlighted = try highlightLangBlock(blob[idx..i], bt_code_flavor);
-                            try output.appendSlice(highlighted);
+                            try output.appendSlice(highlighted orelse blob[idx..i]);
                             try output.appendSlice("\n</div>");
                             idx = i + 4;
                             if (idx >= blob.len) break :sw;
@@ -83,7 +90,11 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
             },
             else => |c| {
                 newline = 0;
-                try output.append(c);
+                if (abx.Html.clean(c)) |clean| {
+                    try output.appendSlice(clean);
+                } else {
+                    try output.append(c);
+                }
             },
         }
     }
@@ -91,20 +102,9 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     return try output.toOwnedSlice();
 }
 
-fn highlightLangBlock(src: []const u8, lang: ?[]const u8) ![]const u8 {
-    _ = lang;
-    return src;
-}
-
 /// Returns a slice into the given string IFF it's a supported language
-fn parseCodeblockFlavor(str: []const u8) ?[]const u8 {
-    if (eql(u8, str, "zig")) {
-        return str[0..3];
-    } else if (eql(u8, str, "html")) {
-        return str[0..4];
-    }
-
-    return null;
+fn parseCodeblockFlavor(str: []const u8) ?syntax.Language {
+    return syntax.Language.fromString(str);
 }
 
 test "title 0" {
@@ -191,6 +191,9 @@ test "backtick block" {
         try std.testing.expectEqualStrings(expected, html);
     }
 }
+
+const syntax = @import("../syntax-highlight.zig");
+const abx = @import("verse").abx;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

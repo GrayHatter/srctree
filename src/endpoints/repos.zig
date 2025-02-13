@@ -595,8 +595,7 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]html.E {
     dom = dom.open(html.element("readme", null, null));
     dom.push(html.element("intro", "README.md", null));
     dom = dom.open(html.element("code", null, null));
-    const clean = verse.abx.Html.cleanAlloc(a, readme) catch return error.Unknown;
-    const translated = try Highlight.translate(a, .markdown, clean);
+    const translated = try Highlight.translate(a, .markdown, readme);
     dom.push(html.text(translated));
     dom = dom.close();
     dom = dom.close();
