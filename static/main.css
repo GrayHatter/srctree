@@ -186,7 +186,7 @@ repo {
 	display: block;
 	&.landing {
 		border-radius: 4px 4px 0 0;
-		border: 1px solid #808080;
+		/* border: 1px solid #808080; */
 		intro {
 
 			span:first-child{
@@ -263,9 +263,8 @@ readme {
 	.codeblock {
 		white-space: pre;
 	}
-	/* TODO remove */
 	code {
-		white-space: pre;
+		width: 98%;
 	}
 }
 

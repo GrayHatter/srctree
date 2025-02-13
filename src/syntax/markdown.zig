@@ -5,6 +5,7 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     var newline: u8 = 255;
     var idx: usize = 0;
     var backtick: bool = false;
+    var esc = true;
     while (idx < blob.len) : (idx += 1) {
         sw: switch (blob[idx]) {
             '\n' => {
@@ -88,8 +89,28 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
                     try output.appendSlice("<span class=\"coderef\">");
                 }
             },
+            '\\' => {
+                if (idx + 1 >= blob.len) {
+                    try output.append('\\');
+                    break;
+                }
+                idx += 1;
+                switch (blob[idx]) {
+                    '\\' => {
+                        try output.append('\\');
+                        idx += 1;
+                    },
+                    '`' => |c| {
+                        try output.append(c);
+                        idx += 1;
+                    },
+                    else => {},
+                }
+                continue :sw blob[idx];
+            },
             else => |c| {
                 newline = 0;
+                esc = false;
                 if (abx.Html.clean(c)) |clean| {
                     try output.appendSlice(clean);
                 } else {
