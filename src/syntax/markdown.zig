@@ -25,52 +25,7 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
             idx += 1;
             if (idx < blob.len) continue :sw blob[idx];
         },
-        '#' => |c| {
-            if (newline == 0) {
-                try output.append(c);
-                idx += 1;
-                if (idx < blob.len) continue :sw blob[idx];
-            }
-
-            newline = 0;
-            var hlvl: u8 = 0;
-            while (idx < blob.len) : (idx += 1) {
-                switch (blob[idx]) {
-                    '#' => hlvl +|= 1,
-                    else => break,
-                }
-            }
-            const tag = switch (hlvl) {
-                1 => "<h1>",
-                2 => "<h2>",
-                3 => "<h3>",
-                4 => "<h4>",
-                5 => "<h5>",
-                6 => "<h6>",
-                else => t: {
-                    for (0..hlvl) |_| try output.append('#');
-                    break :t "";
-                },
-            };
-
-            while (idx < blob.len and blob[idx] == ' ') idx += 1;
-            try output.appendSlice(tag);
-            if (indexOfScalarPos(u8, blob, idx, '\n')) |eol| {
-                var i = eol;
-                while (blob[i] == '#' or blob[i] == ' ' or blob[i] == '\n') i -= 1;
-                try output.appendSlice(blob[idx .. i + 1]);
-                idx = eol;
-            } else {
-                try output.appendSlice(blob[idx..]);
-                idx = blob.len - 1;
-            }
-            if (tag.len > 1) {
-                try output.appendSlice("</");
-                try output.appendSlice(tag[1..]);
-            }
-            if (blob[idx] != '\n') idx += 1;
-            if (idx < blob.len) continue :sw blob[idx];
-        },
+        '#' => |_| {},
         '`' => {
             if (blob.len > idx + 7) {
                 if (blob[idx + 1] == '`' and blob[idx + 2] == '`') {
@@ -181,6 +136,130 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     return try output.toOwnedSlice();
 }
 
+pub const Translate = struct {
+    pub fn source(a: Allocator, src: []const u8) ![]u8 {
+        var dst = std.ArrayList(u8).init(a);
+        const used = try block(src, &dst);
+        if (used < src.len) std.debug.print("Parse Error {} {}\n", .{ src.len, used });
+        return try dst.toOwnedSlice();
+    }
+
+    fn block(src: []const u8, dst: *ArrayList(u8)) !usize {
+        var idx: usize = 0;
+        while (idx < src.len and (src[idx] == ' ' or src[idx] == '\t')) {
+            idx = idx + if (src[idx] == '\t') 4 else @as(usize, 1);
+        }
+        const indent = idx;
+        _ = indent;
+
+        sw: switch (src[idx]) {
+            '\n' => {
+                idx += 1;
+                if (idx < src.len) {
+                    continue :sw src[idx];
+                }
+            },
+            '#' => {
+                const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
+                try header(src[idx..until], dst);
+                idx = until;
+                if (idx < src.len) {
+                    try dst.append('\n');
+                    continue :sw src[idx];
+                }
+            },
+            '>' => {
+                try quote(src[idx..], dst);
+            },
+            '`' => {
+                try code(src[idx..], dst);
+            },
+            else => {
+                try dst.appendSlice("<p>");
+                const until = indexOfPos(u8, src, idx, "\n\n") orelse src.len;
+                try leaf(src[idx..until], dst);
+                try dst.appendSlice("</p>");
+                idx = until + 2;
+                if (idx < src.len) continue :sw src[idx];
+            },
+        }
+        return idx;
+    }
+
+    fn header(src: []const u8, dst: *ArrayList(u8)) !void {
+        var idx: usize = 0;
+        var hlvl: u8 = 0;
+        while (idx < src.len) : (idx += 1) {
+            switch (src[idx]) {
+                '#' => hlvl +|= 1,
+                else => break,
+            }
+        }
+        const tag = switch (hlvl) {
+            1 => "<h1>",
+            2 => "<h2>",
+            3 => "<h3>",
+            4 => "<h4>",
+            5 => "<h5>",
+            6 => "<h6>",
+            else => t: {
+                for (0..hlvl) |_| try dst.append('#');
+                break :t "";
+            },
+        };
+
+        while (idx < src.len and src[idx] == ' ') idx += 1;
+        try dst.appendSlice(tag);
+        if (indexOfScalarPos(u8, src, idx, '\n')) |eol| {
+            var i = eol;
+            while (src[i] == '#' or src[i] == ' ' or src[i] == '\n') i -= 1;
+            try dst.appendSlice(src[idx .. i + 1]);
+            idx = eol;
+        } else {
+            try dst.appendSlice(src[idx..]);
+            idx = src.len - 1;
+        }
+        if (tag.len > 1) {
+            try dst.appendSlice("</");
+            try dst.appendSlice(tag[1..]);
+        }
+        if (src[idx] != '\n') idx += 1;
+    }
+
+    fn quote(src: []const u8, dst: *ArrayList(u8)) !void {
+        _ = src;
+        _ = dst;
+    }
+
+    fn code(src: []const u8, dst: *ArrayList(u8)) !void {
+        _ = src;
+        _ = dst;
+    }
+
+    fn leaf(src: []const u8, dst: *ArrayList(u8)) !void {
+        var idx: usize = 0;
+        while (indexOfScalarPos(u8, src, idx, '\n')) |i| {
+            try line(src[idx..i], dst);
+            if (i + 1 >= src.len) return;
+            idx = i + 1;
+            switch (src[idx]) {
+                else => {},
+            }
+            idx += 1;
+        }
+    }
+
+    fn line(src: []const u8, dst: *ArrayList(u8)) !void {
+        for (src) |c| {
+            if (abx.Html.clean(c)) |clean| {
+                try dst.appendSlice(clean);
+            } else {
+                try dst.append(c);
+            }
+        }
+    }
+};
+
 /// Returns a slice into the given string IFF it's a supported language
 fn parseCodeblockFlavor(str: []const u8) ?syntax.Language {
     return syntax.Language.fromString(str);
@@ -191,7 +270,7 @@ test "title 0" {
     const blob = "# Title";
     const expected = "<h1>Title</h1>";
 
-    const html = try translate(a, blob);
+    const html = try Translate.source(a, blob);
     defer a.free(html);
 
     try std.testing.expectEqualStrings(expected, html);
@@ -199,10 +278,10 @@ test "title 0" {
 
 test "title 1" {
     const a = std.testing.allocator;
-    const blob = "# Title Title Title\n\n\n";
-    const expected = "<h1>Title Title Title</h1>\n<br>\n\n";
+    const blob = "# Title Title Title\n";
+    const expected = "<h1>Title Title Title</h1>\n";
 
-    const html = try translate(a, blob);
+    const html = try Translate.source(a, blob);
     defer a.free(html);
 
     try std.testing.expectEqualStrings(expected, html);
@@ -223,16 +302,12 @@ test "title 2" {
 
     const expected =
         \\<h1>Title</h1>
-        \\<br>
         \\<h2>Fake Title</h2>
-        \\<br>
         \\<h1>Other Title</h1>
-        \\<br>
-        \\text
-        \\
+        \\<p>text</p>
     ;
 
-    const html = try translate(a, blob);
+    const html = try Translate.source(a, blob);
     defer a.free(html);
 
     try std.testing.expectEqualStrings(expected, html);
@@ -276,5 +351,7 @@ const abx = @import("verse").abx;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const eql = std.mem.eql;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
+const indexOfPos = std.mem.indexOfPos;
