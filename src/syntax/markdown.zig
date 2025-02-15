@@ -1,108 +1,16 @@
 pub fn highlight() void {}
 
 pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
-    var output = std.ArrayList(u8).init(a);
-    var newline: u8 = 255;
-    var idx: usize = 0;
-    var esc = true;
-    var open_list = false;
-    var indent: usize = 0;
-    sw: switch (blob[idx]) {
-        '\n' => {
-            indent = 0;
-            newline +|= 1;
-            if (newline % 2 == 0) {
-                if (open_list) {
-                    try output.appendSlice("</ul>");
-                    open_list = false;
-                    idx += 1;
-                    if (idx < blob.len) continue :sw blob[idx];
-                }
-                try output.appendSlice("<br>");
-            }
-            try output.append('\n');
-            idx += 1;
-            if (idx < blob.len) continue :sw blob[idx];
-        },
-        '#' => |_| {},
-        '`' => {},
-        '\\' => {
-            if (idx + 1 >= blob.len) {
-                try output.append('\\');
-                idx += 1;
-                if (idx < blob.len) continue :sw blob[idx];
-            }
-            idx += 1;
-            switch (blob[idx]) {
-                '\\' => {
-                    try output.append('\\');
-                    idx += 1;
-                },
-                '`' => |c| {
-                    try output.append(c);
-                    idx += 1;
-                },
-                else => {},
-            }
-            if (idx < blob.len) continue :sw blob[idx];
-        },
-        '-', '+', '*' => |c| {
-            if ((newline > 0 or indent > 0) and idx + 1 < blob.len and blob[idx + 1] == ' ') {
-                if (!open_list) {
-                    try output.appendSlice("<ul>");
-                    open_list = true;
-                }
-                if (indexOfScalarPos(u8, blob, idx, '\n')) |eol| {
-                    try output.appendSlice("<li>");
-                    try output.appendSlice(blob[idx + 1 .. eol]);
-                    try output.appendSlice("</li>\n");
-                    idx = eol;
-                } else {
-                    idx = blob.len;
-                }
-            } else {
-                try output.append(c);
-            }
-            idx += 1;
-            if (idx < blob.len) continue :sw blob[idx];
-        },
-        ' ' => {
-            newline = 0;
-            indent = 0;
-            while (idx < blob.len and blob[idx] == ' ') {
-                idx += 1;
-                indent += 1;
-                try output.append(' ');
-            }
-            if (idx < blob.len) continue :sw blob[idx];
-        },
-        else => |c| {
-            newline = 0;
-            esc = false;
-            if (indent == 0) {
-                if (open_list) {
-                    try output.appendSlice("</ul>");
-                    open_list = false;
-                }
-            }
-            if (abx.Html.clean(c)) |clean| {
-                try output.appendSlice(clean);
-            } else {
-                try output.append(c);
-            }
-            idx += 1;
-            if (idx < blob.len) continue :sw blob[idx];
-        },
-    }
-
-    return try output.toOwnedSlice();
+    return try Translate.source(a, blob);
 }
 
 pub const Translate = struct {
     pub fn source(a: Allocator, src: []const u8) ![]u8 {
         var dst = std.ArrayList(u8).init(a);
-        const used = try block(src, &dst, a);
-        if (used < src.len) std.debug.print("Parse Error {} {}\n", .{ src.len, used });
+        var used = try block(src, &dst, a);
+        while (used < src.len) {
+            used += try block(src[used..], &dst, a);
+        }
         return try dst.toOwnedSlice();
     }
 
@@ -138,7 +46,7 @@ pub const Translate = struct {
                     src[idx + 1] == '`' and src[idx + 2] == '`' and
                     indexOfPos(u8, src, idx + 3, "\n```") != null)
                 {
-                    try code(src[idx..], dst, a);
+                    idx += try code(src[idx..], dst, a);
                 } else {
                     try dst.appendSlice("<p>");
                     const until = indexOfPos(u8, src, idx, "\n\n") orelse src.len;
@@ -205,7 +113,7 @@ pub const Translate = struct {
         _ = dst;
     }
 
-    fn code(src: []const u8, dst: *ArrayList(u8), a: Allocator) !void {
+    fn code(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
         var idx: usize = 0;
         if (src.len > idx + 7) {
             if (src[idx + 1] == '`' and src[idx + 2] == '`') {
@@ -232,7 +140,7 @@ pub const Translate = struct {
                 }
             }
         }
-        idx += 1;
+        return idx;
     }
 
     fn leaf(src: []const u8, dst: *ArrayList(u8)) !void {
@@ -248,22 +156,31 @@ pub const Translate = struct {
 
     fn line(src: []const u8, dst: *ArrayList(u8)) !void {
         var backtick: bool = false;
-        for (src) |c| {
-            switch (c) {
+        var idx: usize = 0;
+        while (idx < src.len) : (idx += 1) {
+            switch (src[idx]) {
+                '\\' => {
+                    idx += 1;
+                    if (idx >= src.len) {
+                        try dst.append(src[idx]);
+                    }
+                },
                 '`' => {
                     if (backtick) {
                         backtick = false;
                         try dst.appendSlice("</span>");
-                    } else {
+                    } else if (indexOfScalarPos(u8, src, idx + 1, '`') != null) {
                         backtick = true;
                         try dst.appendSlice("<span class=\"coderef\">");
+                    } else {
+                        try dst.append('`');
                     }
                 },
                 else => {
-                    if (abx.Html.clean(c)) |clean| {
+                    if (abx.Html.clean(src[idx])) |clean| {
                         try dst.appendSlice(clean);
                     } else {
-                        try dst.append(c);
+                        try dst.append(src[idx]);
                     }
                 },
             }
