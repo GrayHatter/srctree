@@ -4,7 +4,6 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     var output = std.ArrayList(u8).init(a);
     var newline: u8 = 255;
     var idx: usize = 0;
-    var backtick: bool = false;
     var esc = true;
     var open_list = false;
     var indent: usize = 0;
@@ -26,44 +25,7 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
             if (idx < blob.len) continue :sw blob[idx];
         },
         '#' => |_| {},
-        '`' => {
-            if (blob.len > idx + 7) {
-                if (blob[idx + 1] == '`' and blob[idx + 2] == '`') {
-                    // TODO does the closing ``` need a \n prefix
-                    if (std.mem.indexOfPos(u8, blob, idx + 3, "\n```")) |i| {
-                        var highlighted: ?[]const u8 = null;
-                        defer if (highlighted) |hl| a.free(hl);
-
-                        if (blob[idx + 3] >= 'a' and blob[idx + 3] <= 'z') {
-                            var lang_len = idx + 3;
-                            while (lang_len < i and blob[lang_len] >= 'a' and blob[lang_len] <= 'z') {
-                                lang_len += 1;
-                            }
-                            if (parseCodeblockFlavor(blob[idx + 3 .. lang_len])) |flavor| {
-                                highlighted = try syntax.highlight(a, flavor, blob[lang_len..i]);
-                            }
-                        }
-
-                        try output.appendSlice("<div class=\"codeblock\">");
-                        idx += 3;
-                        try output.appendSlice(highlighted orelse blob[idx..i]);
-                        try output.appendSlice("\n</div>");
-                        idx = i + 4;
-                        if (idx < blob.len) continue :sw blob[idx];
-                        break :sw;
-                    }
-                }
-            }
-            if (backtick) {
-                backtick = false;
-                try output.appendSlice("</span>");
-            } else {
-                backtick = true;
-                try output.appendSlice("<span class=\"coderef\">");
-            }
-            idx += 1;
-            if (idx < blob.len) continue :sw blob[idx];
-        },
+        '`' => {},
         '\\' => {
             if (idx + 1 >= blob.len) {
                 try output.append('\\');
@@ -139,12 +101,12 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
 pub const Translate = struct {
     pub fn source(a: Allocator, src: []const u8) ![]u8 {
         var dst = std.ArrayList(u8).init(a);
-        const used = try block(src, &dst);
+        const used = try block(src, &dst, a);
         if (used < src.len) std.debug.print("Parse Error {} {}\n", .{ src.len, used });
         return try dst.toOwnedSlice();
     }
 
-    fn block(src: []const u8, dst: *ArrayList(u8)) !usize {
+    fn block(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
         var idx: usize = 0;
         while (idx < src.len and (src[idx] == ' ' or src[idx] == '\t')) {
             idx = idx + if (src[idx] == '\t') 4 else @as(usize, 1);
@@ -172,7 +134,19 @@ pub const Translate = struct {
                 try quote(src[idx..], dst);
             },
             '`' => {
-                try code(src[idx..], dst);
+                if (idx + 7 < src.len and
+                    src[idx + 1] == '`' and src[idx + 2] == '`' and
+                    indexOfPos(u8, src, idx + 3, "\n```") != null)
+                {
+                    try code(src[idx..], dst, a);
+                } else {
+                    try dst.appendSlice("<p>");
+                    const until = indexOfPos(u8, src, idx, "\n\n") orelse src.len;
+                    try leaf(src[idx..until], dst);
+                    try dst.appendSlice("</p>");
+                    idx = until + 2;
+                    if (idx < src.len) continue :sw src[idx];
+                }
             },
             else => {
                 try dst.appendSlice("<p>");
@@ -231,9 +205,34 @@ pub const Translate = struct {
         _ = dst;
     }
 
-    fn code(src: []const u8, dst: *ArrayList(u8)) !void {
-        _ = src;
-        _ = dst;
+    fn code(src: []const u8, dst: *ArrayList(u8), a: Allocator) !void {
+        var idx: usize = 0;
+        if (src.len > idx + 7) {
+            if (src[idx + 1] == '`' and src[idx + 2] == '`') {
+                // TODO does the closing ``` need a \n prefix
+                if (std.mem.indexOfPos(u8, src, idx + 3, "\n```")) |i| {
+                    var highlighted: ?[]const u8 = null;
+                    defer if (highlighted) |hl| a.free(hl);
+
+                    if (src[idx + 3] >= 'a' and src[idx + 3] <= 'z') {
+                        var lang_len = idx + 3;
+                        while (lang_len < i and src[lang_len] >= 'a' and src[lang_len] <= 'z') {
+                            lang_len += 1;
+                        }
+                        if (parseCodeblockFlavor(src[idx + 3 .. lang_len])) |flavor| {
+                            highlighted = try syntax.highlight(a, flavor, src[lang_len..i]);
+                        }
+                    }
+
+                    try dst.appendSlice("<div class=\"codeblock\">");
+                    idx += 3;
+                    try dst.appendSlice(highlighted orelse src[idx..i]);
+                    try dst.appendSlice("\n</div>");
+                    idx = i + 4;
+                }
+            }
+        }
+        idx += 1;
     }
 
     fn leaf(src: []const u8, dst: *ArrayList(u8)) !void {
@@ -242,19 +241,31 @@ pub const Translate = struct {
             try line(src[idx..i], dst);
             if (i + 1 >= src.len) return;
             idx = i + 1;
-            switch (src[idx]) {
-                else => {},
-            }
-            idx += 1;
         }
+        if (idx >= src.len) return;
+        try line(src[idx..], dst);
     }
 
     fn line(src: []const u8, dst: *ArrayList(u8)) !void {
+        var backtick: bool = false;
         for (src) |c| {
-            if (abx.Html.clean(c)) |clean| {
-                try dst.appendSlice(clean);
-            } else {
-                try dst.append(c);
+            switch (c) {
+                '`' => {
+                    if (backtick) {
+                        backtick = false;
+                        try dst.appendSlice("</span>");
+                    } else {
+                        backtick = true;
+                        try dst.appendSlice("<span class=\"coderef\">");
+                    }
+                },
+                else => {
+                    if (abx.Html.clean(c)) |clean| {
+                        try dst.appendSlice(clean);
+                    } else {
+                        try dst.append(c);
+                    }
+                },
             }
         }
     }
@@ -316,9 +327,9 @@ test "title 2" {
 test "backtick" {
     const a = std.testing.allocator;
     const blob = "`backtick`";
-    const expected = "<span class=\"coderef\">backtick</span>";
+    const expected = "<p><span class=\"coderef\">backtick</span></p>";
 
-    const html = try translate(a, blob);
+    const html = try Translate.source(a, blob);
     defer a.free(html);
 
     try std.testing.expectEqualStrings(expected, html);
@@ -330,16 +341,16 @@ test "backtick block" {
         const blob = "```backtick block\n```";
         const expected = "<div class=\"codeblock\">backtick block\n</div>";
 
-        const html = try translate(a, blob);
+        const html = try Translate.source(a, blob);
         defer a.free(html);
 
         try std.testing.expectEqualStrings(expected, html);
     }
     {
         const blob = "```backtick```";
-        const expected = "<span class=\"coderef\"></span><span class=\"coderef\">backtick</span><span class=\"coderef\"></span>";
+        const expected = "<p><span class=\"coderef\"></span><span class=\"coderef\">backtick</span><span class=\"coderef\"></span></p>";
 
-        const html = try translate(a, blob);
+        const html = try Translate.source(a, blob);
         defer a.free(html);
 
         try std.testing.expectEqualStrings(expected, html);
