@@ -19,15 +19,18 @@ pub const Translate = struct {
         while (idx < src.len and (src[idx] == ' ' or src[idx] == '\t')) {
             idx = idx + if (src[idx] == '\t') 4 else @as(usize, 1);
         }
-        const indent = idx;
-        _ = indent;
+        var indent = idx;
 
         sw: switch (src[idx]) {
             '\n' => {
+                indent = 0;
                 idx += 1;
-                if (idx < src.len) {
-                    continue :sw src[idx];
-                }
+                if (idx < src.len) continue :sw src[idx];
+            },
+            ' ' => {
+                indent += 1;
+                idx += 1;
+                if (idx < src.len) continue :sw src[idx];
             },
             '#' => {
                 const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
@@ -48,20 +51,21 @@ pub const Translate = struct {
                 {
                     idx += try code(src[idx..], dst, a);
                 } else {
-                    try dst.appendSlice("<p>");
-                    const until = indexOfPos(u8, src, idx, "\n\n") orelse src.len;
-                    try leaf(src[idx..until], dst);
-                    try dst.appendSlice("</p>");
-                    idx = until + 2;
+                    idx = idx + try paragraph(src[idx..], dst);
+                }
+                if (idx < src.len) continue :sw src[idx];
+            },
+            '-', '*', '+' => {
+                if (indent > 0 and idx + 2 < src.len) {
+                    idx = idx + try list(src[idx..], dst, indent);
+                    if (idx < src.len) continue :sw src[idx];
+                } else {
+                    idx = idx + try paragraph(src[idx..], dst);
                     if (idx < src.len) continue :sw src[idx];
                 }
             },
             else => {
-                try dst.appendSlice("<p>");
-                const until = indexOfPos(u8, src, idx, "\n\n") orelse src.len;
-                try leaf(src[idx..until], dst);
-                try dst.appendSlice("</p>");
-                idx = until + 2;
+                idx = idx + try paragraph(src[idx..], dst);
                 if (idx < src.len) continue :sw src[idx];
             },
         }
@@ -113,6 +117,14 @@ pub const Translate = struct {
         _ = dst;
     }
 
+    fn paragraph(src: []const u8, dst: *ArrayList(u8)) !usize {
+        try dst.appendSlice("<p>");
+        const until = indexOfPos(u8, src, 0, "\n\n") orelse src.len;
+        try leaf(src[0..until], dst);
+        try dst.appendSlice("</p>\n");
+        return until + 2;
+    }
+
     fn code(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
         var idx: usize = 0;
         if (src.len > idx + 7) {
@@ -152,6 +164,29 @@ pub const Translate = struct {
         }
         if (idx >= src.len) return;
         try line(src[idx..], dst);
+    }
+
+    fn list(src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+        try dst.appendSlice("<ul>\n");
+        var idx: usize = 0;
+        l: while (indexOfScalarPos(u8, src, idx, '\n')) |until| {
+            try dst.appendSlice("<li>");
+            try line(src[idx..until], dst);
+            try dst.appendSlice("</li>\n");
+            idx = until + 1;
+            if (idx + indent + 2 >= src.len) break;
+            for (0..indent) |i| if (src[idx + i] != ' ') break :l;
+            idx += indent;
+        }
+        try dst.appendSlice("</ul>\n");
+
+        return idx;
+    }
+
+    fn listOrdered(src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+        _ = src;
+        _ = dst;
+        _ = indent;
     }
 
     fn line(src: []const u8, dst: *ArrayList(u8)) !void {
@@ -233,6 +268,7 @@ test "title 2" {
         \\<h2>Fake Title</h2>
         \\<h1>Other Title</h1>
         \\<p>text</p>
+        \\
     ;
 
     const html = try Translate.source(a, blob);
@@ -244,7 +280,7 @@ test "title 2" {
 test "backtick" {
     const a = std.testing.allocator;
     const blob = "`backtick`";
-    const expected = "<p><span class=\"coderef\">backtick</span></p>";
+    const expected = "<p><span class=\"coderef\">backtick</span></p>\n";
 
     const html = try Translate.source(a, blob);
     defer a.free(html);
@@ -265,7 +301,7 @@ test "backtick block" {
     }
     {
         const blob = "```backtick```";
-        const expected = "<p><span class=\"coderef\"></span><span class=\"coderef\">backtick</span><span class=\"coderef\"></span></p>";
+        const expected = "<p><span class=\"coderef\"></span><span class=\"coderef\">backtick</span><span class=\"coderef\"></span></p>\n";
 
         const html = try Translate.source(a, blob);
         defer a.free(html);
