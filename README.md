@@ -27,7 +27,7 @@ In an unsorted order
     - [ ] view history for file (navigable blame view)
     - [x] syntax highlighting (ish)
     - [ ] native syntax highlighting
-    - [ ] README markdown support/formatting
+    - [x] README markdown support/formatting
     - [ ] fold repo .files by default
     - [ ] comment on commits
     - [ ] email support
