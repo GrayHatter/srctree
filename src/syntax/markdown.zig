@@ -51,7 +51,7 @@ pub const Translate = struct {
                 {
                     idx += try code(src[idx..], dst, a);
                 } else {
-                    idx = idx + try paragraph(src[idx..], dst);
+                    idx = idx + try paragraph(src[idx..], dst, indent);
                 }
                 if (idx < src.len) continue :sw src[idx];
             },
@@ -60,12 +60,12 @@ pub const Translate = struct {
                     idx = idx + try list(src[idx..], dst, indent);
                     if (idx < src.len) continue :sw src[idx];
                 } else {
-                    idx = idx + try paragraph(src[idx..], dst);
+                    idx = idx + try paragraph(src[idx..], dst, indent);
                     if (idx < src.len) continue :sw src[idx];
                 }
             },
             else => {
-                idx = idx + try paragraph(src[idx..], dst);
+                idx = idx + try paragraph(src[idx..], dst, indent);
                 if (idx < src.len) continue :sw src[idx];
             },
         }
@@ -117,10 +117,10 @@ pub const Translate = struct {
         _ = dst;
     }
 
-    fn paragraph(src: []const u8, dst: *ArrayList(u8)) !usize {
+    fn paragraph(src: []const u8, dst: *ArrayList(u8), indent: usize) error{OutOfMemory}!usize {
         try dst.appendSlice("<p>");
         const until = indexOfPos(u8, src, 0, "\n\n") orelse src.len;
-        try leaf(src[0..until], dst);
+        try leaf(src[0..until], dst, indent);
         try dst.appendSlice("</p>\n");
         return until + 2;
     }
@@ -155,9 +155,30 @@ pub const Translate = struct {
         return idx;
     }
 
-    fn leaf(src: []const u8, dst: *ArrayList(u8)) !void {
+    fn leaf(src: []const u8, dst: *ArrayList(u8), indent: usize) !void {
         var idx: usize = 0;
         while (indexOfScalarPos(u8, src, idx, '\n')) |i| {
+            var line_indent: usize = 0;
+            while (src[idx + line_indent] == ' ') {
+                line_indent += 1;
+            }
+            if (line_indent > indent) {
+                switch (src[idx + line_indent]) {
+                    '-', '*', '+' => {
+                        if (idx + 2 < src.len) {
+                            idx = idx + try list(src[idx..], dst, line_indent);
+                        } else {
+                            idx = idx + try paragraph(src[idx..], dst, line_indent);
+                        }
+                    },
+                    else => {
+                        try line(src[idx..i], dst);
+                        idx = i + 1;
+                    },
+                }
+                if (i + 1 >= src.len) return;
+                continue;
+            }
             try line(src[idx..i], dst);
             if (i + 1 >= src.len) return;
             idx = i + 1;
