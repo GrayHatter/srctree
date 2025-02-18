@@ -146,8 +146,8 @@ pub const Translate = struct {
 
                     try dst.appendSlice("<div class=\"codeblock\">");
                     idx += 3;
-                    try dst.appendSlice(highlighted orelse src[idx..i]);
-                    try dst.appendSlice("\n</div>");
+                    try dst.appendSlice(std.mem.trim(u8, highlighted orelse src[idx..i], " \n"));
+                    try dst.appendSlice("</div>");
                     idx = i + 4;
                 }
             }
@@ -313,7 +313,7 @@ test "backtick block" {
     const a = std.testing.allocator;
     {
         const blob = "```backtick block\n```";
-        const expected = "<div class=\"codeblock\">backtick block\n</div>";
+        const expected = "<div class=\"codeblock\">backtick block</div>";
 
         const html = try Translate.source(a, blob);
         defer a.free(html);
