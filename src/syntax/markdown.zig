@@ -56,7 +56,7 @@ pub const Translate = struct {
                 if (idx < src.len) continue :sw src[idx];
             },
             '-', '*', '+' => {
-                if (indent > 0 and idx + 2 < src.len) {
+                if (idx + 2 < src.len) {
                     idx = idx + try list(src[idx..], dst, indent);
                     if (idx < src.len) continue :sw src[idx];
                 } else {
