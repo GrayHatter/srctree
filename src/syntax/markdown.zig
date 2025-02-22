@@ -192,6 +192,10 @@ pub const Translate = struct {
         var idx: usize = 0;
         l: while (indexOfScalarPos(u8, src, idx, '\n')) |until| {
             try dst.appendSlice("<li>");
+            if (src[idx] == '[' and src[idx + 2] == ']') {
+                try dst.appendSlice("<input type=\"checkbox\">");
+                idx += 2;
+            }
             try line(src[idx..until], dst);
             try dst.appendSlice("</li>\n");
             idx = until + 1;
