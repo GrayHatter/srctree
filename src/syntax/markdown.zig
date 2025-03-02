@@ -42,7 +42,7 @@ pub const Translate = struct {
                 }
             },
             '>' => {
-                try quote(src[idx..], dst);
+                _ = try quote(src[idx..], dst);
             },
             '`' => {
                 if (idx + 7 < src.len and
@@ -112,9 +112,13 @@ pub const Translate = struct {
         if (src[idx] != '\n') idx += 1;
     }
 
-    fn quote(src: []const u8, dst: *ArrayList(u8)) !void {
-        _ = src;
-        _ = dst;
+    fn quote(src: []const u8, dst: *ArrayList(u8)) !usize {
+        const idx: usize = 0;
+        const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
+        try dst.appendSlice("<blockquote>");
+        try line(src[idx..until], dst);
+        try dst.appendSlice("</blockquote>\n");
+        return until;
     }
 
     fn paragraph(src: []const u8, dst: *ArrayList(u8), indent: usize) error{OutOfMemory}!usize {
