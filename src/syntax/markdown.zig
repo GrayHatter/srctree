@@ -42,7 +42,7 @@ pub const Translate = struct {
                 }
             },
             '>' => {
-                _ = try quote(src[idx..], dst);
+                _ = try quote(src[idx..], dst, indent);
             },
             '`' => {
                 if (idx + 7 < src.len and
@@ -112,7 +112,8 @@ pub const Translate = struct {
         if (src[idx] != '\n') idx += 1;
     }
 
-    fn quote(src: []const u8, dst: *ArrayList(u8)) !usize {
+    fn quote(src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+        _ = indent;
         const idx: usize = 0;
         const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
         try dst.appendSlice("<blockquote>");
