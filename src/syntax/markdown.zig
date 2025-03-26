@@ -4,6 +4,35 @@ pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
     return try Translate.source(a, blob);
 }
 
+const AST = struct {
+    tree: void,
+    //
+    pub const Idx = struct {
+        start: u32,
+        len: u32,
+    };
+
+    pub const Line = struct {
+        idx: Idx,
+    };
+
+    pub const Leaf = struct {
+        idx: Idx,
+    };
+
+    pub const Block = struct {
+        idx: Idx,
+    };
+
+    pub const List = struct {
+        idx: Idx,
+    };
+
+    pub const Code = struct {
+        idx: Idx,
+    };
+};
+
 pub const Translate = struct {
     pub fn source(a: Allocator, src: []const u8) ![]u8 {
         var dst = std.ArrayList(u8).init(a);
@@ -15,6 +44,7 @@ pub const Translate = struct {
     }
 
     fn block(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
+        if (src.len == 0) return 0;
         var idx: usize = 0;
         while (idx < src.len and (src[idx] == ' ' or src[idx] == '\t')) {
             idx = idx + if (src[idx] == '\t') 4 else @as(usize, 1);
