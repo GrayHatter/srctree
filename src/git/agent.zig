@@ -142,11 +142,11 @@ fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.proc
     child.stderr_behavior = .Pipe;
     child.cwd_dir = cwd;
 
-    var stdout = std.ArrayList(u8).init(self.alloc);
-    var stderr = std.ArrayList(u8).init(self.alloc);
+    var stdout = std.ArrayListUnmanaged(u8){};
+    var stderr = std.ArrayListUnmanaged(u8){};
     errdefer {
-        stdout.deinit();
-        stderr.deinit();
+        stdout.deinit(self.alloc);
+        stderr.deinit(self.alloc);
     }
 
     try child.spawn();
@@ -156,7 +156,7 @@ fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.proc
         child.stdin = null;
     }
 
-    child.collectOutput(&stdout, &stderr, 0x1fffff) catch |err| {
+    child.collectOutput(self.alloc, &stdout, &stderr, 0x1fffff) catch |err| {
         const errstr =
             \\git agent error:
             \\error :: {}
@@ -170,8 +170,8 @@ fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.proc
 
     const res = std.process.Child.RunResult{
         .term = try child.wait(),
-        .stdout = try stdout.toOwnedSlice(),
-        .stderr = try stderr.toOwnedSlice(),
+        .stdout = try stdout.toOwnedSlice(self.alloc),
+        .stderr = try stderr.toOwnedSlice(self.alloc),
     };
 
     return res;

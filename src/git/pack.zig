@@ -104,7 +104,7 @@ fn mmap(f: std.fs.File) ![]u8 {
     return std.posix.mmap(null, length, PROT.READ, .{ .TYPE = .SHARED }, f.handle, offset);
 }
 
-fn munmap(mem: []align(std.mem.page_size) const u8) void {
+fn munmap(mem: []align(std.heap.page_size_min) const u8) void {
     std.posix.munmap(mem);
 }
 
