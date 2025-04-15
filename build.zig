@@ -13,6 +13,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .@"template-path" = b.path("templates"),
+        .@"bot-detection" = true,
     });
 
     // Set up verse

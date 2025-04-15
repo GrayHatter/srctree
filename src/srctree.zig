@@ -50,7 +50,16 @@ fn robots(frame: *Frame) Router.Error!void {
     try frame.sendRawSlice(
         \\User-agent: *
         \\Allow: /
+        \\Crawl-delay: 4
         \\
+        \\user-agent: GoogleOther
+        \\disallow: *
+        \\
+        \\user-agent: SiteAuditBot
+        \\disallow: *
+        \\
+        \\user-agent: DataForSeoBot
+        \\disallow: *
     );
 }
 
@@ -65,19 +74,24 @@ fn debug(_: *Frame) Router.Error!void {
     return error.Abusive;
 }
 
-fn builder(vrs: *Frame, call: BuildFn) void {
+fn builder(fr: *Frame, call: BuildFn) void {
+    fr.dumpDebugData();
+    if (fr.request.user_agent) |ua| {
+        ua.botDetectionDump(fr.request);
+    } else std.debug.print("No User agent for request\n", .{});
+
     const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
-    var bh: S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
+    var bh: S.BodyHeaderHtml = fr.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
         .nav_auth = "Error",
         .nav_buttons = &btns,
     } };
 
-    bh.nav.nav_auth = if (vrs.user) |usr| n: {
+    bh.nav.nav_auth = if (fr.user) |usr| n: {
         break :n if (usr.username) |un| un else "Error No Username";
     } else "Public";
-    vrs.response_data.add(bh) catch {};
-    return call(vrs) catch |err| switch (err) {
-        error.InvalidURI => builder(vrs, notFound), // TODO catch inline
+    fr.response_data.add(bh) catch {};
+    return call(fr) catch |err| switch (err) {
+        error.InvalidURI => builder(fr, notFound), // TODO catch inline
         error.BrokenPipe => std.debug.print("client disconnect", .{}),
         error.IOWriteFailure => @panic("Unexpected IOWrite"),
         error.Unrouteable => {
@@ -99,11 +113,11 @@ fn builder(vrs: *Frame, call: BuildFn) void {
         error.BadData,
         error.DataMissing,
         => {
-            std.debug.print("Abusive {} because {}\n", .{ vrs.request, err });
-            for (vrs.request.raw.zwsgi.vars) |vars| {
+            std.debug.print("Abusive {} because {}\n", .{ fr.request, err });
+            for (fr.request.raw.zwsgi.vars) |vars| {
                 std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
             }
-            if (vrs.request.data.post) |post_data| {
+            if (fr.request.data.post) |post_data| {
                 std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
             }
         },
