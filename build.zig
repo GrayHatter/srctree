@@ -1,7 +1,5 @@
 const std = @import("std");
 
-const Compiler = @import("verse").Compiler;
-
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
@@ -14,17 +12,11 @@ pub fn build(b: *std.Build) void {
     const verse = b.dependency("verse", .{
         .target = target,
         .optimize = optimize,
+        .@"template-path" = b.path("templates"),
     });
 
     // Set up verse
-    var compiler = Compiler.init(b);
-    compiler.addDir("templates");
-    compiler.collect() catch unreachable;
-    const comptime_templates = compiler.buildTemplates() catch unreachable;
-    const comptime_structs = compiler.buildStructs() catch unreachable;
     const verse_module = verse.module("verse");
-    verse_module.addImport("comptime_templates", comptime_templates);
-    verse_module.addImport("comptime_structs", comptime_structs);
 
     // srctree
     const exe = b.addExecutable(.{
