@@ -232,7 +232,7 @@ pub fn patchStruct(a: Allocator, patch: *Patch.Patch, unified: bool) !Template.S
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("err: {any}\n", .{err});
-            std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
+            //std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
             return err;
         } else {
             std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
