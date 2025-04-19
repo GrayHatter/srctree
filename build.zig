@@ -52,15 +52,15 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_unit_tests.step);
 
     // Partner Binaries
-    const mailer = b.addExecutable(.{
-        .name = "srctree-mailer",
+    const maild = b.addExecutable(.{
+        .name = "srctree-maild",
         .root_source_file = b.path("src/mailer.zig"),
         .target = target,
         .optimize = optimize,
     });
-    b.installArtifact(mailer);
+    b.installArtifact(maild);
 
-    const send_email = b.addRunArtifact(mailer);
+    const send_email = b.addRunArtifact(maild);
     send_email.step.dependOn(b.getInstallStep());
     const send_email_step = b.step("email", "send an email");
     send_email_step.dependOn(&send_email.step);
