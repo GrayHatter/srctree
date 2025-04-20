@@ -144,6 +144,8 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
         .commit = try commitCtx(ctx.alloc, current, repo_name),
         .comments = .{ .thread = thread },
         .patch = Diffs.patchStruct(ctx.alloc, &patch, !inline_html) catch return error.Unknown,
+        .inline_active = if (inline_html) "active" else null,
+        .split_active = if (inline_html) null else "active",
     });
 
     ctx.status = .ok;

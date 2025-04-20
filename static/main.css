@@ -783,6 +783,35 @@ journal {
 }
 
 
+.toggle {
+	background: #333;
+	border-bottom: 1px solid #737373;
+	border-left: 1px solid black;
+	border-radius: 6px;
+	border-right: 1px solid #737373;
+	border-top: 1px solid black;
+	display: block;
+	height: fit-content;
+	margin: 0 0 0 auto;
+	padding: 4px 5px;
+	text-align: right;
+	white-space: pre;
+	width: fit-content;
+	> a {
+		margin: 2px 0;
+		padding: 2px 12px;
+		&.active {
+			background: #737373;
+			border-top: 1px solid black;
+			border-left: 1px solid black;
+			border-radius: 6px;
+			border-bottom: 1px solid #737373;
+			border-right: 1px solid #737373;
+		}
+	}
+}
+
+
 pre { line-height: 125%; }
 td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
 span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
