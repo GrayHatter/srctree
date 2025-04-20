@@ -430,6 +430,10 @@ gist {
 }
 
 patch, gist {
+	margin: 2rem 0 10rem;
+	border-radius: 4px 4px 0 0;
+	padding: 8px;
+
 	header {
 		border-radius: 3px 3px 0 0;
 		border-top: 1px solid #780000;
@@ -455,12 +459,12 @@ patch, gist {
 			white-space: pre;
 			&.split {
 				white-space: pre;
-				width: 100%;
+				width: fit-content;
 				margin: 0;
 				display: inline-block;
 				span {
 					margin: 0;
-					width: 50%;
+					width: fit-content;
 					display: inline-block;
 					overflow: scroll;
 				}
@@ -493,9 +497,6 @@ patch, gist {
 		height: 25px;
 		padding: 4px 0 4px 12px;
 	}
-	margin: 2rem 0 10rem;
-	border-radius: 4px 4px 0 0;
-	padding: 8px;
 
 	.del { background: #633 }
 	.add { background: #353 }

@@ -38,6 +38,10 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     return try patch.diffsVerseSlice(a);
 }
 
+pub const PatchView = struct {
+    @"inline": ?bool = true,
+};
+
 fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});
@@ -129,7 +133,7 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
         }
     } else |_| {}
 
-    const udata = ctx.request.data.query.validate(Diffs.PatchView) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
 
     var page = CommitPage.init(.{
