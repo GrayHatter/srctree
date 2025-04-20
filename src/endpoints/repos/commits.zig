@@ -1,39 +1,6 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const allocPrint = std.fmt.allocPrint;
-const bufPrint = std.fmt.bufPrint;
-const endsWith = std.mem.endsWith;
-const eql = std.mem.eql;
-
-const Verse = @import("verse");
-const DOM = Verse.DOM;
-const HTML = Verse.HTML;
-const Route = Verse.Router;
-const Template = Verse.template;
-const RequestData = Verse.RequestData;
-
-const Diffs = @import("diffs.zig");
-
-const Repos = @import("../repos.zig");
-
-const Git = @import("../../git.zig");
-const Humanize = @import("../../humanize.zig");
-const Patch = @import("../../patch.zig");
-const Types = @import("../../types.zig");
-
-const S = Template.Structs;
-const CommitMap = Types.CommitMap;
-const Delta = Types.Delta;
-const Error = Route.Error;
-const GET = Route.GET;
-const ROUTE = Route.ROUTE;
-const RouteData = Repos.RouteData;
-const Thread = Types.Thread;
-const UriIter = Route.UriIter;
-
-pub const routes = [_]Route.MatchRouter{
-    ROUTE("", commitsView),
-    GET("before", commitsBefore),
+pub const routes = [_]Router.MatchRouter{
+    Router.ROUTE("", commitsView),
+    Router.GET("before", commitsBefore),
 };
 
 const CommitPage = Template.PageData("commit.html");
@@ -43,7 +10,7 @@ const AddComment = struct {
     text: []const u8,
 };
 
-pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *Verse.Frame) Router.RoutingError!Router.BuildFn {
     const rd = RouteData.make(&ctx.uri) orelse return commitsView;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return viewCommit;
@@ -124,7 +91,7 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
     };
 
     var thread: []Template.Structs.Thread = &[0]Template.Structs.Thread{};
-    if (CommitMap.open(ctx.alloc, repo_name, sha) catch null) |map| {
+    if (CommitMap.open(ctx.alloc, repo_name, sha)) |map| {
         var dlt = map.delta(ctx.alloc) catch |err| n: {
             std.debug.print("error generating delta {}\n", .{err});
             break :n @as(?Delta, null);
@@ -160,7 +127,7 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
                 @panic("oops");
             }
         }
-    }
+    } else |_| {}
 
     const udata = ctx.request.data.query.validate(Diffs.PatchView) catch return error.BadData;
     const inline_html = udata.@"inline" orelse true;
@@ -444,3 +411,31 @@ fn sendCommits(ctx: *Verse.Frame, list: []const S.Commits, repo_name: []const u8
 
     try ctx.sendPage(&page);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
+const endsWith = std.mem.endsWith;
+const eql = std.mem.eql;
+
+const Verse = @import("verse");
+const Router = Verse.Router;
+const Template = Verse.template;
+const S = Template.Structs;
+const HTML = Verse.HTML;
+const Error = Router.Error;
+const DOM = Verse.DOM;
+
+const Diffs = @import("diffs.zig");
+
+const Repos = @import("../repos.zig");
+const RouteData = Repos.RouteData;
+
+const Git = @import("../../git.zig");
+const Humanize = @import("../../humanize.zig");
+const Patch = @import("../../patch.zig");
+
+const Types = @import("../../types.zig");
+const CommitMap = Types.CommitMap;
+const Delta = Types.Delta;
