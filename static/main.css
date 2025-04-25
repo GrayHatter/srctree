@@ -455,38 +455,38 @@ patch, gist {
 		display: block;
 		text-align: left;
 		background: #333;
-		span {
-			white-space: pre;
-			&.split {
-				white-space: pre;
+		width: 100%;
+		.split {
+			display: flex;
+			span {
+				flex: auto;
+				margin: 0;
 				width: fit-content;
-				margin: 0;
+				min-width: 50%;
 				display: inline-block;
-				span {
-					margin: 0;
-					width: fit-content;
-					display: inline-block;
-					overflow: scroll;
+				overflow: scroll;
+				> div {
+					white-space: pre;
 				}
 			}
-			&.del { background: #5b0000 }
-			&.add { background: #003e00 }
-			:first-child {
-				margin: 0;
+		}
+		&.del { background: #5b0000 }
+		&.add { background: #003e00 }
+		:first-child {
+			margin: 0;
+		}
+		.block {
+			&:first-child {
+				margin-top: 0;
 			}
-			.block {
-				&:first-child {
-					margin-top: 0;
-				}
-				border-top: 1px solid #999;
-				border-bottom: 2px solid #222;
-				background: #569;
-				/* background: #4a4a91; might want to revert to this color */
-				display: block;
-				width: auto;
-				margin: 8px auto;
-				padding: 8px;
-			}
+			border-top: 1px solid #999;
+			border-bottom: 2px solid #222;
+			background: #569;
+			/* background: #4a4a91; might want to revert to this color */
+			display: block;
+			width: auto;
+			margin: 8px auto;
+			padding: 8px;
 		}
 	}
 	.buttons {

@@ -39,7 +39,7 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
 }
 
 pub const PatchView = struct {
-    @"inline": ?bool = true,
+    @"inline": ?bool = null,
 };
 
 fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
@@ -133,8 +133,20 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
         }
     } else |_| {}
 
+    var inline_html: bool = true;
     const udata = ctx.request.data.query.validate(PatchView) catch return error.BadData;
-    const inline_html = udata.@"inline" orelse true;
+    if (udata.@"inline") |uinline| {
+        std.debug.print("unline {}\n", .{uinline});
+        inline_html = uinline;
+        ctx.cookie_jar.add(.{
+            .name = "diff-inline",
+            .value = if (uinline) "1" else "0",
+        }) catch @panic("OOM");
+    } else {
+        if (ctx.request.cookie_jar.get("diff-inline")) |cookie| {
+            inline_html = if (cookie.value.len > 0 and cookie.value[0] == '1') true else false;
+        }
+    }
 
     var page = CommitPage.init(.{
         .meta_head = meta_head,
