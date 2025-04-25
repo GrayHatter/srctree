@@ -9,10 +9,10 @@ const indexOfPos = std.mem.indexOfPos;
 const splitScalar = std.mem.splitScalar;
 
 const CURL = @import("curl.zig");
-const Verse = @import("verse");
-const Response = Verse.Response;
-const HTML = Verse.template.html;
-const DOM = Verse.template.html.DOM;
+const verse = @import("verse");
+const Response = verse.Response;
+const HTML = verse.template.html;
+const DOM = verse.template.html.DOM;
 
 pub const Patch = @This();
 
@@ -303,43 +303,6 @@ pub fn parse(self: *Patch, a: Allocator) !void {
     }
 }
 
-pub fn diffsVerseSlice(self: Patch, a: Allocator) ![]Verse {
-    if (self.diffs) |diffs| {
-        const diffs_ctx: []Verse = try a.alloc(Verse, diffs.len);
-        for (diffs, diffs_ctx) |diff, *dctx| {
-            var ctx: Verse = Verse.init(a);
-            switch (diff.header.change) {
-                .none => try ctx.putSlice("Filename", diff.filename orelse "Malformed Patch"),
-                .newfile => {
-                    try ctx.putSlice("Filename", "file was added");
-                },
-                .deletion => {
-                    try ctx.putSlice("Filename", try std.fmt.allocPrint(a, "{s} was Deleted", .{diff.filename.?}));
-                },
-                .copy => |copy| {
-                    try ctx.putSlice("Filename", try std.fmt.allocPrint(a, "{s} was copied to {s}", .{ copy.src, copy.dst }));
-                },
-                .rename => |rename| {
-                    try ctx.putSlice("Filename", try std.fmt.allocPrint(a, "{s} was renamed to {s}", .{ rename.src, rename.dst }));
-                },
-                .mode => try ctx.putSlice("Filename", "file mode change"),
-                .similarity => try ctx.putSlice("Filename", "similarity"),
-                .dissimilarity => try ctx.putSlice("Filename", "dissimilarity"),
-                .binary => unreachable,
-            }
-            try ctx.putSlice("Additions", try std.fmt.allocPrint(a, "{}", .{diff.stat.additions}));
-            try ctx.putSlice("Deletions", try std.fmt.allocPrint(a, "{}", .{diff.stat.deletions}));
-            try ctx.putSlice(
-                "DiffStat",
-                try std.fmt.allocPrint(a, "+{} -{}", .{ diff.stat.additions, diff.stat.deletions }),
-            );
-            try ctx.putSlice("DiffLines", try diffLineUnifiedSlice(a, diff.changes.?));
-            dctx.* = ctx;
-        }
-        return diffs_ctx;
-    } else return error.PatchInvalid;
-}
-
 pub const Stat = struct {
     files: usize,
     additions: usize,
@@ -398,7 +361,7 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
     const a_del = &HTML.Attr.class("del");
     const a_block = &HTML.Attr.class("block");
 
-    const clean = Verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
+    const clean = verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.splitScalar(u8, clean, '\n');
     const nbsp = "&nbsp;";
@@ -472,7 +435,7 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
     dom = dom.open(HTML.span(null, null));
 
-    const clean = Verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
+    const clean = verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = splitScalar(u8, clean, '\n');
     for (0..line_count + 1) |_| {
