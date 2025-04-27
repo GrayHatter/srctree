@@ -19,10 +19,14 @@ pub const endpoints = verse.Endpoints(.{
     struct {
         pub const verse_name = .root;
         pub const verse_routes = [_]Match{
+            verse.robotsTxt(true, 4, &.{
+                .{ .name = "GoogleOther", .allow = false },
+                .{ .name = "SiteAuditBot", .allow = false },
+                .{ .name = "DataForSeoBot", .allow = false },
+            }),
             GET("debug", debug),
             ROUTE("user", commitFlex),
             STATIC("static"),
-            GET("robots.txt", robots),
         };
         pub const verse_builder = &builder;
         pub const index = commitFlex;
@@ -37,31 +41,6 @@ pub const endpoints = verse.Endpoints(.{
 });
 
 const E404Page = template.PageData("4XX.html");
-
-fn robots(frame: *Frame) Router.Error!void {
-    frame.status = .ok;
-    frame.content_type = .{ .base = .{ .text = .plain } };
-    frame.sendHeaders() catch |err| switch (err) {
-        error.HeadersFinished => unreachable,
-        inline else => |e| return e,
-    };
-
-    try frame.sendRawSlice("\r\n");
-    try frame.sendRawSlice(
-        \\User-agent: *
-        \\Allow: /
-        \\Crawl-delay: 4
-        \\
-        \\user-agent: GoogleOther
-        \\disallow: *
-        \\
-        \\user-agent: SiteAuditBot
-        \\disallow: *
-        \\
-        \\user-agent: DataForSeoBot
-        \\disallow: *
-    );
-}
 
 fn notFound(vrs: *Frame) Router.Error!void {
     std.debug.print("404 for route\n", .{});
