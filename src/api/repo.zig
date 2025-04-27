@@ -2,7 +2,7 @@ pub fn router(ctx: *API.verse.Frame) Router.RoutingError!Router.BuildFn {
     const uri_api = ctx.uri.next() orelse return repo;
     if (!std.mem.eql(u8, uri_api, "repo")) return repo;
 
-    return Router.router(ctx, &endpoints);
+    return Router.defaultRouter(ctx, &endpoints);
 }
 
 pub const Repo = struct {

@@ -30,7 +30,7 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
         }
     } else return new;
 
-    return Router.router(ctx, &routes);
+    return Router.defaultRouter(ctx, &routes);
 }
 
 const GistPost = struct {

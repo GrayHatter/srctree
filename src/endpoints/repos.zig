@@ -103,7 +103,7 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
         if (rd.verb) |_| {
             _ = ctx.uri.next();
             _ = ctx.uri.next();
-            return Router.router(ctx, &routes);
+            return Router.defaultRouter(ctx, &routes);
         } else return treeBlob;
     }
     return error.Unrouteable;

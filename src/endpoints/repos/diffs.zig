@@ -54,7 +54,7 @@ fn isHex(input: []const u8) ?usize {
 pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
     if (!eql(u8, "diffs", ctx.uri.next() orelse return error.Unrouteable))
         return error.Unrouteable;
-    const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
+    const verb = ctx.uri.peek() orelse return Route.defaultRouter(ctx, &routes);
 
     if (isHex(verb)) |_| {
         const uri_save = ctx.uri.index;
@@ -67,7 +67,7 @@ pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
         return view;
     }
 
-    return Route.router(ctx, &routes);
+    return Route.defaultRouter(ctx, &routes);
 }
 
 const DiffNewHtml = Template.PageData("diff-new.html");

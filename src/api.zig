@@ -32,7 +32,7 @@ pub fn router(vrs: *Frame) Router.RoutingError!Router.BuildFn {
     const rd = APIRouteData.init(vrs.alloc) catch @panic("OOM");
     vrs.response_data.add(rd) catch unreachable;
 
-    return Router.router(vrs, &endpoints);
+    return Router.defaultRouter(vrs, &endpoints);
 }
 
 const Diff = struct {

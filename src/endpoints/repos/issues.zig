@@ -38,13 +38,13 @@ fn isHex(input: []const u8) ?usize {
 
 pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
     std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
-    const verb = ctx.uri.peek() orelse return Route.router(ctx, &routes);
+    const verb = ctx.uri.peek() orelse return Route.defaultRouter(ctx, &routes);
 
     if (isHex(verb)) |_| {
         return view;
     }
 
-    return Route.router(ctx, &routes);
+    return Route.defaultRouter(ctx, &routes);
 }
 
 const IssueNewPage = Template.PageData("issue-new.html");
