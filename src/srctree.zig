@@ -23,6 +23,7 @@ pub const endpoints = verse.Endpoints(.{
                 .{ .name = "GoogleOther", .allow = false },
                 .{ .name = "SiteAuditBot", .allow = false },
                 .{ .name = "DataForSeoBot", .allow = false },
+                .{ .name = "BacklinksExtendedBot", .allow = false },
             }),
             GET("debug", debug),
             ROUTE("user", commitFlex),
@@ -93,9 +94,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
         error.DataMissing,
         => {
             std.debug.print("Abusive {} because {}\n", .{ fr.request, err });
-            for (fr.request.raw.zwsgi.vars) |vars| {
-                std.debug.print("Abusive var '{s}' => '''{s}'''\n", .{ vars.key, vars.val });
-            }
+            fr.dumpDebugData();
             if (fr.request.data.post) |post_data| {
                 std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
             }
