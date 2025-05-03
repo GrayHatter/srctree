@@ -719,7 +719,6 @@ journal {
 }
 
 .commit-flex {
-	width: 1050px;
 	margin: auto;
 	line-height: 100%;
 	> .day-col {
