@@ -1,3 +1,7 @@
+/// we might add up to 6 days to align the grid
+const HEATMAPSIZE = 1 * (366 + 6);
+const HeatMapArray = [HEATMAPSIZE]u16;
+
 const Journal = struct {
     alloc: Allocator,
     email: []const u8,
@@ -16,8 +20,8 @@ const Journal = struct {
         j.* = .{
             .alloc = a,
             .email = try a.dupe(email),
-            .repos = &[0].{},
-            .hits = .{0} ** (366 + 6),
+            .repos = &.{},
+            .hits = @splat(0),
             .list = std.ArrayList(Scribe.Commit).init(a),
         };
 
@@ -48,8 +52,8 @@ const Journal = struct {
         while (true) {
             if (lseen.contains(commit.sha.bin[0..])) break;
             var commit_time = commit.author.timestamp;
-            if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
-                commit_time += tzs;
+            if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs| {
+                commit_time += tzs.seconds;
             }
             if (commit_time < until) break;
             if (std.mem.eql(u8, email.?, commit.author.email)) {
@@ -127,8 +131,8 @@ const Journal = struct {
             seen.insert(commit.sha.bin[0..]) catch unreachable;
             if (eql(u8, email, commit.author.email)) {
                 var commit_time = commit.author.timestamp;
-                if (DateTime.tzToSec(commit.author.tzstr) catch @as(?i32, 0)) |tzs| {
-                    commit_time += tzs;
+                if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs| {
+                    commit_time += tzs.seconds;
                 }
 
                 const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
@@ -190,16 +194,6 @@ const Scribe = struct {
     }
 };
 
-const Day = struct {
-    //prev: ?*Day,
-    //next: ?*Day,
-    events: []Scribe,
-};
-
-/// we might add up to 6 days to align the grid
-const HeatMapSize = 366 + 6;
-const HeatMapArray = [HeatMapSize]u16;
-
 pub const HeatMap = struct {
     shahex: Git.SHA.Hex,
     hits: HeatMapArray,
@@ -238,7 +232,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     var nowish = DateTime.now();
     var email: []const u8 = undefined;
-    var tz_offset: ?i32 = null;
+    var tz_offset: ?i17 = null;
     var query = ctx.request.data.query.validator();
     const user = query.optionalItem("user");
 
@@ -250,14 +244,14 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
                 email = c_email;
             } else @panic("no email configured");
             if (owner.tz) |ts| {
-                if (DateTime.tzToSec(ts) catch @as(?i32, 0)) |tzs| {
-                    tz_offset = tzs;
-                    nowish = DateTime.fromEpoch(nowish.timestamp + tzs);
+                if (DateTime.Tz.fromStr(ts) catch @as(?DateTime.Tz, .{ .seconds = 0 })) |tzs| {
+                    tz_offset = tzs.seconds;
+                    nowish = DateTime.fromEpoch(nowish.timestamp + tzs.seconds);
                 }
             }
         }
     }
-    var date = nowish.removeTime();
+    var date = nowish.timeTruncate();
     date = DateTime.fromEpoch(date.timestamp + DAY - YEAR);
     while (date.weekday != 0) {
         date = DateTime.fromEpoch(date.timestamp - DAY);
@@ -272,7 +266,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     var scribe_list = std.ArrayList(Scribe.Commit).init(ctx.alloc);
 
-    var count_all: HeatMapArray = .{0} ** (366 + 6);
+    var count_all: HeatMapArray = .{0} ** HEATMAPSIZE;
 
     var itr = dir.iterate();
     while (itr.next() catch return Error.Unknown) |file| {
@@ -295,19 +289,19 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var tcount: u16 = 0;
     for (count_all) |h| tcount +|= h;
 
-    var printed_month: usize = (date.months + 10) % 12;
+    var printed_month: usize = (@intFromEnum(date.months) + 10) % 12;
     var day_offset: usize = 0;
     var streak: usize = 0;
     var committed_today: bool = false;
-    for (0..53) |_| {
+    for (0..(HEATMAPSIZE / 7)) |_| {
         var column: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
-        if ((printed_month % 12) != date.months - 1) {
+        if ((printed_month % 12) != @intFromEnum(date.months) - 1) {
             const next_week = DateTime.fromEpoch(date.timestamp + WEEK);
             printed_month += 1;
-            if ((printed_month % 12) != next_week.months - 1) {
+            if ((printed_month % 12) != @intFromEnum(next_week.months) - 1) {
                 column[0] = HTML.div("&nbsp;", &monthAtt);
             } else {
-                column[0] = HTML.div(DateTime.MONTHS[printed_month % 12 + 1][0..3], &monthAtt);
+                column[0] = HTML.div(DateTime.Names.Month[printed_month % 12 + 1][0..3], &monthAtt);
             }
         } else {
             column[0] = HTML.div("&nbsp;", &monthAtt);
@@ -376,7 +370,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var months = std.ArrayList(Template.Structs.Months).init(ctx.alloc);
     {
         const today = if (tz_offset) |tz|
-            DateTime.fromEpoch(DateTime.now().timestamp + tz).removeTime()
+            DateTime.fromEpoch(DateTime.now().timestamp + tz).timeTruncate()
         else
             DateTime.today();
         const yesterday = DateTime.fromEpoch(today.timestamp - 86400);

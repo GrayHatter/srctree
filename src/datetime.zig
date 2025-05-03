@@ -1,50 +1,112 @@
-const std = @import("std");
-const eql = std.mem.eql;
+// Default to Unix Epoch
+timestamp: i64,
+years: usize,
+months: Month,
+days: Day,
+weekday: u4,
+hours: u6,
+minutes: u6,
+seconds: u6,
+tz: ?Tz = null,
+
+flags: Flags = .default,
 
 const DateTime = @This();
 
-// Default to Unix Epoch
-timestamp: i64 = 0,
-years: usize = 1970,
-months: u8 = 1,
-days: u8 = 1,
-weekday: u8 = 4,
-hours: u8 = 0,
-minutes: u8 = 0,
-seconds: u8 = 0,
-/// Timezone offset in seconds
-/// -1200h -> 1200h
-/// -43200 -> 43200
-tz: ?i32 = null,
+pub const unix_epoch: DateTime = .{
+    .timestamp = 0,
+    .years = 1970,
+    .months = 1,
+    .days = 1,
+    .weekday = 4,
+    .hours = 0,
+    .minutes = 0,
+    .seconds = 0,
+    .tz = null,
+    .flags = .default,
+};
+
+pub const Month = enum(u4) {
+    undefined,
+    January,
+    February,
+    March,
+    April,
+    May,
+    June,
+    July,
+    August,
+    September,
+    October,
+    November,
+    December,
+};
+
+pub const Day = enum(u5) {
+    undefined,
+    _,
+};
+
+pub const Tz = packed struct(i17) {
+    /// Timezone offset in seconds
+    /// -1200h -> 1200h
+    /// -43200 -> 43200
+    seconds: i17,
+
+    pub const Minutes = i11;
+    pub const Hours = i5;
+
+    pub fn fromStr(str: []const u8) !Tz {
+        const tzm: Minutes = try std.fmt.parseInt(Minutes, str[str.len - 2 .. str.len], 10);
+        const tzh: Hours = try std.fmt.parseInt(Hours, str[0 .. str.len - 2], 10);
+        var secs: i17 = tzh;
+        secs *= 60;
+        secs += tzm;
+        secs *= 60;
+        return .{ .seconds = secs };
+    }
+};
+
+pub const Flags = struct {
+    has_date: bool,
+    has_time: bool,
+
+    pub const default: Flags = .{
+        .has_date = true,
+        .has_time = true,
+    };
+};
 
 /// 1 Indexed (index 0 == 0) because Date formatting months start at 1
 pub const DAYS_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
-/// 1 Indexed (index 0 == undefined) because Date formatting months start at 1
-pub const MONTHS = [_][]const u8{
-    undefined,
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-};
+pub const Names = struct {
+    /// 1 Indexed (index 0 == undefined) because Date formatting months start at 1
+    pub const Month = [_][]const u8{
+        undefined,
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    };
 
-pub const WEEKDAYS = [_][]const u8{
-    "Sunday",
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
+    pub const Day = [_][]const u8{
+        "Sunday",
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+    };
 };
 
 pub fn now() DateTime {
@@ -53,16 +115,17 @@ pub fn now() DateTime {
 
 pub fn today() DateTime {
     var self = now();
-    return self.removeTime();
+    return self.timeTruncate();
 }
 
-pub fn removeTime(self: DateTime) DateTime {
+pub fn timeTruncate(self: DateTime) DateTime {
     var output = self;
     const offset = @as(i64, self.hours) * 60 * 60 + @as(i64, self.minutes) * 60 + self.seconds;
     output.timestamp -|= offset;
     output.hours = 0;
     output.minutes = 0;
     output.seconds = 0;
+    output.flags.has_time = false;
     return output;
 }
 
@@ -95,51 +158,56 @@ fn yearsFrom(epoch: usize) usize {
     return year;
 }
 
-fn monthsFrom(year: usize, days: usize) struct { u8, usize } {
+fn monthsFrom(year: usize, days: usize) struct { Month, Day } {
     std.debug.assert(days <= 366);
     var m: u8 = 1;
     var d: usize = days;
-    if (d >= 60 and leapYear(year)) {
+    if (d > 60 and leapYear(year)) {
         d -= 1; // LOL
     }
     while (d > DAYS_IN_MONTH[m]) {
         d -= DAYS_IN_MONTH[m];
         m += 1;
     }
-    return .{ m, d };
+    return .{ @enumFromInt(m), @enumFromInt(d) };
 }
 
 pub fn currentMonth() []const u8 {
     const n = now();
-    return MONTHS[n.months];
+    return Names.Month[n.months];
 }
 
 pub fn month(self: DateTime) []const u8 {
-    return MONTHS[self.months];
+    return Names.Month[self.months];
 }
 
-pub fn fromEpochTz(sts: i64, tz: ?i32) DateTime {
+pub fn fromEpochTz(sts: i64, tzz: ?Tz) DateTime {
     if (sts < 0) unreachable; // return error.UnsupportedTimeStamp;
 
-    var self: DateTime = undefined;
-    self.timestamp = sts;
-    self.tz = tz;
+    const tz: Tz = tzz orelse .{ .seconds = 0 };
+    const ts: u64 = @intCast(sts + tz.seconds);
 
-    const ts: u64 = @intCast(sts + @as(i64, (tz orelse 0)) * 60);
+    const seconds: u6 = @truncate(ts % 60);
+    const minutes: u6 = @truncate(ts / 60 % 60);
+    const hours: u6 = @truncate(ts / 60 / 60 % 24);
 
-    self.seconds = @truncate(ts % 60);
-    self.minutes = @truncate(ts / 60 % 60);
-    self.hours = @truncate(ts / 60 / 60 % 24);
+    const years: usize = yearsFrom(ts);
+    const weekday: u4 = @truncate((ts / 60 / 60 / 24 + 4) % 7);
 
-    self.years = yearsFrom(ts);
-    self.weekday = @truncate((ts / 60 / 60 / 24 + 4) % 7);
+    const days = 719162 + ts / 60 / 60 / 24 - daysAtYear(years);
+    const months, const month_days = monthsFrom(years, days + 1);
 
-    const days = 719162 + ts / 60 / 60 / 24 - daysAtYear(self.years);
-    const both = monthsFrom(self.years, days);
-    self.months = both[0];
-    self.days = @truncate(both[1] + 1);
-
-    return self;
+    return .{
+        .timestamp = sts,
+        .tz = if (tzz) |_| tz else null,
+        .years = years,
+        .months = months,
+        .days = month_days,
+        .weekday = weekday,
+        .hours = hours,
+        .minutes = minutes,
+        .seconds = seconds,
+    };
 }
 
 pub fn fromEpoch(sts: i64) DateTime {
@@ -153,16 +221,10 @@ pub fn fromEpochStr(str: []const u8) !DateTime {
     return fromEpoch(int);
 }
 
-pub fn tzToSec(tzstr: []const u8) !i32 {
-    const tzm: i32 = try std.fmt.parseInt(i16, tzstr[tzstr.len - 2 .. tzstr.len], 10);
-    const tzh: i32 = try std.fmt.parseInt(i16, tzstr[0 .. tzstr.len - 2], 10);
-    return (tzh * 60 + tzm) * 60;
-}
-
 /// Accepts a Unix Epoch int as a string of numbers and timezone in -HHMM format
 pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
     const epoch = try std.fmt.parseInt(i64, str, 10);
-    const tz = try tzToSec(tzstr);
+    const tz: Tz = try .fromStr(tzstr);
     return fromEpochTz(epoch, tz);
 }
 
@@ -170,18 +232,26 @@ pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOption
     if (comptime eql(u8, fstr, "dtime")) {
         return out.print(
             "{s} {:0>2}:{:0>2}:{:0>2}",
-            .{ WEEKDAYS[self.weekday], self.hours, self.minutes, self.seconds },
+            .{ Names.Day[self.weekday], self.hours, self.minutes, self.seconds },
         );
     } else if (comptime eql(u8, fstr, "day")) {
-        return out.print("{s}", .{WEEKDAYS[self.weekday]});
+        return out.print("{s}", .{Names.Day[self.weekday]});
     } else if (comptime eql(u8, fstr, "time") or eql(u8, fstr, "HH:mm:ss")) {
         return out.print("{:0>2}:{:0>2}:{:0>2}", .{ self.hours, self.minutes, self.seconds });
     } else if (comptime eql(u8, fstr, "Y-m-d")) {
-        return out.print("{}-{}-{}", .{ self.years, self.months, self.days });
+        return out.print("{}-{}-{}", .{ self.years, @intFromEnum(self.months), @intFromEnum(self.days) });
     }
     return out.print(
         "{}-{}-{} {s} {:0>2}:{:0>2}:{:0>2}",
-        .{ self.years, self.months, self.days, WEEKDAYS[self.weekday], self.hours, self.minutes, self.seconds },
+        .{
+            self.years,
+            @intFromEnum(self.months),
+            @intFromEnum(self.days),
+            Names.Day[self.weekday],
+            self.hours,
+            self.minutes,
+            self.seconds,
+        },
     );
 }
 
@@ -208,8 +278,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 0,
         .years = 1970,
-        .months = 1,
-        .days = 1,
+        .months = @enumFromInt(1),
+        .days = @enumFromInt(1),
         .weekday = 4,
         .hours = 0,
         .minutes = 0,
@@ -219,8 +289,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1697312998,
         .years = 2023,
-        .months = 10,
-        .days = 14,
+        .months = @enumFromInt(10),
+        .days = @enumFromInt(14),
         .weekday = 6,
         .hours = 19,
         .minutes = 49,
@@ -230,8 +300,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148799,
         .years = 1998,
-        .months = 12,
-        .days = 31,
+        .months = @enumFromInt(12),
+        .days = @enumFromInt(31),
         .weekday = 4,
         .hours = 23,
         .minutes = 59,
@@ -241,8 +311,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148800,
         .years = 1999,
-        .months = 1,
-        .days = 1,
+        .months = @enumFromInt(1),
+        .days = @enumFromInt(1),
         .weekday = 5,
         .hours = 0,
         .minutes = 0,
@@ -252,11 +322,14 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1002131014,
         .years = 2001,
-        .months = 10,
-        .days = 3,
+        .months = @enumFromInt(10),
+        .days = @enumFromInt(3),
         .weekday = 3,
         .hours = 17,
         .minutes = 43,
         .seconds = 34,
     }, DateTime.fromEpoch(1002131014));
 }
+
+const std = @import("std");
+const eql = std.mem.eql;
