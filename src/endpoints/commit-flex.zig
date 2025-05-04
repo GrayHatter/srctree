@@ -293,8 +293,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     const weeks = HEATMAPSIZE / 7;
     const flex_weeks: []S.FlexWeeks = try ctx.alloc.alloc(S.FlexWeeks, weeks);
     for (flex_weeks) |*flex_week| {
-        flex_week.* = .{ .days = try ctx.alloc.alloc(S.Days, 7) };
-
+        flex_week.month = "&nbsp;";
         if ((printed_month % 12) != @intFromEnum(date.months) - 1) {
             const next_week = DateTime.fromEpoch(date.timestamp + WEEK);
             printed_month += 1;
@@ -303,7 +302,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             }
         }
 
-        for (@constCast(flex_week.days)) |*m| {
+        for (&flex_week.days) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
             defer day_offset += 1;
             const count = 16 - @clz(count_all[day_offset]);
