@@ -228,8 +228,6 @@ const YEAR = 31_536_000;
 const UserCommitsPage = Template.PageData("user_commits.html");
 
 pub fn commitFlex(ctx: *Verse.Frame) Error!void {
-    const monthAtt = HTML.Attr.class("month");
-
     var nowish = DateTime.now();
     var email: []const u8 = undefined;
     var tz_offset: ?i17 = null;
@@ -285,7 +283,6 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         }
     }
 
-    var dom = DOM.new(ctx.alloc);
     var tcount: u16 = 0;
     for (count_all) |h| tcount +|= h;
 
@@ -293,24 +290,22 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var day_offset: usize = 0;
     var streak: usize = 0;
     var committed_today: bool = false;
-    for (0..(HEATMAPSIZE / 7)) |_| {
-        var column: []HTML.Element = try ctx.alloc.alloc(HTML.Element, 8);
+    const weeks = HEATMAPSIZE / 7;
+    const flex_weeks: []S.FlexWeeks = try ctx.alloc.alloc(S.FlexWeeks, weeks);
+    for (flex_weeks) |*flex_week| {
+        flex_week.* = .{ .days = try ctx.alloc.alloc(S.Days, 7) };
+
         if ((printed_month % 12) != @intFromEnum(date.months) - 1) {
             const next_week = DateTime.fromEpoch(date.timestamp + WEEK);
             printed_month += 1;
-            if ((printed_month % 12) != @intFromEnum(next_week.months) - 1) {
-                column[0] = HTML.div("&nbsp;", &monthAtt);
-            } else {
-                column[0] = HTML.div(DateTime.Names.Month[printed_month % 12 + 1][0..3], &monthAtt);
+            if ((printed_month % 12) != @intFromEnum(next_week.months) - 1) {} else {
+                flex_week.month = DateTime.Names.Month[printed_month % 12 + 1][0..3];
             }
-        } else {
-            column[0] = HTML.div("&nbsp;", &monthAtt);
         }
 
-        for (column[1..]) |*m| {
+        for (@constCast(flex_week.days)) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
             defer day_offset += 1;
-            const rows = try ctx.alloc.alloc(HTML.Attribute, 2);
             const count = 16 - @clz(count_all[day_offset]);
             const future_date = date.timestamp >= nowish.timestamp - 1;
             if (!future_date) {
@@ -323,34 +318,25 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
                     committed_today = false;
                 }
             }
-            const class = if (future_date)
+            m.class = if (future_date)
                 "day-hide"
             else switch (count) {
-                0 => "day",
-                1 => "day day-commits day-pwr-1",
-                2 => "day day-commits day-pwr-2",
-                3 => "day day-commits day-pwr-3",
-                4 => "day day-commits day-pwr-4",
-                5 => "day day-commits day-pwr-5",
+                0 => "",
+                1 => " day-commits day-pwr-1",
+                2 => " day-commits day-pwr-2",
+                3 => " day-commits day-pwr-3",
+                4 => " day-commits day-pwr-4",
+                5 => " day-commits day-pwr-5",
                 else => "day day-commits day-pwr-max",
             };
-            @memcpy(rows, &[2]HTML.Attr{
-                HTML.Attr.class(class)[0],
-                HTML.Attr{
-                    .key = "title",
-                    .value = try std.fmt.allocPrint(
-                        ctx.alloc,
-                        "{} commits on {}",
-                        .{ count_all[day_offset], date },
-                    ),
-                },
-            });
-            m.* = HTML.div(null, rows);
-        }
-        dom.push(HTML.div(column, &HTML.Attr.class("col")));
-    }
 
-    const flex = dom.done();
+            m.title = try std.fmt.allocPrint(
+                ctx.alloc,
+                "{} commits on {}",
+                .{ count_all[day_offset], date },
+            );
+        }
+    }
 
     const current_streak = switch (streak) {
         0 => "One Day? Or Day One!",
@@ -360,10 +346,6 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             if (!committed_today) "?" else "",
         }),
     };
-
-    const list = try ctx.alloc.alloc([]u8, flex.len);
-    for (list, flex) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
-    const flexes = try std.mem.join(ctx.alloc, "", list);
 
     std.sort.pdq(Scribe.Commit, scribe_list.items, {}, Scribe.sorted);
 
@@ -422,7 +404,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
-        .flexes = flexes,
+        .flex_weeks = flex_weeks,
         .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),
         .current_streak = current_streak,
         .months = try months.toOwnedSlice(),

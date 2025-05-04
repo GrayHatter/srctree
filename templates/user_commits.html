@@ -20,8 +20,10 @@
           <div class="day">Fri</div>
           <div class="day">Sat</div>
         </div>
-        <Flexes>
-
+        <For FlexWeeks><div class="col">
+          <div class="month"><Month default="&nbsp;" /></div>
+          <For Days><div class="day<Class/>" title="<Title />"></div></For>
+        </div></For>
         <h3 style="float: right"><CurrentStreak></h3>
       </div>
 
