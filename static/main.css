@@ -456,6 +456,9 @@ patch, gist {
 		text-align: left;
 		background: #333;
 		width: 100%;
+		div {
+			white-space: break-spaces;
+		}
 		.split {
 			display: flex;
 			span {
