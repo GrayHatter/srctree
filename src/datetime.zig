@@ -235,24 +235,34 @@ pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOption
             .{ Names.Day[self.weekday], self.hours, self.minutes, self.seconds },
         );
     } else if (comptime eql(u8, fstr, "day")) {
-        return out.print("{s}", .{Names.Day[self.weekday]});
+        return out.print(
+            "{s}",
+            .{Names.Day[self.weekday]},
+        );
     } else if (comptime eql(u8, fstr, "time") or eql(u8, fstr, "HH:mm:ss")) {
-        return out.print("{:0>2}:{:0>2}:{:0>2}", .{ self.hours, self.minutes, self.seconds });
+        return out.print(
+            "{:0>2}:{:0>2}:{:0>2}",
+            .{ self.hours, self.minutes, self.seconds },
+        );
     } else if (comptime eql(u8, fstr, "Y-m-d")) {
-        return out.print("{}-{}-{}", .{ self.years, @intFromEnum(self.months), @intFromEnum(self.days) });
+        return out.print(
+            "{}-{:0>2}-{:0>2}",
+            .{ self.years, @intFromEnum(self.months), @intFromEnum(self.days) },
+        );
     }
-    return out.print(
-        "{}-{}-{} {s} {:0>2}:{:0>2}:{:0>2}",
-        .{
-            self.years,
-            @intFromEnum(self.months),
-            @intFromEnum(self.days),
-            Names.Day[self.weekday],
-            self.hours,
-            self.minutes,
-            self.seconds,
-        },
-    );
+
+    if (self.flags.has_date) {
+        try out.print(
+            "{}-{:0>2}-{:0>2} {s}",
+            .{ self.years, @intFromEnum(self.months), @intFromEnum(self.days), Names.Day[self.weekday] },
+        );
+    }
+    if (self.flags.has_time) {
+        try out.print(
+            "{:0>2}:{:0>2}:{:0>2}",
+            .{ self.hours, self.minutes, self.seconds },
+        );
+    }
 }
 
 test "now" {

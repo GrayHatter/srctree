@@ -332,7 +332,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             m.title = try std.fmt.allocPrint(
                 ctx.alloc,
                 "{} commits on {}",
-                .{ count_all[day_offset], date },
+                .{ count_all[day_offset], date.timeTruncate() },
             );
         }
     }
