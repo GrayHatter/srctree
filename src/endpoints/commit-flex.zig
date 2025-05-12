@@ -168,11 +168,9 @@ const Scribe = struct {
                 //.name = self.name,
                 .repo = self.repo,
                 .title = self.title,
-                .date = try allocPrint(
-                    a,
-                    "<span>{Y-m-d}</span><span>{day}</span><span>{time}</span>",
-                    .{ self.date, self.date, self.date },
-                ),
+                .day = try allocPrint(a, "{Y-m-d}", .{self.date}),
+                .weekday = self.date.weekdaySlice(),
+                .time = try allocPrint(a, "{time}", .{self.date}),
                 .sha = shahex[0..8],
             };
         }
@@ -286,7 +284,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var tcount: u16 = 0;
     for (count_all) |h| tcount +|= h;
 
-    var printed_month: usize = (@intFromEnum(date.months) + 10) % 12;
+    var printed_month: usize = (@intFromEnum(date.month) + 10) % 12;
     var day_offset: usize = 0;
     var streak: usize = 0;
     var committed_today: bool = false;
@@ -294,10 +292,10 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     const flex_weeks: []S.FlexWeeks = try ctx.alloc.alloc(S.FlexWeeks, weeks);
     for (flex_weeks) |*flex_week| {
         flex_week.month = "&nbsp;";
-        if ((printed_month % 12) != @intFromEnum(date.months) - 1) {
+        if ((printed_month % 12) != @intFromEnum(date.month) - 1) {
             const next_week = DateTime.fromEpoch(date.timestamp + WEEK);
             printed_month += 1;
-            if ((printed_month % 12) != @intFromEnum(next_week.months) - 1) {} else {
+            if ((printed_month % 12) != @intFromEnum(next_week.month) - 1) {} else {
                 flex_week.month = DateTime.Names.Month[printed_month % 12 + 1][0..3];
             }
         }
@@ -348,7 +346,15 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     std.sort.pdq(Scribe.Commit, scribe_list.items, {}, Scribe.sorted);
 
-    var months = std.ArrayList(Template.Structs.Months).init(ctx.alloc);
+    var scribe_blocks = try std.ArrayListUnmanaged(Template.Structs.Months).initCapacity(ctx.alloc, 6);
+
+    const DefaultBlocks = struct {
+        todays: std.ArrayListUnmanaged(S.JournalRows) = .{},
+        yesterdays: std.ArrayListUnmanaged(S.JournalRows) = .{},
+        last_weeks: std.ArrayListUnmanaged(S.JournalRows) = .{},
+        last_months: std.ArrayListUnmanaged(S.JournalRows) = .{},
+    };
+
     {
         const today = if (tz_offset) |tz|
             DateTime.fromEpoch(DateTime.now().timestamp + tz).timeTruncate()
@@ -357,45 +363,41 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         const yesterday = DateTime.fromEpoch(today.timestamp - 86400);
         const last_week = DateTime.fromEpoch(yesterday.timestamp - 86400 * 7);
 
-        var todays = std.ArrayList(S.JournalRows).init(ctx.alloc);
-        var yesterdays = std.ArrayList(S.JournalRows).init(ctx.alloc);
-        var last_weeks = std.ArrayList(S.JournalRows).init(ctx.alloc);
-        var last_months = std.ArrayList(S.JournalRows).init(ctx.alloc);
-
+        var blocks: DefaultBlocks = .{};
         for (scribe_list.items) |each| {
             if (today.timestamp < each.date.timestamp) {
-                try todays.append(try each.toTemplate(ctx.alloc));
+                try blocks.todays.append(ctx.alloc, try each.toTemplate(ctx.alloc));
             } else if (yesterday.timestamp < each.date.timestamp) {
-                try yesterdays.append(try each.toTemplate(ctx.alloc));
+                try blocks.yesterdays.append(ctx.alloc, try each.toTemplate(ctx.alloc));
             } else if (last_week.timestamp < each.date.timestamp) {
-                try last_weeks.append(try each.toTemplate(ctx.alloc));
+                try blocks.last_weeks.append(ctx.alloc, try each.toTemplate(ctx.alloc));
             } else {
-                try last_months.append(try each.toTemplate(ctx.alloc));
+                try blocks.last_months.append(ctx.alloc, try each.toTemplate(ctx.alloc));
             }
         }
 
-        try months.append(.{
+        scribe_blocks.appendAssumeCapacity(.{
             .group = "Today",
-            .lead = try allocPrint(ctx.alloc, "{} commits today", .{todays.items.len}),
-            .journal_rows = try todays.toOwnedSlice(),
+            .lead = try allocPrint(ctx.alloc, "{} commits today", .{blocks.todays.items.len}),
+            .journal_rows = blocks.todays.items,
         });
 
-        try months.append(.{
+        scribe_blocks.appendAssumeCapacity(.{
             .group = "Yesterday",
-            .lead = try allocPrint(ctx.alloc, "{} commits yesterday", .{yesterdays.items.len}),
-            .journal_rows = try yesterdays.toOwnedSlice(),
+            .lead = try allocPrint(ctx.alloc, "{} commits yesterday", .{blocks.yesterdays.items.len}),
+            .journal_rows = blocks.yesterdays.items,
         });
 
-        try months.append(.{
+        scribe_blocks.appendAssumeCapacity(.{
             .group = "Last Week",
-            .lead = try allocPrint(ctx.alloc, "{} commits last week", .{last_weeks.items.len}),
-            .journal_rows = try last_weeks.toOwnedSlice(),
+            .lead = try allocPrint(ctx.alloc, "{} commits last week", .{blocks.last_weeks.items.len}),
+            .journal_rows = blocks.last_weeks.items,
         });
 
-        try months.append(.{
+        scribe_blocks.appendAssumeCapacity(.{
             .group = "Last Month",
-            .lead = try allocPrint(ctx.alloc, "{} commits last month", .{last_months.items.len}),
-            .journal_rows = try last_months.toOwnedSlice(),
+            .lead = try allocPrint(ctx.alloc, "{} commits last month", .{blocks.last_months.items.len}),
+            .journal_rows = blocks.last_months.items,
         });
     }
 
@@ -406,7 +408,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         .flex_weeks = flex_weeks,
         .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),
         .current_streak = current_streak,
-        .months = try months.toOwnedSlice(),
+        .months = scribe_blocks.items,
     });
 
     return try ctx.sendPage(&page);

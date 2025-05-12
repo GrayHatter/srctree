@@ -1,9 +1,9 @@
 // Default to Unix Epoch
 timestamp: i64,
-years: usize,
-months: Month,
-days: Day,
-weekday: u4,
+year: usize,
+month: Month,
+day: Day,
+weekday: u3,
 hours: u6,
 minutes: u6,
 seconds: u6,
@@ -16,8 +16,8 @@ const DateTime = @This();
 pub const unix_epoch: DateTime = .{
     .timestamp = 0,
     .years = 1970,
-    .months = 1,
-    .days = 1,
+    .month = 1,
+    .day = 1,
     .weekday = 4,
     .hours = 0,
     .minutes = 0,
@@ -45,6 +45,16 @@ pub const Month = enum(u4) {
 pub const Day = enum(u5) {
     undefined,
     _,
+};
+
+pub const Weekday = enum(u3) {
+    Sunday,
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
 };
 
 pub const Tz = packed struct(i17) {
@@ -77,11 +87,11 @@ pub const Flags = struct {
     };
 };
 
-/// 1 Indexed (index 0 == 0) because Date formatting months start at 1
-pub const DAYS_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+/// 1 Indexed (index 0 == 0) because Date formatting month start at 1
+pub const day_IN_MONTH = [_]u8{ 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
 
 pub const Names = struct {
-    /// 1 Indexed (index 0 == undefined) because Date formatting months start at 1
+    /// 1 Indexed (index 0 == undefined) because Date formatting month start at 1
     pub const Month = [_][]const u8{
         undefined,
         "January",
@@ -133,40 +143,40 @@ fn leapYear(year: usize) bool {
     return year % 4 == 0 and (year % 100 != 0 or year % 400 == 0);
 }
 
-fn leapDays(year: usize) u9 {
+fn leapday(year: usize) u9 {
     if (leapYear(year)) return 366;
     return 365;
 }
 
-fn daysAtYear(year: usize) usize {
+fn dayAtYear(year: usize) usize {
     const y = year - 1;
     return y * 365 + @divFloor(y, 4) - @divFloor(y, 100) + @divFloor(y, 400);
 }
 
 test "dby" {
-    try std.testing.expectEqual(@as(usize, 1461), daysAtYear(5));
-    try std.testing.expectEqual(@as(usize, 36524), daysAtYear(101));
-    try std.testing.expectEqual(@as(usize, 146097), daysAtYear(401));
-    try std.testing.expectEqual(@as(usize, 719162), daysAtYear(1970));
+    try std.testing.expectEqual(@as(usize, 1461), dayAtYear(5));
+    try std.testing.expectEqual(@as(usize, 36524), dayAtYear(101));
+    try std.testing.expectEqual(@as(usize, 146097), dayAtYear(401));
+    try std.testing.expectEqual(@as(usize, 719162), dayAtYear(1970));
 }
 
 fn yearsFrom(epoch: usize) usize {
-    const days = epoch / 60 / 60 / 24 + 719162;
-    var year = days / 365;
-    while (days < daysAtYear(year)) year -= 1;
-    std.debug.assert(days >= daysAtYear(year));
+    const day = epoch / 60 / 60 / 24 + 719162;
+    var year = day / 365;
+    while (day < dayAtYear(year)) year -= 1;
+    std.debug.assert(day >= dayAtYear(year));
     return year;
 }
 
-fn monthsFrom(year: usize, days: usize) struct { Month, Day } {
-    std.debug.assert(days <= 366);
+fn monthFrom(year: usize, day: usize) struct { Month, Day } {
+    std.debug.assert(day <= 366);
     var m: u8 = 1;
-    var d: usize = days;
+    var d: usize = day;
     if (d > 60 and leapYear(year)) {
         d -= 1; // LOL
     }
-    while (d > DAYS_IN_MONTH[m]) {
-        d -= DAYS_IN_MONTH[m];
+    while (d > day_IN_MONTH[m]) {
+        d -= day_IN_MONTH[m];
         m += 1;
     }
     return .{ @enumFromInt(m), @enumFromInt(d) };
@@ -174,11 +184,15 @@ fn monthsFrom(year: usize, days: usize) struct { Month, Day } {
 
 pub fn currentMonth() []const u8 {
     const n = now();
-    return Names.Month[n.months];
+    return Names.Month[n.month];
 }
 
-pub fn month(self: DateTime) []const u8 {
-    return Names.Month[self.months];
+pub fn monthSlice(self: DateTime) []const u8 {
+    return Names.Month[self.month];
+}
+
+pub fn weekdaySlice(self: DateTime) []const u8 {
+    return Names.Day[self.weekday];
 }
 
 pub fn fromEpochTz(sts: i64, tzz: ?Tz) DateTime {
@@ -192,17 +206,17 @@ pub fn fromEpochTz(sts: i64, tzz: ?Tz) DateTime {
     const hours: u6 = @truncate(ts / 60 / 60 % 24);
 
     const years: usize = yearsFrom(ts);
-    const weekday: u4 = @truncate((ts / 60 / 60 / 24 + 4) % 7);
+    const weekday: u3 = @truncate((ts / 60 / 60 / 24 + 4) % 7);
 
-    const days = 719162 + ts / 60 / 60 / 24 - daysAtYear(years);
-    const months, const month_days = monthsFrom(years, days + 1);
+    const day = 719162 + ts / 60 / 60 / 24 - dayAtYear(years);
+    const month, const month_day = monthFrom(years, day + 1);
 
     return .{
         .timestamp = sts,
         .tz = if (tzz) |_| tz else null,
-        .years = years,
-        .months = months,
-        .days = month_days,
+        .year = years,
+        .month = month,
+        .day = month_day,
         .weekday = weekday,
         .hours = hours,
         .minutes = minutes,
@@ -237,7 +251,7 @@ pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOption
     } else if (comptime eql(u8, fstr, "day")) {
         return out.print(
             "{s}",
-            .{Names.Day[self.weekday]},
+            .{self.weekdaySlice()},
         );
     } else if (comptime eql(u8, fstr, "time") or eql(u8, fstr, "HH:mm:ss")) {
         return out.print(
@@ -247,14 +261,14 @@ pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOption
     } else if (comptime eql(u8, fstr, "Y-m-d")) {
         return out.print(
             "{}-{:0>2}-{:0>2}",
-            .{ self.years, @intFromEnum(self.months), @intFromEnum(self.days) },
+            .{ self.year, @intFromEnum(self.month), @intFromEnum(self.day) },
         );
     }
 
     if (self.flags.has_date) {
         try out.print(
             "{}-{:0>2}-{:0>2} {s}",
-            .{ self.years, @intFromEnum(self.months), @intFromEnum(self.days), Names.Day[self.weekday] },
+            .{ self.year, @intFromEnum(self.month), @intFromEnum(self.day), Names.Day[self.weekday] },
         );
     }
     if (self.flags.has_time) {
@@ -275,9 +289,9 @@ test "now" {
 test "today" {
     const this = now();
     const today_ = today();
-    try std.testing.expectEqual(this.years, today_.years);
-    try std.testing.expectEqual(this.months, today_.months);
-    try std.testing.expectEqual(this.days, today_.days);
+    try std.testing.expectEqual(this.year, today_.year);
+    try std.testing.expectEqual(this.month, today_.month);
+    try std.testing.expectEqual(this.day, today_.day);
     try std.testing.expectEqual(this.weekday, today_.weekday);
     try std.testing.expectEqual(today_.hours, 0);
     try std.testing.expectEqual(today_.minutes, 0);
@@ -287,9 +301,9 @@ test "today" {
 test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 0,
-        .years = 1970,
-        .months = @enumFromInt(1),
-        .days = @enumFromInt(1),
+        .year = 1970,
+        .month = @enumFromInt(1),
+        .day = @enumFromInt(1),
         .weekday = 4,
         .hours = 0,
         .minutes = 0,
@@ -298,9 +312,9 @@ test "datetime" {
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1697312998,
-        .years = 2023,
-        .months = @enumFromInt(10),
-        .days = @enumFromInt(14),
+        .year = 2023,
+        .month = @enumFromInt(10),
+        .day = @enumFromInt(14),
         .weekday = 6,
         .hours = 19,
         .minutes = 49,
@@ -309,9 +323,9 @@ test "datetime" {
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148799,
-        .years = 1998,
-        .months = @enumFromInt(12),
-        .days = @enumFromInt(31),
+        .year = 1998,
+        .month = @enumFromInt(12),
+        .day = @enumFromInt(31),
         .weekday = 4,
         .hours = 23,
         .minutes = 59,
@@ -320,9 +334,9 @@ test "datetime" {
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148800,
-        .years = 1999,
-        .months = @enumFromInt(1),
-        .days = @enumFromInt(1),
+        .year = 1999,
+        .month = @enumFromInt(1),
+        .day = @enumFromInt(1),
         .weekday = 5,
         .hours = 0,
         .minutes = 0,
@@ -331,9 +345,9 @@ test "datetime" {
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1002131014,
-        .years = 2001,
-        .months = @enumFromInt(10),
-        .days = @enumFromInt(3),
+        .year = 2001,
+        .month = @enumFromInt(10),
+        .day = @enumFromInt(3),
         .weekday = 3,
         .hours = 17,
         .minutes = 43,
