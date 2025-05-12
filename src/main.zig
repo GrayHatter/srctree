@@ -108,7 +108,7 @@ const Auth = struct {
     pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
         const auth: *Auth = @ptrCast(@alignCast(ptr));
         const user = Types.User.findMTLSFingerprint(auth.alloc, user_id) catch |err| {
-            std.debug.print("error {}\n", .{err});
+            std.debug.print("mtls lookup error {}\n", .{err});
             return error.UnknownUser;
         };
         return .{
@@ -208,6 +208,7 @@ pub fn main() !void {
     endpoints.serve(.{
         .mode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } },
         .auth = mtls.provider(),
+        .threads = 4,
     }) catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
