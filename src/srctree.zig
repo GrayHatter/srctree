@@ -56,10 +56,15 @@ fn debug(_: *Frame) Router.Error!void {
 }
 
 fn builder(fr: *Frame, call: BuildFn) void {
-    fr.dumpDebugData();
     if (fr.request.user_agent) |ua| {
-        ua.botDetectionDump(fr.request);
-    } else std.debug.print("No User agent for request\n", .{});
+        if (ua.resolved != .bot or ua.resolved.bot.name != .googlebot) {
+            fr.dumpDebugData();
+            ua.botDetectionDump(fr.request);
+        }
+    } else {
+        std.debug.print("No User agent for request\n\n\n\n", .{});
+        fr.dumpDebugData();
+    }
 
     const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var bh: S.BodyHeaderHtml = fr.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
