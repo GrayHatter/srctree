@@ -1,21 +1,23 @@
+const root = @This();
+
+pub const verse_name = .root;
+pub const verse_routes = [_]Match{
+    verse.robotsTxt(true, 4, &.{
+        .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
+        .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
+        .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
+        .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
+        .{ .name = "barkrowler", .allow = false }, // selfish bot
+    }),
+    GET("debug", debug),
+    ROUTE("user", commitFlex),
+    STATIC("static"),
+};
+pub const verse_builder = &builder;
+pub const index = commitFlex;
+
 pub const endpoints = verse.Endpoints(.{
-    struct {
-        pub const verse_name = .root;
-        pub const verse_routes = [_]Match{
-            verse.robotsTxt(true, 4, &.{
-                .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
-                .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
-                .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
-                .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
-                .{ .name = "barkrowler", .allow = false }, // selfish bot
-            }),
-            GET("debug", debug),
-            ROUTE("user", commitFlex),
-            STATIC("static"),
-        };
-        pub const verse_builder = &builder;
-        pub const index = commitFlex;
-    },
+    root,
     @import("api.zig"),
     @import("endpoints/admin.zig"),
     @import("endpoints/gist.zig"),
