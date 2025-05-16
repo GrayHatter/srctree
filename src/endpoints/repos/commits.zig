@@ -136,7 +136,6 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
     var inline_html: bool = true;
     const udata = ctx.request.data.query.validate(PatchView) catch return error.BadData;
     if (udata.@"inline") |uinline| {
-        std.debug.print("unline {}\n", .{uinline});
         inline_html = uinline;
         ctx.cookie_jar.add(.{
             .name = "diff-inline",
