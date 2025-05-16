@@ -1,20 +1,3 @@
-const std = @import("std");
-const eql = std.mem.eql;
-const verse = @import("verse");
-const Frame = verse.Frame;
-
-const Router = verse.Router;
-const template = verse.template;
-const S = template.Structs;
-
-const ROUTE = Router.ROUTE;
-const GET = Router.GET;
-const STATIC = Router.STATIC;
-const Match = Router.Match;
-const BuildFn = Router.BuildFn;
-
-const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
-
 pub const endpoints = verse.Endpoints(.{
     struct {
         pub const verse_name = .root;
@@ -107,3 +90,20 @@ fn builder(fr: *Frame, call: BuildFn) void {
         },
     };
 }
+
+const std = @import("std");
+const eql = std.mem.eql;
+const verse = @import("verse");
+const Frame = verse.Frame;
+
+const Router = verse.Router;
+const template = verse.template;
+const S = template.Structs;
+
+const ROUTE = Router.ROUTE;
+const GET = Router.GET;
+const STATIC = Router.STATIC;
+const Match = Router.Match;
+const BuildFn = Router.BuildFn;
+
+const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
