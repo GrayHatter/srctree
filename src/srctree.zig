@@ -2,13 +2,13 @@ const root = @This();
 
 pub const verse_name = .root;
 pub const verse_routes = [_]Match{
-    verse.robotsTxt(true, 4, &.{
+    verse.robotsTxt(&.{
         .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
         .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
         .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
         .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
         .{ .name = "barkrowler", .allow = false }, // selfish bot
-    }),
+    }, .{ .extra_rules = "Disallow: /*?*\n" }),
     GET("debug", debug),
     ROUTE("user", commitFlex),
     STATIC("static"),
