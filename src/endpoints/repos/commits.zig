@@ -238,49 +238,6 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Struct
     };
 }
 
-pub fn htmlCommit(a: Allocator, c: Git.Commit, repo: []const u8, comptime top: bool) ![]HTML.E {
-    var dom = DOM.new(a);
-    dom = dom.open(HTML.element("commit", null, null));
-
-    var cd_dom = DOM.new(a);
-    cd_dom = cd_dom.open(HTML.element("data", null, null));
-    cd_dom.push(try HTML.aHrefAlloc(
-        a,
-        c.sha[0..8],
-        try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha[0..8] }),
-    ));
-    cd_dom.push(HTML.br());
-    cd_dom.push(HTML.text(Verse.abx.Html.cleanAlloc(a, c.title) catch unreachable));
-    if (c.body.len > 0) {
-        cd_dom.push(HTML.br());
-        cd_dom.push(HTML.text(Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable));
-    }
-    cd_dom = cd_dom.close();
-    const cdata = cd_dom.done();
-
-    if (!top) dom.pushSlice(cdata);
-
-    dom = dom.open(HTML.element(if (top) "top" else "foot", null, null));
-    {
-        const prnt = c.parent[0] orelse "00000000";
-        dom.push(HTML.element("author", try a.dupe(u8, c.author.name), null));
-        dom = dom.open(HTML.span(null, null));
-        dom.push(HTML.text("parent "));
-        dom.push(try HTML.aHrefAlloc(
-            a,
-            prnt[0..8],
-            try std.fmt.allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, prnt[0..8] }),
-        ));
-        dom = dom.close();
-    }
-    dom = dom.close();
-
-    if (top) dom.pushSlice(cdata);
-
-    dom = dom.close();
-    return dom.done();
-}
-
 fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.Commits {
     var parcount: usize = 0;
     for (c.parent) |p| {
