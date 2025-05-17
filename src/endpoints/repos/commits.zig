@@ -42,7 +42,7 @@ pub const PatchView = struct {
     @"inline": ?bool = null,
 };
 
-fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
+fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});
         return error.Abusive;
@@ -95,7 +95,7 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
     };
 
     var thread: []Template.Structs.Thread = &[0]Template.Structs.Thread{};
-    if (CommitMap.open(ctx.alloc, repo_name, sha)) |map| {
+    if (CommitMap.open(ctx.alloc, repo_name_, sha)) |map| {
         var dlt = map.delta(ctx.alloc) catch |err| n: {
             std.debug.print("error generating delta {}\n", .{err});
             break :n @as(?Delta, null);
@@ -147,6 +147,7 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name: []const u8, repo: G
         }
     }
 
+    const repo_name = try ctx.alloc.dupe(u8, repo_name_);
     var page = CommitPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
@@ -213,7 +214,7 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Templa
         // TODO leaks on err
         if (par_cmt == null) continue;
         par.* = .{
-            .parent_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, par_cmt.?.hex[0..8] }),
+            .repo = repo,
             .parent_sha_short = try a.dupe(u8, par_cmt.?.hex[0..8]),
         };
     }
@@ -222,14 +223,18 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Templa
 }
 
 pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Structs.Commit {
+    //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
+    const body = if (c.body.len > 3)
+        Highlight.translate(a, .markdown, c.body) catch Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable
+    else
+        Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     return .{
         .author = Verse.abx.Html.cleanAlloc(a, c.author.name) catch unreachable,
         .parents = try commitCtxParents(a, c, repo),
-        .sha_uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo, c.sha.hex[0..8] }),
+        .repo = repo,
         .sha_short = try a.dupe(u8, c.sha.hex[0..8]),
-        //.sha = try a.dupe(u8, c.sha),
         .title = Verse.abx.Html.cleanAlloc(a, c.title) catch unreachable,
-        .body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable,
+        .body = body,
     };
 }
 
@@ -452,6 +457,7 @@ const RouteData = Repos.RouteData;
 const Git = @import("../../git.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
+const Highlight = @import("../../syntax-highlight.zig");
 
 const Types = @import("../../types.zig");
 const CommitMap = Types.CommitMap;
