@@ -181,7 +181,7 @@ pub const Repo = struct {
         errdefer list.clearAndFree();
         const config_data = try self.dir.readFileAlloc(a, "config", 0xffff);
         const cfg = try Ini.Config(void).initOwned(a, config_data);
-        defer cfg.raze();
+        defer cfg.raze(a);
         for (0..cfg.ns.len) |i| {
             const ns = cfg.filter("remote", i) orelse break;
             try list.append(.{

@@ -88,11 +88,11 @@ pub const Namespace = struct {
 
 pub fn Config(Base: anytype) type {
     return struct {
-        pub const Self = @This();
-        alloc: Allocator,
         ns: []Namespace,
         data: []const u8,
         owned: ?[]const u8,
+
+        pub const Self = @This();
 
         fn buildStruct(self: Self, T: type, name: []const u8) !?T {
             var namespace: T = undefined;
@@ -158,13 +158,13 @@ pub fn Config(Base: anytype) type {
             return null;
         }
 
-        pub fn raze(self: Self) void {
+        pub fn raze(self: Self, a: Allocator) void {
             for (self.ns) |ns| {
-                ns.raze(self.alloc);
+                ns.raze(a);
             }
-            self.alloc.free(self.ns);
+            a.free(self.ns);
             if (self.owned) |owned| {
-                self.alloc.free(owned);
+                a.free(owned);
             }
         }
 
@@ -195,7 +195,6 @@ pub fn Config(Base: anytype) type {
             }
 
             return .{
-                .alloc = a,
                 .ns = try list.toOwnedSlice(),
                 .data = data,
                 .owned = null,
@@ -234,7 +233,6 @@ test "default" {
     const a = std.testing.allocator;
 
     const expected = Config(void){
-        .alloc = a,
         .ns = @constCast(&[1]Namespace{
             Namespace{
                 .name = @as([]u8, @constCast("one")),
@@ -252,7 +250,7 @@ test "default" {
     };
 
     const vtest = try Config(void).initDupe(a, "[one]\nleft = right");
-    defer vtest.raze();
+    defer vtest.raze(a);
 
     try std.testing.expectEqualDeep(expected, vtest);
 }
@@ -278,7 +276,7 @@ test "getBool" {
 
     const a = std.testing.allocator;
     const c = try Cfg.init(a, data);
-    defer c.raze();
+    defer c.raze(a);
     const ns = c.get("test data").?;
 
     try std.testing.expectEqual(true, ns.getBool("first").?);
@@ -306,7 +304,6 @@ test "commented" {
     ;
 
     const expected = Config(void){
-        .alloc = a,
         .ns = @constCast(&[1]Namespace{
             Namespace{
                 .name = @as([]u8, @constCast("open")),
@@ -324,7 +321,7 @@ test "commented" {
     };
 
     const vtest = try Config(void).initDupe(a, vut);
-    defer vtest.raze();
+    defer vtest.raze(a);
 
     try std.testing.expectEqualDeep(expected, vtest);
 }

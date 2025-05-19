@@ -75,6 +75,12 @@ pub const SrcConfig = struct {
         sock: ?[]const u8,
         remove_on_start: bool = false,
     },
+    repos: ?struct {
+        /// Directory of public repos
+        repos: ?[]const u8,
+        /// Directory of private repos
+        private_repos: ?[]const u8,
+    },
 };
 
 // No, I don't like this
@@ -153,7 +159,7 @@ pub fn main() !void {
         //error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
-    defer config.raze();
+    defer config.raze(a);
     root_ini = config;
 
     const src_conf = try config.config();
