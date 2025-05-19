@@ -422,7 +422,7 @@ const allocPrint = std.fmt.allocPrint;
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
 
-const global_config = &@import("../main.zig").global_config;
+const global_config = &@import("../main.zig").global_config.config;
 
 const Verse = @import("verse");
 const Template = Verse.template;

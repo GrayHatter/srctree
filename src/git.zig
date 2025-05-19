@@ -180,10 +180,11 @@ pub const Repo = struct {
         var list = std.ArrayList(Remote).init(a);
         errdefer list.clearAndFree();
         const config_data = try self.dir.readFileAlloc(a, "config", 0xffff);
-        const cfg = try Ini.Config(void).initOwned(a, config_data);
+        defer a.free(config_data);
+        const cfg = try Ini.Config(void).init(a, config_data);
         defer cfg.raze(a);
-        for (0..cfg.ns.len) |i| {
-            const ns = cfg.filter("remote", i) orelse break;
+        for (0..cfg.ctx.ns.len) |i| {
+            const ns = cfg.ctx.filter("remote", i) orelse break;
             try list.append(.{
                 .name = try a.dupe(u8, std.mem.trim(u8, ns.name[6..], "' \t\n\"")),
                 .url = if (ns.get("url")) |url| try a.dupe(u8, url) else null,

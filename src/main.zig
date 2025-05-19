@@ -62,15 +62,12 @@ const Options = struct {
     source_path: []const u8,
 };
 
-pub const SrcConfig = struct {
+pub const SrcConfig = Ini.Config(struct {
     owner: ?struct {
         email: ?[]const u8,
         tz: ?[]const u8,
     },
-    agent: ?struct {
-        enabled: bool = false,
-        push_upstream: bool = false,
-    },
+    agent: ?Agent,
     server: ?struct {
         sock: ?[]const u8,
         remove_on_start: bool = false,
@@ -80,11 +77,17 @@ pub const SrcConfig = struct {
         repos: ?[]const u8,
         /// Directory of private repos
         private_repos: ?[]const u8,
+        /// List of repos that should be hidden
+        @"hidden-repos": ?[]const u8,
     },
-};
+
+    pub const Agent = struct {
+        enabled: bool = false,
+        push_upstream: bool = false,
+    };
+});
 
 // No, I don't like this
-pub var root_ini: ?Ini.Config(SrcConfig) = null;
 pub var global_config: SrcConfig = undefined;
 
 const Auth = struct {
@@ -112,6 +115,7 @@ const Auth = struct {
     }
 
     pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
+        log.debug("lookup user {s}", .{user_id});
         const auth: *Auth = @ptrCast(@alignCast(ptr));
         const user = Types.User.findMTLSFingerprint(auth.alloc, user_id) catch |err| {
             std.debug.print("mtls lookup error {}\n", .{err});
@@ -155,17 +159,13 @@ pub fn main() !void {
         cfg_file = try cwd.openFile("./config.ini", .{});
     }
 
-    var config = Ini.Config(SrcConfig).fromFile(a, cfg_file.?) catch |e| switch (e) {
+    global_config = SrcConfig.fromFile(a, cfg_file.?) catch |e| switch (e) {
         //error.FileNotFound => Ini.Config.empty(),
         else => return e,
     };
-    defer config.raze(a);
-    root_ini = config;
+    defer global_config.raze(a);
 
-    const src_conf = try config.config();
-    global_config = src_conf;
-
-    if (config.get("owner")) |ns| {
+    if (global_config.ctx.get("owner")) |ns| {
         if (ns.get("email")) |email| {
             log.debug("{s}", .{email});
         }
@@ -178,10 +178,10 @@ pub fn main() !void {
     defer cache.raze();
 
     var agent_config: Repos.AgentConfig = .{
-        .g_config = &src_conf,
+        .agent = &global_config.config.agent,
     };
 
-    if (src_conf.server) |srv| {
+    if (global_config.config.server) |srv| {
         if (srv.remove_on_start) {
             cwd.deleteFile("./srctree.sock") catch |err| switch (err) {
                 error.FileNotFound => {},
@@ -190,7 +190,7 @@ pub fn main() !void {
         }
     }
 
-    if (src_conf.agent.?.enabled) {
+    if (global_config.config.agent.?.enabled) {
         const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
         defer thread.join();
     }
@@ -204,7 +204,7 @@ pub fn main() !void {
         .base = auth.provider(),
     };
 
-    if (src_conf.server) |srvcfg| {
+    if (global_config.config.server) |srvcfg| {
         if (srvcfg.sock) |sock| {
             std.debug.print("sock: {s}\n", .{sock});
         }

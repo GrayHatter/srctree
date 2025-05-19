@@ -86,42 +86,70 @@ pub const Namespace = struct {
     }
 };
 
-pub fn Config(Base: anytype) type {
+pub fn Config(B: anytype) type {
     return struct {
-        ns: []Namespace,
-        data: []const u8,
-        owned: ?[]const u8,
+        config: Base,
+        ctx: IniData,
+
+        pub const Base = B;
+
+        pub const IniData = struct {
+            ns: []Namespace,
+            data: []const u8,
+            owned: ?[]const u8,
+
+            pub fn filter(ctx: IniData, prefix: []const u8, index: usize) ?Namespace {
+                var remaining = index;
+                for (ctx.ns) |ns| {
+                    if (startsWith(u8, ns.name, prefix)) {
+                        if (remaining == 0) return ns;
+                        remaining -= 1;
+                    }
+                } else return null;
+            }
+
+            pub fn get(ctx: IniData, name: []const u8) ?Namespace {
+                for (ctx.ns) |ns| {
+                    if (eql(u8, ns.name, name)) {
+                        return ns;
+                    }
+                }
+                return null;
+            }
+
+            fn buildStruct(ctx: IniData, T: type, name: []const u8) !?T {
+                if (T == void) return {};
+                var namespace: T = undefined;
+                const ns = ctx.get(name) orelse return null;
+                inline for (@typeInfo(T).@"struct".fields) |s| {
+                    switch (s.type) {
+                        bool => {
+                            @field(namespace, s.name) = ns.getBool(s.name) orelse brk: {
+                                if (s.defaultValue()) |dv| {
+                                    break :brk dv;
+                                } else return error.SettingMissing;
+                            };
+                        },
+                        ?bool => {
+                            @field(namespace, s.name) = ns.getBool(s.name);
+                        },
+                        []const u8 => {
+                            @field(namespace, s.name) = ns.get(s.name) orelse return error.SettingMissing;
+                        },
+                        ?[]const u8 => {
+                            @field(namespace, s.name) = ns.get(s.name);
+                        },
+                        else => @compileError("not implemented"),
+                    }
+                }
+                return namespace;
+            }
+        };
 
         pub const Self = @This();
 
-        fn buildStruct(self: Self, T: type, name: []const u8) !?T {
-            var namespace: T = undefined;
-            const ns = self.get(name) orelse return null;
-            inline for (@typeInfo(T).@"struct".fields) |s| {
-                switch (s.type) {
-                    bool => {
-                        @field(namespace, s.name) = ns.getBool(s.name) orelse brk: {
-                            if (s.defaultValue()) |dv| {
-                                break :brk dv;
-                            } else return error.SettingMissing;
-                        };
-                    },
-                    ?bool => {
-                        @field(namespace, s.name) = ns.getBool(s.name);
-                    },
-                    []const u8 => {
-                        @field(namespace, s.name) = ns.get(s.name) orelse return error.SettingMissing;
-                    },
-                    ?[]const u8 => {
-                        @field(namespace, s.name) = ns.get(s.name);
-                    },
-                    else => @compileError("not implemented"),
-                }
-            }
-            return namespace;
-        }
-
-        pub fn config(self: Self) !Base {
+        fn makeBase(self: IniData) !Base {
+            if (Base == void) return {};
             var base: Base = undefined;
             inline for (@typeInfo(Base).@"struct".fields) |f| {
                 if (f.type == []const u8) continue; // Root variable not yet supported
@@ -139,43 +167,17 @@ pub fn Config(Base: anytype) type {
             return base;
         }
 
-        pub fn filter(self: Self, prefix: []const u8, index: usize) ?Namespace {
-            var remaining = index;
-            for (self.ns) |ns| {
-                if (startsWith(u8, ns.name, prefix)) {
-                    if (remaining == 0) return ns;
-                    remaining -= 1;
-                }
-            } else return null;
-        }
-
-        pub fn get(self: Self, name: []const u8) ?Namespace {
-            for (self.ns) |ns| {
-                if (eql(u8, ns.name, name)) {
-                    return ns;
-                }
-            }
-            return null;
-        }
-
         pub fn raze(self: Self, a: Allocator) void {
-            for (self.ns) |ns| {
+            for (self.ctx.ns) |ns| {
                 ns.raze(a);
             }
-            a.free(self.ns);
-            if (self.owned) |owned| {
+            a.free(self.ctx.ns);
+            if (self.ctx.owned) |owned| {
                 a.free(owned);
             }
         }
 
-        pub fn initDupe(a: Allocator, ini: []const u8) !Self {
-            const owned = try a.dupe(u8, ini);
-            var c = try init(a, owned);
-            c.owned = c.data;
-            return c;
-        }
-
-        /// `data` must outlive returned Config, use initDupe otherwise
+        /// `data` must outlive returned object
         pub fn init(a: Allocator, data: []const u8) !Self {
             var itr = splitScalar(u8, data, '\n');
 
@@ -194,62 +196,51 @@ pub fn Config(Base: anytype) type {
                 }
             }
 
-            return .{
+            const ctx: IniData = .{
                 .ns = try list.toOwnedSlice(),
                 .data = data,
                 .owned = null,
             };
-        }
 
-        /// I'm not happy with this API. I think I deleted it once already... deleted
-        /// twice incoming!
-        pub fn initOwned(a: Allocator, data: []u8) !Self {
-            var c = try init(a, data);
-            c.owned = data;
-            return c;
+            return .{
+                .config = try makeBase(ctx),
+                .ctx = ctx,
+            };
         }
 
         pub fn fromFile(a: Allocator, file: std.fs.File) !Self {
             const data = try file.readToEndAlloc(a, 1 <<| 18);
-            return try initOwned(a, data);
+            var self = try init(a, data);
+            self.ctx.data = data;
+            return self;
         }
     };
-
-    //const RealBase = @Type(.{
-    //    .Struct = .{
-    //        .layout = .auto,
-    //        .is_tuple = false,
-    //        .fields = &[_]std.builtin.Type.StructField{} ++
-    //            @typeInfo(Base).Struct.fields[0..] ++
-    //            @typeInfo(Real).Struct.fields[0..],
-    //        .decls = &[_]std.builtin.Type.Declaration{} ++
-    //            @typeInfo(Base).Struct.decls ++
-    //            @typeInfo(Real).Struct.decls,
-    //    },
-    //});
 }
 
 test "default" {
     const a = std.testing.allocator;
 
     const expected = Config(void){
-        .ns = @constCast(&[1]Namespace{
-            Namespace{
-                .name = @as([]u8, @constCast("one")),
-                .settings = @constCast(&[1]Setting{
-                    .{
-                        .name = "left",
-                        .val = "right",
-                    },
-                }),
-                .block = @constCast("left = right"),
-            },
-        }),
-        .data = @constCast("[one]\nleft = right"),
-        .owned = @constCast("[one]\nleft = right"),
+        .config = {},
+        .ctx = .{
+            .ns = @constCast(&[1]Namespace{
+                Namespace{
+                    .name = @as([]u8, @constCast("one")),
+                    .settings = @constCast(&[1]Setting{
+                        .{
+                            .name = "left",
+                            .val = "right",
+                        },
+                    }),
+                    .block = @constCast("left = right"),
+                },
+            }),
+            .data = @constCast("[one]\nleft = right"),
+            .owned = null,
+        },
     };
 
-    const vtest = try Config(void).initDupe(a, "[one]\nleft = right");
+    const vtest = try Config(void).init(a, "[one]\nleft = right");
     defer vtest.raze(a);
 
     try std.testing.expectEqualDeep(expected, vtest);
@@ -266,7 +257,8 @@ test "getBool" {
         \\sixth = FALSE
         \\seventh = f
         \\ eight = 0
-        \\    ninth = F       
+        \\    ninth = F
+    ++ "       \n" ++ // intentional trailing spaces
         \\tenth = failure
         \\
     ;
@@ -277,7 +269,7 @@ test "getBool" {
     const a = std.testing.allocator;
     const c = try Cfg.init(a, data);
     defer c.raze(a);
-    const ns = c.get("test data").?;
+    const ns = c.ctx.get("test data").?;
 
     try std.testing.expectEqual(true, ns.getBool("first").?);
     try std.testing.expectEqual(true, ns.getBool("second").?);
@@ -304,23 +296,26 @@ test "commented" {
     ;
 
     const expected = Config(void){
-        .ns = @constCast(&[1]Namespace{
-            Namespace{
-                .name = @as([]u8, @constCast("open")),
-                .settings = @constCast(
-                    &[2]Setting{
-                        .{ .name = "left", .val = "right" },
-                        .{ .name = "this", .val = "works" },
-                    },
-                ),
-                .block = @constCast(vut[7..]),
-            },
-        }),
-        .data = @constCast(vut),
-        .owned = @constCast(vut),
+        .config = {},
+        .ctx = .{
+            .ns = @constCast(&[1]Namespace{
+                Namespace{
+                    .name = @as([]u8, @constCast("open")),
+                    .settings = @constCast(
+                        &[2]Setting{
+                            .{ .name = "left", .val = "right" },
+                            .{ .name = "this", .val = "works" },
+                        },
+                    ),
+                    .block = @constCast(vut[7..]),
+                },
+            }),
+            .data = @constCast(vut),
+            .owned = null,
+        },
     };
 
-    const vtest = try Config(void).initDupe(a, vut);
+    const vtest = try Config(void).init(a, vut);
     defer vtest.raze(a);
 
     try std.testing.expectEqualDeep(expected, vtest);

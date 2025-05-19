@@ -11,19 +11,17 @@ pub fn index(vrs: *Frame) Router.Error!void {
 
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
-    if (global_ini.*) |cfg| {
-        blocks = try vrs.alloc.alloc(S.ConfigBlocks, cfg.ns.len);
-        for (cfg.ns, 0..) |ns, i| {
-            blocks[i] = .{
-                .config_name = ns.name,
-                .config_text = ns.block,
-                .count = try std.fmt.allocPrint(
-                    vrs.alloc,
-                    "{}",
-                    .{std.mem.count(u8, ns.block, "\n") + 2},
-                ),
-            };
-        }
+    blocks = try vrs.alloc.alloc(S.ConfigBlocks, global_config.ctx.ns.len);
+    for (global_config.ctx.ns, 0..) |ns, i| {
+        blocks[i] = .{
+            .config_name = ns.name,
+            .config_text = ns.block,
+            .count = try std.fmt.allocPrint(
+                vrs.alloc,
+                "{}",
+                .{std.mem.count(u8, ns.block, "\n") + 2},
+            ),
+        };
     }
 
     var page = SettingsPage.init(.{
@@ -59,4 +57,4 @@ const template = verse.template;
 const S = template.Structs;
 const Router = verse.Router;
 const RequestData = verse.RequestData.RequestData;
-const global_ini = &@import("../main.zig").root_ini;
+const global_config = &@import("../main.zig").global_config;
