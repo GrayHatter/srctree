@@ -1,17 +1,10 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-
-const Git = @import("../git.zig");
-const Repo = Git.Repo;
-const Tree = Git.Tree;
-
-pub const Agent = @This();
-
-const DEBUG_GIT_ACTIONS = false;
-
 alloc: Allocator,
 repo: ?*const Repo = null,
 cwd: ?std.fs.Dir = null,
+
+const Agent = @This();
+
+const DEBUG_GIT_ACTIONS = false;
 
 pub fn updateUpstream(self: Agent, branch: []const u8) !bool {
     const fetch = try self.exec(&[_][]const u8{
@@ -201,8 +194,10 @@ fn execCustom(self: Agent, argv: []const []const u8) !std.process.Child.RunResul
 
 fn exec(self: Agent, argv: []const []const u8) ![]u8 {
     const child = try self.execCustom(argv);
-    if (child.stderr.len > 0) std.debug.print("git Agent error\nstderr {s}\n", .{child.stderr});
-    self.alloc.free(child.stderr);
+    if (child.stderr.len > 0) {
+        std.debug.print("git Agent error\nstderr: {s}\n", .{child.stderr});
+    }
+    defer self.alloc.free(child.stderr);
 
     if (DEBUG_GIT_ACTIONS) std.debug.print(
         \\git action
@@ -210,7 +205,19 @@ fn exec(self: Agent, argv: []const []const u8) ![]u8 {
         \\'''
         \\{s}
         \\'''
+        \\{s}
+        \\'''
         \\
-    , .{ argv[1], child.stdout });
+        \\git agent
+        \\{any}
+        \\
+    , .{ argv[1], child.stdout, child.stderr, self.cwd });
     return child.stdout;
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+
+const Git = @import("../git.zig");
+const Repo = Git.Repo;
+const Tree = Git.Tree;

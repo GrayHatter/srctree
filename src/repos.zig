@@ -1,20 +1,125 @@
-const Repos = @This();
+const repos = @This();
 
 const DEBUG = false;
+pub var dirs: RepoDirs = .{};
+
+pub const RepoDirs = struct {
+    public: ?[]const u8 = "./repos",
+    private: ?[]const u8 = null,
+    secret: ?[]const u8 = null,
+
+    pub fn directory(rds: RepoDirs, vis: Visability) !std.fs.Dir {
+        var cwd = std.fs.cwd();
+        return cwd.openDir(switch (vis) {
+            .public => rds.public orelse return error.NoDirectory,
+            .private => rds.private orelse return error.NoDirectory,
+            .secret => rds.secret orelse return error.NoDirectory,
+        }, .{ .iterate = true });
+    }
+};
+
+pub const Visability = enum {
+    public,
+    private,
+    secret,
+
+    pub const len = @typeInfo(Visability).@"enum".fields.len;
+};
+
+/// public, but use with caution, might cause side channel leakage
+pub fn isHiddenVis(name: []const u8, vis: Visability) bool {
+    if (global_config.repos) |crepos| {
+        if (crepos.@"hidden-repos") |hr| {
+            // if you actually use null, I hate you!
+            var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
+            while (repo_itr.next()) |r|
+                if (eql(u8, name, r)) return switch (vis) {
+                    .public => true,
+                    .private => false,
+                    .secret => @panic("not implemented"),
+                };
+        }
+    }
+    return false;
+}
+
+/// public, but use with caution, might cause side channel leakage
+pub fn isHidden(name: []const u8) bool {
+    return isHiddenVis(name, .public);
+}
+
+pub fn exists(name: []const u8, vis: Visability) bool {
+    var dir = dirs.directory(vis) catch return false;
+    defer dir.close();
+    var itr = dir.iterate();
+    while (itr.next() catch return false) |file| {
+        if (file.kind != .directory and file.kind != .sym_link) continue;
+        if (eql(u8, file.name, name)) {
+            // lol, crap, there's a side channel leak no matter where I put
+            // this... given near zero thought I've decided this is the better
+            // option
+            if (isHiddenVis(name, vis)) return false;
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn open(name: []const u8, vis: Visability) !?Git.Repo {
+    if (isHiddenVis(name, vis)) return null;
+    var root = try dirs.directory(vis);
+    defer root.close();
+    const dir = root.openDir(name, .{}) catch |err| switch (err) {
+        error.FileNotFound => return null,
+        error.NotDir => return null,
+        else => return err,
+    };
+    return try Git.Repo.init(dir);
+}
 
 pub fn allNames(a: Allocator) ![][]u8 {
     var list = std.ArrayList([]u8).init(a);
 
-    const cwd = std.fs.cwd();
-    var repo_dirs = cwd.openDir("repos", .{ .iterate = true }) catch unreachable;
-    defer repo_dirs.close();
-    var itr_repo = repo_dirs.iterate();
+    var dir_set = try dirs.directory(.public);
+    defer dir_set.close();
+    var itr_repo = dir_set.iterate();
 
     while (itr_repo.next() catch null) |dir| {
         if (dir.kind != .directory and dir.kind != .sym_link) continue;
+        if (isHidden(dir.name)) continue;
         try list.append(try a.dupe(u8, dir.name));
     }
     return try list.toOwnedSlice();
+}
+
+pub const RepoIterator = struct {
+    dir: std.fs.Dir,
+    itr: std.fs.Dir.Iterator,
+    vis: Visability,
+    /// only valid until the following call to next()
+    current_name: ?[]const u8 = null,
+
+    pub fn next(ri: *RepoIterator) !?Git.Repo {
+        while (try ri.itr.next()) |file| {
+            if (file.kind != .directory and file.kind != .sym_link) continue;
+            if (file.name[0] == '.') continue;
+            if (isHidden(file.name)) continue;
+            const rdir = ri.dir.openDir(file.name, .{}) catch continue;
+            ri.current_name = file.name;
+            return try Git.Repo.init(rdir);
+        }
+        ri.current_name = null;
+        return null;
+    }
+};
+
+pub fn allRepoIterator(vis: Visability) !RepoIterator {
+    const dir = try dirs.directory(vis);
+    return .{
+        .dir = dir,
+        .itr = dir.iterate(),
+        .vis = vis,
+    };
 }
 
 pub fn containsName(name: []const u8) bool {
@@ -146,3 +251,4 @@ const eql = std.mem.eql;
 
 const Git = @import("git.zig");
 const SrcConfig = @import("main.zig").SrcConfig;
+const global_config = &@import("main.zig").global_config.config;

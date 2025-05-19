@@ -5,7 +5,7 @@ const NetworkPage = template.PageData("network.html");
 pub fn index(ctx: *Frame) Error!void {
     var dom = DOM.new(ctx.alloc);
 
-    const list = try Repos.allNames(ctx.alloc);
+    const list = Repos.allNames(ctx.alloc) catch return error.Unknown;
     const cwd = std.fs.cwd();
     for (list) |reponame| {
         var b: [0x800]u8 = undefined;

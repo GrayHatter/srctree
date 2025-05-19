@@ -46,15 +46,7 @@ pub const RouteData = struct {
     }
 
     pub fn exists(self: RouteData) bool {
-        var cwd = std.fs.cwd();
-        var dir = cwd.openDir("./repos", .{ .iterate = true }) catch return false;
-        defer dir.close();
-        var itr = dir.iterate();
-        while (itr.next() catch return false) |file| {
-            if (file.kind != .directory and file.kind != .sym_link) continue;
-            if (std.mem.eql(u8, file.name, self.name)) return true;
-        }
-        return false;
+        return repos.exists(self.name, .public);
     }
 };
 
@@ -211,67 +203,57 @@ const RepoSortReq = struct {
 };
 
 fn list(ctx: *Frame) Error!void {
-    var cwd = std.fs.cwd();
-
     const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.BadData;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
-    if (cwd.openDir("./repos", .{ .iterate = true })) |idir| {
-        var repos = std.ArrayList(Git.Repo).init(ctx.alloc);
-        var itr = idir.iterate();
-        while (itr.next() catch return Error.Unknown) |file| {
-            if (file.kind != .directory and file.kind != .sym_link) continue;
-            if (file.name[0] == '.') continue;
-            const rdir = idir.openDir(file.name, .{}) catch continue;
-            var rpo = Git.Repo.init(rdir) catch continue;
-            rpo.loadData(ctx.alloc) catch return error.Unknown;
-            rpo.repo_name = ctx.alloc.dupe(u8, file.name) catch null;
+    var repo_iter = repos.allRepoIterator(.public) catch return error.Unknown;
+    var current_repos = std.ArrayList(Git.Repo).init(ctx.alloc);
+    while (repo_iter.next() catch return Error.Unknown) |rpo_| {
+        var rpo = rpo_;
+        rpo.loadData(ctx.alloc) catch return error.Unknown;
+        rpo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
-            if (rpo.tags != null) {
-                std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
-            }
-            try repos.append(rpo);
+        if (rpo.tags != null) {
+            std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
         }
-
-        std.sort.heap(Git.Repo, repos.items, repoctx{
-            .alloc = ctx.alloc,
-            .by = if (tag_sort) .tag else .commit,
-        }, repoSorterNew);
-
-        var repo_buttons: []const u8 = "";
-        if (ctx.user != null and ctx.user.?.valid()) {
-            repo_buttons =
-                \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
-            ;
-        }
-
-        const repos_compiled = try ctx.alloc.alloc(template.Structs.RepoList, repos.items.len);
-        for (repos.items, repos_compiled) |*repo, *compiled| {
-            defer repo.raze();
-            compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
-                return error.Unknown;
-            };
-        }
-
-        //var btns = [1]template.Structs.NavButtons{.{
-        //    .name = "inbox",
-        //    .extra = 0,
-        //    .url = "/inbox",
-        //}};
-
-        var page = ReposPage.init(.{
-            .meta_head = .{ .open_graph = .{} },
-            .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-
-            .buttons = .{ .buttons = repo_buttons },
-            .repo_list = repos_compiled,
-        });
-
-        try ctx.sendPage(&page);
-    } else |err| {
-        std.debug.print("unable to open given dir {}\n", .{err});
-        return;
+        try current_repos.append(rpo);
     }
+
+    std.sort.heap(Git.Repo, current_repos.items, repoctx{
+        .alloc = ctx.alloc,
+        .by = if (tag_sort) .tag else .commit,
+    }, repoSorterNew);
+
+    var repo_buttons: []const u8 = "";
+    if (ctx.user != null and ctx.user.?.valid()) {
+        repo_buttons =
+            \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
+        ;
+    }
+
+    const repos_compiled = try ctx.alloc.alloc(template.Structs.RepoList, current_repos.items.len);
+    for (current_repos.items, repos_compiled) |*repo, *compiled| {
+        defer repo.raze();
+        compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
+            return error.Unknown;
+        };
+    }
+
+    //var btns = [1]template.Structs.NavButtons{.{
+    //    .name = "inbox",
+    //    .extra = 0,
+    //    .url = "/inbox",
+    //}};
+
+    var page = ReposPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+
+        .buttons = .{ .buttons = repo_buttons },
+        .repo_list = repos_compiled,
+    });
+
+    try ctx.sendPage(&page);
 }
 
 fn dupeDir(a: Allocator, name: []const u8) ![]u8 {
@@ -292,10 +274,7 @@ fn treeBlob(ctx: *Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     _ = ctx.uri.next();
 
-    var cwd = std.fs.cwd();
-    const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = Git.Repo.init(dir) catch return error.Unknown;
+    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze();
 
@@ -419,14 +398,12 @@ fn blame(ctx: *Frame) Error!void {
     _ = ctx.uri.next();
     const blame_file = ctx.uri.rest();
 
-    var cwd = std.fs.cwd();
-    const fname = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    const dir = cwd.openDir(fname, .{}) catch return error.Unknown;
-    var repo = Git.Repo.init(dir) catch return error.Unknown;
+    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
     defer repo.raze();
 
     var actions = repo.getAgent(ctx.alloc);
-    actions.cwd = cwd.openDir(fname, .{}) catch unreachable;
+    actions.cwd = if (!repo.bare) repo.dir.openDir("..", .{}) catch unreachable else repo.dir;
+    defer if (!repo.bare) actions.cwd.?.close();
     const git_blame = actions.blame(blame_file) catch unreachable;
 
     const parsed = parseBlame(ctx.alloc, git_blame) catch unreachable;
@@ -761,10 +738,7 @@ const TagPage = template.PageData("repo-tags.html");
 fn tagsList(ctx: *Frame) Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
-    var cwd = std.fs.cwd();
-    const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = Git.Repo.init(dir) catch return error.Unknown;
+    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze();
 
@@ -811,7 +785,7 @@ const RequestData = verse.RequestData.RequestData;
 
 const Humanize = @import("../humanize.zig");
 const Ini = @import("../ini.zig");
-const Repos = @import("../repos.zig");
+const repos = @import("../repos.zig");
 const Git = @import("../git.zig");
 const Highlight = @import("../syntax-highlight.zig");
 

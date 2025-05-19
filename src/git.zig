@@ -1,5 +1,3 @@
-const Ini = @import("ini.zig");
-
 pub const Actor = @import("git/actor.zig");
 pub const Agent = @import("git/agent.zig");
 pub const Blob = @import("git/blob.zig");
@@ -1331,6 +1329,8 @@ test "list remotes" {
     try std.testing.expectEqualStrings("github", remotes[0].name);
     try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
 }
+
+const Ini = @import("ini.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
