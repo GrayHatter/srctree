@@ -24,7 +24,10 @@ a {
 		font-family: 'Titillium Web', sans-serif;
 		padding: 6px 18px;
 		border: 2px outset gray;
-		border-bottom-color: #7a003f;
+		border-bottom-color: #4e0029;
+		&:hover, &.active {
+			border-bottom: #880046 solid 2px;
+		}
 	}
 }
 
@@ -59,8 +62,11 @@ header {
 		justify-content: space-between;
 		> li {
 			margin: 0 0.3rem;
-			border-bottom: #7a003f solid 2px;
+			border-bottom: #4e0029 solid 2px;
 			border-radius: 0 0 2px 2px;
+			&:hover, &.active {
+				border-bottom: #880046 solid 2px;
+			}
 			a {
 				font-size: 108%;
 				padding: 0 1rem;
@@ -95,11 +101,14 @@ button {
 	font-size: 108%;
 	font-weight: 600;
 	background-color: #222;
-	border-bottom-color: #7a003f;
+	border-bottom-color: #4e0029;
 	border-radius: 3px;
 	font-family: 'Titillium Web', sans-serif;
 	padding: 6px 18px;
 
+	&:hover, &.active {
+		border-bottom: #880046 solid 2px;
+	}
 	&.red {
 		color: red;
 	}
@@ -224,7 +233,7 @@ repo {
 	desc {
 		display: block;
 		border: 1px gray solid;
-		border-bottom: #7a003f solid 2px;
+		border-bottom: #4e0029 solid 2px;
 		margin-bottom: 20px;
 		min-height: 50px;
 		display: block;
@@ -309,7 +318,7 @@ search {
 
 actionable {
 	border: 1px gray solid;
-	border-bottom: #7a003f solid 2px;
+	border-bottom: #4e0029 solid 2px;
 	border-radius: 0 0 4px 4px;
 	display: block;
 	margin-bottom: 20px;
@@ -375,10 +384,10 @@ commit {
 	}
 	> top {
 		border-radius: 3px 3px 0 0;
-		border-top: #7a003f solid 2px;
+		border-top: #4e0029 solid 2px;
 	}
 	> foot {
-		border-bottom: #7a003f solid 2px;
+		border-bottom: #4e0029 solid 2px;
 		border-radius: 0 0 3px 3px;
 	}
 }
