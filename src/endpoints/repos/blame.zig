@@ -1,30 +1,30 @@
 const BlamePage = PageData("blame.html");
 
-pub fn blame(ctx: *Frame) Router.Error!void {
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+pub fn blame(f: *Frame) Router.Error!void {
+    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
     std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
-    _ = ctx.uri.next();
-    const blame_file = ctx.uri.rest();
+    _ = f.uri.next();
+    const blame_file = f.uri.rest();
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
     defer repo.raze();
 
-    var actions = repo.getAgent(ctx.alloc);
+    var actions = repo.getAgent(f.alloc);
     actions.cwd = if (!repo.bare) repo.dir.openDir("..", .{}) catch unreachable else repo.dir;
     defer if (!repo.bare) actions.cwd.?.close();
     const git_blame = actions.blame(blame_file) catch unreachable;
 
-    const parsed = parseBlame(ctx.alloc, git_blame) catch unreachable;
-    var source_lines = std.ArrayList(u8).init(ctx.alloc);
+    const parsed = parseBlame(f.alloc, git_blame) catch unreachable;
+    var source_lines = std.ArrayList(u8).init(f.alloc);
     for (parsed.lines) |line| {
         try source_lines.appendSlice(line.line);
         try source_lines.append('\n');
     }
 
     const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang| fmt: {
-        var pre = try Highlight.highlight(ctx.alloc, lang, source_lines.items);
+        var pre = try Highlight.highlight(f.alloc, lang, source_lines.items);
         break :fmt pre[28..][0 .. pre.len - 38];
-    } else verse.abx.Html.cleanAlloc(ctx.alloc, source_lines.items) catch return error.Unknown;
+    } else verse.abx.Html.cleanAlloc(f.alloc, source_lines.items) catch return error.Unknown;
 
     var litr = std.mem.splitScalar(u8, formatted, '\n');
     for (parsed.lines) |*line| {
@@ -35,18 +35,18 @@ pub fn blame(ctx: *Frame) Router.Error!void {
         }
     }
 
-    const wrapped_blames = try wrapLineNumbersBlame(ctx.alloc, parsed.lines, parsed.map, rd.name);
-    //var btns = navButtons(ctx) catch return error.Unknown;
+    const wrapped_blames = try wrapLineNumbersBlame(f.alloc, parsed.lines, parsed.map, rd.name);
+    //var btns = navButtons(f) catch return error.Unknown;
 
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .filename = verse.abx.Html.cleanAlloc(ctx.alloc, blame_file) catch unreachable,
+        .body_header = f.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .filename = verse.abx.Html.cleanAlloc(f.alloc, blame_file) catch unreachable,
         .blame_lines = wrapped_blames,
     });
 
-    ctx.status = .ok;
-    try ctx.sendPage(&page);
+    f.status = .ok;
+    try f.sendPage(&page);
 }
 
 fn wrapLineNumbersBlame(
