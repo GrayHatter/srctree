@@ -32,14 +32,14 @@ pub fn treeBlob(ctx: *Frame) Router.Error!void {
         } else if (eql(u8, verb, "tree")) {
             var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
             files = mkTree(ctx.alloc, &repo, &ctx.uri, files) catch return error.Unknown;
-            return repos_.tree(ctx, &repo, &files);
+            return tree(ctx, &repo, &files);
         } else if (eql(u8, verb, "")) {
             var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-            return repos_.tree(ctx, &repo, &files);
+            return tree(ctx, &repo, &files);
         } else return error.InvalidURI;
     } else {
         var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-        return repos_.tree(ctx, &repo, &files);
+        return tree(ctx, &repo, &files);
     }
 }
 
@@ -149,6 +149,7 @@ fn newRepo(ctx: *Frame) Router.Error!void {
     return error.NotImplemented;
 }
 
+const tree = @import("tree.zig").tree;
 const repos_ = @import("../repos.zig");
 const RouteData = repos_.RouteData;
 
