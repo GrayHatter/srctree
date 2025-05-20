@@ -83,9 +83,20 @@ pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     }
 
     //var btns = navButtons(ctx) catch return error.Unknown;
+    var page_desc: ?[]const u8 = repo.description(ctx.alloc) catch null;
+    if (page_desc) |pd| {
+        if (std.mem.startsWith(u8, pd, "Unnamed repository; edit this file"))
+            page_desc = null;
+    }
+
+    const page_title = try allocPrint(ctx.alloc, "{s}{s}{s} - srctree", .{
+        rd.name,
+        if (page_desc) |_| " - " else "",
+        page_desc orelse "",
+    });
 
     var page = TreePage.init(.{
-        .meta_head = .{ .open_graph = .{} },
+        .meta_head = .{ .title = page_title, .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .upstream = null,
         .repo_name = rd.name,
