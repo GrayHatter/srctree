@@ -13,7 +13,7 @@ pub const routes = [_]Router.Match{
     ROUTE("commits", &Commits.router),
     ROUTE("diffs", &Diffs.router),
     ROUTE("issues", &Issues.router),
-    ROUTE("tags", tagsList),
+    ROUTE("tags", tags.list),
     ROUTE("tree", treeBlob),
 } ++ gitweb.endpoints;
 
@@ -109,10 +109,6 @@ const repoctx = struct {
     } = .commit,
 };
 
-fn tagSorter(_: void, l: Git.Tag, r: Git.Tag) bool {
-    return l.tagger.timestamp >= r.tagger.timestamp;
-}
-
 fn repoSorterNew(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     return !repoSorter(ctx, l, r);
 }
@@ -171,10 +167,10 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
 
     var tag: ?S.Tag = null;
 
-    if (repo.tags) |tags| {
+    if (repo.tags) |rtags| {
         tag = .{
-            .tag = tags[0].name,
-            .title = try allocPrint(a, "created {}", .{Humanize.unix(tags[0].tagger.timestamp)}),
+            .tag = rtags[0].name,
+            .title = try allocPrint(a, "created {}", .{Humanize.unix(rtags[0].tagger.timestamp)}),
             .uri = try allocPrint(a, "/repo/{s}/tags", .{name}),
         };
     }
@@ -207,7 +203,7 @@ fn list(ctx: *Frame) Router.Error!void {
         rpo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
         if (rpo.tags != null) {
-            std.sort.heap(Git.Tag, rpo.tags.?, {}, tagSorter);
+            std.sort.heap(Git.Tag, rpo.tags.?, {}, tags.sort);
         }
         try current_repos.append(rpo);
     }
@@ -232,12 +228,6 @@ fn list(ctx: *Frame) Router.Error!void {
         };
     }
 
-    //var btns = [1]template.Structs.NavButtons{.{
-    //    .name = "inbox",
-    //    .extra = 0,
-    //    .url = "/inbox",
-    //}};
-
     var page = ReposPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
@@ -249,39 +239,10 @@ fn list(ctx: *Frame) Router.Error!void {
     try ctx.sendPage(&page);
 }
 
-const TreePage = PageData("tree.html");
-
-const TagPage = PageData("repo-tags.html");
-
-fn tagsList(ctx: *Frame) Router.Error!void {
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-
-    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze();
-
-    std.sort.heap(Git.Tag, repo.tags.?, {}, tagSorter);
-
-    const tstack = try ctx.alloc.alloc(S.Tags, repo.tags.?.len);
-
-    for (repo.tags.?, tstack) |tag, *html_| {
-        html_.name = tag.name;
-    }
-
-    //var btns = navButtons(ctx) catch return error.Unknown;
-    var page = TagPage.init(.{
-        .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .upstream = null,
-        .tags = tstack,
-    });
-
-    try ctx.sendPage(&page);
-}
-
 const treeBlob = @import("repos/blob.zig").treeBlob;
 const tree = @import("repos/tree.zig").tree;
 const blame = @import("repos/blame.zig").blame;
+const tags = @import("repos/tags.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
