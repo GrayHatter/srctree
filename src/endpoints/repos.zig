@@ -50,12 +50,12 @@ pub const RouteData = struct {
     }
 };
 
-pub fn navButtons(ctx: *Frame) ![2]template.Structs.NavButtons {
+pub fn navButtons(ctx: *Frame) ![2]S.NavButtons {
     const rd = RouteData.make(&ctx.uri) orelse unreachable;
     if (!rd.exists()) unreachable;
     var i_count: usize = 0;
     var d_count: usize = 0;
-    var itr = Types.Delta.iterator(ctx.alloc, rd.name);
+    var itr = Delta.iterator(ctx.alloc, rd.name);
     while (itr.next()) |dlt| {
         switch (dlt.attach) {
             .diff => d_count += 1,
@@ -65,7 +65,7 @@ pub fn navButtons(ctx: *Frame) ![2]template.Structs.NavButtons {
         dlt.raze(ctx.alloc);
     }
 
-    const btns = [2]template.Structs.NavButtons{
+    const btns = [2]S.NavButtons{
         .{
             .name = "issues",
             .extra = i_count,
@@ -155,7 +155,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !template.Structs.RepoList {
+fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
     var desc: ?[]const u8 = try repo.description(a);
     if (std.mem.startsWith(u8, desc.?, "Unnamed repository; edit this file")) {
         desc = null;
@@ -176,7 +176,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !template.Structs.R
         );
     } else |_| {}
 
-    var tag: ?template.Structs.Tag = null;
+    var tag: ?S.Tag = null;
 
     if (repo.tags) |tags| {
         tag = .{
@@ -196,19 +196,19 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !template.Structs.R
     };
 }
 
-const ReposPage = template.PageData("repos.html");
+const ReposPage = PageData("repos.html");
 
 const RepoSortReq = struct {
     sort: ?[]const u8,
 };
 
-fn list(ctx: *Frame) Error!void {
+fn list(ctx: *Frame) Router.Error!void {
     const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.BadData;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
     var repo_iter = repos.allRepoIterator(.public) catch return error.Unknown;
     var current_repos = std.ArrayList(Git.Repo).init(ctx.alloc);
-    while (repo_iter.next() catch return Error.Unknown) |rpo_| {
+    while (repo_iter.next() catch return error.Unknown) |rpo_| {
         var rpo = rpo_;
         rpo.loadData(ctx.alloc) catch return error.Unknown;
         rpo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
@@ -231,7 +231,7 @@ fn list(ctx: *Frame) Error!void {
         ;
     }
 
-    const repos_compiled = try ctx.alloc.alloc(template.Structs.RepoList, current_repos.items.len);
+    const repos_compiled = try ctx.alloc.alloc(S.RepoList, current_repos.items.len);
     for (current_repos.items, repos_compiled) |*repo, *compiled| {
         defer repo.raze();
         compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
@@ -340,9 +340,9 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct {
     };
 }
 
-const BlamePage = template.PageData("blame.html");
+const BlamePage = PageData("blame.html");
 
-fn blame(ctx: *Frame) Error!void {
+fn blame(ctx: *Frame) Router.Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
     _ = ctx.uri.next();
@@ -416,7 +416,7 @@ fn wrapLineNumbersBlame(
 }
 
 fn htmlReadme(a: Allocator, readme: []const u8) ![]html.E {
-    var dom = DOM.new(a);
+    var dom = html.DOM.new(a);
 
     dom = dom.open(html.element("readme", null, null));
     dom.push(html.element("intro", "README.md", null));
@@ -437,12 +437,12 @@ fn isReadme(name: []const u8) bool {
 
 fn drawFileLine(
     a: Allocator,
-    ddom: *DOM,
+    ddom: *html.DOM,
     rname: []const u8,
     base: []const u8,
     obj: Git.Blob,
     ch: Git.ChangeSet,
-) !*DOM {
+) !*html.DOM {
     var dom = ddom;
     if (obj.isFile()) {
         dom = try drawBlob(a, dom, rname, base, obj);
@@ -459,7 +459,7 @@ fn drawFileLine(
     return dom.close();
 }
 
-fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
+fn drawBlob(a: Allocator, ddom: *html.DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*html.DOM {
     var dom = ddom.open(html.element("file", null, null));
     const file_link = try allocPrint(a, "/repo/{s}/blob/{s}{s}", .{ rname, base, obj.name });
 
@@ -472,7 +472,7 @@ fn drawBlob(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
     return dom;
 }
 
-fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*DOM {
+fn drawTree(a: Allocator, ddom: *html.DOM, rname: []const u8, base: []const u8, obj: Git.Blob) !*html.DOM {
     var dom = ddom.open(html.element("tree", null, null));
     const file_link = try allocPrint(a, "/repo/{s}/tree/{s}{s}/", .{ rname, base, obj.name });
 
@@ -484,9 +484,9 @@ fn drawTree(a: Allocator, ddom: *DOM, rname: []const u8, base: []const u8, obj: 
     return dom;
 }
 
-const TreePage = template.PageData("tree.html");
+const TreePage = PageData("tree.html");
 
-pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
+pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     //const head = if (repo.head) |h| switch (h) {
     //    .sha => |s| s.hex[0..],
     //    .branch => |b| b.name,
@@ -501,7 +501,7 @@ pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
     _ = ctx.uri.next();
     const uri_base = ctx.uri.rest();
 
-    var dom = DOM.new(ctx.alloc);
+    var dom = html.DOM.new(ctx.alloc);
 
     dom = dom.open(html.element("repo", null, &html.Attr.class("landing")));
 
@@ -582,9 +582,9 @@ pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Error!void {
     try ctx.sendPage(&page);
 }
 
-const TagPage = template.PageData("repo-tags.html");
+const TagPage = PageData("repo-tags.html");
 
-fn tagsList(ctx: *Frame) Error!void {
+fn tagsList(ctx: *Frame) Router.Error!void {
     const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
@@ -593,7 +593,7 @@ fn tagsList(ctx: *Frame) Error!void {
 
     std.sort.heap(Git.Tag, repo.tags.?, {}, tagSorter);
 
-    const tstack = try ctx.alloc.alloc(template.Structs.Tags, repo.tags.?.len);
+    const tstack = try ctx.alloc.alloc(S.Tags, repo.tags.?.len);
 
     for (repo.tags.?, tstack) |tag, *html_| {
         html_.name = tag.name;
@@ -615,36 +615,23 @@ const treeBlob = @import("repos/blob.zig").treeBlob;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
-const bPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
-const startsWith = std.mem.startsWith;
-const splitScalar = std.mem.splitScalar;
 
 const verse = @import("verse");
 const Frame = verse.Frame;
-const template = verse.template;
-const html = template.html;
-const DOM = html.DOM;
 const Router = verse.Router;
-const S = template.Structs;
-const elm = html.element;
-const Error = Router.Error;
+const PageData = verse.template.PageData;
+const html = verse.template.html;
+const S = verse.template.Structs;
 const ROUTE = Router.ROUTE;
-const POST = Router.POST;
-const GET = Router.GET;
-const RequestData = verse.RequestData.RequestData;
-
 const Humanize = @import("../humanize.zig");
-const Ini = @import("../ini.zig");
 const repos = @import("../repos.zig");
 const Git = @import("../git.zig");
 const Highlight = @import("../syntax-highlight.zig");
-
 const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
 const Issues = @import("repos/issues.zig");
-const htmlCommit = Commits.htmlCommit;
 
-const Types = @import("../types.zig");
+const Delta = @import("../types.zig").Delta;
 
 const gitweb = @import("../gitweb.zig");

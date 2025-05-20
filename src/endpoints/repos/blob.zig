@@ -155,7 +155,6 @@ const RouteData = repos_.RouteData;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
-//const bPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
@@ -163,29 +162,8 @@ const splitScalar = std.mem.splitScalar;
 const verse = @import("verse");
 const Frame = verse.Frame;
 const S = verse.template.Structs;
-//const template = verse.template;
 const PageData = verse.template.PageData;
-//const html = template.html;
-//const DOM = html.DOM;
 const Router = verse.Router;
-//const elm = html.element;
-//const Error = Router.Error;
-//const ROUTE = Router.ROUTE;
-//const POST = Router.POST;
-//const GET = Router.GET;
-//const RequestData = verse.RequestData.RequestData;
-//
-//const Humanize = @import("../humanize.zig");
-//const Ini = @import("../ini.zig");
 const repos = @import("../../repos.zig");
 const Git = @import("../../git.zig");
 const Highlight = @import("../../syntax-highlight.zig");
-//
-//const Commits = @import("repos/commits.zig");
-//const Diffs = @import("repos/diffs.zig");
-//const Issues = @import("repos/issues.zig");
-//const htmlCommit = Commits.htmlCommit;
-//
-//const Types = @import("../types.zig");
-//
-//const gitweb = @import("../gitweb.zig");
