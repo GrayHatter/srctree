@@ -176,7 +176,7 @@ pub fn commitPatch(ctx: *Verse.Frame, sha: []const u8, repo: Git.Repo) Error!voi
         //    diff = diff[i..];
         //}
         ctx.status = .ok;
-        ctx.headers.addCustom(ctx.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
+        ctx.headers.addCustom("Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
         ctx.sendHeaders() catch return Error.Unknown;
         ctx.sendRawSlice(diff) catch return Error.Unknown;
     }

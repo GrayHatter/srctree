@@ -214,7 +214,6 @@ pub fn main() !void {
     endpoints.serve(.{
         .mode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } },
         .auth = mtls.provider(),
-        .threads = 4,
     }) catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
