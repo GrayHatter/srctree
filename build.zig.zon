@@ -1,7 +1,8 @@
 .{
-    .name = "srctree",
+    .name = .srctree,
     .version = "0.0.0",
-    .minimum_zig_version = "0.13.0",
+    .minimum_zig_version = "0.14.0",
+    .fingerprint = 0x4eee355ffa6e50b7,
     .dependencies = .{
         .verse = .{
             //.url = "git+https://srctree.gr.ht/repo/verse",

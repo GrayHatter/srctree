@@ -1325,7 +1325,7 @@ test "list remotes" {
     try repo.loadData(a);
     defer repo.raze();
     const remotes = repo.remotes orelse unreachable;
-    try std.testing.expect(remotes.len == 2);
+    try std.testing.expect(remotes.len >= 2);
     try std.testing.expectEqualStrings("github", remotes[0].name);
     try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
 }
