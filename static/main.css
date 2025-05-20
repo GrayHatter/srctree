@@ -1,6 +1,5 @@
 html {
-	background: #222222;
-	background-image: linear-gradient(0deg, #290015 0%, #222222 6%);
+	background: #1c1c1a;
 	color-scheme: light dark;
 	color: #FFFFEB;
 	min-height: 100%;
@@ -10,10 +9,10 @@ body { margin: 0 auto; }
 
 a {
 	text-decoration: none;
-	color: #FFFFEB;
+	color: #FFFFBE;
 	&:visited {
 		text-decoration: none;
-		color: #FFFFEB;
+		color: #FFFFBE;
 	}
 	&.btn {
 		display: inline-block;
@@ -24,7 +23,7 @@ a {
 		font-family: 'Titillium Web', sans-serif;
 		padding: 6px 18px;
 		border: 2px outset gray;
-		border-bottom-color: #7a003f;
+		border-bottom-color: #a30054;
 	}
 }
 
@@ -59,7 +58,7 @@ header {
 		justify-content: space-between;
 		> li {
 			margin: 0 0.3rem;
-			border-bottom: #7a003f solid 2px;
+			border-bottom: #a30054 solid 2px;
 			border-radius: 0 0 2px 2px;
 			a {
 				font-size: 108%;
@@ -95,7 +94,7 @@ button {
 	font-size: 108%;
 	font-weight: 600;
 	background-color: #222;
-	border-bottom-color: #7a003f;
+	border-bottom-color: #a30054;
 	border-radius: 3px;
 	font-family: 'Titillium Web', sans-serif;
 	padding: 6px 18px;
@@ -224,7 +223,7 @@ repo {
 	desc {
 		display: block;
 		border: 1px gray solid;
-		border-bottom: #7a003f solid 2px;
+		border-bottom: #a30054 solid 2px;
 		margin-bottom: 20px;
 		min-height: 50px;
 		display: block;
@@ -309,7 +308,7 @@ search {
 
 actionable {
 	border: 1px gray solid;
-	border-bottom: #7a003f solid 2px;
+	border-bottom: #a30054 solid 2px;
 	border-radius: 0 0 4px 4px;
 	display: block;
 	margin-bottom: 20px;
@@ -375,10 +374,10 @@ commit {
 	}
 	> top {
 		border-radius: 3px 3px 0 0;
-		border-top: #7a003f solid 2px;
+		border-top: #a30054 solid 2px;
 	}
 	> foot {
-		border-bottom: #7a003f solid 2px;
+		border-bottom: #a30054 solid 2px;
 		border-radius: 0 0 3px 3px;
 	}
 }
