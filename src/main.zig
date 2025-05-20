@@ -210,9 +210,14 @@ pub fn main() !void {
         }
     }
 
+    var mode: verse.Server.RunMode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } };
+    if (runmode == .http) {
+        mode = .{ .http = .{} };
+    }
+
     var endpoints = Srctree.endpoints.init(a);
     endpoints.serve(.{
-        .mode = .{ .zwsgi = .{ .file = "./srctree.sock", .chmod = 0o777 } },
+        .mode = mode,
         .auth = mtls.provider(),
     }) catch {
         if (@errorReturnTrace()) |trace| {
