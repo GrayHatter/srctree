@@ -1330,6 +1330,30 @@ test "list remotes" {
     try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
 }
 
+test "parse commit" {
+    const commit_data =
+        \\tree 863dce25c7370ca052f0efddd1e3aa73569fb37b
+        \\parent ac7bc0f8c6d88e2595d6147f79d88b91476acdde
+        \\author Gregory Mullen <github@gr.ht> 1747760721 -0700
+        \\committer Gregory Mullen <github@gr.ht> 1747760721 -0700
+        \\
+        \\clean up blame.zig
+    ;
+
+    const commit = try Commit.init(SHA.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), commit_data);
+    const parents: [9]?SHA = .{ SHA.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), null, null, null, null, null, null, null, null };
+    try std.testing.expectEqualSlices(?SHA, &parents, &commit.parent);
+    try std.testing.expectEqual(SHA.init("863dce25c7370ca052f0efddd1e3aa73569fb37b"), commit.tree);
+    try std.testing.expectEqualStrings("Gregory Mullen", commit.author.name);
+    try std.testing.expectEqualStrings("github@gr.ht", commit.author.email);
+    try std.testing.expectEqual(1747760721, commit.author.timestamp);
+    try std.testing.expectEqualStrings("-0700", commit.author.tzstr);
+    try std.testing.expectEqualStrings("Gregory Mullen", commit.committer.name);
+    try std.testing.expectEqualStrings("github@gr.ht", commit.committer.email);
+    try std.testing.expectEqual(1747760721, commit.committer.timestamp);
+    try std.testing.expectEqualStrings("-0700", commit.committer.tzstr);
+}
+
 const Ini = @import("ini.zig");
 
 const std = @import("std");

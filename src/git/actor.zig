@@ -18,9 +18,12 @@ pub fn make(data: []const u8) !Actor {
     const email = itr.next() orelse return error.ActorParse;
     const name = itr.rest();
 
+    const email_start = if (std.mem.indexOfScalar(u8, email, '<')) |index| index + 1 else 0;
+    const email_end = std.mem.indexOfScalar(u8, email, '>') orelse email.len;
+
     return .{
         .name = name,
-        .email = email,
+        .email = email[email_start..email_end],
         .timestr = data[epstart..data.len],
         .tzstr = tzstr,
         .timestamp = std.fmt.parseInt(i64, epoch, 10) catch return error.ActorParse,
