@@ -227,7 +227,7 @@ const UserCommitsPage = Template.PageData("user_commits.html");
 
 pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var nowish = DateTime.now();
-    var email: []const u8 = undefined;
+    var email: []const u8 = "";
     var tz_offset: ?i17 = null;
     var query = ctx.request.data.query.validator();
     const user = query.optionalItem("user");
@@ -403,7 +403,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     var page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
         .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
         .flex_weeks = flex_weeks,
         .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),

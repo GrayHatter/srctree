@@ -26,7 +26,9 @@ pub fn index(vrs: *Frame) Router.Error!void {
 
     var page = SettingsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch .{
+            .nav = .{ .nav_buttons = &.{} },
+        },
         .config_blocks = blocks[0..],
     });
 

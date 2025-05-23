@@ -37,7 +37,7 @@ fn notFound(vrs: *Frame) Router.Error!void {
 }
 
 fn debug(_: *Frame) Router.Error!void {
-    return error.Abusive;
+    return error.Unrouteable;
 }
 
 fn builder(fr: *Frame, call: BuildFn) void {
@@ -91,6 +91,15 @@ fn builder(fr: *Frame, call: BuildFn) void {
             }
         },
     };
+}
+
+test {
+    const a = std.testing.allocator;
+    const cache = @import("cache.zig");
+    const ca = cache.init(a);
+    defer ca.raze();
+
+    try endpoints.smokeTest(a);
 }
 
 const std = @import("std");

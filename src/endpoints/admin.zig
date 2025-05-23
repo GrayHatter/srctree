@@ -141,7 +141,7 @@ fn postNewRepo(ctx: *Frame) Error!void {
     var valid = if (ctx.request.data.post) |p|
         p.validator()
     else
-        return error.Unknown;
+        return error.BadData;
     const rname = valid.require("repo name") catch return error.Unknown;
 
     for (rname.value) |c| {

@@ -20,8 +20,7 @@ fn inbox(ctx: *Frame) Error!void {
 pub fn index(ctx: *Frame) Error!void {
     const udata = ctx.request.data.query.validate(SearchReq) catch return error.BadData;
 
-    const query_str = udata.q orelse "null";
-    std.debug.print("query {s}\n", .{query_str});
+    const query_str = udata.q orelse "";
 
     return custom(ctx, query_str);
 }
@@ -56,7 +55,8 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
     }
 
     for (rules.items) |rule| {
-        std.debug.print("rule = {s} : {s}\n", .{ rule.subject, rule.match });
+        if (false)
+            std.debug.print("rule = {s} : {s}\n", .{ rule.subject, rule.match });
     }
 
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);

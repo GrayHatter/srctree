@@ -1,7 +1,6 @@
-pub const Cache = @This();
-
 alloc: Allocator,
 
+const Cache = @This();
 /// List of endpoint cache blobs, TODO abstract this to something good!
 //list: struct {
 //    const COMMIT_FLEX = @import("endpoints/commit-flex.zig").CACHED_MAP;
@@ -16,7 +15,7 @@ pub fn Cacher(T: type) type {
 }
 
 const COMMIT_FLEX = @import("endpoints/commit-flex.zig");
-pub fn init(a: Allocator) !Cache {
+pub fn init(a: Allocator) Cache {
     COMMIT_FLEX.initCache(a);
     return .{
         .alloc = a,

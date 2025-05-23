@@ -85,10 +85,20 @@ pub const SrcConfig = Ini.Config(struct {
         enabled: bool = false,
         push_upstream: bool = false,
     };
+
+    pub const empty: SrcConfig.Base = .{
+        .owner = null,
+        .agent = null,
+        .server = null,
+        .repos = null,
+    };
 });
 
 // No, I don't like this
-pub var global_config: SrcConfig = undefined;
+pub var global_config: SrcConfig = .{
+    .config = .empty,
+    .ctx = undefined,
+};
 
 const Auth = struct {
     alloc: Allocator,
@@ -174,7 +184,7 @@ pub fn main() !void {
     try Database.init(.{});
     defer Database.raze();
 
-    const cache = try Cache.init(a);
+    const cache = Cache.init(a);
     defer cache.raze();
 
     var agent_config: Repos.AgentConfig = .{
