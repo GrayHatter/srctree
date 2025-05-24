@@ -17,15 +17,6 @@ ptr_parent: ?*Commit = null, // TOOO multiple parents
 
 pub const Commit = @This();
 
-/// TODO this
-fn gpgSig(itr: *std.mem.SplitIterator(u8, .sequence)) !void {
-    while (itr.next()) |line| {
-        if (std.mem.indexOf(u8, line, "-----END PGP SIGNATURE-----") != null) return;
-        if (std.mem.indexOf(u8, line, "-----END SSH SIGNATURE-----") != null) return;
-    }
-    return error.InvalidGpgsig;
-}
-
 pub fn init(sha: SHA, data: []const u8) !Commit {
     if (std.mem.startsWith(u8, data, "commit")) unreachable;
     var lines = std.mem.splitSequence(u8, data, "\n");
@@ -163,6 +154,15 @@ pub fn format(
         \\{s}
         \\}}
     , .{ self.author, self.committer, self.message });
+}
+
+/// TODO this
+fn gpgSig(itr: *std.mem.SplitIterator(u8, .sequence)) !void {
+    while (itr.next()) |line| {
+        if (std.mem.indexOf(u8, line, "-----END PGP SIGNATURE-----") != null) return;
+        if (std.mem.indexOf(u8, line, "-----END SSH SIGNATURE-----") != null) return;
+    }
+    return error.InvalidGpgsig;
 }
 
 const SHA = @import("SHA.zig");
