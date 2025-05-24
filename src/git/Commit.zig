@@ -59,8 +59,8 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
         } else return error.MalformedHeader;
     }
     var message = lines.rest();
-    var title: ?[]const u8 = null;
-    var body: ?[]const u8 = null;
+    var title: []const u8 = message;
+    var body: []const u8 = "";
     if (indexOf(u8, message, "\n\n")) |nl| {
         title = message[0..nl];
         body = message[nl + 2 ..];
@@ -72,8 +72,8 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
         .author = author orelse return error.AuthorMissing,
         .committer = committer orelse return error.CommitterMissing,
         .message = message,
-        .title = title orelse message,
-        .body = body orelse "",
+        .title = title,
+        .body = body,
         .gpgsig = null, // TODO still unimplemented
     };
 }
@@ -163,6 +163,45 @@ fn gpgSig(itr: *std.mem.SplitIterator(u8, .sequence)) !void {
         if (std.mem.indexOf(u8, line, "-----END SSH SIGNATURE-----") != null) return;
     }
     return error.InvalidGpgsig;
+}
+
+test "parse commit" {
+    const commit_data =
+        \\tree 863dce25c7370ca052f0efddd1e3aa73569fb37b
+        \\parent ac7bc0f8c6d88e2595d6147f79d88b91476acdde
+        \\author Gregory Mullen <github@gr.ht> 1747760721 -0700
+        \\committer Gregory Mullen <github@gr.ht> 1747760721 -0700
+        \\
+        \\clean up blame.zig
+    ;
+
+    const commit = try Commit.init(SHA.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), commit_data);
+    const parents: [9]?SHA = .{ SHA.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), null, null, null, null, null, null, null, null };
+    try std.testing.expectEqualSlices(?SHA, &parents, &commit.parent);
+    try std.testing.expectEqual(SHA.init("863dce25c7370ca052f0efddd1e3aa73569fb37b"), commit.tree);
+    try std.testing.expectEqualStrings("Gregory Mullen", commit.author.name);
+    try std.testing.expectEqualStrings("github@gr.ht", commit.author.email);
+    try std.testing.expectEqual(1747760721, commit.author.timestamp);
+    try std.testing.expectEqualStrings("-0700", commit.author.tzstr);
+    try std.testing.expectEqualStrings("Gregory Mullen", commit.committer.name);
+    try std.testing.expectEqualStrings("github@gr.ht", commit.committer.email);
+    try std.testing.expectEqual(1747760721, commit.committer.timestamp);
+    try std.testing.expectEqualStrings("-0700", commit.committer.tzstr);
+}
+
+test "fuzz" {
+    const Context = struct {
+        fn testOne(context: @This(), input: []const u8) anyerror!void {
+            _ = context;
+            if (input.len < 20) return;
+            if (init(.init(input[0..20]), input[20..])) |_| {
+                try std.testing.expect(false);
+            } else |_| {
+                return;
+            }
+        }
+    };
+    try std.testing.fuzz(Context{}, Context.testOne, .{});
 }
 
 const SHA = @import("SHA.zig");
