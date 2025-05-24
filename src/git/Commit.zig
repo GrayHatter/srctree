@@ -1,5 +1,3 @@
-pub const Commit = @This();
-
 alloc: ?Allocator = null,
 memory: ?[]const u8 = null,
 sha: SHA,
@@ -16,6 +14,8 @@ body: []const u8,
 gpgsig: ?GPGSig,
 
 ptr_parent: ?*Commit = null, // TOOO multiple parents
+
+pub const Commit = @This();
 
 /// TODO this
 fn gpgSig(itr: *std.mem.SplitIterator(u8, .sequence)) !void {
@@ -87,7 +87,7 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
     };
 }
 
-pub fn initOwned(sha: SHA, a: Allocator, object: Git.Object) !Commit {
+pub fn initOwned(sha: SHA, a: Allocator, object: Object) !Commit {
     var commit = try init(sha, object.body);
     commit.alloc = a;
     commit.memory = object.memory;
@@ -165,6 +165,12 @@ pub fn format(
     , .{ self.author, self.committer, self.message });
 }
 
+const SHA = @import("SHA.zig");
+const Repo = @import("Repo.zig");
+const Tree = @import("tree.zig");
+const Actor = @import("actor.zig");
+const Object = @import("Object.zig");
+
 const std = @import("std");
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
@@ -172,12 +178,6 @@ const startsWith = std.mem.startsWith;
 const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
 const AnyReader = std.io.AnyReader;
-
-const Git = @import("../git.zig");
-const SHA = Git.SHA;
-const Repo = Git.Repo;
-const Tree = Git.Tree;
-const Actor = @import("actor.zig");
 
 // TODO not currently implemented
 pub const GPGSig = struct {};

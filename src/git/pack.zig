@@ -1,20 +1,3 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const zlib = std.compress.zlib;
-const PROT = std.posix.PROT;
-const MAP_TYPE = std.os.linux.MAP_TYPE;
-const AnyReader = std.io.AnyReader;
-const bufPrint = std.fmt.bufPrint;
-const eql = std.mem.eql;
-
-const Git = @import("../git.zig");
-const Error = Git.Error;
-const Repo = Git.Repo;
-
-const SHA = Git.SHA;
-
-pub const Pack = @This();
-
 pack: []u8,
 idx: []u8,
 pack_fd: std.fs.File,
@@ -26,6 +9,8 @@ objnames: []u8 = undefined,
 crc: []u32 = undefined,
 offsets: []u32 = undefined,
 hugeoffsets: ?[]u64 = null,
+
+const Pack = @This();
 
 const Header = extern struct {
     sig: u32 = 0,
@@ -378,7 +363,7 @@ pub fn loadData(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Erro
     };
 }
 
-pub fn resolveObject(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Error!Git.Object {
+pub fn resolveObject(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Error!Object {
     const resolved = try self.loadData(a, offset, repo);
     errdefer a.free(resolved.data);
 
@@ -405,3 +390,17 @@ pub fn raze(self: Pack) void {
     munmap(@alignCast(self.pack));
     munmap(@alignCast(self.idx));
 }
+
+const Error = Repo.Error;
+const Repo = @import("Repo.zig");
+const SHA = @import("SHA.zig");
+const Object = @import("Object.zig");
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const zlib = std.compress.zlib;
+const PROT = std.posix.PROT;
+const MAP_TYPE = std.os.linux.MAP_TYPE;
+const AnyReader = std.io.AnyReader;
+const bufPrint = std.fmt.bufPrint;
+const eql = std.mem.eql;
