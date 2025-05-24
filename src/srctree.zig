@@ -102,6 +102,15 @@ test {
     try endpoints.smokeTest(a);
 }
 
+test "fuzzing" {
+    const a = std.testing.allocator;
+    const cache = @import("cache.zig");
+    const ca = cache.init(a);
+    defer ca.raze();
+
+    try verse.testing.fuzzTest(.{ .build = commitFlex });
+}
+
 const std = @import("std");
 const eql = std.mem.eql;
 const verse = @import("verse");

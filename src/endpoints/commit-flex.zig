@@ -2,6 +2,8 @@
 const HEATMAPSIZE = 1 * (366 + 6);
 const HeatMapArray = [HEATMAPSIZE]u16;
 
+const empty_heat_map: HeatMapArray = @splat(0);
+
 const Journal = struct {
     alloc: Allocator,
     email: []const u8,
@@ -79,7 +81,8 @@ const Journal = struct {
         until: i64,
         gitdir: []const u8,
         email: []const u8,
-    ) !*HeatMapArray {
+    ) !*const HeatMapArray {
+        if (email.len < 5) return &empty_heat_map;
         const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
         var repo = try Git.Repo.init(repo_dir);
         try repo.loadData(a);
