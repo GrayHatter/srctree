@@ -230,6 +230,7 @@ pub fn main() !void {
         .mode = mode,
         .auth = mtls.provider(),
         .threads = 4,
+        .stats = true,
     }) catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);

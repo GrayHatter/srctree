@@ -60,7 +60,7 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name_: []const u8, repo: 
 
     var git = repo.getAgent(ctx.alloc);
     var diff = git.show(sha) catch |err| switch (err) {
-        error.StdoutStreamTooLong => return ctx.sendError(.internal_server_error),
+        error.StdoutStreamTooLong => return ctx.sendDefaultErrorPage(.internal_server_error),
         else => return error.Unknown,
     };
 
