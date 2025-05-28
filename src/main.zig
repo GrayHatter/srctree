@@ -225,8 +225,7 @@ pub fn main() !void {
         mode = .{ .http = .{} };
     }
 
-    var endpoints = Srctree.endpoints.init(a);
-    endpoints.serve(.{
+    Srctree.endpoints.serve(a, .{
         .mode = mode,
         .auth = mtls.provider(),
         .threads = 4,
