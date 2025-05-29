@@ -58,9 +58,15 @@ fn builder(fr: *Frame, call: BuildFn) void {
         .nav_buttons = &btns,
     } };
 
-    bh.nav.nav_auth = if (fr.user) |usr| n: {
-        break :n if (usr.username) |un| un else "Error No Username";
-    } else "Public";
+    if (fr.user) |usr| {
+        if (usr.username) |un| {
+            bh.nav.nav_auth = un;
+        } else {
+            bh.nav.nav_auth = "Error No Username";
+        }
+    } else {
+        bh.nav.nav_auth = "Public";
+    }
     fr.response_data.add(bh) catch {};
     return call(fr) catch |err| switch (err) {
         error.InvalidURI => builder(fr, notFound), // TODO catch inline

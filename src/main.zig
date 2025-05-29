@@ -104,9 +104,7 @@ const Auth = struct {
     alloc: Allocator,
 
     pub fn init(a: Allocator) Auth {
-        return .{
-            .alloc = a,
-        };
+        return .{ .alloc = a };
     }
 
     pub fn raze(_: Auth) void {}
@@ -127,12 +125,16 @@ const Auth = struct {
     pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
         log.debug("lookup user {s}", .{user_id});
         const auth: *Auth = @ptrCast(@alignCast(ptr));
-        const user = Types.User.findMTLSFingerprint(auth.alloc, user_id) catch |err| {
+        const user: *Types.User = auth.alloc.create(Types.User) catch @panic("OOM");
+        user.* = Types.User.findMTLSFingerprint(user_id) catch |err| {
             std.debug.print("mtls lookup error {}\n", .{err});
             return error.UnknownUser;
         };
+
         return .{
-            .username = user.username,
+            .user_ptr = user,
+            .unique_id = auth.alloc.dupe(u8, user_id) catch @panic("OOM"),
+            .username = user.username.slice(),
         };
     }
 };
