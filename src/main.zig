@@ -114,12 +114,20 @@ const Auth = struct {
             .ctx = self,
             .vtable = .{
                 .authenticate = null,
-                .valid = null,
+                .valid = valid,
                 .create_session = null,
                 .get_cookie = null,
                 .lookup_user = lookupUser,
             },
         };
+    }
+
+    pub fn valid(_: *anyopaque, u: *const verse.auth.User) bool {
+        //const auth: *Auth = @ptrCast(@alignCast(ptr));
+        if (u.username) |_| {
+            return true;
+        }
+        return false;
     }
 
     pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
@@ -231,7 +239,7 @@ pub fn main() !void {
         .mode = mode,
         .auth = mtls.provider(),
         .threads = 4,
-        .stats = true,
+        .stats = .{ .auth_mode = .sensitive },
     }) catch {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace.*);
