@@ -43,7 +43,7 @@ fn debug(_: *Frame) Router.Error!void {
 
 fn builder(fr: *Frame, call: BuildFn) void {
     if (fr.request.user_agent) |ua| {
-        if (ua.resolved != .bot or ua.resolved.bot.name != .googlebot) {
+        if (ua.resolved == .bot and ua.resolved.bot.name == .googlebot or fr.user != null) {} else {
             fr.dumpDebugData();
             ua.botDetectionDump(fr.request);
         }
@@ -71,7 +71,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
     return call(fr) catch |err| switch (err) {
         error.InvalidURI => builder(fr, notFound), // TODO catch inline
         error.BrokenPipe => std.debug.print("client disconnect", .{}),
-        error.IOWriteFailure => @panic("Unexpected IOWrite"),
+        error.IOWriteFailure => std.debug.print("Unexpected IOWriteFailure\n", .{}),
         error.Unrouteable => {
             std.debug.print("Unrouteable", .{});
             if (@errorReturnTrace()) |trace| {
