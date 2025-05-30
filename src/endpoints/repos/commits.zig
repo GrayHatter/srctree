@@ -10,15 +10,15 @@ const AddComment = struct {
     text: []const u8,
 };
 
-pub fn router(ctx: *Verse.Frame) Router.RoutingError!Router.BuildFn {
-    const rd = RouteData.make(&ctx.uri) orelse return commitsView;
+pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
+    const rd = RouteData.make(&f.uri) orelse return commitsView;
     if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
         return viewCommit;
     return commitsView;
 }
 
-fn newComment(ctx: *Verse.Frame) Error!void {
-    if (ctx.request.data.post) |post| {
+fn newComment(f: *Frame) Error!void {
+    if (f.request.data.post) |post| {
         _ = post.validate(AddComment) catch return error.BadData;
     }
     return error.BadData;
@@ -42,25 +42,25 @@ pub const PatchView = struct {
     @"inline": ?bool = null,
 };
 
-fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
+fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abusive ''{s}''\n", .{sha});
         return error.Abusive;
     }
 
     // lol... I'd forgotten I'd done this. >:)
-    const current: Git.Commit = repo.commit(ctx.alloc, Git.SHA.initPartial(sha)) catch cmt: {
+    const current: Git.Commit = repo.commit(f.alloc, Git.SHA.initPartial(sha)) catch cmt: {
         // TODO return 404
-        var fallback: Git.Commit = repo.headCommit(ctx.alloc) catch return error.Unknown;
+        var fallback: Git.Commit = repo.headCommit(f.alloc) catch return error.Unknown;
         while (!std.mem.startsWith(u8, fallback.sha.hex[0..], sha)) {
-            fallback = fallback.toParent(ctx.alloc, 0, &repo) catch return error.Unknown;
+            fallback = fallback.toParent(f.alloc, 0, &repo) catch return error.Unknown;
         }
         break :cmt fallback;
     };
 
-    var git = repo.getAgent(ctx.alloc);
+    var git = repo.getAgent(f.alloc);
     var diff = git.show(sha) catch |err| switch (err) {
-        error.StdoutStreamTooLong => return ctx.sendDefaultErrorPage(.internal_server_error),
+        error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
         else => return error.Unknown,
     };
 
@@ -76,12 +76,12 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name_: []const u8, repo: 
     //    .author = "grayhatter",
     //    .message = "Hah, yeah, added it the other day... pretty dope huh?",
     //} }) |cm| {
-    //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
+    //    comments.pushSlice(addComment(f.alloc, cm) catch unreachable);
     //}
 
     const diffstat = patch.patchStat();
-    const og_title = try allocPrint(ctx.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
-        Verse.abx.Html.cleanAlloc(ctx.alloc, current.author.name) catch unreachable,
+    const og_title = try allocPrint(f.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
+        Verse.abx.Html.cleanAlloc(f.alloc, current.author.name) catch unreachable,
         diffstat.files,
         if (diffstat.files > 1) "s" else "",
         diffstat.additions,
@@ -90,27 +90,27 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name_: []const u8, repo: 
     const meta_head = S.MetaHeadHtml{
         .open_graph = .{
             .title = og_title,
-            .desc = Verse.abx.Html.cleanAlloc(ctx.alloc, current.message) catch unreachable,
+            .desc = Verse.abx.Html.cleanAlloc(f.alloc, current.message) catch unreachable,
         },
     };
 
     var thread: []Template.Structs.Thread = &[0]Template.Structs.Thread{};
-    if (CommitMap.open(ctx.alloc, repo_name_, sha)) |map| {
-        var dlt = map.delta(ctx.alloc) catch |err| n: {
+    if (CommitMap.open(f.alloc, repo_name_, sha)) |map| {
+        var dlt = map.delta(f.alloc) catch |err| n: {
             std.debug.print("error generating delta {}\n", .{err});
             break :n @as(?Delta, null);
         };
         if (dlt) |*delta| {
-            _ = delta.loadThread(ctx.alloc) catch unreachable;
-            if (delta.getMessages(ctx.alloc)) |messages| {
-                thread = try ctx.alloc.alloc(Template.Structs.Thread, messages.len);
+            _ = delta.loadThread(f.alloc) catch unreachable;
+            if (delta.getMessages(f.alloc)) |messages| {
+                thread = try f.alloc.alloc(Template.Structs.Thread, messages.len);
                 for (messages, thread) |msg, *pg_comment| {
                     switch (msg.kind) {
                         .comment => |cmt| {
                             pg_comment.* = .{
-                                .author = try Verse.abx.Html.cleanAlloc(ctx.alloc, cmt.author),
-                                .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
-                                .message = try Verse.abx.Html.cleanAlloc(ctx.alloc, cmt.message),
+                                .author = try Verse.abx.Html.cleanAlloc(f.alloc, cmt.author),
+                                .date = try allocPrint(f.alloc, "{}", .{Humanize.unix(msg.updated)}),
+                                .message = try Verse.abx.Html.cleanAlloc(f.alloc, cmt.message),
                                 .direct_reply = null,
                                 .sub_thread = null,
                             };
@@ -134,38 +134,38 @@ fn commitHtml(ctx: *Verse.Frame, sha: []const u8, repo_name_: []const u8, repo: 
     } else |_| {}
 
     var inline_html: bool = true;
-    const udata = ctx.request.data.query.validate(PatchView) catch return error.BadData;
+    const udata = f.request.data.query.validate(PatchView) catch return error.BadData;
     if (udata.@"inline") |uinline| {
         inline_html = uinline;
-        ctx.cookie_jar.add(.{
+        f.cookie_jar.add(.{
             .name = "diff-inline",
             .value = if (uinline) "1" else "0",
         }) catch @panic("OOM");
     } else {
-        if (ctx.request.cookie_jar.get("diff-inline")) |cookie| {
+        if (f.request.cookie_jar.get("diff-inline")) |cookie| {
             inline_html = if (cookie.value.len > 0 and cookie.value[0] == '1') true else false;
         }
     }
 
-    const repo_name = try ctx.alloc.dupe(u8, repo_name_);
+    const repo_name = try f.alloc.dupe(u8, repo_name_);
     var page = CommitPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_buttons = &try Repos.navButtons(f),
         } },
-        .commit = try commitCtx(ctx.alloc, current, repo_name),
+        .commit = try commitCtx(f.alloc, current, repo_name),
         .comments = .{ .thread = thread },
-        .patch = Diffs.patchStruct(ctx.alloc, &patch, !inline_html) catch return error.Unknown,
+        .patch = Diffs.patchStruct(f.alloc, &patch, !inline_html) catch return error.Unknown,
         .inline_active = if (inline_html) "active" else null,
         .split_active = if (inline_html) null else "active",
     });
 
-    ctx.status = .ok;
-    return ctx.sendPage(&page) catch unreachable;
+    f.status = .ok;
+    return f.sendPage(&page) catch unreachable;
 }
 
-pub fn commitPatch(ctx: *Verse.Frame, sha: []const u8, repo: Git.Repo) Error!void {
-    var acts = repo.getAgent(ctx.alloc);
+pub fn commitPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
+    var acts = repo.getAgent(f.alloc);
     if (endsWith(u8, sha, ".patch")) {
         var rbuf: [0xff]u8 = undefined;
         const commit_only = sha[0 .. sha.len - 6];
@@ -175,31 +175,29 @@ pub fn commitPatch(ctx: *Verse.Frame, sha: []const u8, repo: Git.Repo) Error!voi
         //if (std.mem.indexOf(u8, diff, "diff")) |i| {
         //    diff = diff[i..];
         //}
-        ctx.status = .ok;
-        ctx.headers.addCustom(ctx.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
-        ctx.sendHeaders() catch return Error.Unknown;
-        ctx.sendRawSlice(diff) catch return Error.Unknown;
+        f.status = .ok;
+        f.headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
+        f.sendHeaders() catch return Error.Unknown;
+        f.sendRawSlice(diff) catch return Error.Unknown;
     }
 }
 
-pub fn viewCommit(ctx: *Verse.Frame) Error!void {
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    if (rd.verb == null) return commitsView(ctx);
+pub fn viewCommit(f: *Frame) Error!void {
+    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
+    if (rd.verb == null) return commitsView(f);
 
     const sha = rd.noun orelse return error.Unrouteable;
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
-    const cwd = std.fs.cwd();
-    // FIXME user data flows into system
-    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = Git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
+
+    var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
+        return f.sendDefaultErrorPage(.not_found);
+    repo.loadData(f.alloc) catch return error.Unknown;
     defer repo.raze();
 
     if (std.mem.endsWith(u8, sha, ".patch"))
-        return commitPatch(ctx, sha, repo)
+        return commitPatch(f, sha, repo)
     else
-        return commitHtml(ctx, sha, rd.name, repo);
+        return commitHtml(f, sha, rd.name, repo);
     return error.Unrouteable;
 }
 
@@ -315,16 +313,16 @@ fn buildListBetween(
     return commits;
 }
 
-pub fn commitsView(ctx: *Verse.Frame) Error!void {
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+pub fn commitsView(f: *Frame) Error!void {
+    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
 
-    if (ctx.uri.next()) |next| {
+    if (f.uri.next()) |next| {
         if (!std.mem.eql(u8, next, "commits")) return error.Unrouteable;
     }
 
     var commitish: ?Git.SHA = null;
-    if (ctx.uri.next()) |next| if (eql(u8, next, "before")) {
-        if (ctx.uri.next()) |before| commitish = Git.SHA.initPartial(before);
+    if (f.uri.next()) |next| if (eql(u8, next, "before")) {
+        if (f.uri.next()) |before| commitish = Git.SHA.initPartial(before);
     };
 
     // TODO use left and right commit finding
@@ -340,45 +338,41 @@ pub fn commitsView(ctx: *Verse.Frame) Error!void {
     //    }
     //} else {}
 
-    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    var cwd = std.fs.cwd();
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = Git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
+    var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
+        return f.sendDefaultErrorPage(.not_found);
+    repo.loadData(f.alloc) catch return error.Unknown;
     defer repo.raze();
 
     var last_sha: Git.SHA = undefined;
-    const cmts_list = buildList(ctx.alloc, repo, rd.name, commitish, 50, &last_sha) catch
+    const cmts_list = buildList(f.alloc, repo, rd.name, commitish, 50, &last_sha) catch
         return error.Unknown;
 
-    return sendCommits(ctx, cmts_list, rd.name, last_sha.hex[0..8]);
+    return sendCommits(f, cmts_list, rd.name, last_sha.hex[0..8]);
 }
 
-pub fn commitsBefore(ctx: *Verse.Frame) Error!void {
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+pub fn commitsBefore(f: *Frame) Error!void {
+    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
 
-    std.debug.assert(std.mem.eql(u8, "after", ctx.uri.next().?));
+    std.debug.assert(std.mem.eql(u8, "after", f.uri.next().?));
 
-    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    var cwd = std.fs.cwd();
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = Git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
+    var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
+        return f.sendDefaultErrorPage(.not_found);
+    repo.loadData(f.alloc) catch return error.Unknown;
 
-    const before: Git.SHA = if (ctx.uri.next()) |bf| Git.SHA.initPartial(bf);
-    const commits_b = try ctx.alloc.alloc(Template.Verse, 50);
+    const before: Git.SHA = if (f.uri.next()) |bf| Git.SHA.initPartial(bf);
+    const commits_b = try f.alloc.alloc(Template.Verse, 50);
     var last_sha: Git.SHA = undefined;
-    const cmts_list = try buildList(ctx.alloc, repo, rd.name, before, commits_b, &last_sha);
-    return sendCommits(ctx, cmts_list, rd.name, last_sha[0..]);
+    const cmts_list = try buildList(f.alloc, repo, rd.name, before, commits_b, &last_sha);
+    return sendCommits(f, cmts_list, rd.name, last_sha[0..]);
 }
 
-fn sendCommits(ctx: *Verse.Frame, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
+fn sendCommits(f: *Frame, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_buttons = &try Repos.navButtons(f),
         } },
 
         .commits = list,
@@ -388,7 +382,7 @@ fn sendCommits(ctx: *Verse.Frame, list: []const S.Commits, repo_name: []const u8
         },
     });
 
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const std = @import("std");
@@ -405,6 +399,7 @@ const S = Template.Structs;
 const HTML = Verse.HTML;
 const Error = Router.Error;
 const DOM = Verse.DOM;
+const Frame = Verse.Frame;
 
 const Diffs = @import("diffs.zig");
 
@@ -412,6 +407,7 @@ const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
 
 const Git = @import("../../git.zig");
+const repos = @import("../../repos.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
 const Highlight = @import("../../syntax-highlight.zig");

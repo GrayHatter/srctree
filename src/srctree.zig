@@ -78,8 +78,14 @@ fn builder(fr: *Frame, call: BuildFn) void {
                 std.debug.dumpStackTrace(trace.*);
             }
         },
-        error.NotImplemented,
-        error.Unknown,
+        error.NotImplemented, error.Unknown => {
+            std.debug.print("Unexpected error '{}'\n", .{err});
+            return fr.sendDefaultErrorPage(.internal_server_error);
+        },
+        error.ServerFault => {
+            std.debug.print("Server Fault\n", .{});
+            return fr.sendDefaultErrorPage(.internal_server_error);
+        },
         error.OutOfMemory,
         error.NoSpaceLeft,
         => {
