@@ -287,7 +287,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var tcount: u16 = 0;
     for (count_all) |h| tcount +|= h;
 
-    var printed_month: usize = (@intFromEnum(date.month) + 10) % 12;
+    var printed_month: usize = (@as(usize, @intFromEnum(date.month)) + 10) % 12;
     var day_offset: usize = 0;
     var streak: usize = 0;
     var committed_today: bool = false;
