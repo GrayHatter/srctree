@@ -167,10 +167,21 @@ const Scribe = struct {
 
         pub fn toTemplate(self: Commit, a: Allocator) !S.JournalRows {
             const shahex = try a.dupe(u8, self.sha.hex[0..]);
+
+            const continuation = "...";
+            const max_title_length = 80;
+
+            var title: [max_title_length]u8 = @splat(' ');
+            if (self.title.len > max_title_length) {
+                _ = try std.fmt.bufPrint(&title, "{s}{s}", .{ self.title[0..(max_title_length - continuation.len)], continuation });
+            } else {
+                _ = try std.fmt.bufPrint(&title, "{s}", .{self.title});
+            }
+
             return .{
                 //.name = self.name,
                 .repo = self.repo,
-                .title = self.title,
+                .title = try a.dupe(u8, &title),
                 .day = try allocPrint(a, "{Y-m-d}", .{self.date}),
                 .weekday = self.date.weekdaySlice(),
                 .time = try allocPrint(a, "{time}", .{self.date}),
