@@ -220,7 +220,7 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Templa
     return parents;
 }
 
-pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Structs.Commit {
+pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.Commit {
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     const body = if (c.body.len > 3)
         Highlight.translate(a, .markdown, c.body) catch Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable
@@ -236,13 +236,11 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !Template.Struct
     };
 }
 
-fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.Commits {
+fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.CommitList {
     var parcount: usize = 0;
     for (c.parent) |p| {
         if (p != null) parcount += 1;
     }
-    const parents = try a.alloc(S.CommitParent, parcount);
-    errdefer a.free(parents);
     var par_ptr: [*]const ?Git.SHA = &c.parent;
     for (0..parcount) |i| {
         var lim = 9 - i;
@@ -250,18 +248,23 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.Commits {
             par_ptr += 1;
             lim -= 1;
         }
-        parents[i] = .{
-            .uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo_name, par_ptr[i].?.hex[0..8] }),
-            .sha = try allocPrint(a, "{s}", .{par_ptr[i].?.hex[0..8]}),
-        };
     }
+    const ws = " \t\n";
+    const date = Datetime.fromEpoch(c.author.timestamp);
     return .{
+        .repo = repo_name,
+        .body = try abx.Html.cleanAlloc(a, trim(u8, c.body, ws)),
+        .title = try abx.Html.cleanAlloc(a, trim(u8, c.title, ws)),
+        .cmt_line_src = .{
+            .pre = "by ",
+            .link_root = "/user?user=",
+            .link_target = try abx.Html.cleanAlloc(a, trim(u8, c.author.email, ws)),
+            .name = try abx.Html.cleanAlloc(a, trim(u8, c.author.name, ws)),
+        },
+        .day = try allocPrint(a, "{Y-m-d}", .{date}),
+        .weekday = date.weekdaySlice(),
+        .time = try allocPrint(a, "{time}", .{date}),
         .sha = try allocPrint(a, "{s}", .{c.sha.hex[0..8]}),
-        .uri = try allocPrint(a, "/repo/{s}/commit/{s}", .{ repo_name, c.sha.hex[0..8] }),
-        .msg_title = try Verse.abx.Html.cleanAlloc(a, c.title),
-        .msg = try Verse.abx.Html.cleanAlloc(a, c.body),
-        .author = c.author.name,
-        .commit_parent = parents,
     };
 }
 
@@ -272,7 +275,7 @@ fn buildList(
     before: ?Git.SHA,
     count: usize,
     outsha: *Git.SHA,
-) ![]S.Commits {
+) ![]S.CommitList {
     return buildListBetween(a, repo, name, null, before, count, outsha);
 }
 
@@ -284,8 +287,8 @@ fn buildListBetween(
     right: ?Git.SHA,
     count: usize,
     outsha: *Git.SHA,
-) ![]S.Commits {
-    var commits = try a.alloc(S.Commits, count);
+) ![]S.CommitList {
+    var commits = try a.alloc(S.CommitList, count);
     var current: Git.Commit = repo.headCommit(a) catch return error.Unknown;
     if (right) |r| {
         while (!current.sha.eqlIsh(r)) {
@@ -358,6 +361,7 @@ pub fn commitsBefore(f: *Frame) Error!void {
     var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
     repo.loadData(f.alloc) catch return error.Unknown;
+    defer repo.raze();
 
     const before: Git.SHA = if (f.uri.next()) |bf| Git.SHA.initPartial(bf);
     const commits_b = try f.alloc.alloc(Template.Verse, 50);
@@ -366,7 +370,7 @@ pub fn commitsBefore(f: *Frame) Error!void {
     return sendCommits(f, cmts_list, rd.name, last_sha[0..]);
 }
 
-fn sendCommits(f: *Frame, list: []const S.Commits, repo_name: []const u8, sha: []const u8) Error!void {
+fn sendCommits(f: *Frame, list: []const S.CommitList, repo_name: []const u8, sha: []const u8) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
     var page = CommitsListPage.init(.{
@@ -375,7 +379,7 @@ fn sendCommits(f: *Frame, list: []const S.Commits, repo_name: []const u8, sha: [
             .nav_buttons = &try Repos.navButtons(f),
         } },
 
-        .commits = list,
+        .commit_list = list,
         .after_commits = .{
             .repo_name = repo_name,
             .sha = sha,
@@ -391,6 +395,7 @@ const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const endsWith = std.mem.endsWith;
 const eql = std.mem.eql;
+const trim = std.mem.trim;
 
 const Verse = @import("verse");
 const Router = Verse.Router;
@@ -400,17 +405,19 @@ const HTML = Verse.HTML;
 const Error = Router.Error;
 const DOM = Verse.DOM;
 const Frame = Verse.Frame;
+const abx = Verse.abx;
 
 const Diffs = @import("diffs.zig");
 
 const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
 
+const Datetime = @import("../../datetime.zig");
 const Git = @import("../../git.zig");
-const repos = @import("../../repos.zig");
+const Highlight = @import("../../syntax-highlight.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
-const Highlight = @import("../../syntax-highlight.zig");
+const repos = @import("../../repos.zig");
 
 const Types = @import("../../types.zig");
 const CommitMap = Types.CommitMap;

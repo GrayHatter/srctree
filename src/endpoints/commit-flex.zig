@@ -59,9 +59,14 @@ const Journal = struct {
             }
             if (commit_time < until) break;
             if (std.mem.eql(u8, email.?, commit.author.email)) {
+                const ws = " \t\n";
                 try list.append(.{
-                    .name = try Verse.abx.Html.cleanAlloc(a, commit.author.name),
-                    .title = try Verse.abx.Html.cleanAlloc(a, commit.title),
+                    .name = try abx.Html.cleanAlloc(a, trim(u8, commit.author.name, ws)),
+                    .title = try abx.Html.cleanAlloc(a, trim(u8, commit.title, ws)),
+                    .body = if (commit.body.len > 0)
+                        try Verse.abx.Html.cleanAlloc(a, trim(u8, commit.body, ws))
+                    else
+                        null,
                     .date = DateTime.fromEpoch(commit_time),
                     .sha = commit.sha,
                     .repo = try a.dupe(u8, gitdir[8..]),
@@ -162,6 +167,7 @@ const Scribe = struct {
         name: []const u8,
         repo: []const u8,
         title: []const u8,
+        body: ?[]const u8,
         date: DateTime,
         sha: Git.SHA,
 
@@ -169,19 +175,24 @@ const Scribe = struct {
             const shahex = try a.dupe(u8, self.sha.hex[0..]);
 
             const continuation = "...";
-            const max_title_length = 80;
+            const title_max = 80;
 
-            var title: [max_title_length]u8 = @splat(' ');
-            if (self.title.len > max_title_length) {
-                _ = try std.fmt.bufPrint(&title, "{s}{s}", .{ self.title[0..(max_title_length - continuation.len)], continuation });
-            } else {
-                _ = try std.fmt.bufPrint(&title, "{s}", .{self.title});
+            // TODO is this sanitation safe?
+            const title = try a.dupe(u8, self.title[0..@min(title_max, self.title.len)]);
+            if (self.title.len >= title_max) {
+                title[title_max - 3 .. title_max].* = continuation.*;
             }
 
             return .{
-                //.name = self.name,
                 .repo = self.repo,
-                .title = try a.dupe(u8, &title),
+                .body = self.body,
+                .title = title,
+                .cmt_line_src = .{
+                    .pre = "in ",
+                    .link_root = "/repo/",
+                    .link_target = self.repo,
+                    .name = self.repo,
+                },
                 .day = try allocPrint(a, "{Y-m-d}", .{self.date}),
                 .weekday = self.date.weekdaySlice(),
                 .time = try allocPrint(a, "{time}", .{self.date}),
@@ -430,6 +441,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
 const std = @import("std");
 const eql = std.mem.eql;
+const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 
@@ -439,6 +451,7 @@ const Git = @import("../git.zig");
 const global_config = &@import("../main.zig").global_config.config;
 
 const Verse = @import("verse");
+const abx = Verse.abx;
 const Template = Verse.template;
 const DOM = Verse.template.html.DOM;
 const HTML = Verse.template.html;

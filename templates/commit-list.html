@@ -6,20 +6,7 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content>
-      <For Commits>
-        <commit>
-          <data>
-            <a href="<Uri>" class=muted><Sha></a>
-            <span><MsgTitle ornull></span>
-            <br />
-            <Msg>
-          </data>
-          <foot>
-          <author><Author></author>
-          <For CommitParent><span>parent <a href="<Uri>"><Sha></a></span></For>
-          </foot>
-        </commit>
-      </For>
+      <For CommitList use="_short_commit_line.html"></For>
       <With AfterCommits><a href="/repo/<RepoName>/commits/before/<Sha>" class="btn">More</a></With>
     </content>
   </body>
