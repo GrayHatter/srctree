@@ -120,8 +120,17 @@ fn __objects(ctx: *Verse.Frame) Error!void {
     _ = ctx.uri.first();
     _ = ctx.uri.next();
     _ = ctx.uri.next();
-    const o2 = ctx.uri.next().?;
-    const o38 = ctx.uri.next().?;
+    const o2 = ctx.uri.next() orelse return error.Unrouteable;
+    const o38 = ctx.uri.next() orelse return error.Unrouteable;
+
+    if (o2.len != 2 or o38 != 38) return error.Abusive;
+    for (o2[0..2] ++ o38[0..38]) |c| {
+        switch (c) {
+            'a'...'f', '0'...'9' => continue,
+            else => return error.Abusive,
+        }
+    }
+    if (std.mem.indexOf(u8, rd.name, "..")) |_| return error.Abusive;
 
     filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}/objects/{s}/{s}", .{ rd.name, o2, o38 });
     var file = cwd.openFile(filename, .{}) catch unreachable;
