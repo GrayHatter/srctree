@@ -150,6 +150,9 @@ fn __objects(ctx: *Verse.Frame) Error!void {
 fn __info(ctx: *Verse.Frame) Error!void {
     std.debug.print("gitweb info\n", .{});
 
+    // TODO HARDEN & fixup
+    comptime unreachable;
+
     const rd = @import("endpoints/repos.zig").RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
