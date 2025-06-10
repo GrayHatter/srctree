@@ -44,12 +44,12 @@ fn debug(_: *Frame) Router.Error!void {
 fn builder(fr: *Frame, call: BuildFn) void {
     if (fr.request.user_agent) |ua| {
         if (ua.resolved == .bot and ua.resolved.bot.name == .googlebot or fr.user != null) {} else {
-            fr.dumpDebugData();
+            fr.dumpDebugData(.{});
             ua.botDetectionDump(fr.request);
         }
     } else {
         std.debug.print("No User agent for request\n\n\n\n", .{});
-        fr.dumpDebugData();
+        fr.dumpDebugData(.{});
     }
 
     const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
@@ -98,7 +98,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
         error.DataMissing,
         => {
             std.debug.print("Abusive {} because {}\n", .{ fr.request, err });
-            fr.dumpDebugData();
+            fr.dumpDebugData(.{});
             if (fr.request.data.post) |post_data| {
                 std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
             }
