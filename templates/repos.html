@@ -6,13 +6,18 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content class="mw">
-      <With Buttons><Buttons></With>
+      <Buttons ornull />
       <repos>
       <For RepoList>
         <repo>
-          <name><a href="<Uri>"><Name></a></name>
-            <desc><Desc ornull><p class="upstream"><Upstream ornull></p>
-            <div class="updated"><span><Updated></span><With Tag><a href="<Uri>" title="<Title>"><Tag></a></With></div>
+          <bar>
+            <name><a href="<Uri>"><Name></a></name>
+            <With Tag><a href="<Uri>" title="<Title>" class="tag muted"><Tag></a></With>
+          </bar>
+          <desc><Desc ornull /><p class="upstream"><Upstream ornull></p>
+            <div class="updated">
+              <span><Updated></span>
+            </div>
           </desc><last></last>
         </repo>
       </For>

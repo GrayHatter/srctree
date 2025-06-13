@@ -184,12 +184,50 @@ repos {
 	repo {
 		min-width: 320px;
 		max-width: 480px;
-		width: 48%;
+		width: 30%;
 		margin: 0 auto 10px 0.5%;
+		bar {
+			font-family: 'Titillium Web', sans-serif;
+			background: #333;
+			height: 30px;
+			display: flex;
+			justify-content: space-between;
+			border-radius: 4px 4px 0 0;
+			border: 1px gray solid;
+			border-bottom: 0px;
+			padding: 4px 0 4px 12px;
+			margin: 0;
+			font-size: 120%;
+			name {
+				display: inline-block;
+				width: 70%;
+				height: 100%;
+				a {
+					display: block;
+					width 100%;
+				}
+
+			}
+			a.tag {
+				float: right;
+				margin: 0.4rem 8px 0 0;
+				white-space: nowrap;
+				font-size: 70%;
+
+			}
+
+		}
 	}
 }
 
-
+.tag.muted {
+	color: #bbb;
+	font-family: 'Titillium Web', sans-serif;
+	font-size: 80%;
+	&a:visited {
+		color: #bbb;
+	}
+}
 
 repo {
 	display: block;
@@ -214,21 +252,6 @@ repo {
 	}
 
 	name {
-		font-family: 'Titillium Web', sans-serif;
-		background: #333;
-		height: 30px;
-		display: block;
-		border-radius: 4px 4px 0 0;
-		border: 1px gray solid;
-		border-bottom: 0px;
-		padding: 4px 0 4px 12px;
-		margin: 0;
-		font-size: 120%;
-		a {
-			display: block;
-			width: 100%;
-			height: 100%;
-		}
 	}
 	desc {
 		display: block;

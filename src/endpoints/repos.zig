@@ -213,7 +213,7 @@ fn list(ctx: *Frame) Router.Error!void {
         .by = if (tag_sort) .tag else .commit,
     }, repoSorterNew);
 
-    var repo_buttons: []const u8 = "";
+    var repo_buttons: ?[]const u8 = null;
     if (ctx.user != null and ctx.user.?.valid()) {
         repo_buttons =
             \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
@@ -231,8 +231,7 @@ fn list(ctx: *Frame) Router.Error!void {
     var page = ReposPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-
-        .buttons = .{ .buttons = repo_buttons },
+        .buttons = repo_buttons,
         .repo_list = repos_compiled,
     });
 
