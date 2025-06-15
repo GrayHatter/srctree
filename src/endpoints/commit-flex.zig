@@ -1,5 +1,6 @@
 /// we might add up to 6 days to align the grid
-const HEATMAPSIZE = 1 * (366 + 6);
+const DISPLAY_YEARS = 1;
+const HEATMAPSIZE = DISPLAY_YEARS * (366 + 6);
 const HeatMapArray = [HEATMAPSIZE]u16;
 
 const empty_heat_map: HeatMapArray = @splat(0);
@@ -273,7 +274,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         }
     }
     var date = nowish.timeTruncate();
-    date = DateTime.fromEpoch(date.timestamp + DAY - YEAR);
+    date = DateTime.fromEpoch(date.timestamp + DAY - DISPLAY_YEARS * YEAR);
     while (date.weekday != 0) {
         date = DateTime.fromEpoch(date.timestamp - DAY);
     }
