@@ -6,6 +6,7 @@ pub const verse_routes = [_]Match{
         .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
         .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
         .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
+        .{ .name = "Zoominfobot", .allow = false }, // selfish bot
         .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
         .{ .name = "barkrowler", .allow = false }, // selfish bot
         .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
