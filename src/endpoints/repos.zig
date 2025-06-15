@@ -169,7 +169,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
 
     if (repo.tags) |rtags| {
         tag = .{
-            .tag = rtags[0].name,
+            .tag = try a.dupe(u8, rtags[0].name),
             .title = try allocPrint(a, "created {}", .{Humanize.unix(rtags[0].tagger.timestamp)}),
             .uri = try allocPrint(a, "/repo/{s}/tags", .{name}),
         };

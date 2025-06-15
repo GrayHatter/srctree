@@ -251,13 +251,13 @@ pub fn loadCommit(self: Repo, a: Allocator, sha: SHA) !Commit {
     }
 }
 
-fn loadTag(self: *Repo, a: Allocator, sha: SHA) !Tag {
+fn loadTag(self: *Repo, a: Allocator, sha: SHA, name: []const u8) !Tag {
     const obj = try self.loadObject(a, sha);
-    switch (obj.kind) {
+    return switch (obj.kind) {
         .blob, .tree => unreachable,
-        .commit => return try Tag.lightTag(sha, obj.body),
-        .tag => return try Tag.fromSlice(sha, obj.body),
-    }
+        .commit => try .lightTag(sha, try a.dupe(u8, name), obj.body),
+        .tag => try .fromSlice(sha, obj.body),
+    };
 }
 
 pub fn loadPacks(self: *Repo) !void {
@@ -378,45 +378,40 @@ pub fn HEAD(self: *Repo, a: Allocator) !Ref {
 }
 
 fn loadTags(self: *Repo) !void {
-    const a = self.alloc orelse unreachable;
-    var tagdir = try self.dir.openDir("refs/tags", .{ .iterate = true });
+    const a = self.alloc orelse return error.InvalidRepoState;
+
     const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0xffff) catch |err| switch (err) {
         error.FileNotFound => null,
         else => {
             std.debug.print("packed-refs {any}\n", .{err});
-            unreachable;
+            @panic("unimplemented error in tags packed-refs");
         },
     };
     defer if (pk_refs) |pr| a.free(pr);
 
-    defer tagdir.close();
-    var itr = tagdir.iterate();
-    var count: usize = if (pk_refs) |p| std.mem.count(u8, p, "refs/tags/") else 0;
-    while (try itr.next()) |next| {
-        if (next.kind != .file) continue;
-        count += 1;
-    }
-    if (count == 0) return;
-    self.tags = try a.alloc(Tag, count);
-    errdefer self.tags = null;
-    errdefer a.free(self.tags.?);
+    const count: usize = if (pk_refs) |p| std.mem.count(u8, p, "refs/tags/") else 0;
+    var tags: std.ArrayListUnmanaged(Tag) = try .initCapacity(a, count);
+    errdefer tags.deinit(a);
 
-    var index: usize = 0;
     if (pk_refs) |pkrefs| {
         var lines = splitScalar(u8, pkrefs, '\n');
         while (lines.next()) |line| {
-            if (indexOf(u8, line, "refs/tags/") != null) {
-                self.tags.?[index] = try self.loadTag(a, SHA.init(line[0..40]));
-                index += 1;
+            if (indexOf(u8, line, "refs/tags/")) |i| {
+                const name = line[i + 10 ..];
+                try tags.append(a, try self.loadTag(a, SHA.init(line[0..40]), name));
             }
         }
     }
 
-    itr.reset();
+    var tagdir = try self.dir.openDir("refs/tags", .{ .iterate = true });
+    defer tagdir.close();
+    var itr = tagdir.iterate();
+
     while (try itr.next()) |next| {
-        var fnbuf: [2048]u8 = undefined;
         if (next.kind != .file) continue;
+        var fnbuf: [2048]u8 = undefined;
         const fname = try bufPrint(&fnbuf, "refs/tags/{s}", .{next.name});
+
         var conbuf: [44]u8 = undefined;
         const contents = self.dir.readFile(fname, &conbuf) catch |err| {
             std.debug.print("unexpected tag format for {s}\n", .{fname});
@@ -426,10 +421,9 @@ fn loadTags(self: *Repo) !void {
             std.debug.print("unexpected tag format for {s}\n", .{fname});
             return error.InvalidTagFound;
         }
-        self.tags.?[index] = try self.loadTag(a, SHA.init(contents[0..40]));
-        index += 1;
+        try tags.append(a, try self.loadTag(a, SHA.init(contents[0..40]), next.name));
     }
-    if (index != self.tags.?.len) return error.UnexpectedError;
+    if (tags.items.len > 0) self.tags = try tags.toOwnedSlice(a);
 }
 
 fn loadBranches(self: *Repo) !void {
@@ -522,8 +516,12 @@ pub fn raze(self: *Repo) void {
             for (remotes) |remote| remote.raze(a);
             a.free(remotes);
         }
+
+        if (self.tags) |tags| {
+            for (tags) |tag| tag.raze(a);
+            a.free(tags);
+        }
     }
-    // TODO self.tags leaks, badly
 }
 
 // functions that might move or be removed...

@@ -21,6 +21,13 @@ pub const TagType = enum {
     }
 };
 
+pub fn raze(tag: Tag, a: std.mem.Allocator) void {
+    switch (tag.type) {
+        .lightweight => a.free(tag.name),
+        else => {},
+    }
+}
+
 pub fn fromSlice(sha: SHA, bblob: []const u8) !Tag {
     // sometimes, the slice will have a preamble
     var blob = bblob;
@@ -29,14 +36,19 @@ pub fn fromSlice(sha: SHA, bblob: []const u8) !Tag {
         blob = bblob[i + 1 ..];
     }
     //std.debug.print("tag\n{s}\n{s}\n", .{ sha, bblob });
-    if (startsWith(u8, blob, "tree ")) return try lightTag(sha, blob);
+    if (startsWith(u8, blob, "tree ")) {
+        // should be unreachable
+        @panic("unreachable");
+        // return try lightTag(sha, blob);
+    }
     return try fullTag(sha, blob);
 }
 
 /// I don't like this implementation, but I can't be arsed... good luck
 /// future me!
 /// Dear past me... fuck you! dear future me... HA same!
-pub fn lightTag(sha: SHA, blob: []const u8) !Tag {
+/// Dear past mes... you both suck!
+pub fn lightTag(sha: SHA, name: []const u8, blob: []const u8) !Tag {
     var actor: ?Actor = null;
     if (indexOf(u8, blob, "committer ")) |i| {
         var act = blob[i + 10 ..];
@@ -45,7 +57,7 @@ pub fn lightTag(sha: SHA, blob: []const u8) !Tag {
     } else return error.InvalidTag;
 
     return .{
-        .name = "[lightweight tag]",
+        .name = name,
         .sha = sha,
         .object = sha.hex[0..],
         .type = .lightweight,
