@@ -1,6 +1,6 @@
 /// we might add up to 6 days to align the grid
 const DISPLAY_YEARS = 1;
-const HEATMAPSIZE = DISPLAY_YEARS * (366 + 6);
+const HEATMAPSIZE = DISPLAY_YEARS * 366 + 6;
 const HeatMapArray = [HEATMAPSIZE]u16;
 
 const empty_heat_map: HeatMapArray = @splat(0);
@@ -274,11 +274,11 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         }
     }
     var date = nowish.timeTruncate();
-    date = DateTime.fromEpoch(date.timestamp + DAY - DISPLAY_YEARS * YEAR);
+    date = .fromEpoch(date.timestamp + DAY - DISPLAY_YEARS * YEAR);
     while (date.weekday != 0) {
-        date = DateTime.fromEpoch(date.timestamp - DAY);
+        date = .fromEpoch(date.timestamp - DAY);
     }
-    const until = date.timestamp;
+    const start_date = date.timestamp;
 
     var seen = std.BufSet.init(ctx.alloc);
     var repo_count: usize = 0;
@@ -296,7 +296,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         switch (file.kind) {
             .directory, .sym_link => {
                 const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                const count_repo = Journal.buildCommitList(ctx.alloc, &seen, until, repo, email) catch unreachable;
+                const count_repo = Journal.buildCommitList(ctx.alloc, &seen, start_date, repo, email) catch unreachable;
                 Journal.build(ctx.alloc, &scribe_list, email, repo) catch {
                     return error.Unknown;
                 };
@@ -311,7 +311,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     for (count_all) |h| tcount +|= h;
 
     var printed_month: usize = (@as(usize, @intFromEnum(date.month)) + 10) % 12;
-    var day_offset: usize = 0;
+    var day_idx: usize = 0;
     var streak: usize = 0;
     var committed_today: bool = false;
     const weeks = HEATMAPSIZE / 7;
@@ -328,8 +328,8 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
         for (&flex_week.days) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
-            defer day_offset += 1;
-            const count = 16 - @clz(count_all[day_offset]);
+            defer day_idx += 1;
+            const count = 16 - @clz(count_all[day_idx]);
             const future_date = date.timestamp >= nowish.timestamp - 1;
             if (!future_date) {
                 if (count > 0) {
@@ -356,7 +356,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             m.title = try std.fmt.allocPrint(
                 ctx.alloc,
                 "{} commits on {}",
-                .{ count_all[day_offset], date.timeTruncate() },
+                .{ count_all[day_idx], date.timeTruncate() },
             );
         }
     }
