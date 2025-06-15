@@ -115,6 +115,7 @@ fn __objects(ctx: *Verse.Frame) Error!void {
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
+    defer repo.raze();
 
     ctx.uri.reset();
     _ = ctx.uri.first();
@@ -160,6 +161,7 @@ fn __info(ctx: *Verse.Frame) Error!void {
     const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
     var repo = git.Repo.init(dir) catch return error.Unknown;
     repo.loadData(ctx.alloc) catch return error.Unknown;
+    defer repo.raze();
 
     var adata = std.ArrayList(u8).init(ctx.alloc);
 
