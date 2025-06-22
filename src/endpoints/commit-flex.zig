@@ -41,13 +41,9 @@ const Journal = struct {
         a: Allocator,
         list: *std.ArrayList(Scribe.Commit),
         email: ?[]const u8,
-        gitdir: []const u8,
+        name: []const u8,
+        repo: *const Git.Repo,
     ) !void {
-        const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
-        var repo = try Git.Repo.init(repo_dir);
-        try repo.loadData(a);
-        defer repo.raze();
-
         var lseen = std.BufSet.init(a);
         const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
         var commit = try repo.headCommit(a);
@@ -70,11 +66,11 @@ const Journal = struct {
                         null,
                     .date = DateTime.fromEpoch(commit_time),
                     .sha = commit.sha,
-                    .repo = try a.dupe(u8, gitdir[8..]),
+                    .repo = try a.dupe(u8, name),
                 });
             }
 
-            commit = commit.toParent(a, 0, &repo) catch |err| switch (err) {
+            commit = commit.toParent(a, 0, repo) catch |err| switch (err) {
                 error.NoParent => break,
                 else => |e| return e,
             };
@@ -85,14 +81,11 @@ const Journal = struct {
         a: Allocator,
         seen: *std.BufSet,
         until: i64,
-        gitdir: []const u8,
         email: []const u8,
+        rname: []const u8,
+        repo: *const Git.Repo,
     ) !*const HeatMapArray {
         if (email.len < 5) return &empty_heat_map;
-        const repo_dir = try std.fs.cwd().openDir(gitdir, .{});
-        var repo = try Git.Repo.init(repo_dir);
-        try repo.loadData(a);
-        defer repo.raze();
 
         // TODO return empty hits here
         const commit = repo.headCommit(a) catch unreachable;
@@ -103,20 +96,20 @@ const Journal = struct {
             email_gop.value_ptr.* = CachedRepo.init(cached_emails.allocator);
         }
 
-        const repo_gop = try email_gop.value_ptr.*.getOrPut(gitdir);
+        const repo_gop = try email_gop.value_ptr.*.getOrPut(rname);
         var heatmap: *HeatMap = repo_gop.value_ptr;
 
         var hits: *HeatMapArray = &heatmap.hits;
 
         if (!repo_gop.found_existing) {
-            repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, gitdir);
+            repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, rname);
             @memset(hits[0..], 0);
         }
 
         if (!eql(u8, heatmap.shahex[0..], commit.sha.hex[0..])) {
             heatmap.shahex = commit.sha.hex;
             @memset(hits[0..], 0);
-            try countCommits(a, hits, seen, until, commit, &repo, email);
+            try countCommits(a, hits, seen, until, commit, repo, email);
         }
 
         return hits;
@@ -282,29 +275,35 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     var seen = std.BufSet.init(ctx.alloc);
     var repo_count: usize = 0;
-    var dir = std.fs.cwd().openDir("./repos", .{ .iterate = true }) catch {
-        return error.Unknown;
-    };
 
     var scribe_list = std.ArrayList(Scribe.Commit).init(ctx.alloc);
 
     var count_all: HeatMapArray = .{0} ** HEATMAPSIZE;
 
-    var itr = dir.iterate();
-    while (itr.next() catch return Error.Unknown) |file| {
-        var buf: [1024]u8 = undefined;
-        switch (file.kind) {
-            .directory, .sym_link => {
-                const repo = std.fmt.bufPrint(&buf, "./repos/{s}", .{file.name}) catch return Error.Unknown;
-                const count_repo = Journal.buildCommitList(ctx.alloc, &seen, start_date, repo, email) catch unreachable;
-                Journal.build(ctx.alloc, &scribe_list, email, repo) catch {
-                    return error.Unknown;
-                };
-                repo_count +|= 1;
-                for (&count_all, count_repo) |*a, r| a.* += r;
-            },
-            else => {},
-        }
+    var all_repos = repos.allRepoIterator(.public) catch return error.Unknown;
+    while (all_repos.next() catch return error.Unknown) |input| {
+        var repo = input;
+        repo.loadData(ctx.alloc) catch return error.Unknown;
+        defer repo.raze();
+        const count_repo = Journal.buildCommitList(
+            ctx.alloc,
+            &seen,
+            start_date,
+            email,
+            all_repos.current_name.?,
+            &repo,
+        ) catch unreachable;
+        Journal.build(
+            ctx.alloc,
+            &scribe_list,
+            email,
+            all_repos.current_name.?,
+            &repo,
+        ) catch {
+            return error.Unknown;
+        };
+        repo_count +|= 1;
+        for (&count_all, count_repo) |*a, r| a.* += r;
     }
 
     var tcount: u16 = 0;
@@ -448,6 +447,7 @@ const allocPrint = std.fmt.allocPrint;
 
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
+const repos = @import("../repos.zig");
 
 const global_config = &@import("../main.zig").global_config.config;
 
