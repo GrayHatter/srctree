@@ -329,12 +329,12 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
             defer day_idx += 1;
             const count = 16 - @clz(count_all[day_idx]);
-            const future_date = date.timestamp >= nowish.timestamp - 1;
+            const future_date = date.timestamp > nowish.timestamp;
             if (!future_date) {
                 if (count > 0) {
                     streak +|= 1;
                     committed_today = true;
-                } else if (date.timestamp + 86400 <= nowish.timestamp - 1) {
+                } else if (date.timestamp + 86400 < nowish.timestamp) {
                     streak = 0;
                 } else {
                     committed_today = false;
@@ -426,7 +426,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         });
     }
 
-    var page = UserCommitsPage.init(.{
+    const page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
         .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
@@ -436,7 +436,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         .months = scribe_blocks.items,
     });
 
-    return try ctx.sendPage(&page);
+    return try ctx.sendPage(page);
 }
 
 const std = @import("std");
