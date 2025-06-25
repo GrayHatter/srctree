@@ -253,7 +253,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.CommitList
     const date = Datetime.fromEpoch(c.author.timestamp);
     return .{
         .repo = repo_name,
-        .body = try abx.Html.cleanAlloc(a, trim(u8, c.body, ws)),
+        .body = if (c.body.len > 0) try abx.Html.cleanAlloc(a, trim(u8, c.body, ws)) else null,
         .title = try abx.Html.cleanAlloc(a, trim(u8, c.title, ws)),
         .cmt_line_src = .{
             .pre = "by ",
