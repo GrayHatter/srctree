@@ -211,7 +211,7 @@ pub fn Config(B: anytype) type {
         pub fn fromFile(a: Allocator, file: std.fs.File) !Self {
             const data = try file.readToEndAlloc(a, 1 <<| 18);
             var self = try init(a, data);
-            self.ctx.data = data;
+            self.ctx.owned = data;
             return self;
         }
     };
