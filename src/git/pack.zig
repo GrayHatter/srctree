@@ -1,7 +1,5 @@
 pack: []u8,
 idx: []u8,
-pack_fd: std.fs.File,
-idx_fd: std.fs.File,
 
 pack_header: *Header = undefined,
 idx_header: *IdxHeader = undefined,
@@ -50,12 +48,12 @@ pub fn init(dir: std.fs.Dir, name: []const u8) !Pack {
     std.debug.assert(name.len <= 45);
     var filename: [50]u8 = undefined;
     const ifd = try dir.openFile(try bufPrint(&filename, "{s}.idx", .{name}), .{});
+    defer ifd.close();
     const pfd = try dir.openFile(try bufPrint(&filename, "{s}.pack", .{name}), .{});
+    defer pfd.close();
     var pack = Pack{
         .pack = try mmap(pfd),
         .idx = try mmap(ifd),
-        .pack_fd = pfd,
-        .idx_fd = ifd,
     };
     try pack.prepare();
     return pack;
@@ -385,8 +383,6 @@ pub fn resolveObject(self: Pack, a: Allocator, offset: usize, repo: *const Repo)
 }
 
 pub fn raze(self: Pack) void {
-    self.pack_fd.close();
-    self.idx_fd.close();
     munmap(@alignCast(self.pack));
     munmap(@alignCast(self.idx));
 }
