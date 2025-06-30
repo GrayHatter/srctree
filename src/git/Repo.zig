@@ -303,10 +303,8 @@ pub fn loadRefs(self: *Repo) !void {
             .repo = self,
         } });
     }
-    if (self.dir.openFile("packed-refs", .{})) |file| {
-        var buf: [2048]u8 = undefined;
-        const size = try file.readAll(&buf);
-        const b = buf[0..size];
+    var buf: [2048]u8 = undefined;
+    if (self.dir.readFile("packed-refs", &buf)) |b| {
         var p_itr = splitScalar(u8, b, '\n');
         _ = p_itr.next();
         while (p_itr.next()) |line| {
