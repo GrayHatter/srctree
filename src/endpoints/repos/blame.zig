@@ -35,7 +35,7 @@ pub fn blame(f: *Frame) Router.Error!void {
         }
     }
 
-    const wrapped_blames = try wrapLineNumbersBlame(f.alloc, parsed.lines, parsed.map, rd.name);
+    const wrapped_blames = try wrapLineNumbersBlame(f.alloc, parsed.lines, parsed.map, rd.name, f.user != null);
     //var btns = navButtons(f) catch return error.Unknown;
 
     var page = BlamePage.init(.{
@@ -54,16 +54,18 @@ fn wrapLineNumbersBlame(
     blames: []BlameLine,
     map: std.StringHashMap(BlameCommit),
     repo_name: []const u8,
+    include_email: bool,
 ) ![]S.BlameLines {
     const b_lines = try a.alloc(S.BlameLines, blames.len);
     for (blames, b_lines, 0..) |src, *dst, i| {
         const bcommit = map.get(src.sha) orelse unreachable;
+        const email = if (!include_email) "" else verse.abx.Html.cleanAlloc(a, bcommit.author.email) catch unreachable;
         dst.* = .{
             .repo_name = repo_name,
             .sha = bcommit.sha[0..8],
             .author_email = .{
                 .author = verse.abx.Html.cleanAlloc(a, bcommit.author.name) catch unreachable,
-                .email = verse.abx.Html.cleanAlloc(a, bcommit.author.email) catch unreachable,
+                .email = email,
             },
             .time = try Humanize.unix(bcommit.author.timestamp).printAlloc(a),
             .num = i + 1,

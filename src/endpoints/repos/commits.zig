@@ -236,7 +236,7 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.Commit {
     };
 }
 
-fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.CommitList {
+fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email: bool) !S.CommitList {
     var parcount: usize = 0;
     for (c.parent) |p| {
         if (p != null) parcount += 1;
@@ -251,6 +251,9 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.CommitList
     }
     const ws = " \t\n";
     const date = Datetime.fromEpoch(c.author.timestamp);
+
+    const email = if (!include_email) "" else try abx.Html.cleanAlloc(a, trim(u8, c.author.email, ws));
+
     return .{
         .repo = repo_name,
         .body = if (c.body.len > 0) try abx.Html.cleanAlloc(a, trim(u8, c.body, ws)) else null,
@@ -258,7 +261,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8) !S.CommitList
         .cmt_line_src = .{
             .pre = "by ",
             .link_root = "/user?user=",
-            .link_target = try abx.Html.cleanAlloc(a, trim(u8, c.author.email, ws)),
+            .link_target = email,
             .name = try abx.Html.cleanAlloc(a, trim(u8, c.author.name, ws)),
         },
         .day = try allocPrint(a, "{Y-m-d}", .{date}),
@@ -275,8 +278,9 @@ fn buildList(
     before: ?Git.SHA,
     count: usize,
     outsha: *Git.SHA,
+    include_email: bool,
 ) ![]S.CommitList {
-    return buildListBetween(a, repo, name, null, before, count, outsha);
+    return buildListBetween(a, repo, name, null, before, count, outsha, include_email);
 }
 
 fn buildListBetween(
@@ -287,6 +291,7 @@ fn buildListBetween(
     right: ?Git.SHA,
     count: usize,
     outsha: *Git.SHA,
+    include_email: bool,
 ) ![]S.CommitList {
     var commits = try a.alloc(S.CommitList, count);
     var current: Git.Commit = repo.headCommit(a) catch return error.Unknown;
@@ -304,7 +309,7 @@ fn buildListBetween(
     }
     var found: usize = 0;
     for (commits, 1..) |*c, i| {
-        c.* = try commitVerse(a, current, name);
+        c.* = try commitVerse(a, current, name, include_email);
         found = i;
         outsha.* = current.sha;
         if (left) |l| if (current.sha.eqlIsh(l)) break;
@@ -347,7 +352,15 @@ pub fn commitsView(f: *Frame) Error!void {
     defer repo.raze();
 
     var last_sha: Git.SHA = undefined;
-    const cmts_list = buildList(f.alloc, repo, rd.name, commitish, 50, &last_sha) catch
+    const cmts_list = buildList(
+        f.alloc,
+        repo,
+        rd.name,
+        commitish,
+        50,
+        &last_sha,
+        f.user != null,
+    ) catch
         return error.Unknown;
 
     return sendCommits(f, cmts_list, rd.name, last_sha.hex[0..8]);
