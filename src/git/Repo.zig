@@ -316,7 +316,10 @@ pub fn loadRefs(self: *Repo) !void {
                 } });
             }
         }
-    } else |_| {}
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => std.debug.print("unable to read packed ref {}\n", .{err}),
+    }
     self.refs = try list.toOwnedSlice();
 }
 
