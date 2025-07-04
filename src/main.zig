@@ -18,6 +18,7 @@ const Srctree = @import("srctree.zig");
 test "main" {
     std.testing.refAllDecls(@This());
     std.testing.refAllDecls(@import("git.zig"));
+    _ = &Auth;
 }
 
 pub const std_options: std.Options = .{
@@ -100,57 +101,7 @@ pub var global_config: SrcConfig = .{
     .ctx = undefined,
 };
 
-const Auth = struct {
-    alloc: Allocator,
-
-    pub fn init(a: Allocator) Auth {
-        return .{ .alloc = a };
-    }
-
-    pub fn raze(_: Auth) void {}
-
-    pub fn provider(self: *Auth) verse.auth.Provider {
-        return .{
-            .ctx = self,
-            .vtable = .{
-                .authenticate = null,
-                .valid = valid,
-                .create_session = null,
-                .get_cookie = null,
-                .lookup_user = lookupUser,
-            },
-        };
-    }
-
-    pub fn valid(ptr: *const anyopaque, u: *const verse.auth.User) bool {
-        const auth: *const Auth = @ptrCast(@alignCast(ptr));
-        _ = &auth;
-        if (u.username != null and
-            u.unique_id != null and
-            u.user_ptr != null and
-            u.authenticated)
-        {
-            return true;
-        }
-        return false;
-    }
-
-    pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
-        log.debug("lookup user {s}", .{user_id});
-        const auth: *Auth = @ptrCast(@alignCast(ptr));
-        const user: *Types.User = auth.alloc.create(Types.User) catch @panic("OOM");
-        user.* = Types.User.findMTLSFingerprint(user_id) catch |err| {
-            std.debug.print("mtls lookup error {}\n", .{err});
-            return error.UnknownUser;
-        };
-
-        return .{
-            .user_ptr = user,
-            .unique_id = auth.alloc.dupe(u8, user_id) catch @panic("OOM"),
-            .username = user.username.slice(),
-        };
-    }
-};
+const Auth = @import("Auth.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};

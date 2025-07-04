@@ -1,104 +1,61 @@
-const std = @import("std");
-
-const Allocator = std.mem.Allocator;
-
-const Request = @import("request.zig");
-const HeaderList = Request.HeaderList;
-const User = @import("types.zig").User;
+alloc: Allocator,
 
 const Auth = @This();
 
-pub const MethodType = enum {
-    none,
-    unknown,
-    invalid,
-    mtls,
-};
+pub fn init(a: Allocator) Auth {
+    return .{ .alloc = a };
+}
 
-const Reason = enum {
-    because_i_said_so,
-};
+pub fn raze(_: Auth) void {}
 
-const MTLSPayload = struct {
-    status: []const u8,
-    fingerprint: []const u8,
-    cert: []const u8,
+pub fn provider(self: *Auth) verse.auth.Provider {
+    return .{
+        .ctx = self,
+        .vtable = .{
+            .authenticate = null,
+            .valid = valid,
+            .create_session = null,
+            .get_cookie = null,
+            .lookup_user = lookupUser,
+        },
+    };
+}
 
-    pub fn valid(m: MTLSPayload) bool {
-        var buffer: [0xffff]u8 = undefined;
-        var fba = std.heap.FixedBufferAllocator.init(&buffer);
-        const a = fba.allocator();
-        const user = User.findMTLSFingerprint(a, m.fingerprint) catch |err| {
-            std.debug.print("Auth failure {}\n", .{err});
-            return false;
-        };
-        const time = std.time.timestamp();
-        if (user.not_before <= time and user.not_after >= time) {
-            return true;
-        } else {
-            return false;
-        }
+pub fn valid(ptr: *const anyopaque, u: *const verse.auth.User) bool {
+    const auth: *const Auth = @ptrCast(@alignCast(ptr));
+    _ = &auth;
+    if (u.username != null and
+        u.unique_id != null and
+        u.user_ptr != null and
+        u.authenticated)
+    {
+        return true;
     }
-};
+    return false;
+}
 
-const Method = union(MethodType) {
-    none: void,
-    unknown: void,
-    invalid: Reason,
-    mtls: MTLSPayload,
-};
-
-method: Method,
-
-pub fn init(h: HeaderList) Auth {
-    var status: ?[]const u8 = null;
-    var fingerprint: ?[]const u8 = null;
-    var cert: ?[]const u8 = null;
-    for (h.items) |header| {
-        if (std.mem.eql(u8, header.name, "MTLS_ENABLED")) {
-            status = header.val;
-        } else if (std.mem.eql(u8, header.name, "MTLS_FINGERPRINT")) {
-            fingerprint = header.val;
-        } else if (std.mem.eql(u8, header.name, "MTLS_CERT")) {
-            cert = header.val;
-        }
-    }
-
-    if (status) |s| {
-        if (fingerprint) |f| {
-            if (cert) |c| {
-                return .{
-                    .method = .{ .mtls = .{
-                        .status = s,
-                        .fingerprint = f,
-                        .cert = c,
-                    } },
-                };
-            }
-        }
-    }
+pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
+    log.debug("lookup user {s}", .{user_id});
+    const auth: *Auth = @ptrCast(@alignCast(ptr));
+    const user: *types.User = auth.alloc.create(types.User) catch @panic("OOM");
+    user.* = types.User.findMTLSFingerprint(user_id) catch |err| {
+        std.debug.print("mtls lookup error {}\n", .{err});
+        return error.UnknownUser;
+    };
 
     return .{
-        .method = .none,
+        .user_ptr = user,
+        .unique_id = auth.alloc.dupe(u8, user_id) catch @panic("OOM"),
+        .username = user.username.slice(),
     };
 }
 
-pub fn valid(auth: Auth) bool {
-    return switch (auth.method) {
-        .mtls => |m| m.valid(),
-        else => false,
-    };
+test {
+    std.testing.refAllDecls(Auth);
 }
 
-pub fn validOrError(auth: Auth) !void {
-    if (!auth.valid()) return error.Unauthenticated;
-}
-
-pub fn currentUser(auth: Auth, a: Allocator) !User {
-    switch (auth.method) {
-        .mtls => |m| {
-            return try User.findMTLSFingerprint(a, m.fingerprint);
-        },
-        else => return error.NotImplemted,
-    }
-}
+const types = @import("types.zig");
+const verse = @import("verse");
+const std = @import("std");
+const log = std.log.scoped(.srctree_auth);
+const Allocator = std.mem.Allocator;
