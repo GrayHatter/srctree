@@ -122,9 +122,14 @@ const Auth = struct {
         };
     }
 
-    pub fn valid(_: *anyopaque, u: *const verse.auth.User) bool {
-        //const auth: *Auth = @ptrCast(@alignCast(ptr));
-        if (u.username) |_| {
+    pub fn valid(ptr: *const anyopaque, u: *const verse.auth.User) bool {
+        const auth: *const Auth = @ptrCast(@alignCast(ptr));
+        _ = &auth;
+        if (u.username != null and
+            u.unique_id != null and
+            u.user_ptr != null and
+            u.authenticated)
+        {
             return true;
         }
         return false;
