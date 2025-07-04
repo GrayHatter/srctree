@@ -85,7 +85,7 @@ fn new(ctx: *Verse.Frame) Error!void {
     var title: ?[]const u8 = null;
     var desc: ?[]const u8 = null;
     if (ctx.request.data.post) |post| {
-        const udata = post.validate(DiffCreateChangeReq) catch return error.BadData;
+        const udata = post.validate(DiffCreateChangeReq) catch return error.DataInvalid;
         title = udata.title;
         desc = udata.desc;
 
@@ -160,8 +160,8 @@ const DiffCreateReq = struct {
 fn createDiff(vrs: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&vrs.uri) orelse return error.Unrouteable;
     if (vrs.request.data.post) |post| {
-        const udata = post.validate(DiffCreateReq) catch return error.BadData;
-        if (udata.title.len == 0) return error.BadData;
+        const udata = post.validate(DiffCreateReq) catch return error.DataInvalid;
+        if (udata.title.len == 0) return error.DataInvalid;
 
         var remote_addr: []const u8 = "unknown";
         remote_addr = vrs.request.remote_addr;
@@ -657,7 +657,7 @@ fn view(ctx: *Verse.Frame) Error!void {
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
 
-    const udata = ctx.request.data.query.validate(PatchView) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(PatchView) catch return error.DataInvalid;
     const inline_html = udata.@"inline" orelse true;
 
     var patch_formatted: ?Template.Structs.PatchHtml = null;

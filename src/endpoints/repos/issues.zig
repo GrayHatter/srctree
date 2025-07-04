@@ -69,7 +69,7 @@ fn newPost(ctx: *Verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.request.data.post) |post| {
-        const valid = post.validate(IssueCreate) catch return error.BadData;
+        const valid = post.validate(IssueCreate) catch return error.DataInvalid;
         var delta = Delta.new(
             rd.name,
             valid.title,

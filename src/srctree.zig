@@ -105,12 +105,13 @@ fn builder(fr: *Frame, call: BuildFn) void {
             std.debug.print("Unexpected error '{}'", .{err});
             @panic("not implemented");
         },
-        error.Abusive,
+        error.Abuse,
         error.Unauthenticated,
-        error.BadData,
+        error.Unauthorized,
+        error.DataInvalid,
         error.DataMissing,
         => {
-            std.debug.print("Abusive {} because {}\n", .{ fr.request, err });
+            std.debug.print("Abuse {} because {}\n", .{ fr.request, err });
             fr.dumpDebugData(.{});
             if (fr.request.data.post) |post_data| {
                 std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
@@ -125,7 +126,11 @@ test {
     const ca = cache.init(a);
     defer ca.raze();
 
-    try endpoints.smokeTest(a);
+    try endpoints.smokeTest(a, .{
+        .recurse = true,
+        .soft_errors = &[_]Router.Error{ error.DataInvalid, error.DataMissing, error.Unrouteable },
+        .retry_with_fake_user = true,
+    });
 }
 
 test "fuzzing" {

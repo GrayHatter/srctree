@@ -18,7 +18,7 @@ fn inbox(ctx: *Frame) Error!void {
 }
 
 pub fn index(ctx: *Frame) Error!void {
-    const udata = ctx.request.data.query.validate(SearchReq) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(SearchReq) catch return error.DataInvalid;
 
     const query_str = udata.q orelse "";
 

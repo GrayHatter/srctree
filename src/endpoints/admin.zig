@@ -26,7 +26,7 @@ const AdminPage = template.PageData("admin.html");
 const btns = [1]template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
 fn default(ctx: *Frame) Error!void {
-    //try ctx.auth.requireValid();
+    try ctx.requireValidUser();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -56,7 +56,7 @@ fn default(ctx: *Frame) Error!void {
 }
 
 fn cloneUpstream(ctx: *Frame) Error!void {
-    //try ctx.auth.requireValid();
+    try ctx.requireValidUser();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/clone-upstream";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -90,9 +90,9 @@ const CloneUpstreamReq = struct {
 };
 
 fn postCloneUpstream(ctx: *Frame) Error!void {
-    //try ctx.auth.requireValid();
+    try ctx.requireValidUser();
 
-    const udata = ctx.request.data.post.?.validate(CloneUpstreamReq) catch return error.BadData;
+    const udata = ctx.request.data.post.?.validate(CloneUpstreamReq) catch return error.DataInvalid;
     std.debug.print("repo uri {s}\n", .{udata.repo_uri});
     var nameitr = std.mem.splitBackwardsScalar(u8, udata.repo_uri, '/');
     const name = nameitr.first();
@@ -136,18 +136,19 @@ fn postCloneUpstream(ctx: *Frame) Error!void {
 }
 
 fn postNewRepo(ctx: *Frame) Error!void {
-    //try ctx.auth.requireValid();
+    try ctx.requireValidUser();
+
     // TODO ini repo dir
     var valid = if (ctx.request.data.post) |p|
         p.validator()
     else
-        return error.BadData;
+        return error.DataInvalid;
     const rname = valid.require("repo name") catch return error.Unknown;
 
     for (rname.value) |c| {
         if (std.ascii.isAlphanumeric(c)) continue;
         if (c == '-' or c == '_') continue;
-        return error.Abusive;
+        return error.Abuse;
     }
 
     std.debug.print("creating {s}\n", .{rname.value});
@@ -189,7 +190,7 @@ fn postNewRepo(ctx: *Frame) Error!void {
 }
 
 fn newRepo(ctx: *Frame) Error!void {
-    //try ctx.auth.requireValid();
+    try ctx.requireValidUser();
     var dom = DOM.new(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
@@ -217,7 +218,7 @@ fn newRepo(ctx: *Frame) Error!void {
 }
 
 pub fn index(ctx: *Frame) Error!void {
-    //try ctx.auth.requireValid();
+    try ctx.requireValidUser();
     if (ctx.request.data.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
         return newRepo(ctx);

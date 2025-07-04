@@ -40,11 +40,11 @@ const GistPost = struct {
 };
 
 fn post(ctx: *Frame) Error!void {
-    //try ctx.auth.requireValid();
+    try ctx.requireValidUser();
 
-    const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.request.data) catch return error.BadData;
+    const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.request.data) catch return error.DataInvalid;
 
-    if (udata.file_name.len != udata.file_blob.len) return error.BadData;
+    if (udata.file_name.len != udata.file_blob.len) return error.DataInvalid;
     const username = if (ctx.user) |usr| usr.username.? else "public";
 
     if (udata.new_file != null) {
@@ -111,7 +111,7 @@ fn view(vrs: *Frame) Error!void {
     var btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
     if (vrs.uri.next()) |hash| {
-        if (hash.len != 64) return error.BadData;
+        if (hash.len != 64) return error.DataInvalid;
 
         const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.Unknown;
         const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;

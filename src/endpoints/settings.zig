@@ -7,7 +7,7 @@ pub const verse_routes = [_]Router.Match{
 const SettingsPage = template.PageData("settings.html");
 
 pub fn index(vrs: *Frame) Router.Error!void {
-    //try vrs.auth.requireValid();
+    try vrs.requireValidUser();
 
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
@@ -41,9 +41,9 @@ const SettingsReq = struct {
 };
 
 fn post(vrs: *Frame) Router.Error!void {
-    //try vrs.auth.requireValid();
+    try vrs.requireValidUser();
 
-    const udata = RequestData(SettingsReq).initMap(vrs.alloc, vrs.request.data) catch return error.BadData;
+    const udata = RequestData(SettingsReq).initMap(vrs.alloc, vrs.request.data) catch return error.DataInvalid;
 
     for (udata.block_name, udata.block_text) |name, text| {
         std.debug.print("block data:\nname '{s}'\ntext '''{s}'''\n", .{ name, text });

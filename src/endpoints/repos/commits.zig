@@ -19,9 +19,9 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
 
 fn newComment(f: *Frame) Error!void {
     if (f.request.data.post) |post| {
-        _ = post.validate(AddComment) catch return error.BadData;
+        _ = post.validate(AddComment) catch return error.DataInvalid;
     }
-    return error.BadData;
+    return error.DataInvalid;
 }
 
 pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
@@ -44,8 +44,8 @@ pub const PatchView = struct {
 
 fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
-        std.debug.print("Abusive ''{s}''\n", .{sha});
-        return error.Abusive;
+        std.debug.print("Abuse ''{s}''\n", .{sha});
+        return error.Abuse;
     }
 
     // lol... I'd forgotten I'd done this. >:)
@@ -134,7 +134,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     } else |_| {}
 
     var inline_html: bool = true;
-    const udata = f.request.data.query.validate(PatchView) catch return error.BadData;
+    const udata = f.request.data.query.validate(PatchView) catch return error.DataInvalid;
     if (udata.@"inline") |uinline| {
         inline_html = uinline;
         f.cookie_jar.add(.{

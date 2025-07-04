@@ -192,7 +192,7 @@ const RepoSortReq = struct {
 };
 
 fn list(ctx: *Frame) Router.Error!void {
-    const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.BadData;
+    const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.DataInvalid;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
     var repo_iter = repos.allRepoIterator(.public) catch return error.Unknown;

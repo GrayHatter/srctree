@@ -32,7 +32,7 @@ pub fn repo(ctx: *API.verse.Frame) API.Router.Error!void {
     const req = try ctx.request.data.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
-        error.InvalidName => return error.Abusive,
+        error.InvalidName => return error.Abuse,
         error.FileNotFound => {
             return try ctx.sendJSON(.not_found, [0]Repo{});
         },
@@ -69,7 +69,7 @@ pub fn repoBranches(ctx: *API.verse.Frame) API.Router.Error!void {
     const req = try ctx.request.data.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
-        error.InvalidName => return error.Abusive,
+        error.InvalidName => return error.Abuse,
         error.FileNotFound => {
             return try ctx.sendJSON(.not_found, [0]RepoBranches{});
         },
@@ -104,7 +104,7 @@ pub fn repoTags(ctx: *API.verse.Frame) API.Router.Error!void {
     const req = try ctx.request.data.validate(RepoRequest);
 
     var gitrepo = openRepo(ctx.alloc, req.name) catch |err| switch (err) {
-        error.InvalidName => return error.Abusive,
+        error.InvalidName => return error.Abuse,
         error.FileNotFound => {
             return try ctx.sendJSON(.not_found, [0]RepoTags{});
         },

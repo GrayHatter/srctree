@@ -35,7 +35,7 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
     const name = ctx.uri.next() orelse return error.Unknown;
     const target = ctx.uri.rest();
     if (!std.mem.eql(u8, target, "info/refs") and !std.mem.eql(u8, target, "git-upload-pack")) {
-        return error.Abusive;
+        return error.Abuse;
     }
 
     var path_buf: [2048]u8 = undefined;
@@ -124,14 +124,14 @@ fn __objects(ctx: *Verse.Frame) Error!void {
     const o2 = ctx.uri.next() orelse return error.Unrouteable;
     const o38 = ctx.uri.next() orelse return error.Unrouteable;
 
-    if (o2.len != 2 or o38 != 38) return error.Abusive;
+    if (o2.len != 2 or o38 != 38) return error.Abuse;
     for (o2[0..2] ++ o38[0..38]) |c| {
         switch (c) {
             'a'...'f', '0'...'9' => continue,
-            else => return error.Abusive,
+            else => return error.Abuse,
         }
     }
-    if (std.mem.indexOf(u8, rd.name, "..")) |_| return error.Abusive;
+    if (std.mem.indexOf(u8, rd.name, "..")) |_| return error.Abuse;
 
     filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}/objects/{s}/{s}", .{ rd.name, o2, o38 });
     var file = cwd.openFile(filename, .{}) catch unreachable;
