@@ -58,7 +58,7 @@ pub fn updateDownstream(self: Agent) !bool {
 }
 
 pub fn forkRemote(self: Agent, uri: []const u8, local_dir: []const u8) ![]u8 {
-    return try self.exec(&[_][]const u8{
+    const child = try self.execCustom(&[_][]const u8{
         "git",
         "clone",
         "--bare",
@@ -67,6 +67,22 @@ pub fn forkRemote(self: Agent, uri: []const u8, local_dir: []const u8) ![]u8 {
         uri,
         local_dir,
     });
+    if (child.stderr.len > 0) {
+        std.debug.print("git Agent error\nstderr: {s}\n", .{child.stderr});
+        if (std.mem.indexOf(u8, child.stderr, "does not exist")) |_| {
+            return error.RemoteRepoUnreachable;
+        } else {
+            return error.UnexpectedGitError;
+        }
+    }
+    defer self.alloc.free(child.stderr);
+
+    if (DEBUG_GIT_ACTIONS) std.debug.print(
+        "git action\n{s}\n'''\n{s} \n''' \n{s} \n''' \ngit agent\n{any}\n",
+        .{ uri, child.stdout, child.stderr, self.cwd },
+    );
+
+    return child.stdout;
 }
 
 pub fn initRepo(self: Agent, dir: []const u8, opt: struct { bare: bool = true }) ![]u8 {

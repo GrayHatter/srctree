@@ -4,9 +4,20 @@ pub const verse_routes = [_]Route.Match{
     Route.ANY("post", index),
     Route.ROUTE("new-repo", newRepo),
     Route.POST("new-repo", postNewRepo),
-    Route.ROUTE("clone-upstream", cloneUpstream),
-    Route.POST("clone-upstream", postCloneUpstream),
+    .{ .name = "clone-upstream", .methods = .{
+        .GET = .{ .build = cloneUpstream },
+        .POST = .{ .build = postCloneUpstream },
+    } },
 };
+
+pub fn index(ctx: *Frame) Error!void {
+    try ctx.requireValidUser();
+    if (ctx.request.data.post) |pd| {
+        std.debug.print("{any}\n", .{pd.items});
+        return newRepo(ctx);
+    }
+    return default(ctx);
+}
 
 fn createRepo(a: Allocator, reponame: []const u8) !void {
     var dn_buf: [2048]u8 = undefined;
@@ -21,9 +32,6 @@ fn createRepo(a: Allocator, reponame: []const u8) !void {
 }
 
 const AdminPage = template.PageData("admin.html");
-
-/// TODO fix me
-const btns = [1]template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
 fn default(ctx: *Frame) Error!void {
     try ctx.requireValidUser();
@@ -49,38 +57,19 @@ fn default(ctx: *Frame) Error!void {
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
         .form = value,
     });
     try ctx.sendPage(&page);
 }
 
+const CloneUpstreamPage = template.PageData("admin/clone-upstream.html");
 fn cloneUpstream(ctx: *Frame) Error!void {
     try ctx.requireValidUser();
-    var dom = DOM.new(ctx.alloc);
-    const action = "/admin/clone-upstream";
-    dom = dom.open(HTML.form(null, &[_]HTML.Attr{
-        HTML.Attr{ .key = "method", .value = "POST" },
-        HTML.Attr{ .key = "action", .value = action },
-    }));
-    dom.push(HTML.element("input", null, &[_]HTML.Attr{
-        HTML.Attr{ .key = "name", .value = "repo_uri" },
-        HTML.Attr{ .key = "value", .value = "https://srctree/reponame" },
-    }));
-    dom = dom.close();
-    const form = dom.done();
-    const list = try ctx.alloc.alloc([]u8, form.len);
-    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
-    const value = try std.mem.join(ctx.alloc, "", list);
-
-    var page = AdminPage.init(.{
+    var page = CloneUpstreamPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{
-            .nav = .{
-                .nav_buttons = &btns,
-            },
-        },
-        .form = value,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+        .post_error = null,
     });
     try ctx.sendPage(&page);
 }
@@ -92,47 +81,36 @@ const CloneUpstreamReq = struct {
 fn postCloneUpstream(ctx: *Frame) Error!void {
     try ctx.requireValidUser();
 
+    var page = CloneUpstreamPage.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+        .post_error = null,
+    });
+
     const udata = ctx.request.data.post.?.validate(CloneUpstreamReq) catch return error.DataInvalid;
     std.debug.print("repo uri {s}\n", .{udata.repo_uri});
     var nameitr = std.mem.splitBackwardsScalar(u8, udata.repo_uri, '/');
     const name = nameitr.first();
     std.debug.print("repo uri {s}\n", .{name});
+    // TODO sanitize requested repo name
+    const dir = std.fs.cwd().openDir("repos", .{}) catch |err| {
+        page.data.post_error = .{ .err_str = @errorName(err) };
+        return try ctx.sendPage(&page);
+    };
 
-    const dir = std.fs.cwd().openDir("repos", .{}) catch return error.Unknown;
     var agent = git.Agent{
         .alloc = ctx.alloc,
         .cwd = dir,
     };
     std.debug.print("fork bare {s}\n", .{
-        agent.forkRemote(udata.repo_uri, name) catch return error.Unknown,
-    });
-
-    var dom = DOM.new(ctx.alloc);
-    const action = "/admin/clone-upstream";
-    dom = dom.open(HTML.form(null, &[_]HTML.Attr{
-        HTML.Attr{ .key = "method", .value = "POST" },
-        HTML.Attr{ .key = "action", .value = action },
-    }));
-    dom.push(HTML.element("input", null, &[_]HTML.Attr{
-        HTML.Attr{ .key = "name", .value = "repo uri" },
-        HTML.Attr{ .key = "value", .value = "https://srctree/reponame" },
-    }));
-    dom = dom.close();
-    const form = dom.done();
-    const list = try ctx.alloc.alloc([]u8, form.len);
-    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
-    const value = try std.mem.join(ctx.alloc, "", list);
-
-    var page = AdminPage.init(.{
-        .meta_head = .{ .open_graph = .{} },
-        .body_header = .{
-            .nav = .{
-                .nav_buttons = &btns,
-            },
+        agent.forkRemote(udata.repo_uri, name) catch |err| {
+            page.data.post_error = .{ .err_str = @errorName(err) };
+            return try ctx.sendPage(&page);
         },
-        .form = value,
     });
-    try ctx.sendPage(&page);
+
+    // TODO redirect to new repo
+    return ctx.redirect("/repos", .see_other) catch unreachable;
 }
 
 fn postNewRepo(ctx: *Frame) Error!void {
@@ -179,11 +157,7 @@ fn postNewRepo(ctx: *Frame) Error!void {
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{
-            .nav = .{
-                .nav_buttons = &btns,
-            },
-        },
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
         .form = value,
     });
     try ctx.sendPage(&page);
@@ -211,19 +185,10 @@ fn newRepo(ctx: *Frame) Error!void {
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
         .form = value,
     });
     try ctx.sendPage(&page);
-}
-
-pub fn index(ctx: *Frame) Error!void {
-    try ctx.requireValidUser();
-    if (ctx.request.data.post) |pd| {
-        std.debug.print("{any}\n", .{pd.items});
-        return newRepo(ctx);
-    }
-    return default(ctx);
 }
 
 const std = @import("std");
@@ -233,6 +198,7 @@ const verse = @import("verse");
 const Frame = verse.Frame;
 const Route = verse.Router;
 const template = verse.template;
+const S = template.Structs;
 const HTML = template.html;
 const DOM = HTML.DOM;
 
