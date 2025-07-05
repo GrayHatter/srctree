@@ -235,7 +235,6 @@ repo {
 		border-radius: 4px 4px 0 0;
 		/* border: 1px solid #808080; */
 		intro {
-
 			span:first-child{
 				font-family: 'Titillium Web', sans-serif;
 				font-size: 120%;
@@ -748,8 +747,8 @@ blob {
 	display: flex;
 	justify-content: space-between;
 	border-bottom: 1px solid gray;
-	margin: 0 0.2rem;
-	padding: 2px 0 1px;
+	margin: 2px -0.3rem 0 0.4rem;
+	padding: 0;
 	span { padding: 0 0 0 0.3rem; }
 }
 
@@ -807,11 +806,16 @@ blob {
 .flex-month {
 	display: block;
 	margin: 2rem 0 1rem;
+	div.flex-list {
+		border-left: 1px solid gray;
+	}
 	intro {
-		padding: 2px 0;
-		background: #333;
-		width: 100%;
+		border-bottom: 1px solid gray;
 		display: inline-block;
+		font-size: 120%;
+		padding: 2px 0 2px 5px;
+		text-align: left;
+		width: 100%;
 	}
 
 }

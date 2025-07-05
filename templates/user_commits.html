@@ -28,11 +28,10 @@
 
     <For Months>
       <div class="flex-month">
-        <intro>
-          <Group>
-        </intro>
-        <Lead ornull>
-        <For JournalRows use="_short_commit_line.html"></For>
+        <intro><Group><span class="muted"><Lead ornull /></span></intro>
+        <div class="flex-list">
+          <For JournalRows use="_short_commit_line.html"></For>
+        </div>
       </div>
     </For>
     </content>
