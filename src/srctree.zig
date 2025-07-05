@@ -39,6 +39,7 @@ pub const endpoints = verse.Endpoints(.{
     @import("endpoints/repos.zig"),
     @import("endpoints/search.zig"),
     @import("endpoints/settings.zig"),
+    @import("endpoints/debugging.zig"),
 });
 
 const E404Page = template.PageData("4XX.html");
@@ -105,9 +106,13 @@ fn builder(fr: *Frame, call: BuildFn) void {
             std.debug.print("Unexpected error '{}'", .{err});
             @panic("not implemented");
         },
+        error.Unauthenticated => {
+            return fr.sendDefaultErrorPage(.unauthorized);
+        },
+        error.Unauthorized => {
+            return fr.sendDefaultErrorPage(.forbidden);
+        },
         error.Abuse,
-        error.Unauthenticated,
-        error.Unauthorized,
         error.DataInvalid,
         error.DataMissing,
         => {
@@ -116,6 +121,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
             if (fr.request.data.post) |post_data| {
                 std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
             }
+            return fr.sendDefaultErrorPage(.bad_request);
         },
     };
 }
