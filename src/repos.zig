@@ -65,6 +65,13 @@ pub fn exists(name: []const u8, vis: Visability) bool {
     return false;
 }
 
+//pub fn open(name: []const u8, vis: Visability) !?Git.Repo {
+//    if (isHiddenVis(name, vis)) return null;
+//    return openAny(name);
+//}
+//
+//pub fn openAny(name: []const u8) !?Git.Repo {
+
 pub fn open(name: []const u8, vis: Visability) !?Git.Repo {
     if (isHiddenVis(name, vis)) return null;
     var root = try dirs.directory(vis);
@@ -126,128 +133,207 @@ pub fn containsName(name: []const u8) bool {
     return if (name.len > 0) true else false;
 }
 
-pub const AgentConfig = struct {
-    const SECONDS = 1000 * 1000 * 1000;
-    running: bool = true,
-    sleep_for: usize = 60 * 60 * SECONDS,
-    agent: *const ?SrcConfig.Base.Agent,
-};
+pub const Agent = struct {
+    config: Config,
+    thread: ?std.Thread = null,
+    enabled: bool = false,
 
-fn pushUpstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
-    var update_buffer: [512]u8 = undefined;
-    const update = std.fmt.bufPrint(
-        &update_buffer,
-        "update {}\n",
-        .{std.time.timestamp()},
-    ) catch unreachable;
+    pub const Config = struct {
+        enabled: bool,
+        sleep_for: usize = 60 * 60 * SECONDS,
+        upstream: Direction = .both,
+        downstream: Direction = .both,
 
-    const rhead = try repo.HEAD(a);
-    const head: []const u8 = switch (rhead) {
-        .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
-        .tag => |t| t.name,
-        else => "main",
+        pub const Direction = packed struct(u2) {
+            push: bool,
+            pull: bool,
+
+            pub const none: Direction = .{ .push = false, .pull = false };
+            pub const push_only: Direction = .{ .push = true, .pull = false };
+            pub const pull_only: Direction = .{ .push = false, .pull = true };
+            pub const both: Direction = .{ .push = true, .pull = true };
+        };
+
+        const SECONDS = 1000 * 1000 * 1000;
     };
 
-    if (try repo.findRemote("upstream")) |_| {
-        repo.dir.writeFile(.{ .sub_path = "srctree_last_update", .data = update }) catch {};
-        var agent = repo.getAgent(a);
-        const updated = agent.pullUpstream(head) catch er: {
-            std.debug.print("Warning, unable to update repo {s}\n", .{name});
-            break :er false;
+    const Updated = struct {
+        upstream_push: i64 = 0,
+        upstream_pull: i64 = 0,
+        downstream_push: i64 = 0,
+        downstream_pull: i64 = 0,
+
+        pub fn format(u: Updated, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+            try out.print(
+                \\upstream_push {}
+                \\upstream_pull {}
+                \\downstream_push {}
+                \\downstream_pull {}
+                \\
+            , .{ u.upstream_push, u.upstream_pull, u.downstream_push, u.downstream_pull });
+        }
+    };
+
+    pub fn init(cfg: Config) Agent {
+        return .{
+            .config = cfg,
         };
-        if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{name});
     }
-}
 
-pub fn updateThread(cfg: *AgentConfig) void {
-    std.debug.print("Spawning update thread\n", .{});
-    const a = std.heap.page_allocator;
-    const names = allNames(a) catch unreachable;
-    defer {
-        for (names) |n| a.free(n);
-        a.free(names);
-    }
-    var name_buffer: [2048]u8 = undefined;
-
-    var push_upstream: bool = false;
-    if (cfg.agent.*) |agent| {
-        if (agent.push_upstream) {
-            push_upstream = true;
+    pub fn startThread(a: *Agent) !void {
+        if (a.config.enabled) {
+            a.enabled = true;
+            a.thread = try std.Thread.spawn(.{}, updateThread, .{a});
         }
     }
 
-    sleep(cfg.sleep_for / 60 / 6);
-    running: while (cfg.running) {
-        for (names) |rname| {
-            const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
-            const dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
-            var repo = Git.Repo.init(dir) catch continue;
-            defer repo.raze();
-            repo.loadData(a) catch {
-                std.debug.print("Warning, unable to load data for repo {s}\n", .{rname});
-            };
+    pub fn joinThread(a: *Agent) void {
+        a.enabled = false;
+        if (a.thread) |thr| {
+            thr.join();
+        }
+        a.thread = null;
+    }
 
-            if (push_upstream) {
-                pushUpstream(a, rname, &repo) catch {
-                    std.debug.print("Error when trying to push on {s}\n", .{rname});
-                    break;
-                };
+    fn setUpdated(dir: std.fs.Dir, update: Updated) void {
+        var buffer: [1024]u8 = undefined;
+        const text = std.fmt.bufPrint(&buffer, "{}", .{update}) catch unreachable;
+        dir.writeFile(.{ .sub_path = "srctree_sync", .data = text }) catch {};
+    }
+
+    fn getUpdated(dir: std.fs.Dir) !Updated {
+        var update: Updated = .{};
+        var rbuf: [1024]u8 = undefined;
+        const sync_str = dir.readFile("srctree_sync", &rbuf) catch return .{};
+        if (indexOf(u8, sync_str, "upstream_push ")) |i| {
+            if (indexOfPos(u8, sync_str, i, "\n")) |j| {
+                update.upstream_push = parseInt(i64, sync_str[i + 14 .. j], 10) catch 0;
             }
+        }
+        if (indexOf(u8, sync_str, "upstream_pull ")) |i| {
+            if (indexOfPos(u8, sync_str, i, "\n")) |j| {
+                update.upstream_pull = parseInt(i64, sync_str[i + 14 .. j], 10) catch 0;
+            }
+        }
+        if (indexOf(u8, sync_str, "downstream_push ")) |i| {
+            if (indexOfPos(u8, sync_str, i, "\n")) |j| {
+                update.downstream_push = parseInt(i64, sync_str[i + 16 .. j], 10) catch 0;
+            }
+        }
+        if (indexOf(u8, sync_str, "downstream_pull ")) |i| {
+            if (indexOfPos(u8, sync_str, i, "\n")) |j| {
+                update.downstream_pull = parseInt(i64, sync_str[i + 16 .. j], 10) catch 0;
+            }
+        }
 
-            var rbuf: [0xff]u8 = undefined;
-            const last_push_str = repo.dir.readFile("srctree_last_downdate", &rbuf) catch |err| switch (err) {
-                error.FileNotFound => for (rbuf[0..9], "update 0\n") |*dst, src| {
-                    dst.* = src;
-                } else rbuf[0..9],
-                else => {
-                    std.debug.print("unable to read downstream update {}  '{s}'\n", .{ err, rname });
-                    continue;
-                },
-            };
-            const last_push = std.fmt.parseInt(i64, last_push_str[7 .. last_push_str.len - 1], 10) catch |err| {
-                std.debug.print("unable to parse int {} '{s}'\n", .{ err, last_push_str });
-                continue;
-            };
-            const repo_update = repo.updatedAt(a) catch 0;
+        return update;
+    }
 
-            var update_buffer: [512]u8 = undefined;
-            const update = std.fmt.bufPrint(
-                &update_buffer,
-                "update {}\n",
-                .{std.time.timestamp()},
-            ) catch unreachable;
+    fn pullUpstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
+        var update = try getUpdated(repo.dir);
+        const rhead = try repo.HEAD(a);
+        const head: []const u8 = switch (rhead) {
+            .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
+            .tag => |t| t.name,
+            else => "main",
+        };
 
-            if (repo_update > last_push) {
-                if (repo.findRemote("downstream") catch continue) |_| {
-                    repo.dir.writeFile(.{ .sub_path = "srctree_last_downdate", .data = update }) catch {};
-                    var agent = repo.getAgent(a);
-                    const updated = agent.pushDownstream() catch er: {
-                        std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});
-                        break :er false;
-                    };
-                    if (!updated) std.debug.print("Warning, update failed repo {s}\n", .{rname});
-                }
+        if (try repo.findRemote("upstream")) |_| {
+            var gitagent = repo.getAgent(a);
+            if (try gitagent.pullUpstream(head)) {
+                log.debug("Update Successful on repo {s}", .{name});
             } else {
-                if (DEBUG) {
-                    std.debug.print("Skipping for {s} no new branches {} {}\n", .{ rname, repo_update, last_push });
-                }
+                log.warn("Warning upstream pull failed repo {s}", .{name});
             }
-        }
+            update.upstream_pull = std.time.timestamp();
+            setUpdated(repo.dir, update);
+        } else log.debug("repo {s} doesn't have an upstream peer", .{name});
+    }
 
-        var qi: usize = 60 * 60;
-        while (qi > 0) {
-            qi -|= 1;
-            sleep(cfg.sleep_for / 60 / 60);
-            if (!cfg.running) break :running;
+    fn pushDownstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
+        var update = try getUpdated(repo.dir);
+        const repo_update = repo.updatedAt(a) catch 0;
+
+        if (repo_update > update.downstream_push) {
+            if (repo.findRemote("downstream") catch return) |_| {
+                var gitagent = repo.getAgent(a);
+                const updated = gitagent.pushDownstream() catch er: {
+                    log.warn("Warning, unable to push to downstream repo {s}", .{name});
+                    break :er false;
+                };
+                update.downstream_push = std.time.timestamp();
+                setUpdated(repo.dir, update);
+                if (!updated) log.warn("Warning downstream push failed repo {s}", .{name});
+            } else log.debug("repo {s} doesn't have any downstream peers", .{name});
+        } else {
+            log.debug("Skipping for {s} no new branches {} {}", .{ name, repo_update, update.downstream_push });
         }
     }
-    std.debug.print("update thread done!\n", .{});
-}
+
+    pub fn updateThread(a: *Agent) void {
+        log.debug("Spawning update thread", .{});
+        const alloc = std.heap.page_allocator;
+        const names = allNames(alloc) catch unreachable;
+        defer {
+            for (names) |n| alloc.free(n);
+            alloc.free(names);
+        }
+
+        sleep(1000_000_000 * 20);
+        running: while (a.enabled) {
+            log.info("Starting sync for {} repos", .{names.len});
+            for (names) |rname| {
+                log.debug("starting update for {s}", .{rname});
+                var repo: Git.Repo = open(rname, .public) catch {
+                    log.warn("unable to load public repo {s}", .{rname});
+                    continue;
+                } orelse open(rname, .private) catch {
+                    log.warn("unable to load private repo {s}", .{rname});
+                    continue;
+                } orelse {
+                    log.warn("unable to find repo {s}", .{rname});
+                    continue;
+                };
+                defer repo.raze();
+
+                repo.loadData(alloc) catch {
+                    log.err("Warning, unable to load data for repo {s}", .{rname});
+                    continue;
+                };
+
+                if (a.config.upstream.pull) {
+                    pullUpstream(alloc, rname, &repo) catch |err| {
+                        log.err("Error ({}) when trying to pull on {s}\n", .{ err, rname });
+                        break :running;
+                    };
+                }
+                if (a.config.downstream.push) {
+                    pushDownstream(alloc, rname, &repo) catch |err| {
+                        log.err("Error ({}) when trying to push on {s}\n", .{ err, rname });
+                        break :running;
+                    };
+                }
+            }
+            log.debug("update cycle complete", .{});
+            var qi: usize = 60 * 60;
+            while (qi > 0) {
+                qi -|= 1;
+                sleep(a.config.sleep_for / 60 / 60);
+                if (!a.enabled) break :running;
+            }
+        }
+        log.info("Update thread complete!", .{});
+    }
+};
 
 const std = @import("std");
+const log = std.log.scoped(.update_thread);
 const Allocator = std.mem.Allocator;
 const sleep = std.time.sleep;
 const eql = std.mem.eql;
+const indexOf = std.mem.indexOf;
+const indexOfPos = std.mem.indexOfPos;
+const parseInt = std.fmt.parseInt;
 
 const Git = @import("git.zig");
 const SrcConfig = @import("main.zig").SrcConfig;

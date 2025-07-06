@@ -39,7 +39,7 @@ pub fn pullUpstream(self: Agent, branch: []const u8) !bool {
         self.alloc.free(move);
         return true;
     } else {
-        std.debug.print("refusing to move head non-ancestor\n", .{});
+        std.debug.print("refusing to move head non-ancestor {s}\n", .{up_branch});
         return false;
     }
 }

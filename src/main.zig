@@ -84,7 +84,10 @@ pub const SrcConfig = Ini.Config(struct {
 
     pub const Agent = struct {
         enabled: bool = false,
-        push_upstream: bool = false,
+        upstream_push: bool = false,
+        upstream_pull: bool = false,
+        downstream_push: bool = false,
+        downstream_pull: bool = false,
     };
 
     pub const empty: SrcConfig.Base = .{
@@ -153,10 +156,6 @@ pub fn main() !void {
     const cache = Cache.init(a);
     defer cache.raze();
 
-    var agent_config: Repos.AgentConfig = .{
-        .agent = &global_config.config.agent,
-    };
-
     if (global_config.config.server) |srv| {
         if (srv.remove_on_start) {
             cwd.deleteFile("./srctree.sock") catch |err| switch (err) {
@@ -166,10 +165,19 @@ pub fn main() !void {
         }
     }
 
-    if (global_config.config.agent.?.enabled) {
-        const thread = try Thread.spawn(.{}, Repos.updateThread, .{&agent_config});
-        defer thread.join();
-    }
+    var agent: Repos.Agent = .init(.{
+        .enabled = global_config.config.agent.?.enabled,
+        .upstream = .{
+            .push = global_config.config.agent.?.upstream_push,
+            .pull = global_config.config.agent.?.upstream_pull,
+        },
+        .downstream = .{
+            .push = global_config.config.agent.?.downstream_push,
+            .pull = global_config.config.agent.?.downstream_pull,
+        },
+    });
+    try agent.startThread();
+    defer agent.joinThread();
 
     var arena = std.heap.ArenaAllocator.init(a);
     defer arena.deinit();
@@ -202,5 +210,4 @@ pub fn main() !void {
         }
         std.posix.exit(1);
     };
-    agent_config.running = false;
 }
