@@ -177,7 +177,7 @@ pub fn updateThread(cfg: *AgentConfig) void {
     }
 
     sleep(cfg.sleep_for / 60 / 6);
-    while (cfg.running) running: {
+    running: while (cfg.running) {
         for (names) |rname| {
             const dirname = std.fmt.bufPrint(&name_buffer, "repos/{s}", .{rname}) catch return;
             const dir = std.fs.cwd().openDir(dirname, .{}) catch continue;
