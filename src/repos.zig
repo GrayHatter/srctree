@@ -151,7 +151,7 @@ fn pushUpstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
     if (try repo.findRemote("upstream")) |_| {
         repo.dir.writeFile(.{ .sub_path = "srctree_last_update", .data = update }) catch {};
         var agent = repo.getAgent(a);
-        const updated = agent.updateUpstream(head) catch er: {
+        const updated = agent.pullUpstream(head) catch er: {
             std.debug.print("Warning, unable to update repo {s}\n", .{name});
             break :er false;
         };
@@ -221,7 +221,7 @@ pub fn updateThread(cfg: *AgentConfig) void {
                 if (repo.findRemote("downstream") catch continue) |_| {
                     repo.dir.writeFile(.{ .sub_path = "srctree_last_downdate", .data = update }) catch {};
                     var agent = repo.getAgent(a);
-                    const updated = agent.updateDownstream() catch er: {
+                    const updated = agent.pushDownstream() catch er: {
                         std.debug.print("Warning, unable to push to downstream repo {s}\n", .{rname});
                         break :er false;
                     };

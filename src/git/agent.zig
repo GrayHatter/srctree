@@ -6,7 +6,7 @@ const Agent = @This();
 
 const DEBUG_GIT_ACTIONS = false;
 
-pub fn updateUpstream(self: Agent, branch: []const u8) !bool {
+pub fn pullUpstream(self: Agent, branch: []const u8) !bool {
     const fetch = try self.exec(&[_][]const u8{
         "git",
         "fetch",
@@ -44,7 +44,7 @@ pub fn updateUpstream(self: Agent, branch: []const u8) !bool {
     }
 }
 
-pub fn updateDownstream(self: Agent) !bool {
+pub fn pushDownstream(self: Agent) !bool {
     const push = try self.exec(&[_][]const u8{
         "git",
         "push",
