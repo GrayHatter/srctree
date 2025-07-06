@@ -53,7 +53,7 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
             } else if (eql(u8, name, "committer")) {
                 committer = try Actor.make(payload);
             } else {
-                std.debug.print("unknown header: {any}\n", .{name});
+                std.debug.print("unknown header: {any} '{s}'\n", .{ name, name });
                 return error.UnknownHeader;
             }
         } else return error.MalformedHeader;

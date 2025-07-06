@@ -283,7 +283,10 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var all_repos = repos.allRepoIterator(.public) catch return error.Unknown;
     while (all_repos.next() catch return error.Unknown) |input| {
         var repo = input;
-        repo.loadData(ctx.alloc) catch return error.Unknown;
+        repo.loadData(ctx.alloc) catch {
+            log.err("unable to load data for repo {s}", .{all_repos.current_name.?});
+            continue;
+        };
         defer repo.raze();
         const count_repo = Journal.buildCommitList(
             ctx.alloc,
@@ -292,7 +295,10 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             email,
             all_repos.current_name.?,
             &repo,
-        ) catch unreachable;
+        ) catch {
+            log.err("unable to build the commit list for repo {s}", .{all_repos.current_name.?});
+            continue;
+        };
         Journal.build(
             ctx.alloc,
             &scribe_list,
@@ -300,7 +306,8 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             all_repos.current_name.?,
             &repo,
         ) catch {
-            return error.Unknown;
+            log.err("unable to build journal for repo {s}", .{all_repos.current_name.?});
+            continue;
         };
         repo_count +|= 1;
         for (&count_all, count_repo) |*a, r| a.* += r;
@@ -444,6 +451,7 @@ const eql = std.mem.eql;
 const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
+const log = std.log;
 
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
