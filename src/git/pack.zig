@@ -81,14 +81,11 @@ fn preparePack(self: *Pack) !void {
 }
 
 fn mmap(f: std.fs.File) ![]u8 {
-    try f.seekFromEnd(0);
-    const length = try f.getPos();
-    const offset = 0;
-    return std.posix.mmap(null, length, PROT.READ, .{ .TYPE = .SHARED }, f.handle, offset);
+    return system.mmap(f.handle, try f.getEndPos(), .{});
 }
 
 fn munmap(mem: []align(std.heap.page_size_min) const u8) void {
-    std.posix.munmap(mem);
+    system.munmap(mem);
 }
 
 /// the packidx fanout is a 0xFF count table of u32 the sum count for that
@@ -392,10 +389,11 @@ const Repo = @import("Repo.zig");
 const SHA = @import("SHA.zig");
 const Object = @import("Object.zig");
 
+const system = @import("../system.zig");
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const zlib = std.compress.zlib;
-const PROT = std.posix.PROT;
 const MAP_TYPE = std.os.linux.MAP_TYPE;
 const AnyReader = std.io.AnyReader;
 const bufPrint = std.fmt.bufPrint;

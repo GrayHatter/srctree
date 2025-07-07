@@ -386,14 +386,20 @@ pub fn HEAD(self: *Repo, a: Allocator) !Ref {
 fn loadTags(self: *Repo) !void {
     const a = self.alloc orelse return error.InvalidRepoState;
 
-    const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0x2ffff) catch |err| switch (err) {
+    const fd = self.dir.openFile("packed-refs", .{}) catch |err| switch (err) {
         error.FileNotFound => null,
         else => {
             std.debug.print("packed-refs {any}\n", .{err});
             @panic("unimplemented error in tags packed-refs");
         },
     };
-    defer if (pk_refs) |pr| a.free(pr);
+
+    const pk_refs: ?[]const u8 = if (fd) |f|
+        system.mmap(f.handle, try f.getEndPos(), .{}) catch null
+    else
+        null;
+
+    defer if (pk_refs) |pr| system.munmap(@alignCast(pr));
 
     const count: usize = if (pk_refs) |p| std.mem.count(u8, p, "refs/tags/") else 0;
     var tags: std.ArrayListUnmanaged(Tag) = try .initCapacity(a, count);
@@ -594,6 +600,7 @@ const Tag = @import("Tag.zig");
 const Tree = @import("tree.zig");
 
 const Ini = @import("../ini.zig");
+const system = @import("../system.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
