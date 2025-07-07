@@ -9,6 +9,8 @@ head: ?Ref = null,
 tags: ?[]Tag = null,
 branches: ?[]Branch = null,
 remotes: ?[]Remote = null,
+config: ?Ini.Config(void) = null,
+config_data: ?[]u8 = null,
 
 repo_name: ?[]const u8 = null,
 
@@ -81,6 +83,7 @@ pub fn loadData(self: *Repo, a: Allocator) !void {
     if (self.alloc != null) unreachable;
     self.alloc = a;
 
+    try self.loadConfig();
     try self.loadPacks();
     try self.loadRefs();
     try self.loadTags();
@@ -89,14 +92,16 @@ pub fn loadData(self: *Repo, a: Allocator) !void {
     _ = try self.HEAD(a);
 }
 
+fn loadConfig(self: *Repo) !void {
+    self.config_data = try self.dir.readFileAlloc(self.alloc.?, "config", 0xffff);
+    self.config = try .init(self.alloc.?, self.config_data.?);
+}
+
 fn loadRemotes(self: *Repo) !void {
     const a = self.alloc orelse unreachable;
     var list = std.ArrayList(Remote).init(a);
     errdefer list.clearAndFree();
-    const config_data = try self.dir.readFileAlloc(a, "config", 0xffff);
-    defer a.free(config_data);
-    const cfg = try Ini.Config(void).init(a, config_data);
-    defer cfg.raze(a);
+    const cfg = self.config orelse return;
     for (0..cfg.ctx.ns.len) |i| {
         const ns = cfg.ctx.filter("remote", i) orelse break;
         try list.append(.{
@@ -492,6 +497,13 @@ pub fn description(self: Repo, a: Allocator) ![]u8 {
 pub fn raze(self: *Repo) void {
     self.dir.close();
     if (self.alloc) |a| {
+        if (self.config) |cfg| {
+            cfg.raze(a);
+        }
+        if (self.config_data) |cd| {
+            a.free(cd);
+        }
+
         for (self.packs) |pack| {
             pack.raze();
         }
