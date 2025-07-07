@@ -30,8 +30,8 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
     while (lines.next()) |line| {
         if (startsWith(u8, line, "gpgsig")) {
             gpgSig(&lines) catch |e| {
-                std.debug.print("GPG sig failed {}\n", .{e});
-                std.debug.print("full stack '''\n{s}\n'''\n", .{data});
+                log.err("GPG sig failed {}\n", .{e});
+                log.debug("full stack '''\n{s}\n'''\n", .{data});
                 return e;
             };
             continue;
@@ -52,8 +52,10 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
                 author = try Actor.make(payload);
             } else if (eql(u8, name, "committer")) {
                 committer = try Actor.make(payload);
+            } else if (eql(u8, name, "change-id")) {
+                log.debug("unsupported git header: '{s}'\n\t\t'{any}'", .{ name, line });
             } else {
-                std.debug.print("unknown header: {any} '{s}'\n", .{ name, name });
+                log.err("unknown header: {any} '{s}'\n", .{ name, name });
                 return error.UnknownHeader;
             }
         } else return error.MalformedHeader;
@@ -211,6 +213,7 @@ const Actor = @import("actor.zig");
 const Object = @import("Object.zig");
 
 const std = @import("std");
+const log = std.log.scoped(.git_internals);
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const startsWith = std.mem.startsWith;
