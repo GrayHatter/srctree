@@ -219,7 +219,7 @@ fn readVarInt(reader: *AnyReader) error{ReadError}!usize {
     return base;
 }
 
-fn deltaInst(reader: *AnyReader, writer: anytype, base: []u8) !usize {
+fn deltaInst(reader: *AnyReader, writer: anytype, base: []const u8) !usize {
     const readb: usize = try reader.readByte();
     if (readb == 0) {
         std.debug.print("INVALID INSTRUCTION 0x00\n", .{});
@@ -266,7 +266,7 @@ fn loadRefDelta(_: Pack, a: Allocator, reader: *AnyReader, _: usize, repo: *cons
     const sha = SHA.init(buf[0..]);
     // I hate it too... but I need a break
     var basefree: []u8 = undefined;
-    var basedata: []u8 = undefined;
+    var basedata: []const u8 = undefined;
     var basetype: PackedObjectTypes = undefined;
     switch (repo.loadObjectOrDelta(a, sha) catch return error.BlobMissing) {
         .pack => |pk| {
@@ -274,15 +274,27 @@ fn loadRefDelta(_: Pack, a: Allocator, reader: *AnyReader, _: usize, repo: *cons
             basedata = pk.data;
             basetype = pk.header.kind;
         },
-        .file => |fdata| {
-            basefree = fdata.memory;
-            basedata = fdata.body;
-            basetype = switch (fdata.kind) {
-                .blob => .blob,
-                .tree => .tree,
-                .commit => .commit,
-                .tag => .tag,
-            };
+        .file => |fdata| switch (fdata) {
+            .blob => |b| {
+                basefree = b.memory.?;
+                basedata = b.data.?;
+                basetype = .blob;
+            },
+            .tree => |t| {
+                basefree = t.memory.?;
+                basedata = t.blob;
+                basetype = .blob;
+            },
+            .commit => |c| {
+                basefree = c.memory.?;
+                basedata = c.body;
+                basetype = .blob;
+            },
+            .tag => |t| {
+                basefree = t.memory.?;
+                basedata = t.memory.?;
+                basetype = .blob;
+            },
         },
     }
     defer a.free(basefree);
@@ -358,23 +370,15 @@ pub fn loadData(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Erro
     };
 }
 
-pub fn resolveObject(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Error!Object {
+pub fn resolveObject(self: Pack, sha: SHA, a: Allocator, offset: usize, repo: *const Repo) !Object.Object {
     const resolved = try self.loadData(a, offset, repo);
     errdefer a.free(resolved.data);
 
     return switch (resolved.header.kind) {
-        .blob, .tree, .commit, .tag => |kind| .{
-            .kind = switch (kind) {
-                .blob => .blob,
-                .tree => .tree,
-                .commit => .commit,
-                .tag => .tag,
-                else => unreachable,
-            },
-            .memory = resolved.data,
-            .header = resolved.data[0..0],
-            .body = resolved.data,
-        },
+        .blob => .{ .blob = .initOwned(sha, .{ 0, 0, 0, 0, 0, 0 }, resolved.data, resolved.data, resolved.data) },
+        .tree => .{ .tree = try .initOwned(sha, a, resolved.data, resolved.data) },
+        .commit => .{ .commit = try .initOwned(sha, a, resolved.data, resolved.data) },
+        .tag => .{ .tag = try .initOwned(sha, resolved.data) },
         else => return error.IncompleteObject,
     };
 }

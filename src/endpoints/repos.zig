@@ -235,7 +235,10 @@ fn list(ctx: *Frame) Router.Error!void {
     var current_repos = std.ArrayList(Git.Repo).init(ctx.alloc);
     while (repo_iter.next() catch return error.Unknown) |rpo_| {
         var rpo = rpo_;
-        rpo.loadData(ctx.alloc) catch return error.Unknown;
+        rpo.loadData(ctx.alloc) catch |err| {
+            log.err("Error, unable to load data on repo {s} {}", .{ repo_iter.current_name.?, err });
+            continue;
+        };
         rpo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
         if (rpo.tags != null) {
@@ -283,6 +286,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
+const log = std.log.scoped(.srctree);
 
 const verse = @import("verse");
 const Frame = verse.Frame;

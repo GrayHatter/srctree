@@ -1,5 +1,5 @@
 alloc: ?Allocator = null,
-memory: ?[]const u8 = null,
+memory: ?[]u8 = null,
 sha: SHA,
 tree: SHA,
 /// 9 ought to be enough for anyone... or at least robinli ... at least for a while
@@ -80,25 +80,29 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
     };
 }
 
-pub fn initOwned(sha: SHA, a: Allocator, object: Object) !Commit {
-    var commit = try init(sha, object.body);
+pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Commit {
+    var commit = try init(sha, body);
     commit.alloc = a;
-    commit.memory = object.memory;
+    commit.memory = memory;
     return commit;
 }
 
 pub fn toParent(self: Commit, a: Allocator, idx: u8, repo: *const Repo) !Commit {
     if (idx >= self.parent.len) return error.NoParent;
     if (self.parent[idx]) |parent| {
-        const tmp = try repo.loadObject(a, parent);
-        return try initOwned(parent, a, tmp);
+        return switch (try repo.loadObject(a, parent)) {
+            .commit => |c| c,
+            else => error.NotACommit,
+        };
     }
     return error.NoParent;
 }
 
 pub fn mkTree(self: Commit, a: Allocator, repo: *const Repo) !Tree {
-    const tmp = try repo.loadObject(a, self.tree);
-    return try Tree.initOwned(self.tree, a, tmp);
+    return switch (try repo.loadObject(a, self.tree)) {
+        .tree => |t| t,
+        else => error.NotATree,
+    };
 }
 
 pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8, repo: *const Repo) !Tree {

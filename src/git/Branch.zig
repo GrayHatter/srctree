@@ -3,8 +3,10 @@ sha: SHA,
 repo: *const Repo,
 
 pub fn toCommit(self: Branch, a: Allocator) !Commit {
-    const obj = try self.repo.loadObject(a, self.sha);
-    return Commit.initOwned(self.sha, a, obj);
+    switch (try self.repo.loadObject(a, self.sha)) {
+        .commit => |c| return c,
+        else => return error.NotACommit,
+    }
 }
 
 pub fn raze(self: Branch, a: Allocator) void {

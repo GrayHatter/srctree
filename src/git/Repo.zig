@@ -148,28 +148,26 @@ fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
     const data = try decomr.readAllAlloc(a, 0xffffff);
     errdefer a.free(data);
     if (indexOf(u8, data, "\x00")) |i| {
-        return .{
-            .memory = data,
-            .header = data[0..i],
-            .body = data[i + 1 ..],
-            .kind = if (startsWith(u8, data, "blob "))
-                .blob
-            else if (startsWith(u8, data, "tree "))
-                .tree
-            else if (startsWith(u8, data, "commit "))
-                .commit
-            else if (startsWith(u8, data, "tag "))
-                .tag
-            else
-                return error.InvalidObject,
-        };
-    } else return error.InvalidObject;
+        const header = data[0..i];
+        _ = header;
+        const body = data[i + 1 ..];
+        if (startsWith(u8, data, "blob ")) {
+            return .{ .blob = .initOwned(sha, @splat(0), body, body, data) };
+        } else if (startsWith(u8, data, "tree ")) {
+            return .{ .tree = try .initOwned(sha, a, body, data) };
+        } else if (startsWith(u8, data, "commit ")) {
+            return .{ .commit = try .initOwned(sha, a, body, data) };
+        } else if (startsWith(u8, data, "tag ")) {
+            return .{ .tag = try .initOwned(sha, body) };
+        }
+    }
+    return error.InvalidObject;
 }
 
 fn loadPacked(self: Repo, a: Allocator, sha: SHA) !?Object {
     for (self.packs) |pack| {
         if (pack.contains(sha)) |offset| {
-            return try pack.resolveObject(a, offset, &self);
+            return try pack.resolveObject(sha, a, offset, &self);
         }
     }
     return null;
@@ -189,7 +187,7 @@ fn loadPackedPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
     std.debug.assert(sha.partial == true);
     for (self.packs) |pack| {
         if (try pack.containsPrefix(sha.bin[0..sha.binlen])) |offset| {
-            return try pack.resolveObject(a, offset, &self);
+            return try pack.resolveObject(sha, a, offset, &self);
         }
     }
     return null;
@@ -227,41 +225,9 @@ pub fn loadObject(self: Repo, a: Allocator, sha: SHA) !Object {
 }
 
 pub fn loadBlob(self: Repo, a: Allocator, sha: SHA) !Blob {
-    const obj = try self.loadObject(a, sha);
-    switch (obj.kind) {
-        .blob => {
-            return Blob{
-                .memory = obj.memory,
-                .sha = sha,
-                .mode = undefined,
-                .name = undefined,
-                .data = obj.body,
-            };
-        },
-        .tree, .commit, .tag => unreachable,
-    }
-}
-pub fn loadTree(self: Repo, a: Allocator, sha: SHA) !Tree {
-    const obj = try self.loadObject(a, sha);
-    switch (obj.kind) {
-        .tree => return try Tree.initOwned(sha, a, obj),
-        .blob, .commit, .tag => unreachable,
-    }
-}
-pub fn loadCommit(self: Repo, a: Allocator, sha: SHA) !Commit {
-    const obj = try self.loadObject(a, sha);
-    switch (obj.kind) {
-        .blob, .tree, .tag => unreachable,
-        .commit => return try Commit.initOwned(sha, a, obj),
-    }
-}
-
-fn loadTag(self: *Repo, a: Allocator, sha: SHA, name: []const u8) !Tag {
-    const obj = try self.loadObject(a, sha);
-    return switch (obj.kind) {
-        .blob, .tree => unreachable,
-        .commit => try .lightTag(sha, try a.dupe(u8, name), obj.body),
-        .tag => try .fromSlice(sha, obj.body),
+    return switch (try self.loadObject(a, sha)) {
+        .blob => |b| b,
+        else => error.NotABlob,
     };
 }
 
@@ -410,7 +376,11 @@ fn loadTags(self: *Repo) !void {
         while (lines.next()) |line| {
             if (indexOf(u8, line, "refs/tags/")) |i| {
                 const name = line[i + 10 ..];
-                try tags.append(a, try self.loadTag(a, SHA.init(line[0..40]), name));
+
+                try tags.append(a, try .fromObject(
+                    try self.loadObject(a, .init(line[0..40])),
+                    try a.dupe(u8, name),
+                ));
             }
         }
     }
@@ -433,7 +403,10 @@ fn loadTags(self: *Repo) !void {
             std.debug.print("unexpected tag format for {s}\n", .{fname});
             return error.InvalidTagFound;
         }
-        try tags.append(a, try self.loadTag(a, SHA.init(contents[0..40]), next.name));
+        try tags.append(a, try .fromObject(
+            try self.loadObject(a, .init(contents[0..40])),
+            try a.dupe(u8, next.name),
+        ));
     }
     if (tags.items.len > 0) self.tags = try tags.toOwnedSlice(a);
 }
@@ -475,7 +448,7 @@ pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
         obj = try self.loadObject(a, sha);
     }
     if (obj == null) return error.CommitMissing;
-    return try Commit.initOwned(fullsha, a, obj.?);
+    return obj.?.commit;
 }
 
 pub fn headCommit(self: *const Repo, a: Allocator) !Commit {
@@ -581,17 +554,19 @@ test "hopefully a delta" {
     defer head.raze();
     if (false) std.debug.print("{}\n", .{head});
 
-    const obj = try repo.loadPacked(a, head.tree);
-    const tree = try Tree.initOwned(head.tree, a, obj.?);
-    tree.raze();
-    if (false) std.debug.print("{}\n", .{tree});
+    const obj = try repo.loadPacked(a, head.tree) orelse return error.UnableToLoadObject;
+    switch (obj) {
+        .tree => |tree| tree.raze(),
+        else => return error.NotATree,
+    }
+    if (false) std.debug.print("{}\n", .{obj.tree});
 }
 
 const Agent = @import("agent.zig");
 const Blob = @import("blob.zig");
 const Branch = @import("Branch.zig");
 const Commit = @import("Commit.zig");
-const Object = @import("Object.zig");
+const Object = @import("Object.zig").Object;
 const Pack = @import("pack.zig");
 const Ref = @import("ref.zig").Ref;
 const Remote = @import("remote.zig");

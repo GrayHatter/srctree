@@ -1,10 +1,12 @@
-name: []const u8,
+name: []u8,
 sha: SHA,
 object: []const u8,
 type: TagType,
 tagger: Actor,
 message: []const u8,
 signature: ?[]const u8,
+//TODO raze
+memory: ?[]u8 = null,
 //signature: ?Commit.GPGSig,
 
 const Tag = @This();
@@ -28,6 +30,24 @@ pub fn raze(tag: Tag, a: std.mem.Allocator) void {
     }
 }
 
+pub fn init(sha: SHA, data: []const u8) !Tag {
+    return fromSlice(sha, data);
+}
+
+pub fn initOwned(sha: SHA, data: []u8) !Tag {
+    var tag = try init(sha, data);
+    tag.memory = data;
+    return tag;
+}
+
+pub fn fromObject(obj: Object, name: []u8) !Tag {
+    return switch (obj) {
+        .tag => |tag| try .fromSlice(tag.sha, tag.memory.?),
+        .commit => |cmt| try .lightTag(cmt.sha, name, cmt.memory orelse cmt.body),
+        else => error.NotATag,
+    };
+}
+
 pub fn fromSlice(sha: SHA, bblob: []const u8) !Tag {
     // sometimes, the slice will have a preamble
     var blob = bblob;
@@ -48,7 +68,7 @@ pub fn fromSlice(sha: SHA, bblob: []const u8) !Tag {
 /// future me!
 /// Dear past me... fuck you! dear future me... HA same!
 /// Dear past mes... you both suck!
-pub fn lightTag(sha: SHA, name: []const u8, blob: []const u8) !Tag {
+pub fn lightTag(sha: SHA, name: []u8, blob: []const u8) !Tag {
     var actor: ?Actor = null;
     if (indexOf(u8, blob, "committer ")) |i| {
         var act = blob[i + 10 ..];
@@ -68,7 +88,7 @@ pub fn lightTag(sha: SHA, name: []const u8, blob: []const u8) !Tag {
 }
 
 pub fn fullTag(sha: SHA, blob: []const u8) !Tag {
-    var name: ?[]const u8 = null;
+    var name: ?[]u8 = null;
     var object: ?[]const u8 = null;
     var ttype: ?TagType = null;
     var actor: ?Actor = null;
@@ -79,7 +99,7 @@ pub fn fullTag(sha: SHA, blob: []const u8) !Tag {
         } else if (startsWith(u8, line, "type ")) {
             ttype = TagType.fromSlice(line[5..]);
         } else if (startsWith(u8, line, "tag ")) {
-            name = line[4..];
+            name = @constCast(line[4..]);
         } else if (startsWith(u8, line, "tagger ")) {
             actor = Actor.make(line[7..]) catch return error.InvalidActor;
         } else if (line.len == 0) {
@@ -147,3 +167,4 @@ const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const SHA = @import("SHA.zig");
 const Actor = @import("actor.zig");
+const Object = @import("Object.zig").Object;

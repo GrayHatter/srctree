@@ -4,7 +4,7 @@ pub const Blob = @import("git/blob.zig");
 pub const Branch = @import("git/Branch.zig");
 pub const ChangeSet = @import("git/changeset.zig");
 pub const Commit = @import("git/Commit.zig");
-pub const Object = @import("git/Object.zig");
+pub const Object = @import("git/Object.zig").Object;
 pub const Pack = @import("git/pack.zig");
 pub const Remote = @import("git/remote.zig");
 pub const Repo = @import("git/Repo.zig");
@@ -183,8 +183,8 @@ test "read pack" {
         }
     }
     const obj = try repo.loadObject(a, SHA.init(lol));
-    defer a.free(obj.memory);
-    try std.testing.expect(obj.kind == .commit);
+    defer a.free(obj.commit.memory.?);
+    try std.testing.expect(obj == .commit);
     if (false) std.debug.print("{}\n", .{obj});
 }
 

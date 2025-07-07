@@ -34,45 +34,53 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, cmt: Git.Commit, repo: *Git.Rep
             const files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
             return blob(frame, repo, files);
         } else if (eql(u8, verb, "tree")) {
+            if (frame.uri.buffer[frame.uri.buffer.len - 1] != '/') {
+                const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.buffer});
+                return frame.redirect(uri, .permanent_redirect);
+            }
             var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
             files = mkTree(frame.alloc, repo, &frame.uri, files) catch return error.Unknown;
-            return tree(frame, repo, &files);
+            return treeEndpoint(frame, repo, &files);
         } else if (eql(u8, verb, "")) {
             var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
-            return tree(frame, repo, &files);
+            return treeEndpoint(frame, repo, &files);
         } else return error.InvalidURI;
     } else {
         var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
-        return tree(frame, repo, &files);
+        return treeEndpoint(frame, repo, &files);
     }
 }
 
-fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, pfiles: Git.Tree) !Git.Tree {
-    var files: Git.Tree = pfiles;
-    if (uri.next()) |udir| for (files.blobs) |obj| {
+fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, in_tree: Git.Tree) !Git.Tree {
+    const udir = uri.next() orelse return in_tree;
+    if (udir.len == 0) return in_tree;
+    for (in_tree.blobs) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
-            const treeobj = try repo.loadObject(a, obj.sha);
-            files = try Git.Tree.initOwned(obj.sha, a, treeobj);
-            return try mkTree(a, repo, uri, files);
+            return switch (try repo.loadObject(a, obj.sha)) {
+                .tree => |t| try mkTree(a, repo, uri, t),
+                else => return error.NotATree,
+            };
         }
-    };
-    return files;
+    }
+    return error.InvalidURI;
 }
 
-fn blob(vrs: *Frame, repo: *Git.Repo, pfiles: Git.Tree) Router.Error!void {
+fn blob(vrs: *Frame, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
     var blb: Git.Blob = undefined;
 
-    var files = pfiles;
+    var files = tree;
     search: while (vrs.uri.next()) |bname| {
         for (files.blobs) |obj| {
             if (std.mem.eql(u8, bname, obj.name)) {
                 blb = obj;
                 if (obj.isFile()) {
-                    if (vrs.uri.next()) |_| return error.InvalidURI;
+                    if (vrs.uri.next() != null) return error.InvalidURI;
                     break :search;
                 }
-                const treeobj = repo.loadObject(vrs.alloc, obj.sha) catch return error.Unknown;
-                files = Git.Tree.initOwned(obj.sha, vrs.alloc, treeobj) catch return error.Unknown;
+                files = switch (repo.loadObject(vrs.alloc, obj.sha) catch return error.Unknown) {
+                    .tree => |t| t,
+                    else => return error.Unknown,
+                };
                 continue :search;
             }
         } else return error.InvalidURI;
@@ -153,7 +161,7 @@ fn newRepo(ctx: *Frame) Router.Error!void {
     return error.NotImplemented;
 }
 
-const tree = @import("tree.zig").tree;
+const treeEndpoint = @import("tree.zig").tree;
 const repos_ = @import("../repos.zig");
 const RouteData = repos_.RouteData;
 

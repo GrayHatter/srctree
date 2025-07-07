@@ -94,6 +94,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
         },
         error.NotImplemented, error.Unknown => {
             std.debug.print("Unexpected error '{}'\n", .{err});
+            if (@import("builtin").mode == .Debug) unreachable;
             return fr.sendDefaultErrorPage(.internal_server_error);
         },
         error.ServerFault => {

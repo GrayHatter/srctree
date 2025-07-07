@@ -5,14 +5,30 @@ const Git = @import("../git.zig");
 const Repo = Git.Repo;
 const Object = Git.Object;
 const Tree = @import("tree.zig");
+const SHA = @import("SHA.zig");
 
-pub const Blob = @This();
+const Blob = @This();
 
 memory: ?[]u8 = null,
 sha: Git.SHA,
 mode: [6]u8,
 name: []const u8,
 data: ?[]u8 = null,
+
+pub fn init(sha: SHA, mode: [6]u8, name: []const u8, data: []u8) Blob {
+    return .{
+        .sha = sha,
+        .mode = mode,
+        .name = name,
+        .data = data,
+    };
+}
+
+pub fn initOwned(sha: SHA, mode: [6]u8, name: []const u8, data: []u8, memory: []u8) Blob {
+    var b: Blob = .init(sha, mode, name, data);
+    b.memory = memory;
+    return b;
+}
 
 pub fn isFile(self: Blob) bool {
     return self.mode[0] != 48;
@@ -27,8 +43,10 @@ pub fn toObject(self: Blob, a: Allocator, repo: Repo) !Object {
 
 pub fn toTree(self: Blob, a: Allocator, repo: *const Repo) !Tree {
     if (self.isFile()) return error.NotATree;
-    const obj = try repo.loadObject(a, self.sha);
-    return try Tree.initOwned(self.sha, a, obj);
+    return switch (try repo.loadObject(a, self.sha)) {
+        .tree => |t| t,
+        else => error.NotATree,
+    };
 }
 
 pub fn raze(self: Blob, a: Allocator) void {

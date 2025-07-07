@@ -40,11 +40,12 @@ pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
 
         obj_i += 1;
         if (blob[i] == '1') {
-            _ = try bufPrint(&obj.mode, "{s}", .{blob[i .. i + 6]});
+            @memcpy(obj.mode[0..6], blob[i..][0..6]);
             obj.sha = SHA.init(blob[index + 1 .. index + 21]);
             obj.name = blob[i + 7 .. index];
         } else if (blob[i] == '4') {
-            _ = try bufPrint(&obj.mode, "0{s}", .{blob[i .. i + 5]});
+            obj.mode[0] = '0';
+            @memcpy(obj.mode[1..6], blob[i..][0..5]);
             obj.sha = SHA.init(blob[index + 1 .. index + 21]);
             obj.name = blob[i + 6 .. index];
         } else std.debug.print("panic {s} ", .{blob[i..index]});
@@ -57,9 +58,9 @@ pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
     return self;
 }
 
-pub fn initOwned(sha: SHA, a: Allocator, obj: Object) !Tree {
-    var tree = try init(sha, a, obj.body);
-    tree.memory = obj.memory;
+pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Tree {
+    var tree = try init(sha, a, body);
+    tree.memory = memory;
     return tree;
 }
 
@@ -158,7 +159,7 @@ pub fn raze(self: Tree) void {
 pub fn format(self: Tree, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
     var f: usize = 0;
     var d: usize = 0;
-    for (self.objects) |obj| {
+    for (self.blobs) |obj| {
         if (obj.mode[0] == 48)
             d += 1
         else
@@ -166,7 +167,7 @@ pub fn format(self: Tree, comptime _: []const u8, _: std.fmt.FormatOptions, out:
     }
     try out.print(
         \\Tree{{ {} Objects, {} files {} directories }}
-    , .{ self.objects.len, f, d });
+    , .{ self.blobs.len, f, d });
 }
 
 test "tree decom" {
