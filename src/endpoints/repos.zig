@@ -121,8 +121,7 @@ fn commitSorter(a: Allocator, l: Git.Repo, r: Git.Repo) bool {
     return sorter({}, lc.committer.timestr, rc.committer.timestr);
 }
 
-// TODO deep invert this logic
-fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
+fn sortPinned(l: Git.Repo, r: Git.Repo) ?bool {
     const left_pinned: bool = if (l.config) |cfg|
         if (cfg.ctx.get("srctree")) |srctree|
             srctree.getBool("pinned") orelse false
@@ -139,13 +138,19 @@ fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     else
         false;
 
-    if (left_pinned) {
-        if (right_pinned == false) {
-            return false;
-        }
-    } else if (right_pinned) {
+    if (left_pinned == right_pinned) {
+        return null;
+    } else if (left_pinned) {
         return true;
+    } else if (right_pinned) {
+        return false;
     }
+    return null;
+}
+
+// TODO deep invert this logic
+fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
+    if (sortPinned(l, r)) |pinned| return !pinned;
 
     switch (ctx.by) {
         .commit => {
