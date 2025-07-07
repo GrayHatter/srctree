@@ -1,28 +1,4 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const allocPrint = std.fmt.allocPrint;
-const bufPrint = std.fmt.bufPrint;
-const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
-
-const Verse = @import("verse");
-const Route = Verse.Router;
-const DOM = Verse.DOM;
-const HTML = Verse.HTML;
-const Template = Verse.template;
-const Error = Route.Error;
-const UriIter = Route.Error;
-const ROUTE = Route.ROUTE;
-const POST = Route.POST;
-const S = Template.Structs;
-
-const Repos = @import("../repos.zig");
-
-const CURL = @import("../../curl.zig");
-const Types = @import("../../types.zig");
-const Delta = Types.Delta;
-const Humanize = @import("../../humanize.zig");
-
-pub const routes = [_]Route.Match{
+pub const routes = [_]Router.Match{
     ROUTE("", list),
     ROUTE("new", new),
     POST("new", newPost),
@@ -36,20 +12,20 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *verse.Frame) Router.RoutingError!Router.BuildFn {
     std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
-    const verb = ctx.uri.peek() orelse return Route.defaultRouter(ctx, &routes);
+    const verb = ctx.uri.peek() orelse return Router.defaultRouter(ctx, &routes);
 
     if (isHex(verb)) |_| {
         return view;
     }
 
-    return Route.defaultRouter(ctx, &routes);
+    return Router.defaultRouter(ctx, &routes);
 }
 
-const IssueNewPage = Template.PageData("issue-new.html");
+const IssueNewPage = template.PageData("issue-new.html");
 
-fn new(ctx: *Verse.Frame) Error!void {
+fn new(ctx: *verse.Frame) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -65,7 +41,7 @@ const IssueCreate = struct {
     desc: []const u8,
 };
 
-fn newPost(ctx: *Verse.Frame) Error!void {
+fn newPost(ctx: *verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.request.data.post) |post| {
@@ -88,7 +64,7 @@ fn newPost(ctx: *Verse.Frame) Error!void {
     return ctx.redirect(loc, .see_other) catch unreachable;
 }
 
-fn newComment(ctx: *Verse.Frame) Error!void {
+fn newComment(ctx: *verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     if (ctx.request.data.post) |post| {
         var valid = post.validator();
@@ -114,9 +90,9 @@ fn newComment(ctx: *Verse.Frame) Error!void {
     return error.Unknown;
 }
 
-const DeltaIssuePage = Template.PageData("delta-issue.html");
+const DeltaIssuePage = template.PageData("delta-issue.html");
 
-fn view(ctx: *Verse.Frame) Error!void {
+fn view(ctx: *verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
@@ -131,9 +107,9 @@ fn view(ctx: *Verse.Frame) Error!void {
             switch (msg.kind) {
                 .comment => |comment| {
                     c_ctx.* = .{
-                        .author = try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.author),
+                        .author = try verse.abx.Html.cleanAlloc(ctx.alloc, comment.author),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
-                        .message = try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.message),
+                        .message = try verse.abx.Html.cleanAlloc(ctx.alloc, comment.message),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
                             index,
                             fmtSliceHexLower(msg.hash[0..]),
@@ -157,8 +133,8 @@ fn view(ctx: *Verse.Frame) Error!void {
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
         } },
-        .title = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
-        .desc = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
+        .title = verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
+        .desc = verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
         .delta_id = delta_id,
         .comments = .{
             .thread = root_thread,
@@ -168,9 +144,9 @@ fn view(ctx: *Verse.Frame) Error!void {
     try ctx.sendPage(&page);
 }
 
-const DeltaListHtml = Template.PageData("delta-list.html");
+const DeltaListHtml = template.PageData("delta-list.html");
 
-fn list(ctx: *Verse.Frame) Error!void {
+fn list(ctx: *verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;
@@ -194,13 +170,13 @@ fn list(ctx: *Verse.Frame) Error!void {
                 "/repo/{s}/{s}/{x}",
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
-            .title = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
+            .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
                 .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
-            .desc = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .desc = try verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
 
@@ -220,3 +196,22 @@ fn list(ctx: *Verse.Frame) Error!void {
 
     try ctx.sendPage(&page);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
+const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
+
+const verse = @import("verse");
+const Router = verse.Router;
+const template = verse.template;
+const Error = Router.Error;
+const ROUTE = Router.ROUTE;
+const POST = Router.POST;
+const S = template.Structs;
+
+const Repos = @import("../repos.zig");
+
+const Delta = @import("../../types.zig").Delta;
+const Humanize = @import("../../humanize.zig");
