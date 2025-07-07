@@ -1,20 +1,20 @@
 const BlobPage = PageData("blob.html");
 
-pub fn treeBlob(ctx: *Frame) Router.Error!void {
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    _ = ctx.uri.next();
+pub fn treeBlob(frame: *Frame) Router.Error!void {
+    const rd = RouteData.make(&frame.uri) orelse return error.Unrouteable;
+    _ = frame.uri.next();
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
+    repo.loadData(frame.alloc) catch return error.Unknown;
     defer repo.raze();
 
     const ograph: S.OpenGraph = .{
         .title = rd.name,
         .desc = desc: {
-            var d = repo.description(ctx.alloc) catch return error.Unknown;
+            var d = repo.description(frame.alloc) catch return error.Unknown;
             if (startsWith(u8, d, "Unnamed repository; edit this file")) {
                 d = try allocPrint(
-                    ctx.alloc,
+                    frame.alloc,
                     "An Indescribable repo with {s} commits",
                     .{"[todo count commits]"},
                 );
@@ -22,24 +22,28 @@ pub fn treeBlob(ctx: *Frame) Router.Error!void {
             break :desc d;
         },
     };
-
     _ = ograph;
-    const cmt = repo.headCommit(ctx.alloc) catch return newRepo(ctx);
+
+    const cmt = repo.headCommit(frame.alloc) catch return newRepo(frame);
+    return treeOrBlobAtRef(frame, rd, cmt, &repo);
+}
+
+fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, cmt: Git.Commit, repo: *Git.Repo) Router.Error!void {
     if (rd.verb) |verb| {
         if (eql(u8, verb, "blob")) {
-            const files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-            return blob(ctx, &repo, files);
+            const files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
+            return blob(frame, repo, files);
         } else if (eql(u8, verb, "tree")) {
-            var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-            files = mkTree(ctx.alloc, &repo, &ctx.uri, files) catch return error.Unknown;
-            return tree(ctx, &repo, &files);
+            var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
+            files = mkTree(frame.alloc, repo, &frame.uri, files) catch return error.Unknown;
+            return tree(frame, repo, &files);
         } else if (eql(u8, verb, "")) {
-            var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-            return tree(ctx, &repo, &files);
+            var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
+            return tree(frame, repo, &files);
         } else return error.InvalidURI;
     } else {
-        var files: Git.Tree = cmt.mkTree(ctx.alloc, &repo) catch return error.Unknown;
-        return tree(ctx, &repo, &files);
+        var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
+        return tree(frame, repo, &files);
     }
 }
 
