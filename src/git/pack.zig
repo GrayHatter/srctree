@@ -283,17 +283,17 @@ fn loadRefDelta(_: Pack, a: Allocator, reader: *AnyReader, _: usize, repo: *cons
             .tree => |t| {
                 basefree = t.memory.?;
                 basedata = t.blob;
-                basetype = .blob;
+                basetype = .tree;
             },
             .commit => |c| {
                 basefree = c.memory.?;
                 basedata = c.body;
-                basetype = .blob;
+                basetype = .commit;
             },
             .tag => |t| {
                 basefree = t.memory.?;
                 basedata = t.memory.?;
-                basetype = .blob;
+                basetype = .tag;
             },
         },
     }
