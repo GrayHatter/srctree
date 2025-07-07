@@ -6,16 +6,22 @@ pub const verse_alias = .{
 
 pub const verse_router = &router;
 
+pub const verse_endpoints_ = verse.Endpoints(.{
+    @import("repos/issues.zig"),
+});
+
 pub const routes = [_]Router.Match{
     ROUTE("blame", blame),
     ROUTE("blob", treeBlob),
     ROUTE("commit", &Commits.router),
     ROUTE("commits", &Commits.router),
     ROUTE("diffs", &Diffs.router),
-    ROUTE("issues", &Issues.router),
+    ROUTE("ref", ref),
     ROUTE("tags", tags.list),
     ROUTE("tree", treeBlob),
-} ++ gitweb.endpoints;
+} ++ gitweb.endpoints ++ verse_endpoints_.routes;
+
+pub fn ref(_: *Frame) Router.Error!void {}
 
 pub const RouteData = struct {
     name: []const u8,
@@ -291,7 +297,6 @@ const Git = @import("../git.zig");
 const Highlight = @import("../syntax-highlight.zig");
 const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
-const Issues = @import("repos/issues.zig");
 
 const Delta = @import("../types.zig").Delta;
 

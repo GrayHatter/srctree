@@ -1,9 +1,19 @@
+pub const verse_name = .issues;
+
+pub const verse_alias = .{
+    .issue,
+};
+
 pub const routes = [_]Router.Match{
     ROUTE("", list),
     ROUTE("new", new),
     POST("new", newPost),
     POST("add-comment", newComment),
 };
+
+pub const verse_router: Router.RouteFn = router;
+
+pub const index = list;
 
 fn isHex(input: []const u8) ?usize {
     for (input) |c| {
@@ -95,9 +105,9 @@ const DeltaIssuePage = template.PageData("delta-issue.html");
 fn view(ctx: *verse.Frame) Error!void {
     const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
-    const index = isHex(delta_id) orelse return error.Unrouteable;
+    const idx = isHex(delta_id) orelse return error.Unrouteable;
 
-    var delta = (Delta.open(ctx.alloc, rd.name, index) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var delta = (Delta.open(ctx.alloc, rd.name, idx) catch return error.Unrouteable) orelse return error.Unrouteable;
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
     var root_thread: []S.Thread = &[0]S.Thread{};
@@ -111,7 +121,7 @@ fn view(ctx: *verse.Frame) Error!void {
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
                         .message = try verse.abx.Html.cleanAlloc(ctx.alloc, comment.message),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
-                            index,
+                            idx,
                             fmtSliceHexLower(msg.hash[0..]),
                         }) },
                         .sub_thread = null,
@@ -123,7 +133,7 @@ fn view(ctx: *verse.Frame) Error!void {
             }
         }
     } else |err| {
-        std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
+        std.debug.print("Unable to load comments for thread {} {}\n", .{ idx, err });
         @panic("oops");
     }
 
