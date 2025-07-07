@@ -386,7 +386,7 @@ pub fn HEAD(self: *Repo, a: Allocator) !Ref {
 fn loadTags(self: *Repo) !void {
     const a = self.alloc orelse return error.InvalidRepoState;
 
-    const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0xffff) catch |err| switch (err) {
+    const pk_refs: ?[]const u8 = self.dir.readFileAlloc(a, "packed-refs", 0x2ffff) catch |err| switch (err) {
         error.FileNotFound => null,
         else => {
             std.debug.print("packed-refs {any}\n", .{err});
