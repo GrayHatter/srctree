@@ -252,7 +252,7 @@ test "blob to commit" {
     var lap = timer.lap();
     const found = try tree.changedSet(a, &repo);
     if (false) std.debug.print("found {any}\n", .{found});
-    for (found) |f| f.raze();
+    for (found) |f| f.raze(a);
     a.free(found);
     lap = timer.lap();
     if (false) std.debug.print("timer {}\n", .{lap});
@@ -388,7 +388,7 @@ test "ref delta" {
     var lap = timer.lap();
     const found = try tree.changedSet(a, &repo);
     if (false) std.debug.print("found {any}\n", .{found});
-    for (found) |f| f.raze();
+    for (found) |f| f.raze(a);
     a.free(found);
     lap = timer.lap();
     if (false) std.debug.print("timer {}\n", .{lap});

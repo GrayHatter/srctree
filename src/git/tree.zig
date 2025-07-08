@@ -91,13 +91,7 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]ChangeSet {
                 for (search_list, 0..) |search_ish, i| {
                     if (search_ish) |search| {
                         found += 1;
-                        changed[i] = try ChangeSet.init(
-                            a,
-                            search.name,
-                            old.sha,
-                            old.message,
-                            old.committer.timestamp,
-                        );
+                        changed[i] = try .init(a, search.name, old);
                     }
                 }
                 old.raze();
@@ -111,13 +105,7 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]ChangeSet {
                 for (search_list, 0..) |search_ish, i| {
                     if (search_ish) |search| {
                         found += 1;
-                        changed[i] = try ChangeSet.init(
-                            a,
-                            search.name,
-                            old.sha,
-                            old.message,
-                            old.committer.timestamp,
-                        );
+                        changed[i] = try .init(a, search.name, old);
                     }
                 }
                 old.raze();
@@ -131,13 +119,7 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]ChangeSet {
             if (std.mem.indexOf(u8, ptree.blob, &search.sha.bin)) |_| {} else {
                 search_ish.* = null;
                 found += 1;
-                changed[i] = try ChangeSet.init(
-                    a,
-                    search.name,
-                    old.sha,
-                    old.message,
-                    old.committer.timestamp,
-                );
+                changed[i] = try .init(a, search.name, old);
                 continue;
             }
         }
@@ -283,7 +265,7 @@ test "commit mk sub tree" {
     const changed = try csubtree2.changedSet(a, &repo);
     for (csubtree2.blobs, changed) |o, c| {
         if (false) std.debug.print("{s} {s}\n", .{ o.name, c.sha });
-        c.raze();
+        c.raze(a);
     }
     a.free(changed);
 }
