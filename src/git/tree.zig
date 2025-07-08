@@ -230,7 +230,7 @@ test "mk sub tree" {
     const cmtt = try repo.headCommit(a);
     defer cmtt.raze();
 
-    var tree = try cmtt.mkTree(a, &repo);
+    var tree = try cmtt.loadTree(a, &repo);
     defer tree.raze();
 
     var blob: Blob = blb: for (tree.blobs) |obj| {
@@ -257,7 +257,7 @@ test "commit mk sub tree" {
     const cmtt = try repo.headCommit(a);
     defer cmtt.raze();
 
-    var tree = try cmtt.mkTree(a, &repo);
+    var tree = try cmtt.loadTree(a, &repo);
     defer tree.raze();
 
     var blob: Blob = blb: for (tree.blobs) |obj| {

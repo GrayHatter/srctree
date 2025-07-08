@@ -98,7 +98,7 @@ pub fn toParent(self: Commit, a: Allocator, idx: u8, repo: *const Repo) !Commit 
     return error.NoParent;
 }
 
-pub fn mkTree(self: Commit, a: Allocator, repo: *const Repo) !Tree {
+pub fn loadTree(self: Commit, a: Allocator, repo: *const Repo) !Tree {
     return switch (try repo.loadObject(a, self.tree)) {
         .tree => |t| t,
         else => error.NotATree,
@@ -106,11 +106,11 @@ pub fn mkTree(self: Commit, a: Allocator, repo: *const Repo) !Tree {
 }
 
 pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8, repo: *const Repo) !Tree {
-    const rootpath = subpath orelse return self.mkTree(a, repo);
-    if (rootpath.len == 0) return self.mkTree(a, repo);
+    const rootpath = subpath orelse return self.loadTree(a, repo);
+    if (rootpath.len == 0) return self.loadTree(a, repo);
 
     var itr = std.mem.splitScalar(u8, rootpath, '/');
-    var root = try self.mkTree(a, repo);
+    var root = try self.loadTree(a, repo);
     root.path = try a.dupe(u8, rootpath);
     iter: while (itr.next()) |path| {
         for (root.blobs) |obj| {

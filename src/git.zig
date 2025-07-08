@@ -228,7 +228,7 @@ test "commit to tree" {
 
     const cmt = try repo.headCommit(a);
     defer cmt.raze();
-    const tree = try cmt.mkTree(a, &repo);
+    const tree = try cmt.loadTree(a, &repo);
     defer tree.raze();
     if (false) std.debug.print("tree {}\n", .{tree});
     if (false) for (tree.objects) |obj| std.debug.print("    {}\n", .{obj});
@@ -245,7 +245,7 @@ test "blob to commit" {
     const cmtt = try repo.headCommit(a);
     defer cmtt.raze();
 
-    const tree = try cmtt.mkTree(a, &repo);
+    const tree = try cmtt.loadTree(a, &repo);
     defer tree.raze();
 
     var timer = try std.time.Timer.start();
@@ -274,7 +274,7 @@ test "considering optimizing blob to commit" {
     //const cmtt = try repo.headCommit(a);
     //defer cmtt.raze();
 
-    //const tree = try cmtt.mkTree(a);
+    //const tree = try cmtt.loadTree(a);
     //defer tree.raze(a);
     //var search_list: []?Blob = try a.alloc(?Blob, tree.objects.len);
     //for (tree.objects, search_list) |src, *dst| {
@@ -283,7 +283,7 @@ test "considering optimizing blob to commit" {
     //defer a.free(search_list);
 
     //var par = try repo.headCommit(a);
-    //var ptree = try par.mkTree(a);
+    //var ptree = try par.loadTree(a);
 
     //var old = par;
     //var oldtree = ptree;
@@ -293,7 +293,7 @@ test "considering optimizing blob to commit" {
     //    old = par;
     //    oldtree = ptree;
     //    par = try par.toParent(a, 0);
-    //    ptree = try par.mkTree(a);
+    //    ptree = try par.loadTree(a);
     //    for (search_list) |*search_ish| {
     //        const search = search_ish.* orelse continue;
     //        var line = search.name;
@@ -319,7 +319,7 @@ test "considering optimizing blob to commit" {
     //par.raze(a);
     //ptree.raze(a);
     //par = try repo.headCommit(a);
-    //ptree = try par.mkTree(a);
+    //ptree = try par.loadTree(a);
 
     //var set = std.BufSet.init(a);
     //defer set.deinit();
@@ -328,7 +328,7 @@ test "considering optimizing blob to commit" {
     //    old = par;
     //    oldtree = ptree;
     //    par = try par.toParent(a, 0);
-    //    ptree = try par.mkTree(a);
+    //    ptree = try par.loadTree(a);
     //    if (tree.objects.len != ptree.objects.len) {
     //        objl: for (tree.objects) |obj| {
     //            if (set.contains(&obj.hash)) continue;
@@ -381,7 +381,7 @@ test "ref delta" {
     const cmtt = try repo.headCommit(a);
     defer cmtt.raze();
 
-    const tree = try cmtt.mkTree(a, &repo);
+    const tree = try cmtt.loadTree(a, &repo);
     defer tree.raze();
 
     var timer = try std.time.Timer.start();

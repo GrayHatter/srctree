@@ -31,33 +31,33 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
 fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, cmt: Git.Commit, repo: *Git.Repo) Router.Error!void {
     if (rd.verb) |verb| {
         if (eql(u8, verb, "blob")) {
-            const files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
+            const files: Git.Tree = cmt.loadTree(frame.alloc, repo) catch return error.Unknown;
             return blob(frame, repo, files);
         } else if (eql(u8, verb, "tree")) {
             if (frame.uri.buffer[frame.uri.buffer.len - 1] != '/') {
                 const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.buffer});
                 return frame.redirect(uri, .permanent_redirect);
             }
-            var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
-            files = mkTree(frame.alloc, repo, &frame.uri, files) catch return error.Unknown;
+            var files: Git.Tree = cmt.loadTree(frame.alloc, repo) catch return error.Unknown;
+            files = traverseTree(frame.alloc, repo, &frame.uri, files) catch return error.Unknown;
             return treeEndpoint(frame, repo, &files);
         } else if (eql(u8, verb, "")) {
-            var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
+            var files: Git.Tree = cmt.loadTree(frame.alloc, repo) catch return error.Unknown;
             return treeEndpoint(frame, repo, &files);
         } else return error.InvalidURI;
     } else {
-        var files: Git.Tree = cmt.mkTree(frame.alloc, repo) catch return error.Unknown;
+        var files: Git.Tree = cmt.loadTree(frame.alloc, repo) catch return error.Unknown;
         return treeEndpoint(frame, repo, &files);
     }
 }
 
-fn mkTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, in_tree: Git.Tree) !Git.Tree {
+fn traverseTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, in_tree: Git.Tree) !Git.Tree {
     const udir = uri.next() orelse return in_tree;
     if (udir.len == 0) return in_tree;
     for (in_tree.blobs) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
             return switch (try repo.loadObject(a, obj.sha)) {
-                .tree => |t| try mkTree(a, repo, uri, t),
+                .tree => |t| try traverseTree(a, repo, uri, t),
                 else => return error.NotATree,
             };
         }

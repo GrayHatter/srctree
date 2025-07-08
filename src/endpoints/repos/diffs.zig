@@ -401,7 +401,7 @@ fn resolveLineRefRepo(
     var found_lines = std.ArrayList([]const u8).init(a);
 
     const cmt = try repo.headCommit(a);
-    var files: Git.Tree = try cmt.mkTree(a, repo);
+    var files: Git.Tree = try cmt.loadTree(a, repo);
     var blob_sha: Git.SHA = undefined;
     var itr = splitScalar(u8, filename, '/');
     root: while (itr.next()) |dirname| {
