@@ -25,13 +25,31 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
     _ = ograph;
 
     const cmt = repo.headCommit(frame.alloc) catch return newRepo(frame);
-    return treeOrBlobAtRef(frame, rd, cmt, &repo);
+
+    if (rd.verb != null and rd.ref != null and rd.verb.? == .ref and isHash(rd.ref.?)) {
+        if (rd.ref.?.len != 40) return error.InvalidURI;
+        const sha: Git.SHA = .init(rd.ref.?);
+        switch (repo.loadObject(frame.alloc, sha) catch return error.InvalidURI) {
+            .commit => |c| return treeOrBlobAtRef(frame, rd, &repo, c),
+            else => return error.DataInvalid,
+        }
+    }
+
+    return treeOrBlobAtRef(frame, rd, &repo, cmt);
 }
 
-fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, cmt: Git.Commit, repo: *Git.Repo) Router.Error!void {
+fn isHash(slice: []const u8) bool {
+    for (slice) |s| switch (s) {
+        '0'...'9', 'A'...'F', 'a'...'f' => {},
+        else => return false,
+    };
+    return true;
+}
+
+fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) Router.Error!void {
     var files: Git.Tree = cmt.loadTree(frame.alloc, repo) catch return error.Unknown;
-    const verb = rd.verb orelse return treeEndpoint(frame, repo, &files);
-    if (rd.noun == null) return error.InvalidURI;
+    const verb = rd.verb orelse return treeEndpoint(frame, rd, repo, &files);
+    if (rd.target == null) return treeEndpoint(frame, rd, repo, &files);
 
     switch (verb) {
         .blob => return blob(frame, repo, files),
@@ -41,12 +59,12 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, cmt: Git.Commit, repo: *Git.Rep
                 return frame.redirect(uri, .permanent_redirect);
             }
             files = traverseTree(frame.alloc, repo, &frame.uri, files) catch return error.Unknown;
-            return treeEndpoint(frame, repo, &files);
+            return treeEndpoint(frame, rd, repo, &files);
         },
         .ref => {},
         else => {},
     }
-    return treeEndpoint(frame, repo, &files);
+    return treeEndpoint(frame, rd, repo, &files);
 }
 
 fn traverseTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, in_tree: Git.Tree) !Git.Tree {

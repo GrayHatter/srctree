@@ -1,19 +1,12 @@
 const TreePage = PageData("tree.html");
 
-pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
+pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     //const head = if (repo.head) |h| switch (h) {
     //    .sha => |s| s.hex()[0..],
     //    .branch => |b| b.name,
     //    else => "unknown",
     //} else "unknown";
     //ctx.putVerse("Branch.default", .{ .slice = head }) catch return error.Unknown;
-
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-    ctx.uri.reset();
-    _ = ctx.uri.next();
-    _ = ctx.uri.next();
-    _ = ctx.uri.next();
-    const uri_base = ctx.uri.rest();
 
     var dom = html.DOM.new(ctx.alloc);
 
@@ -24,7 +17,14 @@ pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     const branches = try allocPrint(ctx.alloc, "{} branches", .{repo.refs.len});
     dom.push(html.span(branches, null));
 
-    const c = repo.headCommit(ctx.alloc) catch return error.Unknown;
+    const c = if (rd.ref) |ref|
+        switch (repo.loadObject(ctx.alloc, .init(ref)) catch return error.InvalidURI) {
+            .commit => |cm| cm,
+            else => return error.DataInvalid,
+        }
+    else
+        repo.headCommit(ctx.alloc) catch return error.Unknown;
+
     dom.push(html.span(c.title[0..@min(c.title.len, 50)], null));
     const commit_time = try allocPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
     dom = dom.open(html.span(null, &html.Attr.class("muted")));
@@ -35,27 +35,27 @@ pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     dom = dom.close();
 
     dom = dom.open(html.div(null, &html.Attr.class("treelist")));
-    if (uri_base.len > 0) {
-        const end = std.mem.lastIndexOf(u8, uri_base[0 .. uri_base.len - 1], "/") orelse 0;
+    if (rd.target) |_| {
+        //const end = std.mem.lastIndexOf(u8, "", "/") orelse 0;
         dom = dom.open(html.element("tree", null, null));
         const dd_href = &[_]html.Attribute{.{
             .key = "href",
             .value = try allocPrint(
                 ctx.alloc,
                 "/repo/{s}/tree/{s}",
-                .{ rd.name, uri_base[0..end] },
+                .{ rd.name, "" },
             ),
         }};
         dom.dupe(html.anch("..", dd_href));
         dom = dom.close();
     }
-    try files.pushPath(ctx.alloc, uri_base);
-    if (files.changedSet(ctx.alloc, repo)) |changed| {
+    try files.pushPath(ctx.alloc, "");
+    if (files.changedSetFrom(ctx.alloc, repo, c.sha)) |changed| {
         std.sort.pdq(Git.Blob, files.blobs, {}, typeSorter);
         for (files.blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
-                    dom = try drawFileLine(ctx.alloc, dom, rd.name, uri_base, obj, ch);
+                    dom = try drawFileLine(ctx.alloc, dom, rd.name, "", obj, ch);
                     break;
                 }
             }

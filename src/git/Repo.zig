@@ -220,8 +220,7 @@ pub fn loadObjectOrDelta(self: Repo, a: Allocator, sha: SHA) !union(enum) {
 /// TODO binary search lol
 pub fn loadObject(self: Repo, a: Allocator, sha: SHA) !Object {
     std.debug.assert(sha.partial == false);
-    if (try self.loadPacked(a, sha)) |pack| return pack;
-    return try self.loadFile(a, sha);
+    return try self.loadPacked(a, sha) orelse try self.loadFile(a, sha);
 }
 
 pub fn loadBlob(self: Repo, a: Allocator, sha: SHA) !Blob {
@@ -451,13 +450,17 @@ pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
 }
 
 pub fn headCommit(self: *const Repo, a: Allocator) !Commit {
-    const resolv: SHA = switch (self.head.?) {
+    const resolv: SHA = try self.headSha();
+    return try self.commit(a, resolv);
+}
+
+pub fn headSha(self: *const Repo) !SHA {
+    return switch (self.head.?) {
         .sha => |s| s,
         .branch => |b| try self.ref(b.name["refs/heads/".len..]),
         .tag => return error.CommitMissing,
         .missing => return error.CommitMissing,
     };
-    return try self.commit(a, resolv);
 }
 
 pub fn blob(self: Repo, a: Allocator, sha: SHA) !Blob {

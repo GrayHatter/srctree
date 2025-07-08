@@ -186,7 +186,7 @@ pub fn viewCommit(f: *Frame) Error!void {
     const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
     if (rd.verb == null) return commitsView(f);
 
-    const sha = rd.noun orelse return error.Unrouteable;
+    const sha = rd.ref orelse return error.Unrouteable;
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
 
     var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse

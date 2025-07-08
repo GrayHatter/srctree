@@ -68,15 +68,20 @@ pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Tree {
 }
 
 pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]ChangeSet {
-    const cmtt = try repo.headCommit(a);
-    defer cmtt.raze();
+    return self.changedSetFrom(a, repo, try repo.headSha());
+}
+
+pub fn changedSetFrom(self: Tree, a: Allocator, repo: *const Repo, start_commit: SHA) ![]ChangeSet {
     const search_list: []?Blob = try a.alloc(?Blob, self.blobs.len);
     for (search_list, self.blobs) |*dst, src| {
         dst.* = src;
     }
     defer a.free(search_list);
 
-    var par = try repo.headCommit(a);
+    var par = switch (try repo.loadObject(a, start_commit)) {
+        .commit => |c| c,
+        else => unreachable,
+    };
     var ptree = try par.mkSubTree(a, self.path, repo);
 
     var changed = try a.alloc(ChangeSet, self.blobs.len);
@@ -273,7 +278,7 @@ test "commit mk sub tree" {
 const SHA = @import("SHA.zig");
 const Repo = @import("Repo.zig");
 const Blob = @import("blob.zig");
-const Object = @import("Object.zig");
+const Commit = @import("Commit.zig");
 const ChangeSet = @import("changeset.zig");
 
 const std = @import("std");
