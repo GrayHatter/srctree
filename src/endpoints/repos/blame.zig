@@ -2,7 +2,7 @@ const BlamePage = PageData("blame.html");
 
 pub fn blame(f: *Frame) Router.Error!void {
     const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
-    std.debug.assert(std.mem.eql(u8, rd.verb orelse "", "blame"));
+    std.debug.assert(rd.verb.? == .blame);
     _ = f.uri.next();
     const blame_file = f.uri.rest();
 

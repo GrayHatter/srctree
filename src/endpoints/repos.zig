@@ -25,8 +25,30 @@ pub fn ref(_: *Frame) Router.Error!void {}
 
 pub const RouteData = struct {
     name: []const u8,
-    verb: ?[]const u8 = null,
+    verb: ?Verb = null,
     noun: ?[]const u8 = null,
+
+    pub const Verb = enum {
+        blame,
+        blob,
+        commit,
+        commits,
+        ref,
+        tree,
+        issues,
+        diffs,
+        tags,
+
+        pub fn fromSlice(slice: ?[]const u8) ?Verb {
+            const s = slice orelse return null;
+            inline for (@typeInfo(Verb).@"enum".fields) |f| {
+                if (eql(u8, s, f.name)) {
+                    return @enumFromInt(f.value);
+                }
+            }
+            return null;
+        }
+    };
 
     fn safe(name: ?[]const u8) ?[]const u8 {
         if (name) |n| {
@@ -46,7 +68,7 @@ pub const RouteData = struct {
         _ = uri.next() orelse return null;
         return .{
             .name = safe(uri.next()) orelse return null,
-            .verb = uri.next(),
+            .verb = .fromSlice(uri.next()),
             .noun = uri.next(),
         };
     }
@@ -98,11 +120,11 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
         bh.nav.nav_buttons = ctx.alloc.dupe(S.NavButtons, &(navButtons(ctx) catch @panic("unreachable"))) catch unreachable;
         ctx.response_data.add(bh) catch unreachable;
 
-        if (rd.verb) |_| {
-            _ = ctx.uri.next();
-            _ = ctx.uri.next();
-            return Router.defaultRouter(ctx, &routes);
-        } else return treeBlob;
+        if (rd.verb == null) return treeBlob;
+
+        _ = ctx.uri.next();
+        _ = ctx.uri.next();
+        return Router.defaultRouter(ctx, &routes);
     }
     return error.Unrouteable;
 }

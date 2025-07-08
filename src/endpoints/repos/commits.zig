@@ -12,7 +12,7 @@ const AddComment = struct {
 
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     const rd = RouteData.make(&f.uri) orelse return commitsView;
-    if (rd.verb != null and std.mem.eql(u8, "commit", rd.verb.?))
+    if (rd.verb != null and rd.verb.? == .commit)
         return viewCommit;
     return commitsView;
 }
