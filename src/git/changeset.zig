@@ -12,8 +12,8 @@ pub fn init(a: Allocator, name: []const u8, commit: Commit) !ChangeSet {
     return ChangeSet{
         .name = try a.dupe(u8, name),
         .sha = commit.sha,
+        .commit_title = std.mem.trim(u8, msg[0..commit.title.len], " \n"),
         .commit = msg,
-        .commit_title = msg[0..commit.title.len],
         .timestamp = commit.committer.timestamp,
     };
 }

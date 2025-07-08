@@ -14,7 +14,21 @@
         <a class="btn" href="/repo/<RepoName>/issues/new">New Issue</a>
         <a class="btn" href="/repo/<RepoName>/diffs/new">Suggest Diff</a>
       </div>
-      <Repo>
+      <repo class="landing">
+        <intro>
+        <h3><RepoName/></h3>
+        <span><BranchCount type="usize" /> branches</span>
+        <span><CommitSlug /></span>
+        <span class="muted"><CommitTimeHuman/>&nbsp;<a href="/repo/<RepoName />/<CommitHex/>"><CommitHexShort /></a></span>
+        </intro>
+        <div class="treelist">
+          <With DotDot><tree><a href="<Href />">..</a></tree></With>
+          <For CommitFilelistTrees>
+          <tree><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></tree></For>
+          <For CommitFilelistFiles>
+          <file><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></file></For>
+        </div>
+      </repo>
       <Readme ornull>
     </content>
   </body>
