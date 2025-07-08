@@ -34,26 +34,29 @@ pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
             i = index + 1;
         }
     }
-    var obj_i: usize = 0;
-    while (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
-        var obj = &self.blobs[obj_i];
-
-        obj_i += 1;
+    var real_count: usize = 0;
+    while (std.mem.indexOfScalarPos(u8, blob, i, 0)) |str_end| {
+        var mode: [6]u8 = @splat('0');
+        var name = blob[i + 7 .. str_end];
         if (blob[i] == '1') {
-            @memcpy(obj.mode[0..6], blob[i..][0..6]);
-            obj.sha = SHA.init(blob[index + 1 .. index + 21]);
-            obj.name = blob[i + 7 .. index];
+            @memcpy(mode[0..6], blob[i..][0..6]);
         } else if (blob[i] == '4') {
-            obj.mode[0] = '0';
-            @memcpy(obj.mode[1..6], blob[i..][0..5]);
-            obj.sha = SHA.init(blob[index + 1 .. index + 21]);
-            obj.name = blob[i + 6 .. index];
-        } else std.debug.print("panic {s} ", .{blob[i..index]});
-
-        i = index + 21;
+            @memcpy(mode[1..6], blob[i..][0..5]);
+            name = blob[i + 6 .. str_end];
+        }
+        self.blobs[real_count] = .{
+            .mode = mode,
+            .name = name,
+            .sha = .init(blob[str_end + 1 ..][0..20]),
+        };
+        real_count += 1;
+        i = str_end + 21;
     }
-    if (a.resize(self.blobs, obj_i)) {
-        self.blobs.len = obj_i;
+
+    if (a.resize(self.blobs, real_count)) {
+        self.blobs.len = real_count;
+    } else {
+        self.blobs = try a.realloc(self.blobs, real_count);
     }
     return self;
 }
@@ -68,7 +71,7 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]ChangeSet {
     const cmtt = try repo.headCommit(a);
     defer cmtt.raze();
     const search_list: []?Blob = try a.alloc(?Blob, self.blobs.len);
-    for (self.blobs, search_list) |src, *dst| {
+    for (search_list, self.blobs) |*dst, src| {
         dst.* = src;
     }
     defer a.free(search_list);
@@ -125,10 +128,7 @@ pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]ChangeSet {
         };
         for (search_list, 0..) |*search_ish, i| {
             const search = search_ish.* orelse continue;
-            var line = search.name;
-            line.len += 21;
-            line = line[line.len - 20 .. line.len];
-            if (std.mem.indexOf(u8, ptree.blob, line)) |_| {} else {
+            if (std.mem.indexOf(u8, ptree.blob, &search.sha.bin)) |_| {} else {
                 search_ish.* = null;
                 found += 1;
                 changed[i] = try ChangeSet.init(

@@ -438,17 +438,16 @@ pub fn resolvePartial(_: *const Repo, _: SHA) !SHA {
 }
 
 pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
-    var obj: ?Object = null;
-    var fullsha: SHA = sha;
-
     if (sha.partial) {
-        obj = try self.loadObjPartial(a, sha);
-        fullsha = try self.expandPartial(sha) orelse sha;
-    } else {
-        obj = try self.loadObject(a, sha);
-    }
-    if (obj == null) return error.CommitMissing;
-    return obj.?.commit;
+        return switch (try self.loadObjPartial(a, sha) orelse
+            try self.loadObject(a, try self.expandPartial(sha) orelse sha)) {
+            .commit => |c| c,
+            else => error.NotACommit,
+        };
+    } else return switch (try self.loadObject(a, sha)) {
+        .commit => |c| c,
+        else => error.NotACommit,
+    };
 }
 
 pub fn headCommit(self: *const Repo, a: Allocator) !Commit {
