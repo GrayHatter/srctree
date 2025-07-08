@@ -2,7 +2,7 @@ const TreePage = PageData("tree.html");
 
 pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     //const head = if (repo.head) |h| switch (h) {
-    //    .sha => |s| s.hex[0..],
+    //    .sha => |s| s.hex()[0..],
     //    .branch => |b| b.name,
     //    else => "unknown",
     //} else "unknown";
@@ -28,9 +28,9 @@ pub fn tree(ctx: *Frame, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     dom.push(html.span(c.title[0..@min(c.title.len, 50)], null));
     const commit_time = try allocPrint(ctx.alloc, "  {}", .{Humanize.unix(c.committer.timestamp)});
     dom = dom.open(html.span(null, &html.Attr.class("muted")));
-    const commit_href = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha.hex[0..8] });
+    const commit_href = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, c.sha.hex()[0..8] });
     dom.push(html.text(commit_time));
-    dom.push(try html.aHrefAlloc(ctx.alloc, c.sha.hex[0..8], commit_href));
+    dom.push(try html.aHrefAlloc(ctx.alloc, c.sha.hex()[0..8], commit_href));
     dom = dom.close();
     dom = dom.close();
 
@@ -131,7 +131,7 @@ fn drawFileLine(
 
     // I know... I KNOW!!!
     dom = dom.open(html.div(null, null));
-    const commit_href = try allocPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha.hex[0..8] });
+    const commit_href = try allocPrint(a, "/repo/{s}/commit/{s}", .{ rname, ch.sha.hex()[0..8] });
     dom.push(try html.aHrefAlloc(a, ch.commit_title, commit_href));
     dom.dupe(html.span(try allocPrint(a, "{}", .{Humanize.unix(ch.timestamp)}), null));
     dom = dom.close();

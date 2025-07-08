@@ -79,7 +79,7 @@ pub fn lightTag(sha: SHA, name: []u8, blob: []const u8) !Tag {
     return .{
         .name = name,
         .sha = sha,
-        .object = sha.hex[0..],
+        .object = sha.hex()[0..],
         .type = .lightweight,
         .tagger = actor orelse unreachable,
         .message = "",

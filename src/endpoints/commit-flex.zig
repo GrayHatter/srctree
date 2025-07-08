@@ -106,8 +106,8 @@ const Journal = struct {
             @memset(hits[0..], 0);
         }
 
-        if (!eql(u8, heatmap.shahex[0..], commit.sha.hex[0..])) {
-            heatmap.shahex = commit.sha.hex;
+        if (!eql(u8, heatmap.shahex[0..], commit.sha.hex()[0..])) {
+            heatmap.shahex = commit.sha.hex();
             @memset(hits[0..], 0);
             try countCommits(a, hits, seen, until, commit, repo, email);
         }
@@ -166,7 +166,7 @@ const Scribe = struct {
         sha: Git.SHA,
 
         pub fn toTemplate(self: Commit, a: Allocator) !S.JournalRows {
-            const shahex = try a.dupe(u8, self.sha.hex[0..]);
+            const shahex = try a.dupe(u8, self.sha.hex()[0..]);
 
             const continuation = "...";
             const title_max = 80;

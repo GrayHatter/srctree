@@ -52,7 +52,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const current: Git.Commit = repo.commit(f.alloc, Git.SHA.initPartial(sha)) catch cmt: {
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(f.alloc) catch return error.Unknown;
-        while (!std.mem.startsWith(u8, fallback.sha.hex[0..], sha)) {
+        while (!std.mem.startsWith(u8, fallback.sha.hex()[0..], sha)) {
             fallback = fallback.toParent(f.alloc, 0, &repo) catch return error.Unknown;
         }
         break :cmt fallback;
@@ -213,7 +213,7 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Templa
         if (par_cmt == null) continue;
         par.* = .{
             .repo = repo,
-            .parent_sha_short = try a.dupe(u8, par_cmt.?.hex[0..8]),
+            .parent_sha_short = try a.dupe(u8, par_cmt.?.hex()[0..8]),
         };
     }
 
@@ -230,7 +230,7 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.Commit {
         .author = Verse.abx.Html.cleanAlloc(a, c.author.name) catch unreachable,
         .parents = try commitCtxParents(a, c, repo),
         .repo = repo,
-        .sha_short = try a.dupe(u8, c.sha.hex[0..8]),
+        .sha_short = try a.dupe(u8, c.sha.hex()[0..8]),
         .title = Verse.abx.Html.cleanAlloc(a, c.title) catch unreachable,
         .body = body,
     };
@@ -267,7 +267,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
         .day = try allocPrint(a, "{Y-m-d}", .{date}),
         .weekday = date.weekdaySlice(),
         .time = try allocPrint(a, "{time}", .{date}),
-        .sha = try allocPrint(a, "{s}", .{c.sha.hex[0..8]}),
+        .sha = try allocPrint(a, "{s}", .{c.sha.hex()[0..8]}),
     };
 }
 
@@ -363,7 +363,7 @@ pub fn commitsView(f: *Frame) Error!void {
     ) catch
         return error.Unknown;
 
-    return sendCommits(f, cmts_list, rd.name, last_sha.hex[0..8]);
+    return sendCommits(f, cmts_list, rd.name, last_sha.hex()[0..8]);
 }
 
 pub fn commitsBefore(f: *Frame) Error!void {

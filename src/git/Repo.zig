@@ -126,13 +126,13 @@ pub fn findRemote(self: Repo, name: []const u8) !?*const Remote {
 
 fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
     var fb = [_]u8{0} ** 2048;
-    const grouped = try bufPrint(&fb, "./objects/{s}/{s}", .{ sha.hex[0..2], sha.hex[2..] });
+    const grouped = try bufPrint(&fb, "./objects/{s}/{s}", .{ sha.hex()[0..2], sha.hex()[2..] });
     const compressed: []u8 = self.dir.readFileAlloc(a, grouped, 0xffffff) catch |err| switch (err) {
         error.FileNotFound => data: {
-            const exact = try bufPrint(&fb, "./objects/{s}", .{sha.hex[0..]});
+            const exact = try bufPrint(&fb, "./objects/{s}", .{sha.hex()[0..]});
             break :data self.dir.readFileAlloc(a, exact, 0xffffff) catch |err2| switch (err2) {
                 error.FileNotFound => {
-                    std.debug.print("unable to find commit '{s}'\n", .{sha.hex[0..]});
+                    std.debug.print("unable to find commit '{s}'\n", .{sha.hex()[0..]});
                     return error.ObjectMissing;
                 },
                 else => return err2,
@@ -152,7 +152,7 @@ fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
         _ = header;
         const body = data[i + 1 ..];
         if (startsWith(u8, data, "blob ")) {
-            return .{ .blob = .initOwned(sha, @splat(0), body, body, data) };
+            return .{ .blob = .initOwned(sha, @splat(0xff), body, body, data) };
         } else if (startsWith(u8, data, "tree ")) {
             return .{ .tree = try .initOwned(sha, a, body, data) };
         } else if (startsWith(u8, data, "commit ")) {
@@ -176,8 +176,8 @@ fn loadPacked(self: Repo, a: Allocator, sha: SHA) !?Object {
 fn expandPartial(self: Repo, sha: SHA) !?SHA {
     std.debug.assert(sha.partial == true);
     for (self.packs) |pack| {
-        if (try pack.containsPrefix(sha.bin[0..sha.binlen])) |_| {
-            return try pack.expandPrefix(sha.bin[0..sha.binlen]);
+        if (try pack.containsPrefix(sha.bin[0..sha.len])) |_| {
+            return try pack.expandPrefix(sha.bin[0..sha.len]);
         }
     }
     return null;
@@ -186,7 +186,7 @@ fn expandPartial(self: Repo, sha: SHA) !?SHA {
 fn loadPackedPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
     std.debug.assert(sha.partial == true);
     for (self.packs) |pack| {
-        if (try pack.containsPrefix(sha.bin[0..sha.binlen])) |offset| {
+        if (try pack.containsPrefix(sha.bin[0..sha.len])) |offset| {
             return try pack.resolveObject(sha, a, offset, &self);
         }
     }

@@ -87,8 +87,8 @@ test "read" {
     //std.debug.print("{s}\n", .{b[0..count]});
     const commit = try Commit.init(SHA.init("370303630b3fc631a0cb3942860fb6f77446e9c1"), b[11 .. count - 11]);
     //std.debug.print("{}\n", .{commit});
-    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree.hex[0..]);
-    try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha.hex[0..]);
+    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree.hex()[0..]);
+    try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha.hex()[0..]);
 }
 
 test "file" {
@@ -114,8 +114,8 @@ test "file" {
     var commit = try Commit.init(SHA.init("370303630b3fc631a0cb3942860fb6f77446e9c1"), blob);
     //defer commit.raze();
     //std.debug.print("{}\n", .{commit});
-    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree.hex[0..]);
-    try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha.hex[0..]);
+    try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree.hex()[0..]);
+    try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha.hex()[0..]);
 }
 
 test "not gpg" {

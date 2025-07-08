@@ -264,39 +264,17 @@ fn loadRefDelta(_: Pack, a: Allocator, reader: *AnyReader, _: usize, repo: *cons
         if (count != 20) return error.PackCorrupt;
     } else |_| return error.ReadError;
     const sha = SHA.init(buf[0..]);
-    // I hate it too... but I need a break
-    var basefree: []u8 = undefined;
-    var basedata: []const u8 = undefined;
-    var basetype: PackedObjectTypes = undefined;
-    switch (repo.loadObjectOrDelta(a, sha) catch return error.BlobMissing) {
-        .pack => |pk| {
-            basefree = pk.data;
-            basedata = pk.data;
-            basetype = pk.header.kind;
-        },
-        .file => |fdata| switch (fdata) {
-            .blob => |b| {
-                basefree = b.memory.?;
-                basedata = b.data.?;
-                basetype = .blob;
+
+    const basefree: []u8, const basedata: []const u8, const basetype: PackedObjectTypes =
+        switch (repo.loadObjectOrDelta(a, sha) catch return error.BlobMissing) {
+            .pack => |pk| .{ pk.data, pk.data, pk.header.kind },
+            .file => |fdata| switch (fdata) {
+                .blob => |b| .{ b.memory.?, b.data.?, .blob },
+                .tree => |t| .{ t.memory.?, t.blob, .tree },
+                .commit => |c| .{ c.memory.?, c.body, .commit },
+                .tag => |t| .{ t.memory.?, t.memory.?, .tag },
             },
-            .tree => |t| {
-                basefree = t.memory.?;
-                basedata = t.blob;
-                basetype = .tree;
-            },
-            .commit => |c| {
-                basefree = c.memory.?;
-                basedata = c.body;
-                basetype = .commit;
-            },
-            .tag => |t| {
-                basefree = t.memory.?;
-                basedata = t.memory.?;
-                basetype = .tag;
-            },
-        },
-    }
+        };
     defer a.free(basefree);
 
     var zlib_ = zlib.decompressor(reader.*);
@@ -309,15 +287,10 @@ fn loadRefDelta(_: Pack, a: Allocator, reader: *AnyReader, _: usize, repo: *cons
     _ = try readVarInt(&inst_reader);
     var buffer = std.ArrayList(u8).init(a);
     while (true) {
-        _ = deltaInst(&inst_reader, buffer.writer(), basedata) catch {
-            break;
-        };
+        _ = deltaInst(&inst_reader, buffer.writer(), basedata) catch break;
     }
     return .{
-        .header = .{
-            .size = 0,
-            .kind = basetype,
-        },
+        .header = .{ .size = 0, .kind = basetype },
         .data = try buffer.toOwnedSlice(),
     };
 }
