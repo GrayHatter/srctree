@@ -15,23 +15,33 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     const commit_hex = c.sha.hex()[0..40];
     const commit_hex_short = commit_hex[0..8];
 
-    const dot_dot: ?S.DotDot = if (rd.target) |_| .{
-        .href = try allocPrint(ctx.alloc, "/repo/{s}/tree/{s}", .{ rd.name, "" }),
+    const path: ?[]const u8 = if (rd.path) |p| p.buffer else null;
+
+    const prefix = if (rd.ref) |ref|
+        try allocPrint(ctx.alloc, "/repo/{s}/ref/{s}", .{ rd.name, ref })
+    else
+        try allocPrint(ctx.alloc, "/repo/{s}/", .{rd.name});
+
+    const dot_dot: ?S.DotDot = if (path) |p| .{
+        // TODO fix
+        .href = try allocPrint(ctx.alloc, "{s}/tree/{s}", .{ prefix, p }),
     } else null;
 
     var list_trees: std.ArrayListUnmanaged(S.CommitFilelistTrees) = .{};
     var list_files: std.ArrayListUnmanaged(S.CommitFilelistFiles) = .{};
 
-    try files.pushPath(ctx.alloc, "");
+    if (path) |p| try files.pushPath(ctx.alloc, p);
     if (files.changedSetFrom(ctx.alloc, repo, c.sha)) |changed| {
         std.sort.pdq(Git.Blob, files.blobs, {}, sorter);
         for (files.blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
-                    const href = try allocPrint(ctx.alloc, "/repo/{s}/blob/{s}{s}", .{ rd.name, "", obj.name });
                     const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, ch.sha.hex()[0..8] });
                     const ctime = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(ch.timestamp)});
                     if (obj.isFile()) {
+                        const href = try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
+                            prefix, path orelse "", obj.name,
+                        });
                         try list_files.append(ctx.alloc, .{
                             .name = ch.name,
                             .href = href,
@@ -40,6 +50,9 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                             .commit_time = ctime,
                         });
                     } else {
+                        const href = try allocPrint(ctx.alloc, "{s}/tree/{s}{s}/", .{
+                            prefix, path orelse "", obj.name,
+                        });
                         try list_trees.append(ctx.alloc, .{
                             .name = ch.name,
                             .href = href,
@@ -86,7 +99,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .readme = readme,
         .commit_slug = commit_slug,
         .commit_time_human = commit_time,
-        .commit_hex = commit_hex,
+        //.commit_hex = commit_hex,
         .commit_hex_short = commit_hex_short,
         .dot_dot = dot_dot,
         .branch_count = branch_count,

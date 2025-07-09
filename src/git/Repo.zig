@@ -184,7 +184,7 @@ fn expandPartial(self: Repo, sha: SHA) !?SHA {
 }
 
 fn loadPackedPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
-    std.debug.assert(sha.partial == true);
+    //std.debug.assert(sha.partial == true);
     for (self.packs) |pack| {
         if (try pack.containsPrefix(sha.bin[0..sha.len])) |offset| {
             return try pack.resolveObject(sha, a, offset, &self);
@@ -198,9 +198,8 @@ fn loadPartial(self: Repo, a: Allocator, sha: SHA) !Pack.PackedObject {
     return error.ObjectMissing;
 }
 
-fn loadObjPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
-    std.debug.assert(sha.partial);
-
+fn loadObjectPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
+    //std.debug.assert(sha.partial);
     if (try self.loadPackedPartial(a, sha)) |pack| return pack;
     return null;
 }
@@ -219,7 +218,7 @@ pub fn loadObjectOrDelta(self: Repo, a: Allocator, sha: SHA) !union(enum) {
 
 /// TODO binary search lol
 pub fn loadObject(self: Repo, a: Allocator, sha: SHA) !Object {
-    std.debug.assert(sha.partial == false);
+    if (sha.partial) return try self.loadObjectPartial(a, sha) orelse error.ObjectMissing;
     return try self.loadPacked(a, sha) orelse try self.loadFile(a, sha);
 }
 
@@ -438,7 +437,7 @@ pub fn resolvePartial(_: *const Repo, _: SHA) !SHA {
 
 pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
     if (sha.partial) {
-        return switch (try self.loadObjPartial(a, sha) orelse
+        return switch (try self.loadObjectPartial(a, sha) orelse
             try self.loadObject(a, try self.expandPartial(sha) orelse sha)) {
             .commit => |c| c,
             else => error.NotACommit,

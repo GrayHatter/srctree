@@ -1,5 +1,3 @@
-const BlobPage = PageData("blob.html");
-
 pub fn treeBlob(frame: *Frame) Router.Error!void {
     const rd = RouteData.make(&frame.uri) orelse return error.Unrouteable;
     _ = frame.uri.next();
@@ -49,19 +47,18 @@ fn isHash(slice: []const u8) bool {
 fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) Router.Error!void {
     var files: Git.Tree = cmt.loadTree(frame.alloc, repo) catch return error.Unknown;
     const verb = rd.verb orelse return treeEndpoint(frame, rd, repo, &files);
-    if (rd.target == null) return treeEndpoint(frame, rd, repo, &files);
+    var path = rd.path orelse return treeEndpoint(frame, rd, repo, &files);
 
     switch (verb) {
-        .blob => return blob(frame, repo, files),
+        .blob => return blob(frame, rd, repo, files),
         .tree => {
             if (frame.uri.buffer[frame.uri.buffer.len - 1] != '/') {
                 const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.buffer});
                 return frame.redirect(uri, .permanent_redirect);
             }
-            files = traverseTree(frame.alloc, repo, &frame.uri, files) catch return error.Unknown;
+            files = traverseTree(frame.alloc, repo, &path, files) catch return error.Unknown;
             return treeEndpoint(frame, rd, repo, &files);
         },
-        .ref => {},
         else => {},
     }
     return treeEndpoint(frame, rd, repo, &files);
@@ -81,19 +78,21 @@ fn traverseTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, i
     return error.InvalidURI;
 }
 
-fn blob(vrs: *Frame, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
-    var blb: Git.Blob = undefined;
+const BlobPage = PageData("blob.html");
 
+fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
+    var blb: Git.Blob = undefined;
     var files = tree;
-    search: while (vrs.uri.next()) |bname| {
+    var path = rd.path orelse return error.InvalidURI;
+    search: while (path.next()) |bname| {
         for (files.blobs) |obj| {
             if (std.mem.eql(u8, bname, obj.name)) {
                 blb = obj;
                 if (obj.isFile()) {
-                    if (vrs.uri.next() != null) return error.InvalidURI;
+                    if (path.next() != null) return error.InvalidURI;
                     break :search;
                 }
-                files = switch (repo.loadObject(vrs.alloc, obj.sha) catch return error.Unknown) {
+                files = switch (repo.loadObject(frame.alloc, obj.sha) catch return error.Unknown) {
                     .tree => |t| t,
                     else => return error.Unknown,
                 };
@@ -102,42 +101,30 @@ fn blob(vrs: *Frame, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
         } else return error.InvalidURI;
     }
 
-    var resolve = repo.loadBlob(vrs.alloc, blb.sha) catch return error.Unknown;
+    var resolve = repo.loadBlob(frame.alloc, blb.sha) catch return error.Unknown;
     if (!resolve.isFile()) return error.Unknown;
     var formatted: []const u8 = undefined;
     if (Highlight.Language.guessFromFilename(blb.name)) |lang| {
-        const pre = try Highlight.highlight(vrs.alloc, lang, resolve.data.?);
+        const pre = try Highlight.highlight(frame.alloc, lang, resolve.data.?);
         formatted = pre[28..][0 .. pre.len - 38];
     } else if (excludedExt(blb.name)) {
         formatted = "This file type is currently unsupported";
     } else {
-        formatted = verse.abx.Html.cleanAlloc(vrs.alloc, resolve.data.?) catch return error.Unknown;
+        formatted = verse.abx.Html.cleanAlloc(frame.alloc, resolve.data.?) catch return error.Unknown;
     }
 
-    const wrapped = try wrapLineNumbers(vrs.alloc, formatted);
-
-    vrs.uri.reset();
-    _ = vrs.uri.next();
-    const uri_repo = vrs.uri.next() orelse return error.Unrouteable;
-    _ = vrs.uri.next();
-    const uri_filename = verse.abx.Html.cleanAlloc(vrs.alloc, vrs.uri.rest()) catch return error.Unknown;
-
-    vrs.status = .ok;
-
-    var btns = repos_.navButtons(vrs) catch return error.Unknown;
-    // TODO fixme
-    _ = &btns;
+    const wrapped = try wrapLineNumbers(frame.alloc, formatted);
 
     var page = BlobPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .repo = uri_repo,
-        .uri_filename = uri_filename,
+        .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .repo = rd.name,
+        .uri_filename = path.buffer,
         .filename = blb.name,
         .blob_lines = wrapped,
     });
 
-    try vrs.sendPage(&page);
+    try frame.sendPage(&page);
 }
 
 fn excludedExt(name: []const u8) bool {

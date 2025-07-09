@@ -25,7 +25,9 @@ pub const RouteData = struct {
     name: []const u8,
     verb: ?Verb = null,
     ref: ?[]const u8 = null,
-    target: ?Target = null,
+    path: ?Path = null,
+
+    const Path = std.mem.SplitIterator(u8, .scalar);
 
     pub const Verb = enum {
         blame,
@@ -49,19 +51,6 @@ pub const RouteData = struct {
         }
     };
 
-    pub const Target = union(enum) {
-        tree: std.mem.SplitIterator(u8, .scalar),
-        blob: std.mem.SplitIterator(u8, .scalar),
-
-        pub fn init(comptime v: Verb, s: []const u8) Target {
-            return switch (v) {
-                .tree => .{ .tree = .{ .index = 0, .buffer = s, .delimiter = '/' } },
-                .blob => .{ .blob = .{ .index = 0, .buffer = s, .delimiter = '/' } },
-                else => comptime unreachable,
-            };
-        }
-    };
-
     fn safe(name: ?[]const u8) ?[]const u8 {
         if (name) |n| {
             // why 30? who knows
@@ -79,32 +68,23 @@ pub const RouteData = struct {
         uri.reset();
         _ = uri.next() orelse return null;
         const name = safe(uri.next()) orelse return null;
-        const verb: Verb = Verb.fromSlice(uri.next()) orelse return .{ .name = name };
+        var verb: ?Verb = Verb.fromSlice(uri.next()) orelse return .{ .name = name };
         var ref: ?[]const u8 = null;
-        var target: ?Target = null;
-        switch (verb) {
+        var path: ?Path = null;
+        switch (verb.?) {
             .commit => ref = uri.next() orelse return .{ .name = name },
             .ref => {
                 ref = uri.next() orelse return .{ .name = name };
-                if (Verb.fromSlice(uri.next())) |subverb| switch (subverb) {
-                    .tree => target = .init(.tree, uri.rest()),
-                    .blob => target = .init(.blob, uri.rest()),
-                    else => unreachable,
-                };
+                verb = if (uri.next()) |n| Verb.fromSlice(n) else null;
+                path = .{ .index = 0, .buffer = uri.rest(), .delimiter = '/' };
             },
-            else => {
-                switch (verb) {
-                    .tree => target = .init(.tree, uri.rest()),
-                    .blob => target = .init(.blob, uri.rest()),
-                    else => unreachable,
-                }
-            },
+            else => path = .{ .index = 0, .buffer = uri.rest(), .delimiter = '/' },
         }
         return .{
             .name = name,
             .verb = verb,
             .ref = ref,
-            .target = target,
+            .path = path,
         };
     }
 
