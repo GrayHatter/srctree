@@ -6,17 +6,19 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content class="mw">
-      <div class="act-btns">
-        <With Upstream>
-        <a class="btn" href="<Uri>">Go To Upstream</a>
-        </With>
-        <a class="btn" href="/repo/<RepoName>/commits">commits</a>
-        <a class="btn" href="/repo/<RepoName>/issues/new">New Issue</a>
-        <a class="btn" href="/repo/<RepoName>/diffs/new">Suggest Diff</a>
+      <div class="tree-header">
+        <h3><RepoName/></h3>
+        <div class="act-btns">
+          <With Upstream>
+          <a class="btn" href="<Uri>">Go To Upstream</a>
+          </With>
+          <a class="btn" href="/repo/<RepoName>/commits">commits</a>
+          <a class="btn" href="/repo/<RepoName>/issues/new">New Issue</a>
+          <a class="btn" href="/repo/<RepoName>/diffs/new">New Diff</a>
+        </div>
       </div>
       <repo class="landing">
         <intro>
-        <h3><RepoName/></h3>
         <span><BranchCount type="usize" /> branches</span>
         <span><CommitSlug /></span>
         <span class="muted"><CommitTimeHuman/>&nbsp;<a href="/repo/<RepoName />/commit/<CommitHexShort/>"><CommitHexShort /></a></span>
