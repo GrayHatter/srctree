@@ -51,17 +51,6 @@ pub const RouteData = struct {
         }
     };
 
-    fn validRepoName(name: ?[]const u8) ?[]const u8 {
-        if (name) |n| {
-            // why 30? who knows
-            if (n.len > 30) return null;
-            for (n) |c| if (!std.ascii.isAlphanumeric(c) and c != '.' and c != '-' and c != '_') return null;
-            if (std.mem.indexOf(u8, n, "..")) |_| return null;
-            return n;
-        }
-        return null;
-    }
-
     pub fn make(uri_itr: *Router.UriIterator) ?RouteData {
         var uri = uri_itr;
         uri.reset();
@@ -89,6 +78,17 @@ pub const RouteData = struct {
 
     pub fn exists(self: RouteData) bool {
         return repos.exists(self.name, .public);
+    }
+
+    fn validRepoName(name: ?[]const u8) ?[]const u8 {
+        if (name) |n| {
+            // why 30? who knows
+            if (n.len > 30) return null;
+            for (n) |c| if (!std.ascii.isAlphanumeric(c) and c != '.' and c != '-' and c != '_') return null;
+            if (std.mem.indexOf(u8, n, "..")) |_| return null;
+            return n;
+        }
+        return null;
     }
 
     fn validRef(ref: ?[]const u8) ?[]const u8 {
