@@ -15,19 +15,22 @@ pub fn make(data: []const u8) !Actor {
     const tzstr = itr.next() orelse return error.ActorParse;
     const epoch = itr.next() orelse return error.ActorParse;
     const epstart = itr.index orelse return error.ActorParse;
-    const email = itr.next() orelse return error.ActorParse;
+    const email = trimEmail(itr.next() orelse return error.ActorParse);
     const name = itr.rest();
-
-    const email_start = if (std.mem.indexOfScalar(u8, email, '<')) |index| index + 1 else 0;
-    const email_end = std.mem.indexOfScalar(u8, email, '>') orelse email.len;
 
     return .{
         .name = name,
-        .email = email[email_start..email_end],
+        .email = email,
         .timestr = data[epstart..data.len],
         .tzstr = tzstr,
         .timestamp = std.fmt.parseInt(i64, epoch, 10) catch return error.ActorParse,
     };
+}
+
+pub fn trimEmail(str: []const u8) []const u8 {
+    const start = if (std.mem.indexOfScalar(u8, str, '<')) |i| i + 1 else 0;
+    const end = std.mem.indexOfScalar(u8, str, '>') orelse str.len;
+    return str[start..end];
 }
 
 pub fn format(self: Actor, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {

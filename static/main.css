@@ -141,7 +141,10 @@ code {
 		white-space: nowrap;
 		display: block;
 		.blame-header {
+			display: inline-block;
 			color: #aaa;
+			min-width: 20rem;
+
 			a {
 				color: #aaa;
 			}
@@ -149,7 +152,6 @@ code {
 				color: #888;
 				max-height: 17px;
 			}
-			display: inline-block;
 			sha {
 				width: 5em;
 				display: inline-block;
@@ -832,6 +834,16 @@ blob {
 
 }
 
+.blame-age-0 {  background-color: #ff5555aa;}
+.blame-age-1 {  background-color: #dd4444aa;}
+.blame-age-2 {  background-color: #bb2222aa;}
+.blame-age-3 {  background-color: #aa1111aa;}
+.blame-age-4 {  background-color: #990000aa;}
+.blame-age-5 {  background-color: #660000aa;}
+.blame-age-6 {  background-color: #330000aa;}
+.blame-age-7 {  background-color: #220000aa;}
+.blame-age-8 {  background-color: #110000cc;}
+.blame-age-old {  background-color: #110000ff;}
 
 .toggle {
 	background: #333;
