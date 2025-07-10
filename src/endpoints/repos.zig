@@ -112,12 +112,12 @@ pub fn navButtons(ctx: *Frame) ![2]S.NavButtons {
         .{
             .name = "issues",
             .extra = i_count,
-            .url = try allocPrint(ctx.alloc, "/repos/{s}/issues/", .{rd.name}),
+            .url = try allocPrint(ctx.alloc, "/repo/{s}/issues/", .{rd.name}),
         },
         .{
             .name = "diffs",
             .extra = d_count,
-            .url = try allocPrint(ctx.alloc, "/repos/{s}/diffs/", .{rd.name}),
+            .url = try allocPrint(ctx.alloc, "/repo/{s}/diffs/", .{rd.name}),
         },
     };
 
