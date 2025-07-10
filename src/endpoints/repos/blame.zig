@@ -1,20 +1,19 @@
 const BlamePage = PageData("blame.html");
 
 pub fn blame(f: *Frame) Router.Error!void {
-    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     std.debug.assert(rd.verb.? == .blame);
-    _ = f.uri.next();
-    const blame_file = f.uri.rest();
+    const blame_file = (rd.path orelse return error.InvalidURI).rest();
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
     defer repo.raze();
 
     var actions = repo.getAgent(f.alloc);
-    actions.cwd = if (!repo.bare) repo.dir.openDir("..", .{}) catch unreachable else repo.dir;
+    actions.cwd = if (!repo.bare) repo.dir.openDir("..", .{}) catch return error.Unknown else repo.dir;
     defer if (!repo.bare) actions.cwd.?.close();
-    const git_blame = actions.blame(blame_file) catch unreachable;
+    const git_blame = actions.blame(blame_file) catch return error.Unknown;
 
-    const parsed = parseBlame(f.alloc, git_blame) catch unreachable;
+    const parsed = parseBlame(f.alloc, git_blame) catch return error.Unknown;
     var source_lines = std.ArrayList(u8).init(f.alloc);
     for (parsed.lines) |line| {
         try source_lines.appendSlice(line.line);

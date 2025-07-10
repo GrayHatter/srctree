@@ -51,7 +51,7 @@ pub const RouteData = struct {
         }
     };
 
-    pub fn make(uri_itr: *Router.UriIterator) ?RouteData {
+    pub fn init(uri_itr: Router.UriIterator) ?RouteData {
         var uri = uri_itr;
         uri.reset();
         _ = uri.next() orelse return null;
@@ -97,8 +97,8 @@ pub const RouteData = struct {
 };
 
 pub fn navButtons(ctx: *Frame) ![2]S.NavButtons {
-    const rd = RouteData.make(&ctx.uri) orelse unreachable;
-    if (!rd.exists()) unreachable;
+    const rd = RouteData.init(ctx.uri) orelse return error.InvalidURI;
+    if (!rd.exists()) return error.InvalidURI;
     var i_count: usize = 0;
     var d_count: usize = 0;
     var itr = Delta.iterator(ctx.alloc, rd.name);
@@ -128,7 +128,7 @@ pub fn navButtons(ctx: *Frame) ![2]S.NavButtons {
 }
 
 pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
-    const rd = RouteData.make(&ctx.uri) orelse return list;
+    const rd = RouteData.init(ctx.uri) orelse return list;
 
     if (rd.exists()) {
         var bh: S.BodyHeaderHtml = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{

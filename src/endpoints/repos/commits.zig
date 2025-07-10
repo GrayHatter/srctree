@@ -11,7 +11,7 @@ const AddComment = struct {
 };
 
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
-    const rd = RouteData.make(&f.uri) orelse return commitsView;
+    const rd = RouteData.init(f.uri) orelse return commitsView;
     if (rd.verb != null and rd.verb.? == .commit)
         return viewCommit;
     return commitsView;
@@ -183,7 +183,7 @@ pub fn commitPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
 }
 
 pub fn viewCommit(f: *Frame) Error!void {
-    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     if (rd.verb == null) return commitsView(f);
 
     const sha = rd.ref orelse return error.Unrouteable;
@@ -322,7 +322,7 @@ fn buildListBetween(
 }
 
 pub fn commitsView(f: *Frame) Error!void {
-    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
     if (f.uri.next()) |next| {
         if (!std.mem.eql(u8, next, "commits")) return error.Unrouteable;
@@ -367,7 +367,7 @@ pub fn commitsView(f: *Frame) Error!void {
 }
 
 pub fn commitsBefore(f: *Frame) Error!void {
-    const rd = RouteData.make(&f.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
     std.debug.assert(std.mem.eql(u8, "after", f.uri.next().?));
 

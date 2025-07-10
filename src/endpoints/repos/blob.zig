@@ -1,5 +1,5 @@
 pub fn treeBlob(frame: *Frame) Router.Error!void {
-    const rd = RouteData.make(&frame.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(frame.uri) orelse return error.Unrouteable;
     _ = frame.uri.next();
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;

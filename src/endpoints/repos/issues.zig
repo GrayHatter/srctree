@@ -52,7 +52,7 @@ const IssueCreate = struct {
 };
 
 fn newPost(ctx: *verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.request.data.post) |post| {
         const valid = post.validate(IssueCreate) catch return error.DataInvalid;
@@ -75,7 +75,7 @@ fn newPost(ctx: *verse.Frame) Error!void {
 }
 
 fn newComment(ctx: *verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
     if (ctx.request.data.post) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
@@ -103,7 +103,7 @@ fn newComment(ctx: *verse.Frame) Error!void {
 const DeltaIssuePage = template.PageData("delta-issue.html");
 
 fn view(ctx: *verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
     const delta_id = ctx.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
 
@@ -157,7 +157,7 @@ fn view(ctx: *verse.Frame) Error!void {
 const DeltaListHtml = template.PageData("delta-list.html");
 
 fn list(ctx: *verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;
 
@@ -222,6 +222,7 @@ const POST = Router.POST;
 const S = template.Structs;
 
 const Repos = @import("../repos.zig");
+const RouteData = Repos.RouteData;
 
 const Delta = @import("../../types.zig").Delta;
 const Humanize = @import("../../humanize.zig");

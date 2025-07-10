@@ -1,7 +1,7 @@
 const TagPage = PageData("repo-tags.html");
 
 pub fn list(ctx: *Frame) Router.Error!void {
-    const rd = RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
     repo.loadData(ctx.alloc) catch return error.Unknown;

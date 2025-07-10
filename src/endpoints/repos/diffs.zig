@@ -1,42 +1,3 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const allocPrint = std.fmt.allocPrint;
-const bufPrint = std.fmt.bufPrint;
-const eql = std.mem.eql;
-const splitScalar = std.mem.splitScalar;
-const indexOf = std.mem.indexOf;
-const indexOfAny = std.mem.indexOfAny;
-const indexOfScalarPos = std.mem.indexOfScalarPos;
-const parseInt = std.fmt.parseInt;
-const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
-const isDigit = std.ascii.isDigit;
-const isWhitespace = std.ascii.isWhitespace;
-
-const Commits = @import("commits.zig");
-
-const Repos = @import("../repos.zig");
-
-const Verse = @import("verse");
-
-const Git = @import("../../git.zig");
-const DOM = Verse.DOM;
-const HTML = Verse.HTML;
-const Humanize = @import("../../humanize.zig");
-const Patch = @import("../../patch.zig");
-const Route = Verse.Router;
-const Template = Verse.template;
-const Types = @import("../../types.zig");
-const Highlighting = @import("../../syntax-highlight.zig");
-
-const Delta = Types.Delta;
-const Error = Route.Error;
-const GET = Route.GET;
-const POST = Route.POST;
-const ROUTE = Route.ROUTE;
-const S = Template.Structs;
-const Thread = Types.Thread;
-const UriIter = Route.UriIter;
-
 pub const routes = [_]Route.Match{
     ROUTE("", list),
     ROUTE("new", new),
@@ -51,7 +12,7 @@ fn isHex(input: []const u8) ?usize {
     return std.fmt.parseInt(usize, input, 16) catch null;
 }
 
-pub fn router(ctx: *Verse.Frame) Route.RoutingError!Route.BuildFn {
+pub fn router(ctx: *Frame) Route.RoutingError!Route.BuildFn {
     if (!eql(u8, "diffs", ctx.uri.next() orelse return error.Unrouteable))
         return error.Unrouteable;
     const verb = ctx.uri.peek() orelse return Route.defaultRouter(ctx, &routes);
@@ -79,7 +40,7 @@ const DiffCreateChangeReq = struct {
     desc: []const u8,
 };
 
-fn new(ctx: *Verse.Frame) Error!void {
+fn new(ctx: *Frame) Error!void {
     var network: ?S.Network = null;
     var patchuri: ?S.PatchUri = .{};
     var title: ?[]const u8 = null;
@@ -90,7 +51,7 @@ fn new(ctx: *Verse.Frame) Error!void {
         desc = udata.desc;
 
         if (udata.from_network) |_| {
-            const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+            const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
             var cwd = std.fs.cwd();
             const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
             const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
@@ -157,8 +118,8 @@ const DiffCreateReq = struct {
     //},
 };
 
-fn createDiff(vrs: *Verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&vrs.uri) orelse return error.Unrouteable;
+fn createDiff(vrs: *Frame) Error!void {
+    const rd = RouteData.init(vrs.uri) orelse return error.Unrouteable;
     if (vrs.request.data.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.DataInvalid;
         if (udata.title.len == 0) return error.DataInvalid;
@@ -198,8 +159,8 @@ fn createDiff(vrs: *Verse.Frame) Error!void {
     return try new(vrs);
 }
 
-fn newComment(ctx: *Verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+fn newComment(ctx: *Frame) Error!void {
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.request.data.post) |post| {
         var valid = post.validator();
@@ -221,7 +182,7 @@ fn newComment(ctx: *Verse.Frame) Error!void {
     return error.Unknown;
 }
 
-pub fn directReply(ctx: *Verse.Frame) Error!void {
+pub fn directReply(ctx: *Frame) Error!void {
     _ = ctx.uri.next().?;
     _ = ctx.uri.next().?;
     std.debug.print("{s}\n", .{ctx.uri.next().?});
@@ -445,12 +406,12 @@ fn resolveLineRefRepo(
     else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
         var pre = try Highlighting.highlight(a, lang, found_line[1..]);
         break :fmt pre[28..][0 .. pre.len - 41];
-    } else try Verse.abx.Html.cleanAlloc(a, found_line[1..]);
+    } else try abx.Html.cleanAlloc(a, found_line[1..]);
 
     const wrapped_line = try allocPrint(
         a,
         "<div title=\"{s}\" class=\"coderef\">{s}</div>",
-        .{ try Verse.abx.Html.cleanAlloc(a, line), formatted },
+        .{ try abx.Html.cleanAlloc(a, line), formatted },
     );
     try found_lines.append(wrapped_line);
     return try found_lines.toOwnedSlice();
@@ -494,12 +455,12 @@ fn resolveLineRefDiff(
                 else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
                     var pre = try Highlighting.highlight(a, lang, found_line[1..]);
                     break :fmt pre[28..][0 .. pre.len - 41];
-                } else try Verse.abx.Html.cleanAlloc(a, found_line[1..]);
+                } else try abx.Html.cleanAlloc(a, found_line[1..]);
 
                 const wrapped_line = try allocPrint(
                     a,
                     "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
-                    .{ try Verse.abx.Html.cleanAlloc(a, line), color, formatted },
+                    .{ try abx.Html.cleanAlloc(a, line), color, formatted },
                 );
                 try found_lines.append(wrapped_line);
             }
@@ -584,7 +545,7 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                             end += 1;
                         }
                         if (end < line.len) try message_lines.append(
-                            try Verse.abx.Html.cleanAlloc(a, line[end..]),
+                            try abx.Html.cleanAlloc(a, line[end..]),
                         );
                     } else if (resolveLineRefRepo(
                         a,
@@ -603,14 +564,14 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                         try message_lines.append(try allocPrint(
                             a,
                             "<span title=\"line not found in this diff\">{s}</span>",
-                            .{try Verse.abx.Html.cleanAlloc(a, line)},
+                            .{try abx.Html.cleanAlloc(a, line)},
                         ));
                     }
                 }
                 break;
             }
         } else {
-            try message_lines.append(try Verse.abx.Html.cleanAlloc(a, line));
+            try message_lines.append(try abx.Html.cleanAlloc(a, line));
         }
     }
 
@@ -619,8 +580,8 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
 
 const DiffViewPage = Template.PageData("delta-diff.html");
 
-fn view(ctx: *Verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+fn view(ctx: *Frame) Error!void {
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
     var cwd = std.fs.cwd();
     const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
@@ -640,8 +601,8 @@ fn view(ctx: *Verse.Frame) Error!void {
     } orelse return error.Unrouteable;
 
     const patch_header = S.Header{
-        .title = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
-        .message = Verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
+        .title = abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
+        .message = abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
     };
 
     // meme saved to protect history
@@ -691,12 +652,12 @@ fn view(ctx: *Verse.Frame) Error!void {
             switch (msg.kind) {
                 .comment => |comment| {
                     c_ctx.* = .{
-                        .author = try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.author),
+                        .author = try abx.Html.cleanAlloc(ctx.alloc, comment.author),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
                         .message = if (patch) |pt|
                             translateComment(ctx.alloc, comment.message, pt, &repo) catch unreachable
                         else
-                            try Verse.abx.Html.cleanAlloc(ctx.alloc, comment.message),
+                            try abx.Html.cleanAlloc(ctx.alloc, comment.message),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
                             index,
                             fmtSliceHexLower(msg.hash[0..]),
@@ -744,8 +705,8 @@ fn view(ctx: *Verse.Frame) Error!void {
 }
 
 const DeltaListPage = Template.PageData("delta-list.html");
-fn list(ctx: *Verse.Frame) Error!void {
-    const rd = Repos.RouteData.make(&ctx.uri) orelse return error.Unrouteable;
+fn list(ctx: *Frame) Error!void {
+    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
     const last = Delta.last(rd.name) + 1;
 
@@ -766,13 +727,13 @@ fn list(ctx: *Verse.Frame) Error!void {
                 "/repo/{s}/{s}/{x}",
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
-            .title = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
+            .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
                 .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
-            .desc = try Verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .desc = try verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
     var default_search_buf: [0xFF]u8 = undefined;
@@ -791,3 +752,40 @@ fn list(ctx: *Verse.Frame) Error!void {
 
     return try ctx.sendPage(&page);
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
+const eql = std.mem.eql;
+const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
+const indexOf = std.mem.indexOf;
+const indexOfAny = std.mem.indexOfAny;
+const indexOfScalarPos = std.mem.indexOfScalarPos;
+const isDigit = std.ascii.isDigit;
+const isWhitespace = std.ascii.isWhitespace;
+const parseInt = std.fmt.parseInt;
+const splitScalar = std.mem.splitScalar;
+
+const Repos = @import("../repos.zig");
+const RouteData = Repos.RouteData;
+
+const verse = @import("verse");
+const abx = verse.abx;
+const Frame = verse.Frame;
+const Error = Route.Error;
+const POST = Route.POST;
+const ROUTE = Route.ROUTE;
+const Template = verse.template;
+const HTML = verse.HTML;
+const DOM = verse.DOM;
+
+const Git = @import("../../git.zig");
+const Highlighting = @import("../../syntax-highlight.zig");
+const Humanize = @import("../../humanize.zig");
+
+const Patch = @import("../../patch.zig");
+const Route = verse.Router;
+const S = Template.Structs;
+const Types = @import("../../types.zig");
+const Delta = Types.Delta;
