@@ -51,7 +51,7 @@ pub const RouteData = struct {
         }
     };
 
-    fn safe(name: ?[]const u8) ?[]const u8 {
+    fn validRepoName(name: ?[]const u8) ?[]const u8 {
         if (name) |n| {
             // why 30? who knows
             if (n.len > 30) return null;
@@ -62,19 +62,18 @@ pub const RouteData = struct {
         return null;
     }
 
-    pub fn make(uri: *Router.UriIterator) ?RouteData {
-        const idx = uri.index;
-        defer uri.index = idx;
+    pub fn make(uri_itr: *Router.UriIterator) ?RouteData {
+        var uri = uri_itr;
         uri.reset();
         _ = uri.next() orelse return null;
-        const name = safe(uri.next()) orelse return null;
+        const name = validRepoName(uri.next()) orelse return null;
         var verb: ?Verb = Verb.fromSlice(uri.next()) orelse return .{ .name = name };
         var ref: ?[]const u8 = null;
         var path: ?Path = null;
         switch (verb.?) {
             .commit => ref = uri.next() orelse return .{ .name = name },
             .ref => {
-                ref = uri.next() orelse return .{ .name = name };
+                ref = validRef(uri.next()) orelse return .{ .name = name };
                 verb = if (uri.next()) |n| Verb.fromSlice(n) else null;
                 path = .{ .index = 0, .buffer = uri.rest(), .delimiter = '/' };
             },
@@ -90,6 +89,10 @@ pub const RouteData = struct {
 
     pub fn exists(self: RouteData) bool {
         return repos.exists(self.name, .public);
+    }
+
+    fn validRef(ref: ?[]const u8) ?[]const u8 {
+        return ref;
     }
 };
 
