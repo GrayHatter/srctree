@@ -11,6 +11,7 @@ pub const Repo = @import("git/Repo.zig");
 pub const SHA = @import("git/SHA.zig");
 pub const Tag = @import("git/Tag.zig");
 pub const Tree = @import("git/tree.zig");
+pub const Ref = @import("git/ref.zig").Ref;
 
 /// TODO for commitish
 /// direct

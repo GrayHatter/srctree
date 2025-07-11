@@ -23,7 +23,14 @@ pub fn blame(f: *Frame) Router.Error!void {
     var actions = repo.getAgent(f.alloc);
     actions.cwd = if (!repo.bare) repo.dir.openDir("..", .{}) catch return error.Unknown else repo.dir;
     defer if (!repo.bare) actions.cwd.?.close();
-    const git_blame = actions.blame(blame_file) catch return error.Unknown;
+    const ref: ?Git.Ref = if (rd.ref) |r|
+        if (Git.SHA.initCheck(r)) |sha|
+            Git.Ref{ .sha = sha }
+        else |_|
+            null
+    else
+        null;
+    const git_blame = actions.blame(blame_file, ref) catch return error.InvalidURI;
 
     const map, const lines = parseBlame(f.alloc, git_blame) catch return error.Unknown;
     var source_lines = std.ArrayList(u8).init(f.alloc);
@@ -56,12 +63,14 @@ pub fn blame(f: *Frame) Router.Error!void {
     for (lines) |*line|
         line.line = litr.next() orelse break;
 
-    const wrapped_blames = try wrapLineNumbersBlame(f.alloc, lines, map, rd.name, f.user != null);
+    const file_name = try abx.Html.cleanAlloc(f.alloc, blame_file);
+    const show_emails = f.user != null;
+    const wrapped_blames = try wrapLineNumbersBlame(f.alloc, lines, map, rd.name, file_name, show_emails);
 
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = f.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .filename = try verse.abx.Html.cleanAlloc(f.alloc, blame_file),
+        .filename = file_name,
         .blame_lines = wrapped_blames,
     });
 
@@ -78,24 +87,27 @@ fn wrapLineNumbersBlame(
     blames: []BlameLine,
     map: BlameMap,
     repo_name: []const u8,
+    path: []const u8,
     include_email: bool,
 ) ![]S.BlameLines {
     const b_lines = try a.alloc(S.BlameLines, blames.len);
     const shas = try a.alloc([8]u8, blames.len);
     var prev_sha: SHA = .{ .bin = @splat(0xff) };
-    for (blames, b_lines, shas, 0..) |src, *dst, *sha, i| {
+    for (blames, b_lines, shas, 0..) |src, *blame_line, *sha, i| {
         const skip = src.sha.eql(prev_sha);
         if (!skip) prev_sha = src.sha;
         const bcommit = map.get(src.sha) orelse unreachable;
-        const email = if (!include_email) "" else verse.abx.Html.cleanAlloc(a, bcommit.author.email) catch unreachable;
+        const email = if (!include_email) "" else abx.Html.cleanAlloc(a, bcommit.author.email) catch unreachable;
         sha.* = src.sha.hex()[0..8].*;
-        dst.* = .{
+        const parent_sha: Git.SHA = .init(bcommit.parent orelse (&[_]u8{'0'} ** 40));
+        blame_line.* = .{
             .repo_name = repo_name,
             .m_sha = if (skip) null else sha,
             .sha = sha,
+            .blame_skip_href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, parent_sha.hex(), path }),
             .time_style = style_blocks[bcommit.age_block],
             .author_email = .{
-                .author = if (skip) null else verse.abx.Html.cleanAlloc(a, bcommit.author.name) catch unreachable,
+                .author = if (skip) null else abx.Html.cleanAlloc(a, bcommit.author.name) catch unreachable,
                 .email = email,
             },
             .time = if (skip) null else try Humanize.unix(bcommit.author.timestamp).printAlloc(a),
@@ -226,6 +238,7 @@ const SHA = Git.SHA;
 const Highlight = @import("../../syntax-highlight.zig");
 
 const verse = @import("verse");
+const abx = verse.abx;
 const Frame = verse.Frame;
 const S = verse.template.Structs;
 const PageData = verse.template.PageData;

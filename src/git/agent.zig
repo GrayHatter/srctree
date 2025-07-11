@@ -131,14 +131,37 @@ pub fn checkPatch(self: Agent, patch: []const u8) !?[]u8 {
     return error.DoesNotApply;
 }
 
-pub fn blame(self: Agent, name: []const u8) ![]u8 {
-    std.debug.print("{s}\n", .{name});
-    return try self.exec(&[_][]const u8{
+pub fn blame(self: Agent, name: []const u8, ref: ?Ref) ![]u8 {
+    std.debug.print("Git blame on file {s}\n", .{name});
+
+    const argv: []const []const u8 = if (ref) |r| switch (r) {
+        .sha => |s| &[_][]const u8{
+            "git",
+            "blame",
+            "--porcelain",
+            s.hex()[0..40],
+            "--",
+            name,
+        },
+        inline else => |_, t| {
+            std.debug.print("Git blame not implemented for {}\n", .{t});
+            return error.NotImplemented;
+        },
+    } else &[_][]const u8{
         "git",
         "blame",
         "--porcelain",
+        "--",
         name,
-    });
+    };
+    if (self.execCustom(argv)) |res| {
+        if (res.term != .Exited or res.term.Exited != 0) {
+            std.debug.print("git Agent error\nstderr: {s}\n", .{res.stderr});
+            self.alloc.free(res.stderr);
+            return error.BlameFailed;
+        }
+        return res.stdout;
+    } else |err| return err;
 }
 
 fn execStdin(self: Agent, argv: []const []const u8, stdin: []const u8) !std.process.Child.RunResult {
@@ -237,3 +260,4 @@ const Allocator = std.mem.Allocator;
 const Git = @import("../git.zig");
 const Repo = Git.Repo;
 const Tree = Git.Tree;
+const Ref = Git.Ref;

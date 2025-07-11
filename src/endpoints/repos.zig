@@ -138,11 +138,16 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
         bh.nav.nav_buttons = ctx.alloc.dupe(S.NavButtons, &(navButtons(ctx) catch @panic("unreachable"))) catch unreachable;
         ctx.response_data.add(bh) catch unreachable;
 
-        if (rd.verb == null) return treeBlob;
+        _ = ctx.uri.next();
+        _ = ctx.uri.next();
 
-        _ = ctx.uri.next();
-        _ = ctx.uri.next();
-        return Router.defaultRouter(ctx, &routes);
+        if (rd.verb) |verb| {
+            return switch (verb) {
+                inline else => |v| Router.targetRouter(ctx, @tagName(v), &routes),
+            };
+        }
+        return treeBlob;
+        //return Router.defaultRouter(ctx, &routes);
     }
     return error.Unrouteable;
 }
