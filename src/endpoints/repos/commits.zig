@@ -50,6 +50,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
 
     // lol... I'd forgotten I'd done this. >:)
     const current: Git.Commit = repo.commit(f.alloc, Git.SHA.initPartial(sha)) catch cmt: {
+        std.debug.print("unable to find commit, trying expensive fallback\n", .{});
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(f.alloc) catch return error.Unknown;
         while (!std.mem.startsWith(u8, fallback.sha.hex()[0..], sha)) {
@@ -226,11 +227,13 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.Commit {
         Highlight.translate(a, .markdown, c.body) catch Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable
     else
         Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
+    const sha = try a.dupe(u8, c.sha.hex()[0..]);
     return .{
         .author = Verse.abx.Html.cleanAlloc(a, c.author.name) catch unreachable,
         .parents = try commitCtxParents(a, c, repo),
         .repo = repo,
-        .sha_short = try a.dupe(u8, c.sha.hex()[0..8]),
+        .sha = sha,
+        .sha_short = sha[0..8],
         .title = Verse.abx.Html.cleanAlloc(a, c.title) catch unreachable,
         .body = body,
     };

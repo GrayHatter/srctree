@@ -173,16 +173,6 @@ fn loadPacked(self: Repo, a: Allocator, sha: SHA) !?Object {
     return null;
 }
 
-fn expandPartial(self: Repo, sha: SHA) !?SHA {
-    std.debug.assert(sha.partial == true);
-    for (self.packs) |pack| {
-        if (try pack.containsPrefix(sha.bin[0..sha.len])) |_| {
-            return try pack.expandPrefix(sha.bin[0..sha.len]);
-        }
-    }
-    return null;
-}
-
 fn loadPackedPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
     //std.debug.assert(sha.partial == true);
     for (self.packs) |pack| {
@@ -431,15 +421,36 @@ fn loadBranches(self: *Repo) !void {
     self.branches = try list.toOwnedSlice();
 }
 
-pub fn resolvePartial(_: *const Repo, _: SHA) !SHA {
-    return error.NotImplemented;
+pub fn resolvePartial(repo: *const Repo, sha: SHA) !?SHA {
+    if (!sha.partial) return sha;
+    if (sha.len < 3) return error.TooShort; // not supported
+
+    var ambiguous: bool = false;
+    for (repo.packs) |pack| {
+        if (pack.expandPrefix(sha) catch |err| switch (err) {
+            error.AmbiguousRef => {
+                ambiguous = true;
+                continue;
+            },
+            else => return err,
+        }) |s| {
+            return s;
+        }
+    }
+    if (ambiguous) return error.AmbiguousRef;
+    return null;
 }
 
 pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
     if (sha.partial) {
+        const full_sha = try self.resolvePartial(sha) orelse sha; //unreachable;
         return switch (try self.loadObjectPartial(a, sha) orelse
-            try self.loadObject(a, try self.expandPartial(sha) orelse sha)) {
-            .commit => |c| c,
+            try self.loadObject(a, full_sha)) {
+            .commit => |c| {
+                var cmt = c;
+                cmt.sha = full_sha;
+                return cmt;
+            },
             else => error.NotACommit,
         };
     } else return switch (try self.loadObject(a, sha)) {

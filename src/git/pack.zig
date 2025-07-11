@@ -118,7 +118,8 @@ pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
 
     const start: usize = if (par_sha[0] > 0) self.fanOut(par_sha[0] - 1) else 0;
 
-    const objnames = @as([*][20]u8, @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]))[0..count];
+    const objnames_ptr: [*][20]u8 = @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]);
+    const objnames = objnames_ptr[0..count];
 
     var left: usize = 0;
     var right: usize = objnames.len;
@@ -148,34 +149,46 @@ pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
         return @byteSwap(self.offsets[f + start]);
     }
 
-    //for (0..count) |i| {
-    //    const objname = objnames[i];
-    //    if (eql(u8, par_sha, objname[0..par_sha.len])) {
-    //        if (objnames.len > i + 1 and eql(u8, par_sha, objnames[i + 1][0..par_sha.len])) {
-    //            return error.AmbiguousRef;
-    //        }
-    //        return @byteSwap(self.offsets[i + start]);
-    //    }
-    //}
     return null;
 }
 
-pub fn expandPrefix(self: Pack, psha: []const u8) !?SHA {
-    const count: usize = self.fanOutCount(psha[0]);
+pub fn expandPrefix(self: Pack, partial_sha: SHA) !?SHA {
+    const partial: []const u8 = partial_sha.bin[0..partial_sha.len];
+    const count: usize = self.fanOutCount(partial[0]);
     if (count == 0) return null;
 
-    const start: usize = if (psha[0] > 0) self.fanOut(psha[0] - 1) else 0;
+    const start: usize = if (partial[0] > 0) self.fanOut(partial[0] - 1) else 0;
 
-    const objnames = self.objnames[start * 20 ..][0 .. count * 20];
-    for (0..count) |i| {
-        const objname = objnames[i * 20 ..][0..20];
-        if (eql(u8, psha, objname[0..psha.len])) {
-            if (objnames.len > i * 20 + 20 and eql(u8, psha, objnames[i * 20 + 20 ..][0..psha.len])) {
-                return error.AmbiguousRef;
-            }
-            return SHA.init(objname);
+    const objnames_ptr: [*][20]u8 = @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]);
+    const objnames = objnames_ptr[0..count];
+
+    var left: usize = 0;
+    var right: usize = objnames.len;
+    var found: ?usize = null;
+
+    while (left < right) {
+        const mid = left + (right - left) / 2;
+
+        switch (orderSha(partial, objnames[mid][0..partial.len])) {
+            .eq => {
+                found = mid;
+                break;
+            },
+            .gt => left = mid + 1,
+            .lt => right = mid,
         }
     }
+
+    if (found) |f| {
+        if (objnames.len > f + 1 and startsWith(u8, &objnames[f + 1], partial)) {
+            return error.AmbiguousRef;
+        }
+        if (f > 1 and startsWith(u8, &objnames[f - 1], partial)) {
+            return error.AmbiguousRef;
+        }
+        return SHA.init(objnames[f][0..20]);
+    }
+
     return null;
 }
 
@@ -375,3 +388,4 @@ const MAP_TYPE = std.os.linux.MAP_TYPE;
 const AnyReader = std.io.AnyReader;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
+const startsWith = std.mem.startsWith;

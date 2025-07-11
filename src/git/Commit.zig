@@ -15,7 +15,7 @@ gpgsig: ?GPGSig,
 
 ptr_parent: ?*Commit = null, // TOOO multiple parents
 
-pub const Commit = @This();
+const Commit = @This();
 
 pub fn init(sha: SHA, data: []const u8) !Commit {
     if (std.mem.startsWith(u8, data, "commit")) unreachable;
