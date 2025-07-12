@@ -20,7 +20,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     const prefix = if (rd.ref) |ref|
         try allocPrint(ctx.alloc, "/repo/{s}/ref/{s}", .{ rd.name, ref })
     else
-        try allocPrint(ctx.alloc, "/repo/{s}/", .{rd.name});
+        try allocPrint(ctx.alloc, "/repo/{s}", .{rd.name});
 
     const dot_dot: ?S.DotDot = if (path) |p| .{
         // TODO fix

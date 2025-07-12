@@ -5,7 +5,18 @@
   </head>
   <body>
     <Build BodyHeader _body_header.html />
-    <content>
+    <content class="mw">
+      <div class="blob-header">
+        <h3><RepoName/></h3>
+        <div class="act-btns">
+          <With Upstream>
+          <a class="btn" href="<Uri>">Go To Upstream</a>
+          </With>
+          <a class="btn" href="/repo/<RepoName>/blob/<UriFilename />">View File</a>
+          <a class="btn" href="/repo/<RepoName>/issues/new">New Issue</a>
+          <a class="btn" href="/repo/<RepoName>/diffs/new">New Diff</a>
+        </div>
+      </div>
       <blob>
         <header><Filename></header>
         <div class="codeblock">

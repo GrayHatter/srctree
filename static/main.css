@@ -33,7 +33,7 @@ a {
 
 h1,h2,h3 { margin: 0 }
 
-.tree-header {
+.tree-header, .blob-header {
 	display: flex;
 	h3 {
 		font-family: 'Titillium Web', sans-serif;

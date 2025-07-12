@@ -118,7 +118,8 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     var page = BlobPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .repo = rd.name,
+        .repo_name = rd.name,
+        .upstream = null,
         .uri_filename = path.buffer,
         .filename = blb.name,
         .blob_lines = wrapped,

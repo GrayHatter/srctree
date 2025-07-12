@@ -47,7 +47,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     std.mem.sort(i64, tsblocks, {}, intSort);
     const min: usize = @abs(tsblocks[tsblocks.len - 1]);
     const max: usize = @abs(tsblocks[0]);
-    const range = (max - min) / (style_blocks.len - 1);
+    const range = @max(1, (max - min) / (style_blocks.len - 1));
 
     for (map.values()) |*dst| {
         const block = (@abs(dst.committer.timestamp) - min) / range;
@@ -55,8 +55,9 @@ pub fn blame(f: *Frame) Router.Error!void {
     }
 
     const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang| fmt: {
-        var pre = try Highlight.highlight(f.alloc, lang, source_lines.items);
-        break :fmt pre[28..][0 .. pre.len - 38];
+        const pre = try Highlight.highlight(f.alloc, lang, source_lines.items);
+        const end = std.mem.lastIndexOf(u8, pre, "</pre></div>") orelse pre.len -| 12;
+        break :fmt pre[28..end];
     } else verse.abx.Html.cleanAlloc(f.alloc, source_lines.items) catch return error.Unknown;
 
     var litr = std.mem.splitScalar(u8, formatted, '\n');
@@ -71,6 +72,9 @@ pub fn blame(f: *Frame) Router.Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = f.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .filename = file_name,
+        .uri_filename = rd.path.?.buffer,
+        .repo_name = rd.name,
+        .upstream = null,
         .blame_lines = wrapped_blames,
     });
 
