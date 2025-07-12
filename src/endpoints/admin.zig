@@ -4,10 +4,8 @@ pub const verse_routes = [_]Route.Match{
     Route.ANY("post", index),
     Route.ROUTE("new-repo", newRepo),
     Route.POST("new-repo", postNewRepo),
-    .{ .name = "clone-upstream", .methods = .{
-        .GET = .{ .build = cloneUpstream },
-        .POST = .{ .build = postCloneUpstream },
-    } },
+    Route.GET("clone-upstream", cloneUpstream),
+    Route.POST("clone-upstream", postCloneUpstream),
 };
 
 pub fn index(ctx: *Frame) Error!void {
