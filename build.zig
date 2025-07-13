@@ -7,6 +7,7 @@ pub fn build(b: *std.Build) void {
     const enable_libcurl = b.option(bool, "libcurl", "enable linking with libcurl") orelse false;
     const options = b.addOptions();
     options.addOption(bool, "libcurl", enable_libcurl);
+    const use_llvm = optimize != .Debug;
 
     // Dependencies
     const verse = b.dependency("verse", .{
@@ -25,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .use_llvm = use_llvm,
     });
     b.installArtifact(exe);
     exe.root_module.addOptions("config", options);
