@@ -1,17 +1,11 @@
-const std = @import("std");
-const eql = std.mem.eql;
-const startsWith = std.mem.startsWith;
-const endsWith = std.mem.endsWith;
-const indexOf = std.mem.indexOf;
-
-pub const Remote = @This();
-
 name: []const u8,
 url: ?[]const u8,
 fetch: ?[]const u8,
 
+const Remote = @This();
+
 pub fn format(r: Remote, comptime fmt: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    if (eql(u8, fmt, "diff")) {
+    if (comptime eql(u8, fmt, "diff")) {
         if (r.url) |url| {
             var printable = url;
             if (startsWith(u8, printable, "https://")) {
@@ -28,7 +22,7 @@ pub fn format(r: Remote, comptime fmt: []const u8, _: std.fmt.FormatOptions, out
             try out.writeAll(r.name);
             try out.writeAll("]");
         }
-    } else if (eql(u8, fmt, "link")) {
+    } else if (comptime eql(u8, fmt, "link")) {
         if (r.url) |url| {
             var printable = url;
             if (startsWith(u8, printable, "https://")) {
@@ -50,7 +44,7 @@ pub fn format(r: Remote, comptime fmt: []const u8, _: std.fmt.FormatOptions, out
                 try out.writeAll(printable);
             }
         }
-    } else unreachable;
+    } else try out.print("Git.Remote: {s}", .{r.name});
 }
 
 /// Half supported alloc function
@@ -59,3 +53,9 @@ pub fn raze(r: Remote, a: std.mem.Allocator) void {
     if (r.url) |url| a.free(url);
     if (r.fetch) |fetch| a.free(fetch);
 }
+
+const std = @import("std");
+const eql = std.mem.eql;
+const startsWith = std.mem.startsWith;
+const endsWith = std.mem.endsWith;
+const indexOf = std.mem.indexOf;

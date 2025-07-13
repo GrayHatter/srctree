@@ -114,9 +114,9 @@ fn loadRemotes(self: *Repo) !void {
     self.remotes = try list.toOwnedSlice();
 }
 
-pub fn findRemote(self: Repo, name: []const u8) !?*const Remote {
+pub fn findRemote(self: Repo, name: []const u8) !?Remote {
     const remotes = self.remotes orelse unreachable;
-    for (remotes) |*remote| {
+    for (remotes) |remote| {
         if (eql(u8, remote.name, name)) {
             return remote;
         }
@@ -259,7 +259,6 @@ pub fn loadRefs(self: *Repo) !void {
         try list.append(Ref{ .branch = .{
             .name = try a.dupe(u8, file.name),
             .sha = SHA.init(&buf),
-            .repo = self,
         } });
     }
     var buf: [2048]u8 = undefined;
@@ -271,7 +270,6 @@ pub fn loadRefs(self: *Repo) !void {
                 try list.append(Ref{ .branch = .{
                     .name = try a.dupe(u8, line[52..]),
                     .sha = SHA.init(line[0..40]),
-                    .repo = self,
                 } });
             }
         }
@@ -323,7 +321,6 @@ pub fn HEAD(self: *Repo, a: Allocator) !Ref {
             .branch = Branch{
                 .sha = self.ref(head[16 .. head.len - 1]) catch SHA.init(&[_]u8{0} ** 20),
                 .name = try a.dupe(u8, head[5 .. head.len - 1]),
-                .repo = self,
             },
         };
     } else if (head.len == 41 and head[40] == '\n') {
@@ -415,7 +412,6 @@ fn loadBranches(self: *Repo) !void {
         try list.append(.{
             .name = try a.dupe(u8, file.name),
             .sha = SHA.init(shabuf[0..40]),
-            .repo = self,
         });
     }
     self.branches = try list.toOwnedSlice();
@@ -535,7 +531,7 @@ pub fn updatedAt(self: *const Repo, a: Allocator) !i64 {
     for (self.refs) |r| {
         switch (r) {
             .branch => |br| {
-                const cmt = try br.toCommit(a);
+                const cmt = try br.toCommit(a, self);
                 defer cmt.raze();
                 if (cmt.committer.timestamp > oldest) oldest = cmt.committer.timestamp;
             },
