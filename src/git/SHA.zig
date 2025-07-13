@@ -41,6 +41,12 @@ pub fn hex(sha: SHA) Hex {
     return toHex(sha.bin); //[0 .. sha.len * 2];
 }
 
+pub fn hexAlloc(sha: SHA, a: Allocator) !*Hex {
+    const h = try a.create(Hex);
+    h.* = toHex(sha.bin);
+    return h;
+}
+
 pub fn toHex(sha: Bin) Hex {
     var hex_: Hex = undefined;
     _ = bufPrint(&hex_, "{}", .{hexLower(sha[0..])}) catch unreachable;
@@ -111,6 +117,7 @@ test "hex tranlations" {
 }
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const mem = std.mem;
 const bufPrint = std.fmt.bufPrint;
 const parseInt = std.fmt.parseInt;
