@@ -13,6 +13,7 @@ pub const verse_endpoints_ = verse.Endpoints(.{
 pub const routes = [_]Router.Match{
     ROUTE("blame", blame),
     ROUTE("blob", treeBlob),
+    ROUTE("branches", branches.list),
     ROUTE("commit", &Commits.router),
     ROUTE("commits", &Commits.router),
     ROUTE("diffs", &Diffs.router),
@@ -30,6 +31,7 @@ pub const RouteData = struct {
     const Path = std.mem.SplitIterator(u8, .scalar);
 
     pub const Verb = enum {
+        branches,
         blame,
         blob,
         commit,
@@ -326,6 +328,7 @@ const treeBlob = @import("repos/blob.zig").treeBlob;
 const tree = @import("repos/tree.zig").tree;
 const blame = @import("repos/blame.zig").blame;
 const tags = @import("repos/tags.zig");
+const branches = @import("repos/branches.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

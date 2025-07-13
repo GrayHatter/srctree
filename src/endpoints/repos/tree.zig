@@ -80,11 +80,14 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         }
     }
 
-    var page_desc: ?[]const u8 = repo.description(ctx.alloc) catch null;
-    if (page_desc) |pd| {
-        if (std.mem.startsWith(u8, pd, "Unnamed repository; edit this file"))
-            page_desc = null;
-    }
+    var open_graph: S.OpenGraph = .{ .title = rd.name };
+    var page_desc: ?[]const u8 = null;
+    if (repo.description(ctx.alloc)) |desc| {
+        if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
+            page_desc = std.mem.trim(u8, desc, " \n\r\t");
+            open_graph.desc = page_desc.?;
+        }
+    } else |_| {}
 
     const page_title = if (page_desc) |pd|
         try allocPrint(ctx.alloc, "{s} - {s} - srctree", .{ rd.name, pd })
@@ -92,7 +95,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
     var page = TreePage.init(.{
-        .meta_head = .{ .title = page_title, .open_graph = .{} },
+        .meta_head = .{ .title = page_title, .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .upstream = null,
         .repo_name = rd.name,

@@ -6,7 +6,7 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content class="mw">
-      <div class="tag-header">
+      <div class="branch-header">
         <h3><RepoName/></h3>
         <div class="act-btns">
           <With Upstream><a class="btn" href="<Href>">Go To Upstream</a></With>
@@ -16,9 +16,11 @@
         </div>
       </div>
 
-      <For Tags>
-        <Name><br>
+      <ol>
+      <For RepoBranches>
+        <li><Name > -- <Sha /></li> 
       </For>
+      </ol>
 
     </content>
   </body>

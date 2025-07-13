@@ -3,7 +3,7 @@ const TagPage = PageData("repo-tags.html");
 pub fn list(ctx: *Frame) Router.Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
-    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
+    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.InvalidURI;
     repo.loadData(ctx.alloc) catch return error.Unknown;
     defer repo.raze();
 
@@ -17,11 +17,14 @@ pub fn list(ctx: *Frame) Router.Error!void {
         }
     }
 
+    const upstream: ?Git.Remote = repo.findRemote("upstream") catch null;
+
     var page = TagPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .upstream = null,
+        .upstream = if (upstream) |u| .{ .href = u.fetch orelse "" } else null,
         .tags = tstack,
+        .repo_name = rd.name,
     });
 
     try ctx.sendPage(&page);
