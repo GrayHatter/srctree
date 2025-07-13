@@ -94,10 +94,14 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     else
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+        .href = try allocPrint(ctx.alloc, "{link}", .{up}),
+    } else null;
+
     var page = TreePage.init(.{
         .meta_head = .{ .title = page_title, .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .upstream = null,
+        .upstream = upstream,
         .repo_name = rd.name,
         .readme = readme,
         .commit_slug = commit_slug,

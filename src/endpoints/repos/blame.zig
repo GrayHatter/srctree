@@ -18,6 +18,9 @@ pub fn blame(f: *Frame) Router.Error!void {
     const blame_file = (rd.path orelse return error.InvalidURI).rest();
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
+    // TODO be more specific
+    //repo.loadRemotes() catch {};
+    repo.loadData(f.alloc) catch {}; // This is a safe optional because it's only used to get upstream
     defer repo.raze();
 
     var actions = repo.getAgent(f.alloc);
@@ -68,13 +71,17 @@ pub fn blame(f: *Frame) Router.Error!void {
     const show_emails = f.user != null;
     const wrapped_blames = try wrapLineNumbersBlame(f.alloc, lines, map, rd.name, file_name, show_emails);
 
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+        .href = try allocPrint(f.alloc, "{link}", .{up}),
+    } else null;
+
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = f.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .filename = file_name,
         .uri_filename = rd.path.?.buffer,
         .repo_name = rd.name,
-        .upstream = null,
+        .upstream = upstream,
         .blame_lines = wrapped_blames,
     });
 

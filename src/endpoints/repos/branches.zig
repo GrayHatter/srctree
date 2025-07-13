@@ -19,17 +19,19 @@ pub fn list(frame: *Frame) Router.Error!void {
         };
     }
 
-    const upstream: ?Git.Remote = repo.findRemote("upstream") catch null;
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+        .href = try allocPrint(frame.alloc, "{link}", .{up}),
+    } else null;
 
     const open_graph: S.OpenGraph = .{
         .title = rd.name,
-        .desc = try std.fmt.allocPrint(frame.alloc, "{} branches", .{branches.len}),
+        .desc = try allocPrint(frame.alloc, "{} branches", .{branches.len}),
     };
 
     var page = BranchPage.init(.{
         .meta_head = .{ .open_graph = open_graph },
         .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .upstream = if (upstream) |u| .{ .href = u.fetch orelse "" } else null,
+        .upstream = upstream,
         .repo_name = rd.name,
         .repo_branches = branches,
     });
@@ -55,6 +57,7 @@ const repos = @import("../../repos.zig");
 const RouteData = @import("../repos.zig").RouteData;
 
 const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
 const verse = @import("verse");
 const Frame = verse.Frame;
 const S = verse.template.Structs;

@@ -1,15 +1,15 @@
 const TagPage = PageData("repo-tags.html");
 
-pub fn list(ctx: *Frame) Router.Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
+pub fn list(frame: *Frame) Router.Error!void {
+    const rd = RouteData.init(frame.uri) orelse return error.Unrouteable;
 
     var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.InvalidURI;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
+    repo.loadData(frame.alloc) catch return error.Unknown;
     defer repo.raze();
 
     var tstack: []S.Tags = &.{};
     if (repo.tags) |rtags| {
-        tstack = try ctx.alloc.alloc(S.Tags, rtags.len);
+        tstack = try frame.alloc.alloc(S.Tags, rtags.len);
         std.sort.heap(Git.Tag, rtags, {}, sort);
 
         for (rtags, tstack) |tag, *html_| {
@@ -17,17 +17,19 @@ pub fn list(ctx: *Frame) Router.Error!void {
         }
     }
 
-    const upstream: ?Git.Remote = repo.findRemote("upstream") catch null;
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+        .href = try allocPrint(frame.alloc, "{link}", .{up}),
+    } else null;
 
     var page = TagPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .upstream = if (upstream) |u| .{ .href = u.fetch orelse "" } else null,
+        .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .upstream = upstream,
         .tags = tstack,
         .repo_name = rd.name,
     });
 
-    try ctx.sendPage(&page);
+    try frame.sendPage(&page);
 }
 
 pub fn sort(_: void, l: Git.Tag, r: Git.Tag) bool {
@@ -38,6 +40,7 @@ const repos_ = @import("../repos.zig");
 const RouteData = repos_.RouteData;
 
 const std = @import("std");
+const allocPrint = std.fmt.allocPrint;
 const verse = @import("verse");
 const Frame = verse.Frame;
 const S = verse.template.Structs;
