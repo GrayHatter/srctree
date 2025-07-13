@@ -21,8 +21,13 @@ pub fn list(frame: *Frame) Router.Error!void {
 
     const upstream: ?Git.Remote = repo.findRemote("upstream") catch null;
 
+    const open_graph: S.OpenGraph = .{
+        .title = rd.name,
+        .desc = try std.fmt.allocPrint(frame.alloc, "{} branches", .{branches.len}),
+    };
+
     var page = BranchPage.init(.{
-        .meta_head = .{ .open_graph = .{} },
+        .meta_head = .{ .open_graph = open_graph },
         .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .upstream = if (upstream) |u| .{ .href = u.fetch orelse "" } else null,
         .repo_name = rd.name,
@@ -40,7 +45,10 @@ const SortCtx = struct {
 pub fn sort(ctx: SortCtx, l: Git.Branch, r: Git.Branch) bool {
     const lc: Git.Commit = l.toCommit(ctx.a, ctx.repo) catch return false;
     const rc: Git.Commit = r.toCommit(ctx.a, ctx.repo) catch return false;
-    return lc.committer.timestamp > rc.committer.timestamp;
+    const ltime = lc.committer.timestamp;
+    const rtime = rc.committer.timestamp;
+    if (ltime == rtime) return (l.name.len < r.name.len);
+    return ltime > rtime;
 }
 
 const repos = @import("../../repos.zig");
