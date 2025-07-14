@@ -3,7 +3,7 @@ pub const verse_name = .network;
 const NetworkPage = template.PageData("network.html");
 
 pub fn index(ctx: *Frame) Error!void {
-    var dom = DOM.new(ctx.alloc);
+    var dom: *DOM = .create(ctx.alloc);
 
     const list = Repos.allNames(ctx.alloc) catch return error.Unknown;
     const cwd = std.fs.cwd();

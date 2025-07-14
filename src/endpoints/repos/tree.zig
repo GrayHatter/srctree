@@ -127,8 +127,8 @@ fn isReadme(name: []const u8) bool {
     return false;
 }
 
-fn htmlReadme(a: Allocator, readme: []const u8) ![]html.E {
-    var dom = html.DOM.new(a);
+fn htmlReadme(a: Allocator, readme: []const u8) ![]E {
+    var dom: *DOM = .create(a);
 
     dom = dom.open(html.element("readme", null, null));
     dom.push(html.element("intro", "README.md", null));
@@ -155,6 +155,9 @@ const verse = @import("verse");
 const Frame = verse.Frame;
 const S = verse.template.Structs;
 const html = verse.template.html;
+const DOM = html.DOM;
+const E = html.E;
+
 const PageData = verse.template.PageData;
 const Router = verse.Router;
 const Humanize = @import("../../humanize.zig");

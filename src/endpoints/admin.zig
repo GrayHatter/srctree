@@ -33,7 +33,7 @@ const AdminPage = template.PageData("admin.html");
 
 fn default(ctx: *Frame) Error!void {
     try ctx.requireValidUser();
-    var dom = DOM.new(ctx.alloc);
+    var dom: *DOM = .create(ctx.alloc);
     const action = "/admin/post";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
@@ -47,12 +47,8 @@ fn default(ctx: *Frame) Error!void {
     dom = dom.close();
     dom = dom.close();
 
-    const form = dom.done();
-
-    const list = try ctx.alloc.alloc([]u8, form.len);
-    for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
-    const value = try std.mem.join(ctx.alloc, "", list);
-    _ = value;
+    const form = try dom.render(ctx.alloc, .compact);
+    _ = form;
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
@@ -138,7 +134,7 @@ fn postNewRepo(ctx: *Frame) Error!void {
 
     std.debug.print("creating {any}\n", .{new_repo});
 
-    var dom = DOM.new(ctx.alloc);
+    var dom: *DOM = .create(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },
@@ -165,7 +161,7 @@ fn postNewRepo(ctx: *Frame) Error!void {
 
 fn newRepo(ctx: *Frame) Error!void {
     try ctx.requireValidUser();
-    var dom = DOM.new(ctx.alloc);
+    var dom: *DOM = .create(ctx.alloc);
     const action = "/admin/new-repo";
     dom = dom.open(HTML.form(null, &[_]HTML.Attr{
         HTML.Attr{ .key = "method", .value = "POST" },

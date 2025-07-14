@@ -337,8 +337,8 @@ pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .blob = try fetch(a, uri) };
 }
 
-pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
-    var dom = DOM.new(a);
+pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]u8 {
+    var dom: *DOM = .create(a);
 
     const a_splt = &HTML.Attr.class("split");
     const a_add = &HTML.Attr.class("add");
@@ -412,11 +412,11 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
 
     dom = dom.close();
 
-    return dom.done();
+    return dom.render(a, .full);
 }
 
-pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
-    var dom = DOM.new(a);
+pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]u8 {
+    var dom = DOM.create(a);
     dom = dom.open(HTML.span(null, null));
 
     const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
@@ -445,18 +445,7 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
         ));
     }
     dom = dom.close();
-    return dom.done();
-}
-
-pub fn diffLineUnifiedSlice(a: Allocator, diffs: []const u8) ![]u8 {
-    const elms = diffLineHtmlUnified(a, diffs);
-    const list = try a.alloc([]u8, elms.len);
-    defer a.free(list);
-    for (list, elms) |*l, e| {
-        l.* = try std.fmt.allocPrint(a, "{pretty}", .{e});
-    }
-    defer for (list) |l| a.free(l);
-    return try std.mem.join(a, "\n", list);
+    return dom.render(a, .compact);
 }
 
 test "simple rename" {
