@@ -27,6 +27,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .use_llvm = use_llvm,
+        .use_lld = use_llvm,
     });
     b.installArtifact(exe);
     exe.root_module.addOptions("config", options);
@@ -46,6 +47,8 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
+        .use_llvm = use_llvm,
+        .use_lld = use_llvm,
     });
     unit_tests.root_module.addOptions("config", options);
     unit_tests.root_module.addImport("verse", verse_module);
@@ -59,6 +62,8 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/mailer.zig"),
         .target = target,
         .optimize = optimize,
+        .use_llvm = use_llvm,
+        .use_lld = use_llvm,
     });
     b.installArtifact(maild);
 
