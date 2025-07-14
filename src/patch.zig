@@ -360,11 +360,11 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
     const a_add = &HTML.Attr.class("add");
     const a_del = &HTML.Attr.class("del");
     const a_block = &HTML.Attr.class("block");
+    const no_line = &HTML.Attr.class("no-line");
 
     const clean = verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.splitScalar(u8, clean, '\n');
-    const nbsp = "&nbsp;";
 
     const LinePair = struct {
         text: []const u8,
@@ -381,13 +381,13 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
             switch (line[0]) {
                 '-' => {
                     try left.append(.{
-                        .text = if (line.len > 1) line[1..] else nbsp,
+                        .text = line[1..],
                         .attr = a_del,
                     });
                 },
                 '+' => {
                     try right.append(.{
-                        .text = if (line.len > 1) line[1..] else nbsp,
+                        .text = line[1..],
                         .attr = a_add,
                     });
                 },
@@ -399,11 +399,11 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
                     if (left.items.len > right.items.len) {
                         const rcount = left.items.len - right.items.len;
                         for (0..rcount) |_|
-                            try right.append(.{ .text = nbsp, .attr = null });
+                            try right.append(.{ .text = "", .attr = no_line });
                     } else if (left.items.len < right.items.len) {
                         const lcount = right.items.len - left.items.len;
                         for (0..lcount) |_|
-                            try left.append(.{ .text = nbsp, .attr = null });
+                            try left.append(.{ .text = "", .attr = no_line });
                     }
                     try left.append(.{ .text = line[1..], .attr = null });
                     try right.append(.{ .text = line[1..], .attr = null });

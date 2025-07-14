@@ -93,15 +93,16 @@ content {
 	margin: auto;
 	text-align: center;
 	width: fit-content;
+	&.full{
+		min-width: 97%;
+	}
 	&.mw{
 		width: 1050px;
 	}
-
 	&.lw{
 		width: 1050px;
 		text-align:left;
 	}
-
 	header {
 		max-width: none;
 	}
@@ -524,11 +525,19 @@ patch, gist {
 				overflow: scroll;
 				> div {
 					white-space: pre;
+					min-height: 14px;
 				}
 			}
 		}
-		&.del { background: #5b0000 }
-		&.add { background: #003e00 }
+		&.del {
+			background: #5b0000;
+		}
+		&.add {
+			background: #003e00;
+		}
+		&.no-line {
+			background: #2228;
+		}
 		:first-child {
 			margin: 0;
 		}
@@ -557,6 +566,7 @@ patch, gist {
 
 	.del { background: #633 }
 	.add { background: #353 }
+	.no-line { background: #8881; margin: 0 3px; }
 }
 
 patchrequest {
