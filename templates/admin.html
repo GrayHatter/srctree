@@ -8,11 +8,12 @@
     <content class="lw">
       <div class="admin-actions">
       <ul>
-        <li><a href="" class="<ActiveAdmin type="enum" tagname="settings" text="active" />">Settings</a></li>
-        <li><a href="" class="<ActiveAdmin type="enum" tagname="empty_repo" text="active" />">Empty Repo</a></li>
-        <li><a href="" class="<ActiveAdmin type="enum" tagname="clone_repo" text="active" />">Clone Repo</a></li>
-        <li><a href="" class="<ActiveAdmin type="enum" tagname="delete_repo" text="active" />">Delete Repo</a></li>
-        <li><a href="" class="<ActiveAdmin type="enum" tagname="remotes" text="active" />">Remotes</a></li>
+        <Directive type="enum" name="ActiveAdmin" text="active" />
+        <li><a href="" class="<ActiveAdmin enum="settings" />">Settings</a></li>
+        <li><a href="" class="<ActiveAdmin enum="empty_repo" />">Empty Repo</a></li>
+        <li><a href="" class="<ActiveAdmin enum="clone_repo" />">Clone Repo</a></li>
+        <li><a href="" class="<ActiveAdmin enum="delete_repo" />">Delete Repo</a></li>
+        <li><a href="" class="<ActiveAdmin enum="remotes" />">Remotes</a></li>
       </ul>
       </div><div class="admin-content">
       <form action="/admin/post" method="POST">

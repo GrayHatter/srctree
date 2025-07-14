@@ -53,7 +53,7 @@ fn default(ctx: *Frame) Error!void {
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
-        .active_admin = .settings,
+        .active_admin = .clone_repo,
     });
     try ctx.sendPage(&page);
 }
