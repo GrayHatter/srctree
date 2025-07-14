@@ -52,11 +52,12 @@ fn default(ctx: *Frame) Error!void {
     const list = try ctx.alloc.alloc([]u8, form.len);
     for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
     const value = try std.mem.join(ctx.alloc, "", list);
+    _ = value;
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
-        .form = value,
+        .active_admin = .settings,
     });
     try ctx.sendPage(&page);
 }
@@ -152,11 +153,12 @@ fn postNewRepo(ctx: *Frame) Error!void {
     const list = try ctx.alloc.alloc([]u8, form.len);
     for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
     const value = try std.mem.join(ctx.alloc, "", list);
+    _ = value;
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
-        .form = value,
+        .active_admin = .settings,
     });
     try ctx.sendPage(&page);
 }
@@ -180,11 +182,12 @@ fn newRepo(ctx: *Frame) Error!void {
     const list = try ctx.alloc.alloc([]u8, form.len);
     for (list, form) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
     const value = try std.mem.join(ctx.alloc, "", list);
+    _ = value;
 
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
-        .form = value,
+        .active_admin = .settings,
     });
     try ctx.sendPage(&page);
 }

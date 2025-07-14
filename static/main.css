@@ -31,6 +31,10 @@ a {
 	}
 }
 
+div {
+	vertical-align: bottom;
+}
+
 h1,h2,h3 { margin: 0 }
 
 .tree-header, .blob-header, .branch-header, .tag-header {
@@ -91,6 +95,11 @@ content {
 	width: fit-content;
 	&.mw{
 		width: 1050px;
+	}
+
+	&.lw{
+		width: 1050px;
+		text-align:left;
 	}
 
 	header {
@@ -871,6 +880,22 @@ blob {
 			border-right: 1px solid #737373;
 		}
 	}
+}
+
+.admin-actions {
+	display: inline-block;
+	min-width: 20rem;
+	background: #aaa2;
+	height: 50vh;
+	ul {
+		font-size: 120%;
+	}
+}
+
+.admin-content {
+	display: inline-block;
+	background: #a112;
+	height: 50vh;
 }
 
 .verse-stats-line {

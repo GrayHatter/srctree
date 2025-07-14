@@ -5,8 +5,20 @@
   </head>
   <body>
     <Build BodyHeader _body_header.html />
-    <content>
-      <Form>
+    <content class="lw">
+      <div class="admin-actions">
+      <ul>
+        <li><a href="" class="<ActiveAdmin type="enum" tagname="settings" text="active" />">Settings</a></li>
+        <li><a href="" class="<ActiveAdmin type="enum" tagname="empty_repo" text="active" />">Empty Repo</a></li>
+        <li><a href="" class="<ActiveAdmin type="enum" tagname="clone_repo" text="active" />">Clone Repo</a></li>
+        <li><a href="" class="<ActiveAdmin type="enum" tagname="delete_repo" text="active" />">Delete Repo</a></li>
+        <li><a href="" class="<ActiveAdmin type="enum" tagname="remotes" text="active" />">Remotes</a></li>
+      </ul>
+      </div><div class="admin-content">
+      <form action="/admin/post" method="POST">
+        <button name="new repo">New Repo</button>
+      </form>
+      </div>
     </content>
   </body>
 </html>
