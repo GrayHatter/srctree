@@ -1,23 +1,7 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const count = std.mem.count;
-const startsWith = std.mem.startsWith;
-const assert = std.debug.assert;
-const eql = std.mem.eql;
-const indexOf = std.mem.indexOf;
-const indexOfPos = std.mem.indexOfPos;
-const splitScalar = std.mem.splitScalar;
-
-const CURL = @import("curl.zig");
-const verse = @import("verse");
-const Response = verse.Response;
-const HTML = verse.template.html;
-const DOM = verse.template.html.DOM;
-
-pub const Patch = @This();
-
 blob: []const u8,
 diffs: ?[]Diff = null,
+
+const Patch = @This();
 
 pub const FSPerm = packed struct(u8) {
     read: bool,
@@ -537,3 +521,19 @@ test "diffsSlice" {
 test "parseMode" {
     try std.testing.expectEqual([4]u8{ 0, 4, 4, 4 }, Diff.Header.parseMode("100444"));
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const count = std.mem.count;
+const startsWith = std.mem.startsWith;
+const assert = std.debug.assert;
+const eql = std.mem.eql;
+const indexOf = std.mem.indexOf;
+const indexOfPos = std.mem.indexOfPos;
+const splitScalar = std.mem.splitScalar;
+
+const CURL = @import("curl.zig");
+const verse = @import("verse");
+const Response = verse.Response;
+const HTML = verse.template.html;
+const DOM = verse.template.html.DOM;

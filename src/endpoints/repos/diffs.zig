@@ -189,7 +189,7 @@ pub fn directReply(ctx: *Frame) Error!void {
     return error.Unknown;
 }
 
-pub fn patchStruct(a: Allocator, patch: *Patch.Patch, unified: bool) !Template.Structs.PatchHtml {
+pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs.PatchHtml {
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("err: {any}\n", .{err});
@@ -624,10 +624,10 @@ fn view(ctx: *Frame) Error!void {
     var patch_formatted: ?Template.Structs.PatchHtml = null;
     const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     var patch_applies: bool = false;
-    var patch: ?Patch.Patch = null;
+    var patch: ?Patch = null;
     if (std.fs.cwd().openFile(patch_filename, .{})) |f| {
         const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
-        patch = Patch.Patch.init(fdata);
+        patch = .init(fdata);
         if (patchStruct(ctx.alloc, &patch.?, !inline_html)) |phtml| {
             patch_formatted = phtml;
         } else |err| {

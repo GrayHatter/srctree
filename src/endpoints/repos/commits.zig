@@ -68,7 +68,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     if (std.mem.indexOf(u8, diff, "diff")) |i| {
         diff = diff[i..];
     }
-    var patch = Patch.Patch.init(diff);
+    var patch: Patch = .init(diff);
 
     //for ([_]Comment{ .{
     //    .author = "robinli",
