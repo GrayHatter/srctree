@@ -98,6 +98,12 @@ pub fn Config(B: anytype) type {
             data: []const u8,
             owned: ?[]const u8,
 
+            pub const empty: IniData = .{
+                .ns = &.{},
+                .data = &.{},
+                .owned = null,
+            };
+
             pub fn filter(ctx: IniData, prefix: []const u8, index: usize) ?Namespace {
                 var remaining = index;
                 for (ctx.ns) |ns| {

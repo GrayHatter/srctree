@@ -8,7 +8,6 @@ const SettingsPage = template.PageData("settings.html");
 
 pub fn index(vrs: *Frame) Router.Error!void {
     try vrs.requireValidUser();
-
     var blocks: []S.ConfigBlocks = &[0]S.ConfigBlocks{};
 
     blocks = try vrs.alloc.alloc(S.ConfigBlocks, global_config.ctx.ns.len);

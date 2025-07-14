@@ -98,11 +98,7 @@ pub const SrcConfig = Ini.Config(struct {
     };
 });
 
-// No, I don't like this
-pub var global_config: SrcConfig = .{
-    .config = .empty,
-    .ctx = undefined,
-};
+pub var global_config: SrcConfig = .{ .config = .empty, .ctx = .empty };
 
 const Auth = @import("Auth.zig");
 
