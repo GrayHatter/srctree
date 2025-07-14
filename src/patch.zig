@@ -346,7 +346,7 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]HTML.Element {
     const a_block = &HTML.Attr.class("block");
     const no_line = &HTML.Attr.class("no-line");
 
-    const clean = verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
+    const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.splitScalar(u8, clean, '\n');
 
@@ -419,7 +419,7 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) []HTML.Element {
     var dom = DOM.new(a);
     dom = dom.open(HTML.span(null, null));
 
-    const clean = verse.abx.Html.cleanAlloc(a, diff) catch unreachable;
+    const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = splitScalar(u8, clean, '\n');
     for (0..line_count + 1) |_| {
@@ -534,6 +534,7 @@ const splitScalar = std.mem.splitScalar;
 
 const CURL = @import("curl.zig");
 const verse = @import("verse");
+const abx = verse.abx;
 const Response = verse.Response;
 const HTML = verse.template.html;
 const DOM = verse.template.html.DOM;
