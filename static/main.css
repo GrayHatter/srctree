@@ -822,6 +822,12 @@ blob {
 				text-decoration: none;
 			}
 		}
+		.day.day-hide {
+			height: 15px;
+			width: 15px;
+			border: none;
+			background: #0000;
+		}
 		.day-pwr-1 { background-image: linear-gradient(108deg, #00708A 0%, #B100B5 100%); }
 		.day-pwr-2 { background-image: linear-gradient(108deg, #009DB3 0%, #D000D6 95%); }
 		.day-pwr-3 { background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 100%); }

@@ -348,7 +348,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
                 }
             }
             m.class = if (future_date)
-                "day-hide"
+                " day-hide"
             else switch (count) {
                 0 => "",
                 1 => " day-commits day-pwr-1",
