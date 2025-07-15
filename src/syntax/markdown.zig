@@ -44,6 +44,7 @@ pub const Translate = struct {
     }
 
     fn block(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
+        @setRuntimeSafety(false);
         if (src.len == 0) return 0;
         var idx: usize = 0;
         while (idx < src.len and (src[idx] == ' ' or src[idx] == '\t')) {
