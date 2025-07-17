@@ -26,15 +26,16 @@ pub fn index(ctx: *Frame) Error!void {
     }
 
     const data = dom.done();
-    const htmllist = try ctx.alloc.alloc([]u8, data.len);
-    for (htmllist, data) |*l, e| l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
-    const value = try std.mem.join(ctx.alloc, "", htmllist);
+    const network_list = try ctx.alloc.alloc([]u8, data.len);
+    for (network_list, data) |*l, e| {
+        l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
+    }
 
     const btns = [1]template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &btns } },
-        .netlist = value,
+        .netlist = network_list,
     });
 
     try ctx.sendPage(&page);
