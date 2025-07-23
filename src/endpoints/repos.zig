@@ -41,6 +41,10 @@ pub const RouteData = struct {
         issues,
         diffs,
         tags,
+        // gitweb endpoints
+        info,
+        objects,
+        @"git-upload-pack",
 
         pub fn fromSlice(slice: ?[]const u8) ?Verb {
             const s = slice orelse return null;
