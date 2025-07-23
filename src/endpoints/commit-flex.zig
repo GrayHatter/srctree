@@ -88,7 +88,12 @@ const Journal = struct {
         if (email.len < 5) return &empty_heat_map;
 
         // TODO return empty hits here
-        const commit = repo.headCommit(a) catch unreachable;
+        const commit = repo.headCommit(a) catch |err| {
+            std.debug.print("Error building commit list on repo {s} because {}\n", .{
+                rname, err,
+            });
+            return &empty_heat_map;
+        };
 
         const email_gop = try cached_emails.getOrPut(email);
         if (!email_gop.found_existing) {

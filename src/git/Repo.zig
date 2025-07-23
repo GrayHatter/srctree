@@ -285,7 +285,7 @@ pub fn ref(self: Repo, str: []const u8) !SHA {
     for (self.refs) |r| {
         switch (r) {
             .sha => |s| return s,
-            .tag => unreachable,
+            .tag => @panic("not implemented"),
             .branch => |b| {
                 if (std.mem.eql(u8, b.name, str)) {
                     return b.sha;
