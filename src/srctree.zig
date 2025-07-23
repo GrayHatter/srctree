@@ -21,7 +21,7 @@ pub const verse_routes = [_]Match{
             ,
         },
         .{ .name = "AcademicBotRTU", .allow = false },
-    }, .{ .extra_rules = "Disallow: /*?*\n" }),
+    }, .{ .extra_rules = "Disallow: /*?*\nDisallow: /repo/*/blame/*\n" }),
     GET("debug", debug),
     ROUTE("user", commitFlex),
     STATIC("static"),
