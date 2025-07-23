@@ -122,9 +122,18 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     var page = BlobPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .repo_name = rd.name,
-        .upstream = upstream,
-        .uri_filename = path.buffer,
+        .tree_blob_header = .{
+            .blame = .{
+                .repo_name = rd.name,
+                .filename = path.buffer,
+            },
+            .git_uri = .{
+                .host = "srctree.gr.ht",
+                .repo_name = rd.name,
+            },
+            .repo_name = rd.name,
+            .upstream = upstream,
+        },
         .filename = blb.name,
         .blob_lines = wrapped,
     });

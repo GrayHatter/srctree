@@ -22,7 +22,7 @@ a {
 		background-color: #222;
 		border-radius: 3px;
 		font-family: 'Titillium Web', sans-serif;
-		padding: 6px 18px;
+		padding: 3px 14px;
 		border: 2px outset gray;
 		border-bottom-color: #4e0029;
 		&:hover, &.active {
@@ -730,6 +730,19 @@ div.coderef {
 	&.yellow {
 		background: #333;
 	}
+}
+
+span.gituri {
+	display: inline-block;
+	border-top: 1px solid black;
+	border-left: 1px solid black;
+	border-radius: 6px;
+	border-bottom: 1px solid #737373;
+	border-right: 1px solid #737373;
+	margin: auto 14px 18px;
+	padding: 5px 12px;
+	background: #333;
+	white-space: pre;
 }
 
 span.coderef {

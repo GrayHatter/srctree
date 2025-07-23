@@ -101,7 +101,15 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     var page = TreePage.init(.{
         .meta_head = .{ .title = page_title, .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
-        .upstream = upstream,
+        .tree_blob_header = .{
+            .git_uri = .{
+                .host = "srctree.gr.ht",
+                .repo_name = rd.name,
+            },
+            .repo_name = rd.name,
+            .upstream = upstream,
+            .blame = null,
+        },
         .repo_name = rd.name,
         .readme = readme,
         .commit_slug = commit_slug,
