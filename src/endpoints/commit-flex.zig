@@ -361,7 +361,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
                 3 => " day-commits day-pwr-3",
                 4 => " day-commits day-pwr-4",
                 5 => " day-commits day-pwr-5",
-                else => "day day-commits day-pwr-max",
+                else => " day-commits day-pwr-max",
             };
 
             m.title = try std.fmt.allocPrint(
