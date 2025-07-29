@@ -148,12 +148,25 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         }
     }
 
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+        .href = try allocPrint(f.alloc, "{link}", .{up}),
+    } else null;
+
     const repo_name = try f.alloc.dupe(u8, repo_name_);
     var page = CommitPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(f),
         } },
+        .tree_blob_header = .{
+            .git_uri = .{
+                .host = "srctree.gr.ht",
+                .repo_name = repo_name_,
+            },
+            .repo_name = repo_name_,
+            .upstream = upstream,
+            .blame = null,
+        },
         .commit = try commitCtx(f.alloc, current, repo_name),
         .comments = .{ .thread = thread },
         .patch = Diffs.patchStruct(f.alloc, &patch, !inline_html) catch return error.Unknown,
