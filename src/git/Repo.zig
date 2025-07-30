@@ -344,6 +344,7 @@ fn loadTags(self: *Repo) !void {
             @panic("unimplemented error in tags packed-refs");
         },
     };
+    defer if (fd) |f| f.close();
 
     const pk_refs: ?[]const u8 = if (fd) |f|
         system.mmap(f.handle, try f.getEndPos(), .{}) catch null

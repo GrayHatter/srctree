@@ -240,10 +240,11 @@ pub const Agent = struct {
 
         if (try repo.findRemote("upstream")) |_| {
             var gitagent = repo.getAgent(a);
-            if (try gitagent.pullUpstream(head)) {
+            if (gitagent.pullUpstream(head)) {
                 log.debug("Update Successful on repo {s}", .{name});
-            } else {
-                log.warn("Warning upstream pull failed repo {s}", .{name});
+            } else |err| switch (err) {
+                error.NonAncestor => {},
+                else => log.warn("Warning upstream pull failed repo {s} {}", .{ name, err }),
             }
             update.upstream_pull = std.time.timestamp();
             setUpdated(repo.dir, update);

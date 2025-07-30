@@ -6,14 +6,14 @@ const Agent = @This();
 
 const DEBUG_GIT_ACTIONS = false;
 
-pub fn pullUpstream(self: Agent, branch: []const u8) !bool {
+pub fn pullUpstream(self: Agent, branch: []const u8) !void {
     const fetch = try self.exec(&[_][]const u8{
         "git",
         "fetch",
         "upstream",
         "-q",
     });
-    if (fetch.len > 0) std.debug.print("fetch {s}\n", .{fetch});
+    if (fetch.len > 0) log.warn("fetch {s}", .{fetch});
     self.alloc.free(fetch);
 
     var buf: [512]u8 = undefined;
@@ -37,11 +37,11 @@ pub fn pullUpstream(self: Agent, branch: []const u8) !bool {
             "-q",
         });
         self.alloc.free(move);
-        return true;
-    } else {
-        std.debug.print("refusing to move head non-ancestor {s}\n", .{up_branch});
-        return false;
+        return;
     }
+
+    log.warn("refusing to move head non-ancestor {s}", .{up_branch});
+    return error.NonAncestor;
 }
 
 pub fn pushDownstream(self: Agent) !bool {
@@ -256,6 +256,7 @@ fn exec(self: Agent, argv: []const []const u8) ![]u8 {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const log = std.log.scoped(.git_agent);
 
 const Git = @import("../git.zig");
 const Repo = Git.Repo;
