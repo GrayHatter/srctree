@@ -5,15 +5,16 @@ const NetworkPage = template.PageData("network.html");
 pub fn index(ctx: *Frame) Error!void {
     var dom: *DOM = .create(ctx.alloc);
 
-    const list = Repos.allNames(ctx.alloc) catch return error.Unknown;
-    const cwd = std.fs.cwd();
-    for (list) |reponame| {
-        var b: [0x800]u8 = undefined;
-        const confname = std.fmt.bufPrint(&b, "repos/{s}/", .{reponame}) catch continue;
-        const rdir = cwd.openDir(confname, .{}) catch continue;
-        var repo = Git.Repo.init(rdir) catch continue;
-        repo.loadData(ctx.alloc) catch continue;
+    var repo_iter = Repos.allRepoIterator(.public) catch return error.Unknown;
+    while (repo_iter.next() catch return error.Unknown) |repoC| {
+        var repo = repoC;
+        repo.loadData(ctx.alloc) catch |err| {
+            log.err("Error, unable to load data on repo {s} {}", .{ repo_iter.current_name.?, err });
+            continue;
+        };
         defer repo.raze();
+        repo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
+
         if (repo.findRemote("upstream") catch continue) |remote| {
             if (remote.url) |_| {
                 dom = dom.open(html.h3(null, &html.Attr.class("upstream")));
@@ -25,17 +26,13 @@ pub fn index(ctx: *Frame) Error!void {
         }
     }
 
-    const data = dom.done();
-    const network_list = try ctx.alloc.alloc([]u8, data.len);
-    for (network_list, data) |*l, e| {
-        l.* = try std.fmt.allocPrint(ctx.alloc, "{}", .{e});
-    }
-
-    const btns = [1]template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
-        .netlist = network_list,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
+            .nav_auth = "Error",
+            .nav_buttons = &[_]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }},
+        } },
+        .netlist = try dom.render(ctx.alloc, .compact),
     });
 
     try ctx.sendPage(&page);
@@ -43,10 +40,12 @@ pub fn index(ctx: *Frame) Error!void {
 
 const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
+const log = std.log.scoped(.srctree);
 
 const verse = @import("verse");
 const Frame = verse.Frame;
 const template = verse.template;
+const S = template.Structs;
 const html = template.html;
 const DOM = html.DOM;
 
