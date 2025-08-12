@@ -10,6 +10,7 @@ pub const verse_routes = [_]Match{
         .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
         .{ .name = "barkrowler", .allow = false }, // selfish bot
         .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
+        .{ .name = "Amazonbot", .allow = false }, // aggressive, selfish
         .{
             .name = "ImagesiftBot",
             .allow = true,
