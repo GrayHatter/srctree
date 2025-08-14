@@ -5,19 +5,57 @@
   </head>
   <body>
     <Build BodyHeader _body_header.html />
-    <content class="lw">
+    <content class="fw">
       <div class="admin-actions">
       <ul>
         <Directive type="enum" name="ActiveAdmin" text="active" />
-        <li><a href="" class="<ActiveAdmin enum="settings" />">Settings</a></li>
-        <li><a href="" class="<ActiveAdmin enum="empty_repo" />">Empty Repo</a></li>
-        <li><a href="" class="<ActiveAdmin enum="clone_repo" />">Clone Repo</a></li>
-        <li><a href="" class="<ActiveAdmin enum="delete_repo" />">Delete Repo</a></li>
-        <li><a href="" class="<ActiveAdmin enum="remotes" />">Remotes</a></li>
+        <li class="<ActiveAdmin enum="settings" />"><a href="/admin/settings" />Settings</a></li>
+        <li class="<ActiveAdmin enum="remotes" />"><a href="/admin/remotes" />Remotes</a></li>
+        <li class="<ActiveAdmin enum="repo_create" />"><a href="/admin/repo/create" />Create Repo</a></li>
+        <li class="<ActiveAdmin enum="repo_clone" />"><a href="/admin/repo/clone" />Clone Repo</a></li>
+        <li class="<ActiveAdmin enum="repo_delete" />"><a href="/admin/repo/delete" />Delete Repo</a></li>
       </ul>
-      </div><div class="admin-content">
-      <form action="/admin/post" method="POST">
-        <button name="new repo">New Repo</button>
+      </div><div class="admin-content <ActiveAdmin enum="settings" />">
+      <form action="/admin/settings" method="POST">
+        <With AdminSettings>
+
+        <For ConfigBlocks>
+          <div class="block">
+          <label>Block Name</label>
+          <input name="block_name" value="<ConfigName ORELSE default>"/>
+          <br>
+          <textarea name="block_text" cols="100" rows="<Count ORELSE 10>"><ConfigText ornull></textarea>
+          </div>
+        </For>
+        <button type="submit" name="new_block">Add New Block</button>
+        <button type="submit" name="save">Save</button>
+        </With>
+        <button name="new repo">Settings</button>
+      </form>
+      </div><div class="admin-content <ActiveAdmin enum="remotes" />">
+      <form action="/admin/remotes" method="POST">
+        <With AdminRemotes></With>
+        <button name="remotes">Remotes</button>
+      </form>
+      </div><div class="admin-content <ActiveAdmin enum="repo_create" />">
+      <form action="/admin/repo/create" method="POST">
+        <With AdminRepoCreate></With>
+        <input name="repo_name" value="" placeholder="new-repo-name">
+        <button name="create repo">Create Repo</button>
+      </form>
+      </div><div class="admin-content <ActiveAdmin enum="repo_clone" />">
+      <form action="/admin/repo/clone" method="POST">
+        <With AdminRepoClone>
+          <With PostError><ErrStr /></With>
+            Repo URI: <input name="repo_uri" placeholder="https://srctree.gr.ht/repo/repo_name">
+        </With>
+        <button name="new repo">Clone Repo</button>
+      </form>
+      </div><div class="admin-content <ActiveAdmin enum="repo_delete" />">
+      <form action="/admin/repo/delete" method="POST">
+        <With AdminRepoDelete></With>
+        TODO list repos
+        <button name="new repo">Delete Repo</button>
       </form>
       </div>
     </content>

@@ -96,6 +96,9 @@ content {
 	&.full{
 		min-width: 97%;
 	}
+	&.fw{
+		min-width: 97%;
+	}
 	&.mw{
 		width: 1050px;
 	}
@@ -913,18 +916,33 @@ blob {
 
 .admin-actions {
 	display: inline-block;
-	min-width: 20rem;
+	min-width: 12rem;
 	background: #aaa2;
 	height: 50vh;
 	ul {
 		font-size: 120%;
+		padding: 0;
+		margin: 0;
+	}
+	li {
+		background: #aaa2;
+		padding: 0 2px;
+	}
+	li.active {
+		background: #a112;
 	}
 }
-
 .admin-content {
+	display: none;
+	background: #a112;
+	height: 50vh;
+	min-width: 30rem;
+}
+.admin-content.active {
 	display: inline-block;
 	background: #a112;
 	height: 50vh;
+	min-width: 30rem;
 }
 
 .verse-stats-line {

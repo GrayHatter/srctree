@@ -39,7 +39,6 @@ pub const endpoints = verse.Endpoints(.{
     @import("endpoints/network.zig"),
     @import("endpoints/repos.zig"),
     @import("endpoints/search.zig"),
-    @import("endpoints/settings.zig"),
     @import("endpoints/debugging.zig"),
 });
 
