@@ -1,6 +1,6 @@
 pub const verse_name = .repos;
 
-pub const verse_alias = .{
+pub const verse_aliases = .{
     .repo,
 };
 
