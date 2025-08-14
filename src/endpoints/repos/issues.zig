@@ -46,7 +46,7 @@ fn new(ctx: *verse.Frame) Error!void {
     try ctx.sendPage(&page);
 }
 
-const IssueCreate = struct {
+const IssueCreateReq = struct {
     title: []const u8,
     desc: []const u8,
 };
@@ -55,7 +55,7 @@ fn newPost(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (ctx.request.data.post) |post| {
-        const valid = post.validate(IssueCreate) catch return error.DataInvalid;
+        const valid = post.validate(IssueCreateReq) catch return error.DataInvalid;
         var delta = Delta.new(
             rd.name,
             valid.title,
