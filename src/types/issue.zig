@@ -1,9 +1,15 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
+index: usize,
+state: usize,
+created: i64 = 0,
+updated: i64 = 0,
+repo: []const u8,
+title: []const u8,
+desc: []const u8,
 
-const Types = @import("../types.zig");
+comment_data: ?[]const u8,
+file: std.fs.File,
 
-pub const Issue = @This();
+const Issue = @This();
 
 pub const TYPE_PREFIX = "issues";
 const ISSUE_VERSION: usize = 0;
@@ -22,15 +28,6 @@ pub const State = packed struct {
     status: Status = .open,
     padding: u63 = 0,
 };
-
-test State {
-    try std.testing.expectEqual(@sizeOf(State), @sizeOf(usize));
-
-    const state = State{};
-    const zero: usize = 0;
-    const ptr: *const usize = @ptrCast(&state);
-    try std.testing.expectEqual(zero, ptr.*);
-}
 
 fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Issue {
     var reader = file.reader();
@@ -51,17 +48,6 @@ fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Issue {
         else => error.UnsupportedVersion,
     };
 }
-
-index: usize,
-state: usize,
-created: i64 = 0,
-updated: i64 = 0,
-repo: []const u8,
-title: []const u8,
-desc: []const u8,
-
-comment_data: ?[]const u8,
-file: std.fs.File,
 
 pub fn writeOut(self: Issue) !void {
     try self.file.seekTo(0);
@@ -173,3 +159,16 @@ pub fn open(a: std.mem.Allocator, index: usize) !?Issue {
     const file = try datad.openFile(filename, .{ .mode = .read_write });
     return try Issue.readFile(a, index, file);
 }
+
+test State {
+    try std.testing.expectEqual(@sizeOf(State), @sizeOf(usize));
+
+    const state = State{};
+    const zero: usize = 0;
+    const ptr: *const usize = @ptrCast(&state);
+    try std.testing.expectEqual(zero, ptr.*);
+}
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const Types = @import("../types.zig");
