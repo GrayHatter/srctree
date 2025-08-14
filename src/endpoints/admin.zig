@@ -25,7 +25,7 @@ fn default(ctx: *Frame) Error!void {
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
-        .active_admin = .settings,
+        .active_admin = .default,
         .admin_settings = null,
         .admin_remotes = null,
         .admin_repo_create = null,
@@ -49,7 +49,7 @@ fn settingsPost(vrs: *Frame) Router.Error!void {
         std.debug.print("block data:\nname '{s}'\ntext '''{s}'''\n", .{ name, text });
     }
 
-    return vrs.redirect("/settings", .see_other) catch unreachable;
+    return vrs.redirect("/admin/settings", .see_other) catch unreachable;
 }
 
 pub fn settings(vrs: *Frame) Router.Error!void {
@@ -59,7 +59,7 @@ pub fn settings(vrs: *Frame) Router.Error!void {
         block.* = .{
             .config_name = ns.name,
             .config_text = ns.block,
-            .count = try allocPrint(vrs.alloc, "{}", .{mem.count(u8, ns.block, "\n") + 2}),
+            .count = mem.count(u8, ns.block, "\n") + 2,
         };
     }
 

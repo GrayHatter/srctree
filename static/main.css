@@ -934,9 +934,9 @@ blob {
 }
 .admin-content {
 	display: none;
-	background: #a112;
-	height: 50vh;
-	min-width: 30rem;
+	textarea {
+		min-width: 35rem;
+	}
 }
 .admin-content.active {
 	display: inline-block;

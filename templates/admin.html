@@ -15,18 +15,20 @@
         <li class="<ActiveAdmin enum="repo_clone" />"><a href="/admin/repo/clone" />Clone Repo</a></li>
         <li class="<ActiveAdmin enum="repo_delete" />"><a href="/admin/repo/delete" />Delete Repo</a></li>
       </ul>
+      </div><div class="admin-content <ActiveAdmin enum="default" />">
       </div><div class="admin-content <ActiveAdmin enum="settings" />">
       <form action="/admin/settings" method="POST">
         <With AdminSettings>
-
-        <For ConfigBlocks>
-          <div class="block">
-          <label>Block Name</label>
-          <input name="block_name" value="<ConfigName ORELSE default>"/>
-          <br>
-          <textarea name="block_text" cols="100" rows="<Count ORELSE 10>"><ConfigText ornull></textarea>
-          </div>
-        </For>
+        <div id="config-blocks">
+          <For ConfigBlocks>
+            <div class="block">
+            <label>Block Name</label>
+            <input name="block_name" value="<ConfigName default="default" />"/>
+            <br>
+            <textarea name="block_text" rows="<Count type="usize" default="10" />" /><ConfigText ornull /></textarea>
+            </div>
+          </For>
+        </div>
         <button type="submit" name="new_block">Add New Block</button>
         <button type="submit" name="save">Save</button>
         </With>
