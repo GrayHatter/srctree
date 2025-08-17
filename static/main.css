@@ -143,7 +143,10 @@ lines {
 	width: 50px;
 }
 
-.codeblock { background: #333; }
+.codeblock { 
+	background: #333;
+
+}
 
 code {
 	display: inline-block;
@@ -192,6 +195,10 @@ code {
 			content: attr(num);
 			width: 3em;
 			display: inline-block;
+			text-align:center;
+			background: #fff1;
+			color: #fff8;
+			margin: 0 0.5em 0 0;
 		}
 		&:target {
 			background-color: #222;
@@ -408,6 +415,7 @@ li {
 	display: block;
 	list-style: none;
 }
+
 commit {
 	display: block;
 	text-align: left;
@@ -481,95 +489,6 @@ delta.issue {
 	border-radius: 100%;
 	padding: 1.1px 3.3px;
 
-}
-
-gist {
-	white-space: pre;
-}
-
-patch, gist {
-	margin: 2rem 0 10rem;
-	border-radius: 4px 4px 0 0;
-	padding: 8px;
-
-	header {
-		border-radius: 3px 3px 0 0;
-		border-top: 1px solid #780000;
-		border-left: 1px solid #737373;
-		border-bottom: 1px solid black;
-		border-right: 1px solid #888;
-		background-color: #686868;
-		padding: 8px 4px;
-		width: auto;
-	}
-
-	changes {
-		font-family: "Ubuntu Mono", monospace, sans-serif;
-		font-size: 0.8em;
-		border-top: 0px;
-		border-bottom: 2px #555 solid;
-		border-left: 1px solid #888;
-		border-right: 1px solid #666;
-		display: block;
-		text-align: left;
-		background: #333;
-		width: 100%;
-		div {
-			white-space: break-spaces;
-		}
-		.split {
-			display: flex;
-			span {
-				flex: auto;
-				margin: 0;
-				width: fit-content;
-				min-width: 50%;
-				display: inline-block;
-				overflow: scroll;
-				> div {
-					white-space: pre;
-					min-height: 14px;
-				}
-			}
-		}
-		&.del {
-			background: #5b0000;
-		}
-		&.add {
-			background: #003e00;
-		}
-		&.no-line {
-			background: #2228;
-		}
-		:first-child {
-			margin: 0;
-		}
-		.block {
-			&:first-child {
-				margin-top: 0;
-			}
-			border-top: 1px solid #999;
-			border-bottom: 2px solid #222;
-			background: #569;
-			/* background: #4a4a91; might want to revert to this color */
-			display: block;
-			width: auto;
-			margin: 8px auto;
-			padding: 8px;
-		}
-	}
-	.buttons {
-		background: #333;
-		border: 1px gray solid;
-		border-top: 0px;
-		display: block;
-		height: 25px;
-		padding: 4px 0 4px 12px;
-	}
-
-	.del { background: #633 }
-	.add { background: #353 }
-	.no-line { background: #8881; margin: 0 3px; }
 }
 
 patchrequest {
@@ -770,26 +689,102 @@ span.coderef {
 	}
 }
 
-blob {
+blob, gist, patch {
 	text-align: left;
 	display: block;
-	margin-bottom: 1em;
+	margin: 1em 0;
 	header {
-		background: #333;
-		border-radius: 3px 3px 0 0;
-		border: 1px gray solid;
-		border-bottom: 0px;
 		display: flex;
 		justify-content: space-between;
-		height: 1.5em;
-		padding: 4px 12px;
+		height: 1.5rem;
+		padding: 0 0 0.25rem 0;
+		span {
+			background: #333;
+			border-radius: 3px 3px 0 0;
+			border: 1px gray solid;
+			border-bottom-width: 1px;
+			border-bottom-style: solid;
+			border-bottom-color: gray;
+			border-bottom: 0px;
+			height: 1.5em;
+			padding: 4px 12px;
+		}
 	}
+
 	.codeblock {
-		padding: 4px 12px;
+		padding: 0.5em 0.5em 0 0;
 		border: 1px gray solid;
 		border-bottom: 0px;
 		border-top: 0px;
 	}
+
+	changes {
+		font-family: "Ubuntu Mono", monospace, sans-serif;
+		font-size: 0.8em;
+		border-top: 0px;
+		border-bottom: 2px #555 solid;
+		border-left: 1px solid #888;
+		border-right: 1px solid #666;
+		display: block;
+		text-align: left;
+		background: #333;
+		width: 100%;
+		div {
+			white-space: break-spaces;
+		}
+		.split {
+			display: flex;
+			span {
+				flex: auto;
+				margin: 0;
+				width: fit-content;
+				min-width: 50%;
+				display: inline-block;
+				overflow: scroll;
+				> div {
+					white-space: pre;
+					min-height: 14px;
+				}
+			}
+		}
+		&.del {
+			background: #5b0000;
+		}
+		&.add {
+			background: #003e00;
+		}
+		&.no-line {
+			background: #2228;
+		}
+		:first-child {
+			margin: 0;
+		}
+		.block {
+			&:first-child {
+				margin-top: 0;
+			}
+			border-top: 1px solid #999;
+			border-bottom: 2px solid #222;
+			background: #569;
+			/* background: #4a4a91; might want to revert to this color */
+			display: block;
+			width: auto;
+			margin: 8px auto;
+			padding: 8px;
+		}
+	}
+	.buttons {
+		background: #333;
+		border: 1px gray solid;
+		border-top: 0px;
+		display: block;
+		height: 25px;
+		padding: 4px 0 4px 12px;
+	}
+
+	.del { background: #633 }
+	.add { background: #353 }
+	.no-line { background: #8881; margin: 0 3px; }
 }
 
 .journal {
