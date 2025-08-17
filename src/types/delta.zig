@@ -26,7 +26,6 @@ pub const Delta = @This();
 
 pub const type_prefix = "deltas";
 pub const type_version = 0;
-const DELTA_VERSION: usize = 1;
 
 pub const Attach = enum(u8) {
     nos = 0,

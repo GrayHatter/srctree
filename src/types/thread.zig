@@ -151,6 +151,5 @@ const sha256 = std.crypto.hash.sha2.Sha256;
 
 pub const Message = @import("message.zig");
 const Delta = @import("delta.zig");
-const State = Delta.State;
 
 const Types = @import("../types.zig");

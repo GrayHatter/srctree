@@ -159,11 +159,10 @@ pub fn readerWriter(T: type, default: T) type {
                 if (line_itr.index != 0) {
                     const name, const value = split(line) orelse .{ "", "" };
                     if (std.mem.eql(u8, name, field.name)) switch (field.type) {
-                        ?[]const u8 => {},
                         [32]u8 => for (0..32) |i| {
                             @field(output, field.name)[i] = std.fmt.parseInt(u8, value[i .. i + 2], 16) catch 0;
                         },
-                        []u8, []const u8 => @field(output, field.name) = value,
+                        []u8, []const u8, ?[]const u8 => @field(output, field.name) = value,
                         usize => @field(output, field.name) = std.fmt.parseInt(usize, value, 10) catch @field(output, field.name),
                         i64 => @field(output, field.name) = std.fmt.parseInt(i64, value, 10) catch @field(output, field.name),
                         i32 => @field(output, field.name) = std.fmt.parseInt(i32, value, 10) catch @field(output, field.name),
