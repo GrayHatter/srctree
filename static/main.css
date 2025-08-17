@@ -454,14 +454,17 @@ textarea.paste {
 	min-height: 20em;
 }
 
-delta.issue {
+delta {
 	display: flex;
 	justify-content: space-between;
-	margin-bottom: 1em;
+	flex-wrap: wrap;
+	margin: 1em 0;
+	gap: 1em;
 
-
-	issue {
-		width: 48%;
+	main {
+		width: 100%;
+		margin: 1em;
+		text-align: left;
 		name {
 			background: #333;
 			border-radius: 3px 3px 0 0;
@@ -478,8 +481,27 @@ delta.issue {
 			padding: 8px;
 		}
 	}
+
 	comments {
+		min-width: 30rem;
 		width: 48%;
+		margin: 0 0 0 1em;
+		flex-grow: 4;
+	}
+	extra {
+		flex-grow: 2;
+		min-width: 20rem;
+		margin: 0 1em 0 0;
+		display: flex;
+		flex-direction: column;
+		gap: 1em;
+		border: 1px solid gray;
+		border-bottom-width: 1px;
+		border-bottom-style: solid;
+		border-bottom-color: gray;
+		border-bottom-color: gray;
+		border-bottom: 0;
+		padding-bottom: 1em;
 	}
 }
 
@@ -555,7 +577,6 @@ form.pretty {
 	input, textarea, select {
 		margin: 0 0.5em;
 		flex-grow: 1;
-		background: #333;
 		display: inline-block;
 		border: 1px solid gray;
 		border-radius: 0;
@@ -570,8 +591,11 @@ form.pretty {
 	}
 	button {
 		margin: 0 0.5em;
+		background: #333;
 	}
-	textarea { height: 10em }
+	textarea { 
+		height: 10em;
+	}
 }
 
 input, textarea {

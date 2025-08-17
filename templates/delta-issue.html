@@ -7,19 +7,24 @@
     <Build BodyHeader _body_header.html />
     <content>
     <delta class="issue">
-      <issue>
-        <name><Title></name>
-        <desc><Desc></desc>
-      </issue>
+      <main>
+        <name><Title /></name>
+        <desc><Description /></desc>
+      </main>
       <comments>
         <Build Comments _comment_thread.html />
         <form class="pretty" action="add-comment" method="POST">
-          <context><CurrentUsername ornull></context>
+          <context><CurrentUsername /></context>
           <textarea name="comment"></textarea>
           <button type="submit" name="comment">Comment</button>
           <input type="hidden" name="did" value="<Delta_id>" />
         </form>
       </comments>
+      <extra>
+        Created: <Created /><br>
+        Updated: <Updated /><br>
+        Tags: none
+      </extra>
     </delta>
     </content>
   </body>

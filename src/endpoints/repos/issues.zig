@@ -133,7 +133,7 @@ fn view(ctx: *verse.Frame) Error!void {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ idx, err });
         @panic("oops");
     }
-
+    const username = if (ctx.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
@@ -141,8 +141,11 @@ fn view(ctx: *verse.Frame) Error!void {
             .nav_buttons = &try Repos.navButtons(ctx),
         } },
         .title = verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
-        .desc = verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
+        .description = verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
         .delta_id = delta_id,
+        .current_username = username,
+        .created = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(delta.created)}),
+        .updated = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(delta.updated)}),
         .comments = .{
             .thread = root_thread,
         },
@@ -157,8 +160,6 @@ fn list(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
     const last = (Types.currentIndex(.deltas) catch 0) + 1;
-    std.debug.print("last {}\n", .{last});
-
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     for (0..last) |i| {
         // TODO implement seen

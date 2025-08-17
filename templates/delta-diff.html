@@ -5,29 +5,30 @@
   </head>
   <body>
     <Build BodyHeader _body_header.html />
-    <content class="diff">
-      <context>
-      <With Patch>
-        <With Header>
-        <context><Title /></context>
-        <p><Message></p>
+    <content>
+      <delta class="diff">
+        <With Patch>
+          <With Header>
+          <context><Title /></context>
+          <p><Message></p>
+          </With>
+          <diff>
+          <Build Patch _patch.html />
+          </diff>
         </With>
-        <diff>
-        <Build Patch _patch.html />
-        </diff>
-      </With>
-      </context>
+        </context>
 
-      <comments>
-        <Build Comments _comment_thread.html />
-        <form class="pretty" action="add-comment" method="POST">
-          <context><CurrentUsername></context>
-          <textarea name="comment"></textarea>
-          <button type="submit" name="comment">Comment</button>
-          <With PatchDoesNotApply><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
-          <input type="hidden" name="did" value="<DeltaId>" />
-        </form>
-      </comments>
+        <comments>
+          <Build Comments _comment_thread.html />
+          <form class="pretty" action="add-comment" method="POST">
+            <context><CurrentUsername></context>
+            <textarea name="comment"></textarea>
+            <button type="submit" name="comment">Comment</button>
+            <With PatchDoesNotApply><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
+            <input type="hidden" name="did" value="<DeltaId>" />
+          </form>
+        </comments>
+      </delta>
     </content>
   </body>
 </html>
