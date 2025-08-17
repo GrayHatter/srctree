@@ -74,7 +74,7 @@ fn gistPost(frame: *Frame) Error!void {
 }
 
 fn new(ctx: *Frame) Error!void {
-    const files = [1]S.GistFiles{.{}};
+    const files = [1]S.GistFiles{.{ .file_name = &.{}, .blob_lines = &.{} }};
     return edit(ctx, &files);
 }
 
@@ -90,12 +90,40 @@ fn edit(vrs: *Frame, files: []const S.GistFiles) Error!void {
     return vrs.sendPage(&page);
 }
 
+fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.BlobLines {
+    var litr = std.mem.splitScalar(u8, text, '\n');
+    const count = std.mem.count(u8, text, "\n");
+    const lines = try a.alloc(S.BlobLines, count + 1);
+    var i: usize = 0;
+    while (litr.next()) |line| {
+        lines[i] = .{
+            .num = i + 1,
+            .line = line,
+        };
+        i += 1;
+    }
+    return lines;
+}
+
 fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
     const out = try a.alloc(S.GistFiles, files.len);
+
     for (files, out) |file, *o| {
+        const file_name = try verse.abx.Html.cleanAlloc(a, file.name);
+        var formatted: []const u8 = undefined;
+        if (Highlight.Language.guessFromFilename(file.name)) |lang| {
+            var raw = try Highlight.highlight(a, lang, file.blob);
+            raw = raw[28..];
+            formatted = raw[0 .. std.mem.lastIndexOf(u8, raw, "</pre>") orelse raw.len];
+        } else {
+            formatted = verse.abx.Html.cleanAlloc(a, file.blob) catch return error.Unknown;
+        }
+
+        const wrapped = try wrapLineNumbers(a, formatted);
+
         o.* = .{
-            .file_name = try verse.abx.Html.cleanAlloc(a, file.name),
-            .file_blob = try verse.abx.Html.cleanAlloc(a, file.blob),
+            .file_name = file_name,
+            .blob_lines = wrapped,
         };
     }
     return out;
@@ -105,25 +133,24 @@ fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
     const body_header = vrs.response_data.get(S.BodyHeaderHtml) catch S.BodyHeaderHtml{ .nav = .{ .nav_buttons = &.{} } };
 
-    if (vrs.uri.next()) |hash| {
-        if (hash.len != 64) return error.DataInvalid;
+    const hash = vrs.uri.next() orelse return error.InvalidURI;
+    if (hash.len != 64) return error.DataInvalid;
 
-        const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.InvalidURI;
-        const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
-        var page = GistPage.init(.{
-            .meta_head = .{ .open_graph = .{
-                .title = try allocPrint(vrs.alloc, "A perfect paste from {}", .{verse.abx.Html{ .text = gist.owner }}),
-                .desc = if (gist.file_count == 1)
-                    try allocPrint(vrs.alloc, "{}", .{verse.abx.Html{ .text = gist.files[0].name }})
-                else
-                    try allocPrint(vrs.alloc, "{} files", .{gist.file_count}),
-            } },
-            .body_header = body_header,
-            .gist_files = files,
-        });
+    const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.InvalidURI;
+    const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
+    var page = GistPage.init(.{
+        .meta_head = .{ .open_graph = .{
+            .title = try allocPrint(vrs.alloc, "A perfect paste from {}", .{verse.abx.Html{ .text = gist.owner }}),
+            .desc = if (gist.file_count == 1)
+                try allocPrint(vrs.alloc, "{}", .{verse.abx.Html{ .text = gist.files[0].name }})
+            else
+                try allocPrint(vrs.alloc, "{} files", .{gist.file_count}),
+        } },
+        .body_header = body_header,
+        .gist_files = files,
+    });
 
-        return vrs.sendPage(&page);
-    } else return error.Unrouteable;
+    return vrs.sendPage(&page);
 }
 
 const std = @import("std");
@@ -136,6 +163,7 @@ const S = template.Structs;
 const RequestData = verse.RequestData.RequestData;
 const Allocator = std.mem.Allocator;
 
+const Highlight = @import("../syntax-highlight.zig");
 const Gist = @import("../types.zig").Gist;
 
 const Router = verse.Router;

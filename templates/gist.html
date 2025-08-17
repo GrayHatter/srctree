@@ -6,14 +6,13 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content>
-      <For GistFiles>
-        <gist>
-        <header><FileName ornull></header>
-        <code>
-          <FileBlob ornull>
-        </code>
-        </gist>
-      </For>
+      <For GistFiles><gist>
+        <header><span><FileName /></span></header>
+
+        <div class="codeblock"><code><For BlobLines>
+<ln num="<Num type=usize >" id="L<Num type=usize >" href="#L<Num type=usize >"><Line /></ln></For></code>
+        </div>
+      </gist></For>
     </content>
   </body>
 </html>
