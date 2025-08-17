@@ -1,5 +1,3 @@
-const std = @import("std");
-
 pub const Message = @import("types/message.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
@@ -13,11 +11,16 @@ pub const Thread = @import("types/thread.zig");
 pub const User = @import("types/user.zig");
 pub const Viewers = @import("types/viewers.zig");
 
+pub const DefaultHash = [sha256.digest_length]u8;
+
 pub const Writer = std.fs.File.Writer;
 
 pub const Storage = std.fs.Dir;
 
+var storage_dir: Storage = undefined;
+
 pub fn init(dir: Storage) !void {
+    storage_dir = dir;
     inline for (.{
         Message,
         CommitMap,
@@ -30,10 +33,189 @@ pub fn init(dir: Storage) !void {
         Thread,
         User,
     }) |inc| {
-        try inc.initType(try dir.makeOpenPath(inc.TYPE_PREFIX, .{ .iterate = true }));
+        if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
+            try inc.initType(try dir.makeOpenPath(inc.TYPE_PREFIX, .{ .iterate = true }));
+        }
     }
 }
 
 pub fn raze() void {
-    //Diff.raze();
+    storage_dir.close();
 }
+
+pub fn iterableDir(comptime type_name: @TypeOf(.enum_literal)) !std.fs.Dir {
+    return try storage_dir.makeOpenPath(@tagName(type_name), .{ .iterate = true });
+}
+
+pub fn loadData(comptime type_name: @TypeOf(.enum_literal), a: Allocator, name: []const u8) ![]const u8 {
+    var type_dir = try storage_dir.makeOpenPath(@tagName(type_name), .{});
+    defer type_dir.close();
+    return try type_dir.readFileAlloc(a, name, 0x8ffff);
+}
+
+pub fn commit(comptime type_name: @TypeOf(.enum_literal), name: []const u8) !std.fs.File {
+    var type_dir = try storage_dir.makeOpenPath(@tagName(type_name), .{});
+    defer type_dir.close();
+    return try type_dir.createFile(name, .{});
+}
+
+pub fn currentIndex(comptime type_name: @TypeOf(.enum_literal)) !usize {
+    const name = "_" ++ @tagName(type_name) ++ ".index";
+    var index_file = storage_dir.openFile(name, .{}) catch |err| switch (err) {
+        error.FileNotFound => {
+            var new_file = try storage_dir.createFile(name, .{});
+            defer new_file.close();
+            var writer = new_file.writer();
+            try writer.writeInt(usize, 1, .big);
+            return 1;
+        },
+        else => return err,
+    };
+    defer index_file.close();
+    var reader = index_file.reader();
+    const idx = reader.readInt(usize, .big) catch 0;
+    return idx;
+}
+
+pub fn nextIndex(comptime type_name: @TypeOf(.enum_literal)) !usize {
+    const name = "_" ++ @tagName(type_name) ++ ".index";
+    var index_file = try storage_dir.createFile(name, .{ .read = true, .truncate = false });
+    defer index_file.close();
+    var reader = index_file.reader();
+    var idx = reader.readInt(usize, .big) catch 0;
+    idx += 1;
+    try index_file.seekTo(0);
+    var writer = index_file.writer();
+    try writer.writeInt(usize, idx, .big);
+    return idx;
+}
+
+pub fn currentIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []const u8) !usize {
+    var buffer: [2048]u8 = undefined;
+    const name = try std.fmt.bufPrint(&buffer, "_{s}.{s}.index", .{
+        extra_name,
+        @tagName(type_name),
+    });
+    var index_file = storage_dir.openFile(name, .{}) catch |err| switch (err) {
+        error.FileNotFound => {
+            var new_file = try storage_dir.createFile(name, .{});
+            defer new_file.close();
+            var writer = new_file.writer();
+            try writer.writeInt(usize, 1, .big);
+            return 1;
+        },
+        else => return err,
+    };
+    defer index_file.close();
+    var reader = index_file.reader();
+    const idx = reader.readInt(usize, .big) catch 0;
+    return idx;
+}
+
+pub fn nextIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []const u8) !usize {
+    var buffer: [2048]u8 = undefined;
+    const name = try std.fmt.bufPrint(&buffer, "_{s}.{s}.index", .{
+        extra_name,
+        @tagName(type_name),
+    });
+    var index_file = try storage_dir.createFile(name, .{ .read = true, .truncate = false });
+    defer index_file.close();
+    var reader = index_file.reader();
+    var idx = reader.readInt(usize, .big) catch 0;
+    idx += 1;
+    try index_file.seekTo(0);
+    var writer = index_file.writer();
+    try writer.writeInt(usize, idx, .big);
+    return idx;
+}
+
+pub fn split(line: []const u8) ?struct { []const u8, []const u8 } {
+    const idx = std.mem.indexOf(u8, line, ": ") orelse return null;
+    return .{ line[0..idx], line[idx + 2 ..] };
+}
+
+pub fn readerWriter(T: type, default: T) type {
+    return struct {
+        pub fn read(data: []const u8) T {
+            if (data.len == 0) return default;
+            const header_end = std.mem.indexOf(u8, data, "\n\n") orelse data.len;
+            const header = data[0..header_end];
+            var line_itr = std.mem.splitScalar(u8, header, '\n');
+            var output: T = default;
+            var line: []const u8 = line_itr.first();
+            var reset = false;
+
+            inline for (@typeInfo(T).@"struct".fields) |field| {
+                reset = false;
+                while (!std.mem.startsWith(u8, line, field.name)) {
+                    line = line_itr.next() orelse orel: {
+                        if (reset) break;
+                        reset = true;
+                        line_itr.reset();
+                        break :orel line_itr.first();
+                    };
+                    reset = true;
+                }
+                if (line_itr.index != 0) {
+                    const name, const value = split(line) orelse .{ "", "" };
+                    if (std.mem.eql(u8, name, field.name)) switch (field.type) {
+                        ?[]const u8 => {},
+                        [32]u8 => for (0..32) |i| {
+                            @field(output, field.name)[i] = std.fmt.parseInt(u8, value[i .. i + 2], 16) catch 0;
+                        },
+                        []u8, []const u8 => @field(output, field.name) = value,
+                        usize => @field(output, field.name) = std.fmt.parseInt(usize, value, 10) catch @field(output, field.name),
+                        i64 => @field(output, field.name) = std.fmt.parseInt(i64, value, 10) catch @field(output, field.name),
+                        i32 => @field(output, field.name) = std.fmt.parseInt(i32, value, 10) catch @field(output, field.name),
+                        bool => @field(output, field.name) = std.mem.eql(u8, value, "true"),
+                        else => switch (@typeInfo(field.type)) {
+                            .@"enum" => |enumT| {
+                                if (!enumT.is_exhaustive) @compileError("non-exaustive enums are not supported");
+                                if (std.meta.stringToEnum(field.type, value)) |enumV| {
+                                    @field(output, field.name) = enumV;
+                                }
+                            },
+                            else => {
+                                if (comptime type_debugging) std.debug.print("skipped type {s} on {s}\n", .{ @typeName(field.type), @typeName(T) });
+                            },
+                        },
+                    };
+                }
+            }
+            return output;
+        }
+
+        pub fn write(t: *const T, w: anytype) anyerror!void {
+            if (@hasDecl(T, "type_prefix") and @hasDecl(T, "type_version")) {
+                try w.print("# {s}/{d}\n", .{ T.type_prefix, T.type_version });
+            }
+
+            inline for (@typeInfo(T).@"struct".fields) |field| {
+                switch (field.type) {
+                    ?[]const u8 => if (@field(t, field.name)) |value|
+                        try w.print("{s}: {s}\n", .{ field.name, value }),
+                    []u8, []const u8 => try w.print("{s}: {s}\n", .{ field.name, @field(t, field.name) }),
+                    [32]u8 => try w.print("{s}: {s}\n", .{ field.name, std.fmt.fmtSliceHexLower(&@field(t, field.name)) }),
+                    usize, isize, i64, i32 => try w.print("{s}: {d}\n", .{ field.name, @field(t, field.name) }),
+                    bool => try w.print("{s}: {s}\n", .{ field.name, if (@field(t, field.name)) "true" else "false" }),
+                    else => switch (@typeInfo(field.type)) {
+                        .@"enum" => |enumT| {
+                            if (!enumT.is_exhaustive) @compileError("non-exaustive enums are not supported");
+                            try w.print("{s}: {s}\n", .{ field.name, @tagName(@field(t, field.name)) });
+                        },
+                        else => {
+                            if (comptime type_debugging) std.debug.print("skipped type {s} on {s}\n", .{ @typeName(field.type), @typeName(T) });
+                        },
+                    },
+                }
+            }
+            try w.writeAll("\n");
+        }
+    };
+}
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const sha256 = std.crypto.hash.sha2.Sha256;
+// TODO buildtime const/flag
+const type_debugging = false;

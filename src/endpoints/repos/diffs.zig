@@ -171,10 +171,10 @@ fn newComment(ctx: *Frame) Error!void {
         const msg = try valid.require("comment");
         if (msg.value.len < 2) return ctx.redirect(loc, .see_other) catch unreachable;
 
-        var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch unreachable orelse return error.Unrouteable;
+        var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch return error.Unknown;
         const username = if (ctx.user) |usr| usr.username.? else "public";
         var thread = delta.loadThread(ctx.alloc) catch unreachable;
-        thread.newComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch unreachable;
+        thread.newComment(ctx.alloc, username, msg.value) catch unreachable;
         // TODO record current revision at comment time
         delta.commit() catch unreachable;
         return ctx.redirect(loc, .see_other) catch unreachable;
@@ -544,11 +544,11 @@ fn view(ctx: *Frame) Error!void {
     const index = isHex(delta_id) orelse return error.Unrouteable;
 
     var delta = Delta.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
-        error.InvalidTarget => return error.Unrouteable,
+        //error.InvalidTarget => return error.Unrouteable,
         error.InputOutput => unreachable,
-        error.Other => unreachable,
+        //error.Other => unreachable,
         else => unreachable,
-    } orelse return error.Unrouteable;
+    };
 
     const patch_header = S.Header{
         .title = abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
@@ -600,14 +600,14 @@ fn view(ctx: *Frame) Error!void {
         root_thread = try ctx.alloc.alloc(S.Thread, messages.len);
         for (messages, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
-                .comment => |comment| {
+                .comment => {
                     c_ctx.* = .{
-                        .author = try abx.Html.cleanAlloc(ctx.alloc, comment.author),
+                        .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
                         .message = if (patch) |pt|
-                            translateComment(ctx.alloc, comment.message, pt, &repo) catch unreachable
+                            translateComment(ctx.alloc, msg.message.?, pt, &repo) catch unreachable
                         else
-                            try abx.Html.cleanAlloc(ctx.alloc, comment.message),
+                            try abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
                             index,
                             fmtSliceHexLower(msg.hash[0..]),
@@ -615,15 +615,15 @@ fn view(ctx: *Frame) Error!void {
                         .sub_thread = null,
                     };
                 },
-                else => {
-                    c_ctx.* = .{
-                        .author = "",
-                        .date = "",
-                        .message = "unsupported message type",
-                        .direct_reply = null,
-                        .sub_thread = null,
-                    };
-                },
+                //else => {
+                //    c_ctx.* = .{
+                //        .author = "",
+                //        .date = "",
+                //        .message = "unsupported message type",
+                //        .direct_reply = null,
+                //        .sub_thread = null,
+                //    };
+                //},
             }
         }
     } else |err| {
@@ -658,11 +658,11 @@ const DeltaListPage = Template.PageData("delta-list.html");
 fn list(ctx: *Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
-    const last = Delta.last(rd.name) + 1;
+    const last = (Types.currentIndex(.deltas) catch 0) + 1;
 
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     for (0..last) |i| {
-        var d = Delta.open(ctx.alloc, rd.name, i) catch continue orelse continue;
+        var d = Delta.open(ctx.alloc, rd.name, i) catch continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .diff) {
             d.raze(ctx.alloc);
             continue;

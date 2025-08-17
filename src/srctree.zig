@@ -133,6 +133,13 @@ test {
     const ca = cache.init(a);
     defer ca.raze();
 
+    const Types = @import("types.zig");
+
+    var tempdir = std.testing.tmpDir(.{});
+    defer tempdir.cleanup();
+    try Types.init(try tempdir.dir.makeOpenPath("datadir", .{}));
+    defer Types.raze();
+
     try endpoints.smokeTest(a, .{
         .recurse = true,
         .soft_errors = &[_]Router.Error{ error.DataInvalid, error.DataMissing, error.Unrouteable },

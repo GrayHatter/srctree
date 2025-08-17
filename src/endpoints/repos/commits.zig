@@ -107,24 +107,24 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
                 thread = try f.alloc.alloc(Template.Structs.Thread, messages.len);
                 for (messages, thread) |msg, *pg_comment| {
                     switch (msg.kind) {
-                        .comment => |cmt| {
+                        .comment => {
                             pg_comment.* = .{
-                                .author = try Verse.abx.Html.cleanAlloc(f.alloc, cmt.author),
+                                .author = try Verse.abx.Html.cleanAlloc(f.alloc, msg.author.?),
                                 .date = try allocPrint(f.alloc, "{}", .{Humanize.unix(msg.updated)}),
-                                .message = try Verse.abx.Html.cleanAlloc(f.alloc, cmt.message),
+                                .message = try Verse.abx.Html.cleanAlloc(f.alloc, msg.message.?),
                                 .direct_reply = null,
                                 .sub_thread = null,
                             };
                         },
-                        else => {
-                            pg_comment.* = .{
-                                .author = "",
-                                .date = "",
-                                .message = "unsupported message type",
-                                .direct_reply = null,
-                                .sub_thread = null,
-                            };
-                        },
+                        //else => {
+                        //    pg_comment.* = .{
+                        //        .author = "",
+                        //        .date = "",
+                        //        .message = "unsupported message type",
+                        //        .direct_reply = null,
+                        //        .sub_thread = null,
+                        //    };
+                        //},
                     }
                 }
             } else |err| {

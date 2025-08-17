@@ -1,80 +1,66 @@
 index: usize,
-state: usize,
+status: Status = .open,
 created: i64 = 0,
 updated: i64 = 0,
 repo: []const u8,
 title: []const u8,
 desc: []const u8,
 
-comment_data: ?[]const u8,
-file: std.fs.File,
+comment_data: ?[]const u8 = null,
 
 const Issue = @This();
 
-pub const TYPE_PREFIX = "issues";
-const ISSUE_VERSION: usize = 0;
-var datad: Types.Storage = undefined;
+pub const type_prefix = "issues";
+pub const type_version: usize = 0;
 
-pub fn initType(stor: Types.Storage) !void {
-    datad = stor;
-}
+const ISSUE_VERSION: usize = 0;
 
 pub const Status = enum(u1) {
     open = 0,
     closed = 1,
 };
 
-pub const State = packed struct {
-    status: Status = .open,
-    padding: u63 = 0,
-};
+const typeio = Types.readerWriter(Issue, .{ .index = 0, .repo = &.{}, .title = &.{}, .desc = &.{} });
+const writerFn = typeio.write;
+const readerFn = typeio.read;
 
-fn readVersioned(a: Allocator, idx: usize, file: std.fs.File) !Issue {
-    var reader = file.reader();
-    const int: usize = try reader.readIntNative(usize);
-    return switch (int) {
-        0 => Issue{
-            .index = idx,
-            .state = try reader.readIntNative(usize),
-            .created = try reader.readIntNative(i64),
-            .updated = try reader.readIntNative(i64),
-            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .title = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .desc = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-
-            .comment_data = try reader.readAllAlloc(a, 0xFFFF),
-            .file = file,
-        },
-        else => error.UnsupportedVersion,
+pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Issue {
+    const max: usize = try Types.nextIndex(.issue);
+    const d = Issue{
+        .index = max + 1,
+        .state = 0,
+        .repo = repo,
+        .title = title,
+        .desc = desc,
+        .comment_data = null,
     };
+    try d.commit();
+
+    return d;
 }
 
-pub fn writeOut(self: Issue) !void {
-    try self.file.seekTo(0);
-    var writer = self.file.writer();
-    try writer.writeIntNative(usize, ISSUE_VERSION);
-    try writer.writeIntNative(usize, self.state);
-    try writer.writeIntNative(i64, self.created);
-    try writer.writeIntNative(i64, self.updated);
-    try writer.writeAll(self.repo);
-    try writer.writeAll("\x00");
-    try writer.writeAll(self.title);
-    try writer.writeAll("\x00");
-    try writer.writeAll(self.desc);
-    try writer.writeAll("\x00");
-    if (self.comments) |cmts| {
-        for (cmts) |*c| {
-            try writer.writeAll(c.toHash());
-        }
+pub fn open(a: std.mem.Allocator, index: usize) !?Issue {
+    const max = try Types.currentIndex(.issue);
+    if (index > max) return error.IssueDoesNotExist;
+
+    var buf: [2048]u8 = undefined;
+    const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{index});
+    const file = try Types.loadData(.issue, a, filename);
+    return readerFn(file);
+}
+
+pub fn commit(issue: Issue) !void {
+    if (issue.messages) |msgs| {
+        // Make a best effort to save/protect all data
+        for (msgs) |msg| msg.commit() catch continue;
     }
-    try writer.writeAll("\x00");
-    try self.file.setEndPos(self.file.getPos() catch unreachable);
-}
 
-pub fn readFile(a: std.mem.Allocator, idx: usize, file: std.fs.File) !Issue {
-    try file.seekTo(0);
-    const issue: Issue = try readVersioned(a, idx, file);
-    return issue;
+    var buf: [2048]u8 = undefined;
+    const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{issue.index});
+    const file = try Types.commit(.thread, filename);
+    defer file.close();
+    var writer = file.writer();
+    try writerFn(&issue, &writer);
 }
 
 //pub fn getComments(self: *Issue, a: Allocator) ![]Comment {
@@ -111,62 +97,48 @@ pub fn raze(self: Issue, a: std.mem.Allocator) void {
     self.file.close();
 }
 
-fn currMaxSet(count: usize) !void {
-    var cnt_file = try datad.createFile("_count", .{ .truncate = false });
-    defer cnt_file.close();
-    var writer = cnt_file.writer();
-    _ = try writer.writeIntNative(usize, count);
-}
+test "reader/writer" {
+    const a = std.testing.allocator;
+    var list = std.ArrayList(u8).init(a);
+    defer list.clearAndFree();
+    var writer = list.writer();
 
-fn currMax() !usize {
-    var cnt_file = try datad.openFile("_count", .{ .mode = .read_write });
-    defer cnt_file.close();
-    var reader = cnt_file.reader();
-    const count: usize = try reader.readIntNative(usize);
-    return count;
-}
-
-pub fn last() usize {
-    return currMax() catch 0;
-}
-
-pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Issue {
-    const max: usize = currMax() catch 0;
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{max + 1});
-    const file = try datad.createFile(filename, .{});
-    const d = Issue{
-        .index = max + 1,
-        .state = 0,
-        .repo = repo,
-        .title = title,
-        .desc = desc,
-        .file = file,
+    const this: Issue = .{
+        .index = 55,
+        .status = .open,
+        .created = 0,
+        .updated = 0,
+        .repo = "srctree",
+        .title = "title",
+        .desc = "desc",
         .comment_data = null,
     };
+    try writerFn(&this, &writer);
 
-    try currMaxSet(max + 1);
+    const expected =
+        \\# issues/0
+        \\index: 55
+        \\status: open
+        \\created: 0
+        \\updated: 0
+        \\repo: srctree
+        \\title: title
+        \\desc: desc
+        \\
+        \\
+    ;
 
-    return d;
-}
+    try std.testing.expectEqualStrings(expected, list.items);
 
-pub fn open(a: std.mem.Allocator, index: usize) !?Issue {
-    const max = currMax() catch 0;
-    if (index > max) return null;
+    {
+        const read_this = readerFn(list.items);
+        try std.testing.expectEqualDeep(this, read_this);
+    }
 
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{index});
-    const file = try datad.openFile(filename, .{ .mode = .read_write });
-    return try Issue.readFile(a, index, file);
-}
-
-test State {
-    try std.testing.expectEqual(@sizeOf(State), @sizeOf(usize));
-
-    const state = State{};
-    const zero: usize = 0;
-    const ptr: *const usize = @ptrCast(&state);
-    try std.testing.expectEqual(zero, ptr.*);
+    {
+        const from_expected_this = readerFn(expected);
+        try std.testing.expectEqualDeep(this, from_expected_this);
+    }
 }
 
 const std = @import("std");

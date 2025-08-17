@@ -61,7 +61,7 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
 
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     var search_results = Delta.search(ctx.alloc, rules.items);
-    while (search_results.next(ctx.alloc) catch return error.Unknown) |next_| {
+    while (search_results.next(ctx.alloc) catch null) |next_| {
         var d: Delta = next_;
         const cmtsmeta = d.countComments();
 

@@ -6,7 +6,7 @@ pub const verse_aliases = .{
 
 pub const routes = [_]Router.Match{
     ROUTE("", list),
-    ROUTE("new", new),
+    GET("new", new),
     POST("new", newPost),
     POST("add-comment", newComment),
 };
@@ -63,7 +63,7 @@ fn newPost(ctx: *verse.Frame) Error!void {
             if (ctx.user) |usr| usr.username.? else try allocPrint(ctx.alloc, "remote_address", .{}),
         ) catch unreachable;
 
-        delta.attach = .{ .issue = 0 };
+        delta.attach = .issue;
         delta.commit() catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
@@ -82,15 +82,12 @@ fn newComment(ctx: *verse.Frame) Error!void {
         const msg = try valid.require("comment");
         const issue_index = isHex(delta_id.value) orelse return error.Unrouteable;
 
-        var delta = Delta.open(
-            ctx.alloc,
-            rd.name,
-            issue_index,
-        ) catch unreachable orelse return error.Unrouteable;
+        var delta = Delta.open(ctx.alloc, rd.name, issue_index) catch
+            return error.Unknown;
         const username = if (ctx.user) |usr| usr.username.? else "public";
 
-        var thread = delta.loadThread(ctx.alloc) catch unreachable;
-        thread.newComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch {};
+        var thread = delta.loadThread(ctx.alloc) catch return error.Unknown;
+        thread.newComment(ctx.alloc, username, msg.value) catch {};
         delta.commit() catch unreachable;
         var buf: [2048]u8 = undefined;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
@@ -107,7 +104,7 @@ fn view(ctx: *verse.Frame) Error!void {
     const delta_id = ctx.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
 
-    var delta = (Delta.open(ctx.alloc, rd.name, idx) catch return error.Unrouteable) orelse return error.Unrouteable;
+    var delta = Delta.open(ctx.alloc, rd.name, idx) catch return error.Unrouteable;
 
     _ = delta.loadThread(ctx.alloc) catch unreachable;
     var root_thread: []S.Thread = &[0]S.Thread{};
@@ -115,11 +112,11 @@ fn view(ctx: *verse.Frame) Error!void {
         root_thread = try ctx.alloc.alloc(S.Thread, messages.len);
         for (messages, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
-                .comment => |comment| {
+                .comment => {
                     c_ctx.* = .{
-                        .author = try verse.abx.Html.cleanAlloc(ctx.alloc, comment.author),
+                        .author = try verse.abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
                         .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
-                        .message = try verse.abx.Html.cleanAlloc(ctx.alloc, comment.message),
+                        .message = try verse.abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
                             idx,
                             fmtSliceHexLower(msg.hash[0..]),
@@ -127,9 +124,9 @@ fn view(ctx: *verse.Frame) Error!void {
                         .sub_thread = null,
                     };
                 },
-                else => {
-                    c_ctx.* = .{ .author = "", .date = "", .message = "unsupported message type", .direct_reply = null, .sub_thread = null };
-                },
+                //else => {
+                //    c_ctx.* = .{ .author = "", .date = "", .message = "unsupported message type", .direct_reply = null, .sub_thread = null };
+                //},
             }
         }
     } else |err| {
@@ -159,12 +156,13 @@ const DeltaListHtml = template.PageData("delta-list.html");
 fn list(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
-    const last = Delta.last(rd.name) + 1;
+    const last = (Types.currentIndex(.deltas) catch 0) + 1;
+    std.debug.print("last {}\n", .{last});
 
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     for (0..last) |i| {
         // TODO implement seen
-        var d = Delta.open(ctx.alloc, rd.name, i) catch continue orelse continue;
+        var d = Delta.open(ctx.alloc, rd.name, i) catch continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
             d.raze(ctx.alloc);
             continue;
@@ -219,10 +217,12 @@ const template = verse.template;
 const Error = Router.Error;
 const ROUTE = Router.ROUTE;
 const POST = Router.POST;
+const GET = Router.GET;
 const S = template.Structs;
 
 const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
 
-const Delta = @import("../../types.zig").Delta;
+const Types = @import("../../types.zig");
+const Delta = Types.Delta;
 const Humanize = @import("../../humanize.zig");
