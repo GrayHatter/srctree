@@ -5,8 +5,8 @@ pub const verse_router = &router;
 const routes = [_]Router.Match{
     GET("gist", view),
     GET("new", new),
-    POST("new", post),
-    POST("post", post),
+    POST("new", gistPost),
+    POST("post", gistPost),
 };
 
 pub const index = new;
@@ -24,10 +24,8 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
                     'a'...'f', '0'...'9' => continue,
                     else => return error.Unrouteable,
                 }
-            } else {
-                return view;
-            }
-        }
+            } else return view;
+        } else return error.NotFound;
     } else return new;
 
     return Router.defaultRouter(ctx, &routes);
@@ -39,41 +37,40 @@ const GistPost = struct {
     new_file: ?[]const u8,
 };
 
-fn post(ctx: *Frame) Error!void {
-    try ctx.requireValidUser();
+fn gistPost(frame: *Frame) Error!void {
+    try frame.requireValidUser();
 
-    const udata = RequestData(GistPost).initMap(ctx.alloc, ctx.request.data) catch return error.DataInvalid;
+    var post = frame.request.data.post orelse return error.DataMissing;
+    const udata = post.validateAlloc(GistPost, frame.alloc) catch return error.DataInvalid;
 
     if (udata.file_name.len != udata.file_blob.len) return error.DataInvalid;
-    const username = if (ctx.user) |usr| usr.username.? else "public";
+    const username = if (frame.user) |usr| usr.username.? else "public";
 
     if (udata.new_file != null) {
-        const files = try ctx.alloc.alloc(S.GistFiles, udata.file_name.len + 1);
+        const files = try frame.alloc.alloc(S.GistFiles, udata.file_name.len + 1);
         for (files[0 .. files.len - 1], udata.file_name, udata.file_blob) |*file, name, blob| {
             file.* = .{
-                .name = name,
-                .blob = blob,
+                .name = try verse.abx.Html.cleanAlloc(frame.alloc, name),
+                .blob = try verse.abx.Html.cleanAlloc(frame.alloc, blob),
             };
         }
         files[files.len - 1] = .{};
-        return edit(ctx, files);
+        return edit(frame, files);
     }
 
-    const files = try ctx.alloc.alloc(Gist.File, udata.file_name.len);
+    const files = try frame.alloc.alloc(Gist.File, udata.file_name.len);
     for (files, udata.file_name, udata.file_blob, 0..) |*file, fname, fblob, i| {
         var name = std.mem.trim(u8, fname, &std.ascii.whitespace);
         if (name.len == 0) {
-            name = try allocPrint(ctx.alloc, "filename{}.txt", .{i});
+            name = try allocPrint(frame.alloc, "filename{}.txt", .{i});
         }
-        file.* = .{
-            .name = name,
-            .blob = fblob,
-        };
+
+        file.* = Gist.File.init(name, fblob) catch return error.DataInvalid;
     }
 
     const hash_str: [64]u8 = Gist.new(username, files) catch return error.Unknown;
 
-    return ctx.redirect("/gist/" ++ hash_str, .see_other) catch unreachable;
+    return frame.redirect("/gist/" ++ hash_str, .see_other) catch unreachable;
 }
 
 fn new(ctx: *Frame) Error!void {
@@ -84,9 +81,7 @@ fn new(ctx: *Frame) Error!void {
 fn edit(vrs: *Frame, files: []const S.GistFiles) Error!void {
     var page = GistNewPage.init(.{
         .meta_head = .{
-            .open_graph = .{
-                .title = "Create A New Gist",
-            },
+            .open_graph = .{ .title = "Create A New Gist" },
         },
         .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
         .gist_files = files,
@@ -108,26 +103,22 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
 
 fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
-    var btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    const body_header = vrs.response_data.get(S.BodyHeaderHtml) catch S.BodyHeaderHtml{ .nav = .{ .nav_buttons = &.{} } };
 
     if (vrs.uri.next()) |hash| {
         if (hash.len != 64) return error.DataInvalid;
 
-        const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.Unknown;
+        const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.InvalidURI;
         const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
-        const og = try std.fmt.allocPrint(vrs.alloc, "A perfect paste from {}", .{verse.abx.Html{ .text = gist.owner }});
         var page = GistPage.init(.{
-            .meta_head = .{
-                .open_graph = .{
-                    .title = og,
-                    .desc = "",
-                },
-            },
-            .body_header = .{
-                .nav = .{
-                    .nav_buttons = &btns,
-                },
-            },
+            .meta_head = .{ .open_graph = .{
+                .title = try allocPrint(vrs.alloc, "A perfect paste from {}", .{verse.abx.Html{ .text = gist.owner }}),
+                .desc = if (gist.file_count == 1)
+                    try allocPrint(vrs.alloc, "{}", .{verse.abx.Html{ .text = gist.files[0].name }})
+                else
+                    try allocPrint(vrs.alloc, "{} files", .{gist.file_count}),
+            } },
+            .body_header = body_header,
             .gist_files = files,
         });
 

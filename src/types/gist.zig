@@ -25,6 +25,24 @@ pub const File = struct {
         };
     }
 
+    pub fn open(file: *File, a: Allocator, name: [64]u8) !void {
+        const data = try Types.loadData(.gist_files, a, name ++ ".gist-file");
+
+        file.* = File.readerFn(data);
+        if (indexOf(u8, data, file.name)) |idx| {
+            file.blob = data[idx + file.name.len + 6 ..];
+        }
+    }
+
+    pub fn commit(file: File) ![64]u8 {
+        const name = file.filename();
+        const data_file = try Types.commit(.gist_files, &name);
+        defer data_file.close();
+        var data_writer = data_file.writer();
+        try File.writerFn(&file, &data_writer);
+        return name[0..64].*;
+    }
+
     pub fn filename(f: File) [74]u8 {
         var output: [74]u8 = [_]u8{0} ** 64 ++ ".gist-file".*;
         var sha = Sha256.init(.{});
@@ -64,7 +82,23 @@ pub fn new(owner: []const u8, files: []const File) ![64]u8 {
 
 pub fn open(a: Allocator, hash: [64]u8) !Gist {
     const data = try Types.loadData(.gist, a, hash ++ ".gist");
-    return readerFn(data);
+    var gist = readerFn(data);
+
+    if (indexOf(u8, data, "\n\n")) |start| {
+        std.debug.assert(std.mem.count(u8, data[start + 2 ..], "\n") == gist.file_count + 1);
+        const gist_files = try a.alloc(File, gist.file_count);
+        gist.files = gist_files;
+
+        var itr = std.mem.splitScalar(u8, data[start + 2 ..], '\n');
+        var next = itr.next();
+        for (gist_files) |*file| {
+            if (next == null) return error.InvalidGist;
+            std.debug.assert(next.?.len == 64);
+            try file.open(a, next.?[0..64].*);
+            next = itr.next();
+        }
+    }
+    return gist;
 }
 
 pub fn commit(gist: *Gist) !void {
@@ -77,12 +111,8 @@ pub fn commit(gist: *Gist) !void {
     try writerFn(gist, &writer);
 
     for (gist.files) |gistfile| {
-        const name = gistfile.filename();
-        const data_file = try Types.commit(.gist_files, &name);
-        defer data_file.close();
-        var data_writer = data_file.writer();
-        try File.writerFn(&gistfile, &data_writer);
-        try writer.print("{s}\n", .{name[0..64]});
+        const f_name = try gistfile.commit();
+        try writer.print("{s}\n", .{f_name[0..64]});
     }
     try writer.print("\n", .{});
 }
