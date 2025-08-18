@@ -44,7 +44,7 @@ pub const Translate = struct {
     }
 
     fn block(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
-        @setRuntimeSafety(false);
+        @setRuntimeSafety(false); // an LLVM bug causes this to crash
         if (src.len == 0) return 0;
         var idx: usize = 0;
         while (idx < src.len and (src[idx] == ' ' or src[idx] == '\t')) {
@@ -155,9 +155,12 @@ pub const Translate = struct {
 
     fn paragraph(src: []const u8, dst: *ArrayList(u8), indent: usize) error{OutOfMemory}!usize {
         try dst.appendSlice("<p>");
-        const until = indexOfPos(u8, src, 0, "\n\n") orelse src.len;
+        const until = indexOfPos(u8, src, 0, "\n\n") orelse indexOfPos(u8, src, 0, "\r\n\r\n") orelse src.len;
         try leaf(src[0..until], dst, indent);
         try dst.appendSlice("</p>\n");
+        if (until < src.len and src[until] == '\r') {
+            return until + 4;
+        }
         return until + 2;
     }
 
@@ -193,7 +196,7 @@ pub const Translate = struct {
 
     fn leaf(src: []const u8, dst: *ArrayList(u8), indent: usize) !void {
         var idx: usize = 0;
-        while (indexOfScalarPos(u8, src, idx, '\n')) |i| {
+        while (indexOfScalarPos(u8, src, idx, '\n')) |i| : (try dst.append(' ')) {
             var line_indent: usize = 0;
             while (src[idx + line_indent] == ' ') {
                 line_indent += 1;
@@ -275,6 +278,7 @@ pub const Translate = struct {
                         try dst.append('`');
                     }
                 },
+                '\r' => {},
                 else => {
                     if (abx.Html.clean(src[idx])) |clean| {
                         try dst.appendSlice(clean);
@@ -332,6 +336,53 @@ test "title 2" {
         \\<h2>Fake Title</h2>
         \\<h1>Other Title</h1>
         \\<p>text</p>
+        \\
+    ;
+
+    const html = try Translate.source(a, blob);
+    defer a.free(html);
+
+    try std.testing.expectEqualStrings(expected, html);
+}
+
+test "paragraph" {
+    const a = std.testing.allocator;
+    const blob =
+        \\This is some
+        \\
+        \\Multi Line Text
+        \\Same Line
+        \\
+        \\New line again
+        \\
+    ;
+    const expected =
+        \\<p>This is some</p>
+        \\<p>Multi Line Text Same Line</p>
+        \\<p>New line again</p>
+        \\
+    ;
+
+    const html = try Translate.source(a, blob);
+    defer a.free(html);
+
+    try std.testing.expectEqualStrings(expected, html);
+}
+
+test "paragraph CRLF" {
+    const a = std.testing.allocator;
+    const blob =
+        "This is some\r\n" ++
+        "\r\n" ++
+        "Multi Line Text\r\n" ++
+        "Same Line\r\n" ++
+        "\r\n" ++
+        "New line again\r\n" ++
+        "\r\n";
+    const expected =
+        \\<p>This is some</p>
+        \\<p>Multi Line Text Same Line</p>
+        \\<p>New line again</p>
         \\
     ;
 

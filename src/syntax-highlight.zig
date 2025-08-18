@@ -1,9 +1,4 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const endsWith = std.mem.endsWith;
-const eql = std.mem.eql;
-
-const Markdown = @import("syntax/markdown.zig");
+pub const Markdown = @import("syntax/markdown.zig");
 
 pub const Language = enum {
     c,
@@ -177,3 +172,8 @@ pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8
     _ = child.wait() catch unreachable;
     return try buf.toOwnedSlice();
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const endsWith = std.mem.endsWith;
+const eql = std.mem.eql;
