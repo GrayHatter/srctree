@@ -66,8 +66,8 @@ pub fn currentIndex(comptime type_name: @TypeOf(.enum_literal)) !usize {
             var new_file = try storage_dir.createFile(name, .{});
             defer new_file.close();
             var writer = new_file.writer();
-            try writer.writeInt(usize, 1, .big);
-            return 1;
+            try writer.writeInt(usize, 0, .big);
+            return 0;
         },
         else => return err,
     };
@@ -101,8 +101,8 @@ pub fn currentIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name:
             var new_file = try storage_dir.createFile(name, .{});
             defer new_file.close();
             var writer = new_file.writer();
-            try writer.writeInt(usize, 1, .big);
-            return 1;
+            try writer.writeInt(usize, 0, .big);
+            return 0;
         },
         else => return err,
     };

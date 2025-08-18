@@ -117,6 +117,9 @@ content {
 		width: unset;
 		max-width: 96%;
 	}
+	&.search {
+		min-width: 50rem;
+	}
 }
 
 button {

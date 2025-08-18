@@ -150,6 +150,15 @@ fn view(ctx: *verse.Frame) Error!void {
             .thread = root_thread,
         },
     });
+    // required because linux will validate data.[slice].ptr and zig likes to
+    // pretend that setting .ptr = undefined when .len == 0
+    if (page.data.title.len == 0) {
+        page.data.title = "[No Title]";
+    }
+
+    if (page.data.description.len == 0) {
+        page.data.description = "<span class=\"muted\">No description provided</span>";
+    }
 
     try ctx.sendPage(&page);
 }
@@ -159,9 +168,10 @@ const DeltaListHtml = template.PageData("delta-list.html");
 fn list(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
-    const last = (Types.currentIndex(.deltas) catch 0) + 1;
+    const last = (Types.currentIndexNamed(.deltas, rd.name) catch 0) + 1;
     var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
     for (0..last) |i| {
+
         // TODO implement seen
         var d = Delta.open(ctx.alloc, rd.name, i) catch continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
@@ -169,7 +179,7 @@ fn list(ctx: *verse.Frame) Error!void {
             continue;
         }
 
-        _ = d.loadThread(ctx.alloc) catch unreachable;
+        _ = d.loadThread(ctx.alloc) catch return error.Unknown;
         const cmtsmeta = d.countComments();
 
         try d_list.append(.{
