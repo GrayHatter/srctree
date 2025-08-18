@@ -133,6 +133,10 @@ fn view(ctx: *verse.Frame) Error!void {
         std.debug.print("Unable to load comments for thread {} {}\n", .{ idx, err });
         @panic("oops");
     }
+
+    const description = Highlight.Markdown.translate(ctx.alloc, delta.message) catch
+        try abx.Html.cleanAlloc(ctx.alloc, delta.message);
+
     const username = if (ctx.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     var page = DeltaIssuePage.init(.{
@@ -141,7 +145,7 @@ fn view(ctx: *verse.Frame) Error!void {
             .nav_buttons = &try Repos.navButtons(ctx),
         } },
         .title = verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
-        .description = verse.abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
+        .description = description,
         .delta_id = delta_id,
         .current_username = username,
         .created = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(delta.created)}),
@@ -223,6 +227,7 @@ const bufPrint = std.fmt.bufPrint;
 const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 
 const verse = @import("verse");
+const abx = verse.abx;
 const Router = verse.Router;
 const template = verse.template;
 const Error = Router.Error;
@@ -237,3 +242,4 @@ const RouteData = Repos.RouteData;
 const Types = @import("../../types.zig");
 const Delta = Types.Delta;
 const Humanize = @import("../../humanize.zig");
+const Highlight = @import("../../syntax-highlight.zig");
