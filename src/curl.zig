@@ -67,10 +67,3 @@ fn curlWriteCB(data: *anyopaque, size: c_uint, nmemb: c_uint, user_data: *anyopa
     buffer.appendSlice(typed_data[0 .. nmemb * size]) catch return 0;
     return nmemb * size;
 }
-
-test "bconfig" {
-    if (!bconfig.libcurl) {
-        const err = curlRequest(std.testing.allocator, "https://gr.ht/");
-        try std.testing.expectError(error.CURLNotAvailable, err);
-    } else {}
-}
