@@ -127,6 +127,8 @@ test "reader/writer" {
         \\
         \\
     ;
+    const expected_var = try a.dupe(u8, expected);
+    defer a.free(expected_var);
 
     try std.testing.expectEqualStrings(expected, list.items);
 
@@ -136,7 +138,7 @@ test "reader/writer" {
     }
 
     {
-        const from_expected_this = readerFn(expected);
+        const from_expected_this = readerFn(expected_var);
         try std.testing.expectEqualDeep(this, from_expected_this);
     }
 }

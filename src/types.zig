@@ -47,7 +47,7 @@ pub fn iterableDir(comptime type_name: @TypeOf(.enum_literal)) !std.fs.Dir {
     return try storage_dir.makeOpenPath(@tagName(type_name), .{ .iterate = true });
 }
 
-pub fn loadData(comptime type_name: @TypeOf(.enum_literal), a: Allocator, name: []const u8) ![]const u8 {
+pub fn loadData(comptime type_name: @TypeOf(.enum_literal), a: Allocator, name: []const u8) ![]u8 {
     var type_dir = try storage_dir.makeOpenPath(@tagName(type_name), .{});
     defer type_dir.close();
     return try type_dir.readFileAlloc(a, name, 0x8ffff);
@@ -129,43 +129,48 @@ pub fn nextIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []
     return idx;
 }
 
-pub fn split(line: []const u8) ?struct { []const u8, []const u8 } {
+pub fn split(line: []u8) ?struct { []u8, []u8 } {
     const idx = std.mem.indexOf(u8, line, ": ") orelse return null;
     return .{ line[0..idx], line[idx + 2 ..] };
 }
 
 pub fn readerWriter(T: type, default: T) type {
     return struct {
-        pub fn read(data: []const u8) T {
+        pub fn read(data: []u8) T {
             if (data.len == 0) return default;
             const header_end = std.mem.indexOf(u8, data, "\n\n") orelse data.len;
             const header = data[0..header_end];
             var line_itr = std.mem.splitScalar(u8, header, '\n');
             var output: T = default;
-            var line: []const u8 = line_itr.first();
+            var line: []u8 = @constCast(line_itr.first());
             var reset = false;
 
             inline for (@typeInfo(T).@"struct".fields) |field| {
                 reset = false;
                 while (!std.mem.startsWith(u8, line, field.name)) {
-                    line = line_itr.next() orelse orel: {
+                    line = @constCast(line_itr.next()) orelse orel: {
                         if (reset) break;
                         reset = true;
                         line_itr.reset();
-                        break :orel line_itr.first();
+                        break :orel @constCast(line_itr.first());
                     };
                     reset = true;
                 }
                 if (line_itr.index != 0) {
-                    const name, const value = split(line) orelse .{ "", "" };
+                    const name, const value: []u8 = split(line) orelse .{ &.{}, &.{} };
                     if (std.mem.eql(u8, name, field.name)) switch (field.type) {
                         [32]u8 => for (0..32) |i| {
-                            @field(output, field.name)[i] = std.fmt.parseInt(u8, value[i .. i + 2], 16) catch 0;
+                            @field(output, field.name)[i] = parseInt(u8, value[i .. i + 2], 16) catch 0;
                         },
-                        []u8, []const u8, ?[]const u8 => @field(output, field.name) = value,
-                        usize => @field(output, field.name) = std.fmt.parseInt(usize, value, 10) catch @field(output, field.name),
-                        i64 => @field(output, field.name) = std.fmt.parseInt(i64, value, 10) catch @field(output, field.name),
-                        i32 => @field(output, field.name) = std.fmt.parseInt(i32, value, 10) catch @field(output, field.name),
+                        []u8, []const u8, ?[]const u8 => {
+                            for (value) |*chr| {
+                                if (chr.* == 0x1a) chr.* = '\n';
+                            }
+                            @field(output, field.name) = value;
+                        },
+                        usize => @field(output, field.name) = parseInt(usize, value, 10) catch @field(output, field.name),
+                        i64 => @field(output, field.name) = parseInt(i64, value, 10) catch @field(output, field.name),
+                        i32 => @field(output, field.name) = parseInt(i32, value, 10) catch @field(output, field.name),
                         bool => @field(output, field.name) = std.mem.eql(u8, value, "true"),
                         else => switch (@typeInfo(field.type)) {
                             .@"enum" => |enumT| {
@@ -191,9 +196,26 @@ pub fn readerWriter(T: type, default: T) type {
 
             inline for (@typeInfo(T).@"struct".fields) |field| {
                 switch (field.type) {
-                    ?[]const u8 => if (@field(t, field.name)) |value|
-                        try w.print("{s}: {s}\n", .{ field.name, value }),
-                    []u8, []const u8 => try w.print("{s}: {s}\n", .{ field.name, @field(t, field.name) }),
+                    ?[]const u8 => {
+                        if (@field(t, field.name)) |value| {
+                            try w.print("{s}: ", .{field.name});
+                            var itr = std.mem.splitScalar(u8, value, '\n');
+                            while (itr.next()) |line| {
+                                try w.writeAll(line);
+                                if (itr.peek()) |_| try w.writeAll("\x1a");
+                            }
+                            try w.writeAll("\n");
+                        }
+                    },
+                    []u8, []const u8 => {
+                        try w.print("{s}: ", .{field.name});
+                        var itr = std.mem.splitScalar(u8, @field(t, field.name), '\n');
+                        while (itr.next()) |line| {
+                            try w.writeAll(line);
+                            if (itr.peek()) |_| try w.writeAll("\x1a");
+                        }
+                        try w.writeAll("\n");
+                    },
                     [32]u8 => try w.print("{s}: {s}\n", .{ field.name, std.fmt.fmtSliceHexLower(&@field(t, field.name)) }),
                     usize, isize, i64, i32 => try w.print("{s}: {d}\n", .{ field.name, @field(t, field.name) }),
                     bool => try w.print("{s}: {s}\n", .{ field.name, if (@field(t, field.name)) "true" else "false" }),
@@ -215,6 +237,7 @@ pub fn readerWriter(T: type, default: T) type {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const parseInt = std.fmt.parseInt;
 const sha256 = std.crypto.hash.sha2.Sha256;
 // TODO buildtime const/flag
 const type_debugging = false;
