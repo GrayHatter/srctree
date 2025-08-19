@@ -173,10 +173,9 @@ fn newComment(ctx: *Frame) Error!void {
 
         var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch return error.Unknown;
         const username = if (ctx.user) |usr| usr.username.? else "public";
-        var thread = delta.loadThread(ctx.alloc) catch unreachable;
-        thread.newComment(ctx.alloc, username, msg.value) catch unreachable;
+        //var thread = delta.loadThread(ctx.alloc) catch unreachable;
+        delta.addComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch unreachable;
         // TODO record current revision at comment time
-        delta.commit() catch unreachable;
         return ctx.redirect(loc, .see_other) catch unreachable;
     }
     return error.Unknown;
@@ -596,9 +595,9 @@ fn view(ctx: *Frame) Error!void {
     }
 
     var root_thread: []S.Thread = &[0]S.Thread{};
-    if (delta.getMessages(ctx.alloc)) |messages| {
-        root_thread = try ctx.alloc.alloc(S.Thread, messages.len);
-        for (messages, root_thread) |msg, *c_ctx| {
+    if (delta.loadThread(ctx.alloc)) |thread| {
+        root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.len);
+        for (thread.messages, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
                     c_ctx.* = .{

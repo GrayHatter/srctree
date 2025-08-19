@@ -102,10 +102,9 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
             break :n @as(?Delta, null);
         };
         if (dlt) |*delta| {
-            _ = delta.loadThread(f.alloc) catch unreachable;
-            if (delta.getMessages(f.alloc)) |messages| {
-                thread = try f.alloc.alloc(Template.Structs.Thread, messages.len);
-                for (messages, thread) |msg, *pg_comment| {
+            if (delta.loadThread(f.alloc)) |delta_thread| {
+                thread = try f.alloc.alloc(Template.Structs.Thread, delta_thread.messages.len);
+                for (delta_thread.messages, thread) |msg, *pg_comment| {
                     switch (msg.kind) {
                         .comment => {
                             pg_comment.* = .{

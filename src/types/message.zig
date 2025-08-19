@@ -6,13 +6,12 @@ target: usize,
 author: ?[]const u8 = null,
 message: ?[]const u8 = null,
 kind: Kind,
-hash: HashType = undefined,
+hash: DefaultHash = @splat(0),
 
 const Message = @This();
 
 pub const type_prefix = "messages";
 pub const type_version = 0;
-pub const HashType = [Sha256.digest_length]u8;
 
 const typeio = Types.readerWriter(Message, .{ .target = undefined, .kind = undefined });
 const writerFn = typeio.write;
@@ -21,6 +20,20 @@ const readerFn = typeio.read;
 pub const Kind = enum(u16) {
     comment,
 };
+
+pub fn new(tid: usize, author: []const u8, message: []const u8) !Message {
+    var m = Message{
+        .target = tid,
+        .kind = .comment,
+        .created = std.time.timestamp(),
+        .updated = std.time.timestamp(),
+        .author = author,
+        .message = message,
+    };
+    _ = m.genHash();
+    try m.commit();
+    return m;
+}
 
 pub fn commit(msg: Message) !void {
     var buf: [2048]u8 = undefined;
@@ -32,14 +45,14 @@ pub fn commit(msg: Message) !void {
     try writerFn(&msg, &writer);
 }
 
-pub fn open(a: Allocator, hash: HashType) !Message {
+pub fn open(a: Allocator, hash: DefaultHash) !Message {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.message", .{fmtSliceHexLower(&hash)});
     const file = try Types.loadData(.message, a, filename);
     return readerFn(file);
 }
 
-pub fn genHash(msg: *Message) *const HashType {
+pub fn genHash(msg: *Message) *const DefaultHash {
     var h = Sha256.init(.{});
     h.update(std.mem.asBytes(&msg.created));
     h.update(std.mem.asBytes(&msg.updated));
@@ -52,20 +65,6 @@ pub fn genHash(msg: *Message) *const HashType {
     }
     h.final(&msg.hash);
     return &msg.hash;
-}
-
-pub fn newComment(tid: usize, author: []const u8, message: []const u8) !Message {
-    var m = Message{
-        .target = tid,
-        .kind = .comment,
-        .created = std.time.timestamp(),
-        .updated = std.time.timestamp(),
-        .author = author,
-        .message = message,
-    };
-    _ = m.genHash();
-    try m.commit();
-    return m;
 }
 
 test "comment" {
@@ -131,7 +130,7 @@ test Message {
     defer tempdir.cleanup();
     try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
 
-    var c = try Message.newComment(0, "author", "message");
+    var c = try Message.new(0, "author", "message");
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0xffffff);
@@ -168,9 +167,8 @@ const endian = builtin.cpu.arch.endian();
 const Sha256 = std.crypto.hash.sha2.Sha256;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
-const AnyWriter = std.io.AnyWriter;
-const AnyReader = std.io.AnyReader;
 const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
+const DefaultHash = Types.DefaultHash;
 
 const Humanize = @import("../humanize.zig");
 const Types = @import("../types.zig");

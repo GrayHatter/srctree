@@ -19,7 +19,7 @@ padding: u61 = 0,
 attach: Attach = .nos,
 attach_target: usize = 0,
 
-hash: [32]u8 = [_]u8{0} ** 32,
+hash: [32]u8 = @splat(0),
 thread: ?*Thread = null,
 
 pub const Delta = @This();
@@ -92,6 +92,7 @@ pub fn commit(delta: Delta) !void {
     var writer = file.writer();
     try writerFn(&delta, &writer);
 }
+
 pub fn loadThread(delta: *Delta, a: Allocator) !*Thread {
     if (delta.thread != null) return error.MemoryAlreadyLoaded;
     const t = try a.create(Thread);
@@ -112,42 +113,34 @@ pub fn loadThread(delta: *Delta, a: Allocator) !*Thread {
     return t;
 }
 
-pub fn getMessages(self: *Delta, a: Allocator) ![]Message {
-    if (self.thread) |thread| {
-        if (thread.getMessages()) |msgs| {
-            return msgs;
-        } else |_| {
-            try thread.loadMessages(a);
-            return try thread.getMessages();
-        }
+pub const Comment = struct {
+    author: []const u8,
+    message: []const u8,
+};
+
+pub fn addComment(delta: *Delta, a: Allocator, c: Comment) !void {
+    if (delta.thread == null) {
+        _ = try delta.loadThread(a);
     }
-    return error.ThreadNotLoaded;
+
+    try delta.thread.?.addComment(a, c.author, c.message);
+    delta.updated = std.time.timestamp();
+    try delta.commit();
 }
 
-//pub fn addComment(self: *Delta, a: Allocator, c: Comment) !void {
-//    if (self.thread) |thread| {
-//        return thread.addComment(a, c);
-//    }
-//    return error.ThreadNotLoaded;
-//}
-
 pub fn countComments(delta: Delta) struct { count: usize, new: bool } {
-    if (delta.thread) |thread| {
-        if (thread.getMessages()) |msgs| {
-            const ts = std.time.timestamp() - 86400;
-            var cmtnew: bool = false;
-            var cmtlen: usize = 0;
-            for (msgs) |m| switch (m.kind) {
-                .comment => {
-                    cmtnew = cmtnew or m.updated > ts;
-                    cmtlen += 1;
-                },
-                //else => {},
-            };
-            return .{ .count = cmtlen, .new = cmtnew };
-        } else |_| {}
-    }
-    return .{ .count = 0, .new = false };
+    const thread = delta.thread orelse return .{ .count = 0, .new = false };
+    const ts = std.time.timestamp() - 86400;
+    var cmtnew: bool = false;
+    var cmtlen: usize = 0;
+    for (thread.messages) |m| switch (m.kind) {
+        .comment => {
+            cmtnew = cmtnew or m.updated > ts;
+            cmtlen += 1;
+        },
+        //else => {},
+    };
+    return .{ .count = cmtlen, .new = cmtnew };
 }
 
 pub fn raze(_: Delta, _: std.mem.Allocator) void {

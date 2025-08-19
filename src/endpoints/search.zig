@@ -65,9 +65,7 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         var d: Delta = next_;
         const cmtsmeta = d.countComments();
 
-        if (d.loadThread(ctx.alloc)) |*thread| {
-            _ = thread.*.loadMessages(ctx.alloc) catch return error.Unknown;
-        } else |_| continue;
+        _ = d.loadThread(ctx.alloc) catch return error.Unknown;
         try d_list.append(.{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
             .title_uri = try allocPrint(

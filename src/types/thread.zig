@@ -11,7 +11,7 @@ embargoed: bool = false,
 padding: u61 = 0,
 
 message_data: ?[]const u8 = &.{},
-messages: ?[]Message = null,
+messages: []Message = &.{},
 
 const Thread = @This();
 
@@ -41,73 +41,60 @@ pub fn open(a: std.mem.Allocator, index: usize) !Thread {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{index});
     const data = try Types.loadData(.thread, a, filename);
-    return readerFn(data);
+    var thread = readerFn(data);
+
+    if (indexOf(u8, data, "\n\n")) |start| {
+        var list: std.ArrayListUnmanaged(Message) = .{};
+        var itr = std.mem.splitScalar(u8, data[start + 2 ..], '\n');
+        while (itr.next()) |next| {
+            if (next.len != 64) continue;
+            var msg_hash: Types.DefaultHash = undefined;
+            for (0..32) |i| msg_hash[i] = parseInt(u8, next[i * 2 .. i * 2 + 2], 16) catch 0;
+            const message = Message.open(a, msg_hash) catch |err| {
+                std.debug.print("unable to load message {}\n", .{err});
+                continue;
+            };
+            try list.append(a, message);
+        }
+        thread.messages = try list.toOwnedSlice(a);
+    }
+
+    return thread;
 }
 
 pub fn commit(thread: Thread) !void {
-    if (thread.messages) |msgs| {
-        // Make a best effort to save/protect all data
-        for (msgs) |msg| msg.commit() catch continue;
-    }
-
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{thread.index});
     const file = try Types.commit(.thread, filename);
     defer file.close();
     var writer = file.writer();
     try writerFn(&thread, &writer);
-}
 
-fn loadFromData(a: Allocator, cd: []const u8) ![]Message {
-    if (cd.len < 32) {
-        if (cd.len != 1) { // ignore single null
-            std.debug.print("unexpected number in comment data {}\n", .{cd.len});
-        }
-        return &[0]Message{};
-    }
-    const count = cd.len / 32;
-    if (count == 0) return &[0]Message{};
-    const msgs = try a.alloc(Message, count);
-    var data = cd[0..];
-    for (msgs, 0..count) |*c, i| {
-        c.* = Message.open(a, data[0..32].*) catch |err| {
-            std.debug.print(
-                \\Error loading msg data {} of {}
-                \\error: {} target {any}
-                \\
-            , .{ i, count, err, data[0..32] });
-            data = data[32..];
-            continue;
-        };
-        data = data[32..];
-    }
-    return msgs;
-}
-
-pub fn loadMessages(self: *Thread, a: Allocator) !void {
-    if (self.message_data) |cd| {
-        self.messages = try loadFromData(a, cd);
+    // Make a best effort to save/protect all data
+    for (thread.messages) |msg| {
+        msg.commit() catch continue;
+        var hash_str: [@sizeOf(Types.DefaultHash) * 2 + 1]u8 = undefined;
+        try writer.writeAll(
+            bufPrint(&hash_str, "{}\n", .{fmtSliceHexLower(&msg.hash)}) catch unreachable,
+        );
     }
 }
 
-pub fn getMessages(self: Thread) ![]Message {
-    if (self.messages) |c| return c;
-    return error.NotLoaded;
-}
-
-pub fn newComment(self: *Thread, a: Allocator, author: []const u8, message: []const u8) !void {
-    if (self.messages) |*messages| {
-        if (a.resize(messages.*, messages.len + 1)) {
-            messages.*.len += 1;
-        } else {
-            self.messages = try a.realloc(messages.*, messages.len + 1);
-        }
+pub fn addComment(thread: *Thread, a: Allocator, author: []const u8, message: []const u8) !void {
+    const new_len = thread.messages.len + 1;
+    if (thread.messages.len == 0) {
+        thread.messages = try a.alloc(Message, 1);
     } else {
-        self.messages = try a.alloc(Message, 1);
+        if (a.resize(thread.messages, new_len)) {
+            thread.messages.len = new_len;
+        } else {
+            thread.messages = try a.realloc(thread.messages, new_len);
+        }
     }
-    self.messages.?[self.messages.?.len - 1] = try Message.newComment(self.index, author, message);
-    self.updated = std.time.timestamp();
-    try self.commit();
+
+    thread.messages[new_len - 1] = try .new(thread.index, author, message);
+    thread.updated = std.time.timestamp();
+    try thread.commit();
 }
 
 pub fn raze(self: Thread, a: std.mem.Allocator) void {
@@ -146,8 +133,12 @@ pub fn iterator() Iterator {
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const bufPrint = std.fmt.bufPrint;
+const indexOf = std.mem.indexOf;
 const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
+const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
+const parseInt = std.fmt.parseInt;
 
 pub const Message = @import("message.zig");
 const Delta = @import("delta.zig");

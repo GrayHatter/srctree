@@ -8,7 +8,7 @@ pub const routes = [_]Router.Match{
     ROUTE("", list),
     GET("new", new),
     POST("new", newPost),
-    POST("add-comment", newComment),
+    POST("add-comment", addComment),
 };
 
 pub const verse_router: Router.RouteFn = router;
@@ -74,27 +74,27 @@ fn newPost(ctx: *verse.Frame) Error!void {
     return ctx.redirect(loc, .see_other) catch unreachable;
 }
 
-fn newComment(ctx: *verse.Frame) Error!void {
+const AddCommentReq = struct {
+    comment: []const u8,
+    did: []const u8,
+};
+
+fn addComment(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
-    if (ctx.request.data.post) |post| {
-        var valid = post.validator();
-        const delta_id = try valid.require("did");
-        const msg = try valid.require("comment");
-        const issue_index = isHex(delta_id.value) orelse return error.Unrouteable;
+    const post = ctx.request.data.post orelse return error.DataMissing;
+    const validate = post.validate(AddCommentReq) catch return error.DataInvalid;
 
-        var delta = Delta.open(ctx.alloc, rd.name, issue_index) catch
-            return error.Unknown;
-        const username = if (ctx.user) |usr| usr.username.? else "public";
+    const did: usize = std.fmt.parseInt(usize, validate.did, 16) catch return error.DataInvalid;
 
-        var thread = delta.loadThread(ctx.alloc) catch return error.Unknown;
-        thread.newComment(ctx.alloc, username, msg.value) catch {};
-        delta.commit() catch unreachable;
-        var buf: [2048]u8 = undefined;
-        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, issue_index });
-        ctx.redirect(loc, .see_other) catch unreachable;
-        return;
-    }
-    return error.Unknown;
+    var delta = Delta.open(ctx.alloc, rd.name, did) catch
+        return error.Unknown;
+    const username = if (ctx.user) |usr| usr.username.? else "public";
+
+    delta.addComment(ctx.alloc, .{ .author = username, .message = validate.comment }) catch {};
+    var buf: [2048]u8 = undefined;
+    const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, did });
+    ctx.redirect(loc, .see_other) catch unreachable;
+    return;
 }
 
 const DeltaIssuePage = template.PageData("delta-issue.html");
@@ -106,11 +106,10 @@ fn view(ctx: *verse.Frame) Error!void {
 
     var delta = Delta.open(ctx.alloc, rd.name, idx) catch return error.Unrouteable;
 
-    _ = delta.loadThread(ctx.alloc) catch unreachable;
     var root_thread: []S.Thread = &[0]S.Thread{};
-    if (delta.getMessages(ctx.alloc)) |messages| {
-        root_thread = try ctx.alloc.alloc(S.Thread, messages.len);
-        for (messages, root_thread) |msg, *c_ctx| {
+    if (delta.loadThread(ctx.alloc)) |thread| {
+        root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.len);
+        for (thread.messages, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
                     c_ctx.* = .{
