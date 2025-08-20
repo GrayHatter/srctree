@@ -1,5 +1,5 @@
 pub const routes = [_]Router.MatchRouter{
-    Router.ROUTE("", commitsView),
+    Router.ROUTE("", commitList),
     Router.GET("before", commitsBefore),
 };
 
@@ -11,10 +11,10 @@ const AddComment = struct {
 };
 
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
-    const rd = RouteData.init(f.uri) orelse return commitsView;
+    const rd = RouteData.init(f.uri) orelse return commitList;
     if (rd.verb != null and rd.verb.? == .commit)
         return viewCommit;
-    return commitsView;
+    return commitList;
 }
 
 fn newComment(f: *Frame) Error!void {
@@ -177,27 +177,27 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     return f.sendPage(&page) catch unreachable;
 }
 
-pub fn commitPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
+pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
     var acts = repo.getAgent(f.alloc);
     if (endsWith(u8, sha, ".patch")) {
         var rbuf: [0xff]u8 = undefined;
         const commit_only = sha[0 .. sha.len - 6];
         const range = try bufPrint(rbuf[0..], "{s}^..{s}", .{ commit_only, commit_only });
 
-        const diff = acts.formatPatch(range) catch return error.Unknown;
-        //if (std.mem.indexOf(u8, diff, "diff")) |i| {
-        //    diff = diff[i..];
-        //}
+        const diff = acts.formatPatch(range) catch return error.ServerFault;
         f.status = .ok;
         f.headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
-        f.sendHeaders() catch return Error.Unknown;
-        f.sendRawSlice(diff) catch return Error.Unknown;
+        f.sendHeaders() catch return error.ServerFault;
+        try f.sendRawSlice("\r\n");
+        try f.sendRawSlice(diff);
+        return;
     }
+    return f.sendDefaultErrorPage(.bad_request);
 }
 
 pub fn viewCommit(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
-    if (rd.verb == null) return commitsView(f);
+    if (rd.verb == null) return commitList(f);
 
     const sha = rd.ref orelse return error.Unrouteable;
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
@@ -207,14 +207,14 @@ pub fn viewCommit(f: *Frame) Error!void {
     repo.loadData(f.alloc) catch return error.Unknown;
     defer repo.raze();
 
-    if (std.mem.endsWith(u8, sha, ".patch"))
-        return commitPatch(f, sha, repo)
-    else
+    if (std.mem.endsWith(u8, sha, ".patch")) {
+        return viewAsPatch(f, sha, repo);
+    } else {
         return commitHtml(f, sha, rd.name, repo);
-    return error.Unrouteable;
+    }
 }
 
-pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]Template.Structs.Parents {
+pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.Parents {
     var plen: usize = 0;
     for (c.parent) |cp| {
         if (cp != null) plen += 1;
@@ -336,7 +336,7 @@ fn buildListBetween(
     return commits;
 }
 
-pub fn commitsView(f: *Frame) Error!void {
+pub fn commitList(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
     if (f.uri.next()) |next| {
