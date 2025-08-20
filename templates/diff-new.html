@@ -6,9 +6,10 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content>
+      <With Err><div class="error"><ErrorString /></div></With>
         <form class="pretty" action="create" method="POST">
           <context>Suggest New Diff</context>
-          <input name="title" placeholder="Diff Title" value="<Title ornull>" />
+          <input name="title" placeholder="Diff Title" value="<Title ornull />" />
           <With Network>
               <div style="display:flex">
               <select name="network">
@@ -23,11 +24,13 @@
               </select>
               </div>
           </With>
-          <With PatchUri><div style="display:flex"><input name="patch_uri" placeholder="Patch URL" /><button name="from_network" value="true" formaction="new">Use Network</button></div></With>
-          <textarea name="desc" placeholder="Additional information about this patch suggestion"><Desc ornull></textarea>
+          <With PatchUri>
+          <div style="display:flex"><input name="patch_uri" placeholder="Patch URL" value="<Uri default="" />"/><button name="from_network" value="true" formaction="new">Use Network</button></div>
+          </With>
+          <textarea name="desc" placeholder="Additional information about this patch suggestion"><Desc ornull /></textarea>
           <buttons>
-            <button name="submit">Submit</button>
             <button name="preview">Preview (does nothing)</button>
+            <button name="submit">Submit</button>
           </buttons>
         </form>
     </content>

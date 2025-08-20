@@ -333,7 +333,7 @@ fn fetch(a: Allocator, uri: []const u8) ![]u8 {
     return error.EpmtyReponse;
 }
 
-pub fn loadRemote(a: Allocator, uri: []const u8) !Patch {
+pub fn loadFromRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .blob = try fetch(a, uri) };
 }
 

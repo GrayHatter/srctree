@@ -33,6 +33,14 @@ a {
 
 div {
 	vertical-align: bottom;
+	&.error {
+		display: block;
+		padding: 0.5rem 1rem;
+		margin: 0.5rem 0;
+		border: solid #ff200080 2px;
+		background: #70281080;
+		border-radius: 4px;
+	}
 }
 
 h1,h2,h3 { margin: 0 }
@@ -466,7 +474,7 @@ delta {
 
 	main {
 		width: 100%;
-		margin: 1em;
+		margin: 1em 0;
 		text-align: left;
 		name {
 			background: #333;
@@ -485,17 +493,20 @@ delta {
 		}
 	}
 
+	diff {
+		flex-grow: 10;
+	}
+
 	comments {
 		min-width: 30rem;
 		width: 48%;
-		margin: 0 0 0 1em;
+		margin: 0;
 		flex-grow: 4;
 	}
 	extra {
 		flex-grow: 2;
 		min-width: 20rem;
-		margin: 0 1em 0 0;
-		display: flex;
+		margin: 0;
 		flex-direction: column;
 		gap: 1em;
 		border: 1px solid gray;

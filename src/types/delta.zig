@@ -94,7 +94,7 @@ pub fn commit(delta: Delta) !void {
 }
 
 pub fn loadThread(delta: *Delta, a: Allocator) !*Thread {
-    if (delta.thread != null) return error.MemoryAlreadyLoaded;
+    if (delta.thread) |thr| return thr;
     const t = try a.create(Thread);
     t.* = Thread.open(a, delta.thread_id) catch |err| t: {
         std.debug.print("Error loading thread!! {}", .{err});

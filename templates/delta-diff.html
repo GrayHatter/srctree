@@ -7,27 +7,29 @@
     <Build BodyHeader _body_header.html />
     <content>
       <delta class="diff">
+
         <With Patch>
           <With Header>
-          <context><Title /></context>
-          <p><Message></p>
+            <main>
+            <name><Title /></name>
+            <desc><Message></desc>
+            </main>
           </With>
-          <diff>
-          <Build Patch _patch.html />
-          </diff>
+          <diff><Build Patch _patch.html /></diff>
         </With>
-        </context>
 
+        <extra>
         <comments>
           <Build Comments _comment_thread.html />
           <form class="pretty" action="add-comment" method="POST">
-            <context><CurrentUsername></context>
+            <context>Commenting as <CurrentUsername /></context>
             <textarea name="comment"></textarea>
             <button type="submit" name="comment">Comment</button>
-            <With PatchDoesNotApply><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
+            <With PatchWarning><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
             <input type="hidden" name="did" value="<DeltaId>" />
           </form>
         </comments>
+        </extra>
       </delta>
     </content>
   </body>

@@ -92,6 +92,7 @@ fn new(ctx: *Frame) Error!void {
         .body_header = .{ .nav = .{
             .nav_buttons = &try Repos.navButtons(ctx),
         } },
+        .err = null,
         .title = title,
         .desc = desc,
         .network = network,
@@ -128,7 +129,8 @@ fn createDiff(vrs: *Frame) Error!void {
         remote_addr = vrs.request.remote_addr;
 
         if (inNetwork(udata.patch_uri)) {
-            const data = Patch.loadRemote(vrs.alloc, udata.patch_uri) catch unreachable;
+            const data = Patch.loadFromRemote(vrs.alloc, udata.patch_uri) catch
+                return createError(vrs, udata, .{ .remote_error = "connection failed" });
 
             std.debug.print(
                 "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
@@ -138,7 +140,10 @@ fn createDiff(vrs: *Frame) Error!void {
                 rd.name,
                 udata.title,
                 udata.desc,
-                if (vrs.user) |usr| usr.username.? else try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
+                if (vrs.user) |usr|
+                    usr.username.?
+                else
+                    try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
             ) catch unreachable;
             delta.commit() catch unreachable;
             std.debug.print("commit id {x}\n", .{delta.index});
@@ -151,12 +156,36 @@ fn createDiff(vrs: *Frame) Error!void {
             defer file.close();
             file.writer().writeAll(data.blob) catch unreachable;
             var buf: [2048]u8 = undefined;
-            const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
+            const loc = try bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
             return vrs.redirect(loc, .see_other) catch unreachable;
         }
     }
 
     return try new(vrs);
+}
+
+const ErrStrs = union(enum) {
+    remote_error: []const u8,
+    unknown,
+};
+
+fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!void {
+    var page = DiffNewHtml.init(.{
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } },
+        .err = switch (err) {
+            .remote_error => |str| .{ .error_string = "Unable to fetch patch from remote (" ++ str ++ ")" },
+            else => .{ .error_string = "error" },
+        },
+        .title = try abx.Html.cleanAlloc(ctx.alloc, udata.title),
+        .desc = try abx.Html.cleanAlloc(ctx.alloc, udata.desc),
+        .network = null,
+        .patch_uri = .{
+            .uri = try abx.Html.cleanAlloc(ctx.alloc, udata.patch_uri),
+        },
+    });
+
+    try ctx.sendPage(&page);
 }
 
 fn newComment(ctx: *Frame) Error!void {
@@ -646,7 +675,7 @@ fn view(ctx: *Frame) Error!void {
         },
         .comments = .{ .thread = root_thread },
         .delta_id = delta_id,
-        .patch_does_not_apply = if (patch_applies) null else .{},
+        .patch_warning = if (patch_applies) null else .{},
         .current_username = username,
     });
 
@@ -676,13 +705,13 @@ fn list(ctx: *Frame) Error!void {
                 "/repo/{s}/{s}/{x}",
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
-            .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
+            .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comments_icon = try allocPrint(
                 ctx.alloc,
                 "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
                 .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
             ),
-            .desc = try verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .desc = try abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
     var default_search_buf: [0xFF]u8 = undefined;
