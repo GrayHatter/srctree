@@ -510,10 +510,6 @@ delta {
 		flex-direction: column;
 		gap: 1em;
 		border: 1px solid gray;
-		border-bottom-width: 1px;
-		border-bottom-style: solid;
-		border-bottom-color: gray;
-		border-bottom-color: gray;
 		border-bottom: 0;
 		padding-bottom: 1em;
 	}
