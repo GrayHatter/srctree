@@ -454,13 +454,13 @@ fn lineNumberStride(target: []const u8) !struct { u32, ?u32 } {
 }
 
 test lineNumberStride {
-    const a = try lineNumberStride("#10");
-    try std.testing.expectEqual(10, a[0]);
-    try std.testing.expectEqual(null, a[1]);
+    const left, const missing = try lineNumberStride("#10");
+    try std.testing.expectEqual(10, left);
+    try std.testing.expectEqual(null, missing);
 
-    const b = try lineNumberStride("#10-20");
-    try std.testing.expectEqual(10, b[0]);
-    try std.testing.expectEqual(20, b[1]);
+    const left_, const right = try lineNumberStride("#10-20");
+    try std.testing.expectEqual(10, left_);
+    try std.testing.expectEqual(20, right);
 }
 
 const Side = enum { del, add };
