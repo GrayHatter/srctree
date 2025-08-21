@@ -90,7 +90,7 @@ fn new(ctx: *Frame) Error!void {
             .open_graph = .{},
         },
         .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_buttons = &try RepoEndpoint.navButtons(ctx),
         } },
         .err = null,
         .title = title,
@@ -172,7 +172,7 @@ const ErrStrs = union(enum) {
 fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!void {
     var page = DiffNewHtml.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } },
+        .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } },
         .err = switch (err) {
             .remote_error => |str| .{ .error_string = "Unable to fetch patch from remote (" ++ str ++ ")" },
             else => .{ .error_string = "error" },
@@ -561,15 +561,12 @@ const DiffViewPage = Template.PageData("delta-diff.html");
 fn view(ctx: *Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
-    var cwd = std.fs.cwd();
-    const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = Git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze();
-
     const delta_id = ctx.uri.next().?;
     const index = isHex(delta_id) orelse return error.Unrouteable;
+
+    var repo = (Repos.open(rd.name, .public) catch return error.DataInvalid) orelse return error.DataInvalid;
+    repo.loadData(ctx.alloc) catch return error.ServerFault;
+    defer repo.raze();
 
     var delta = Delta.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
         //error.InvalidTarget => return error.Unrouteable,
@@ -577,6 +574,16 @@ fn view(ctx: *Frame) Error!void {
         //error.Other => unreachable,
         else => unreachable,
     };
+
+    switch (delta.attach) {
+        .diff => {},
+        .issue => {
+            var buf: [100]u8 = undefined;
+            const loc = try bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
+            return ctx.redirect(loc, .see_other) catch unreachable;
+        },
+        else => return error.DataInvalid,
+    }
 
     const patch_header = S.Header{
         .title = abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
@@ -664,7 +671,7 @@ fn view(ctx: *Frame) Error!void {
     var page = DiffViewPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_buttons = &try RepoEndpoint.navButtons(ctx),
         } },
         .patch = if (patch_formatted) |pf| .{
             .header = patch_header,
@@ -722,7 +729,7 @@ fn list(ctx: *Frame) Error!void {
     var page = DeltaListPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
+            .nav_buttons = &try RepoEndpoint.navButtons(ctx),
         } },
         .delta_list = try d_list.toOwnedSlice(),
         .search = def_search,
@@ -745,8 +752,8 @@ const isWhitespace = std.ascii.isWhitespace;
 const parseInt = std.fmt.parseInt;
 const splitScalar = std.mem.splitScalar;
 
-const Repos = @import("../repos.zig");
-const RouteData = Repos.RouteData;
+const RepoEndpoint = @import("../repos.zig");
+const RouteData = RepoEndpoint.RouteData;
 
 const verse = @import("verse");
 const abx = verse.abx;
@@ -761,7 +768,7 @@ const DOM = verse.DOM;
 const Git = @import("../../git.zig");
 const Highlighting = @import("../../syntax-highlight.zig");
 const Humanize = @import("../../humanize.zig");
-
+const Repos = @import("../../repos.zig");
 const Patch = @import("../../patch.zig");
 const Route = verse.Router;
 const S = Template.Structs;
