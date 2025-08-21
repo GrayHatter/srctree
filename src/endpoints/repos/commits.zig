@@ -186,6 +186,7 @@ pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
 
         const diff = acts.formatPatch(range) catch return error.ServerFault;
         f.status = .ok;
+        f.content_type = null;
         f.headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
         f.sendHeaders() catch return error.ServerFault;
         try f.sendRawSlice("\r\n");
