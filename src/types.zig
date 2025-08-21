@@ -12,6 +12,7 @@ pub const User = @import("types/user.zig");
 pub const Viewers = @import("types/viewers.zig");
 
 pub const DefaultHash = [sha256.digest_length]u8;
+pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
 
 pub const Writer = std.fs.File.Writer;
 

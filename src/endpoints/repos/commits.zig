@@ -96,40 +96,43 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     };
 
     var thread: []Template.Structs.Thread = &[0]Template.Structs.Thread{};
-    if (CommitMap.open(f.alloc, repo_name_, sha)) |map| {
-        var dlt = map.delta(f.alloc) catch |err| n: {
-            std.debug.print("error generating delta {}\n", .{err});
-            break :n @as(?Delta, null);
-        };
-        if (dlt) |*delta| {
-            if (delta.loadThread(f.alloc)) |delta_thread| {
-                thread = try f.alloc.alloc(Template.Structs.Thread, delta_thread.messages.len);
-                for (delta_thread.messages, thread) |msg, *pg_comment| {
-                    switch (msg.kind) {
-                        .comment => {
-                            pg_comment.* = .{
-                                .author = try Verse.abx.Html.cleanAlloc(f.alloc, msg.author.?),
-                                .date = try allocPrint(f.alloc, "{}", .{Humanize.unix(msg.updated)}),
-                                .message = try Verse.abx.Html.cleanAlloc(f.alloc, msg.message.?),
-                                .direct_reply = null,
-                                .sub_thread = null,
-                            };
-                        },
-                        //else => {
-                        //    pg_comment.* = .{
-                        //        .author = "",
-                        //        .date = "",
-                        //        .message = "unsupported message type",
-                        //        .direct_reply = null,
-                        //        .sub_thread = null,
-                        //    };
-                        //},
+    if (CommitMap.open(f.alloc, repo_name_, current.sha.hex())) |map| {
+        switch (map.attach_to) {
+            .delta => {
+                var delta = Delta.open(f.alloc, repo_name_, map.attach_target) catch return error.DataInvalid;
+                if (delta.loadThread(f.alloc)) |dthread| {
+                    thread = try f.alloc.alloc(Template.Structs.Thread, dthread.messages.len);
+                    for (dthread.messages, thread) |msg, *pg_comment| {
+                        switch (msg.kind) {
+                            .comment => {
+                                pg_comment.* = .{
+                                    .author = try Verse.abx.Html.cleanAlloc(f.alloc, msg.author.?),
+                                    .date = try allocPrint(f.alloc, "{}", .{Humanize.unix(msg.updated)}),
+                                    .message = try Verse.abx.Html.cleanAlloc(f.alloc, msg.message.?),
+                                    .direct_reply = null,
+                                    .sub_thread = null,
+                                };
+                            },
+                            //else => {
+                            //    pg_comment.* = .{
+                            //        .author = "",
+                            //        .date = "",
+                            //        .message = "unsupported message type",
+                            //        .direct_reply = null,
+                            //        .sub_thread = null,
+                            //    };
+                            //},
+                        }
                     }
+                } else |err| {
+                    std.debug.print(
+                        "Unable to load comments for thread {} {}\n",
+                        .{ map.attach_target, err },
+                    );
+                    @panic("oops");
                 }
-            } else |err| {
-                std.debug.print("Unable to load comments for thread {} {}\n", .{ map.attach.delta, err });
-                @panic("oops");
-            }
+            },
+            else => {},
         }
     } else |_| {}
 
@@ -154,9 +157,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const repo_name = try f.alloc.dupe(u8, repo_name_);
     var page = CommitPage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(f),
-        } },
+        .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
         .tree_blob_header = .{
             .git_uri = .{
                 .host = "srctree.gr.ht",

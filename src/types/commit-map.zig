@@ -1,114 +1,55 @@
-/// This probably should pipe/flow/depend on `git notes` but here we are...
-const std = @import("std");
-const builtin = @import("builtin");
-const Allocator = std.mem.Allocator;
-const endian = builtin.cpu.arch.endian();
+repo: []u8,
+hexsha: [40]u8,
+created: i64 = 0,
+updated: i64 = 0,
+attach_to: Attach = .nothing,
+attach_target: usize = 0,
 
-const Delta = @import("delta.zig");
-
-const Types = @import("../types.zig");
-
-const COMMITMAP_VERSION: usize = 0;
-pub const TYPE_PREFIX = "commitmap";
-pub var datad: std.fs.Dir = undefined;
-
-pub fn initType(stor: Types.Storage) !void {
-    datad = stor;
-}
-
-pub fn raze() void {}
+pub const type_version: usize = 0;
+pub const type_prefix = "commit-map";
 
 const CommitMap = @This();
 
 const Attach = enum(u8) {
     nothing = 0,
     delta = 1,
-    _,
 };
 
-hash: [40]u8,
-created: i64,
-updated: i64,
-repo: []u8,
-attach: union(Attach) {
-    nothing: usize,
-    delta: usize,
-},
-
-file: std.fs.File,
-
-pub fn delta(cm: CommitMap, a: Allocator) !?Delta {
-    switch (cm.attach) {
-        .nothing => return null,
-        .delta => |dlt| {
-            return try Delta.open(a, cm.repo, dlt);
-        },
-        else => unreachable,
-    }
-}
-
-fn readVersioned(a: Allocator, file: std.fs.File) !CommitMap {
-    var reader = file.reader();
-    const ver: usize = try reader.readInt(usize, endian);
-    return switch (ver) {
-        0 => CommitMap{
-            .hash = try reader.readBytesNoEof(40),
-            .created = try reader.readInt(i64, endian),
-            .updated = try reader.readInt(i64, endian),
-            .repo = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            //.author = try reader.readUntilDelimiterAlloc(a, 0, 0xFFFF),
-            .attach = switch (@as(Attach, @enumFromInt(try reader.readInt(u8, endian)))) {
-                .nothing => .{ .nothing = try reader.readInt(usize, endian) },
-                .delta => .{ .delta = try reader.readInt(usize, endian) },
-                else => return error.UnsupportedVersion,
-            },
-            .file = file,
-        },
-        else => return error.UnsupportedVersion,
-    };
-}
-
-pub fn writeOut(self: CommitMap) !void {
-    try self.file.seekTo(0);
-    var writer = self.file.writer();
-    try writer.writeInt(usize, COMMITMAP_VERSION, endian);
-    try writer.writeAll(self.hash);
-    try writer.writeInt(i64, self.created, endian);
-    try writer.writeInt(i64, self.updated, endian);
-    try writer.writeAll(self.repo);
-    try writer.writeAll("\x00");
-
-    try writer.writeInt(u8, @intFromEnum(self.attach), endian);
-    switch (self.attach) {
-        .nothing => try writer.writeInt(usize, 0, endian),
-        .delta => |dlt| try writer.writeInt(usize, dlt, endian),
-        else => unreachable,
-    }
-
-    try self.file.setEndPos(self.file.getPos() catch unreachable);
-}
-
-pub fn new(repo: []const u8, hash: []const u8) !CommitMap {
-    // TODO this is probably a bug
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmap", .{ repo, hash });
-    const file = try datad.createFile(filename, .{});
-
-    const cm = CommitMap{
-        .hash = hash[0..40].*,
+pub fn new(repo: []const u8, hexsha: [40]u8) !CommitMap {
+    var cm = CommitMap{
+        .repo = repo,
+        .hexsha = hexsha,
         .created = std.time.timestamp(),
         .updated = std.time.timestamp(),
-        .repo = repo,
-        .file = file,
+        .attach_to = .nothing,
+        .attach_target = 0,
     };
-
+    cm.commit();
     return cm;
 }
 
-pub fn open(a: Allocator, repo: []const u8, hash: []const u8) !CommitMap {
-    // FIXME buffer overrun when repo is malicious
+pub fn open(a: Allocator, repo: []const u8, hexsha: [40]u8) !CommitMap {
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmap", .{ repo, hash });
-    const file = datad.openFile(filename, .{ .mode = .read_write }) catch return error.Other;
-    return try CommitMap.readVersioned(a, file);
+    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmtmap", .{ repo, hexsha });
+    const data = try Types.loadData(.commit_map, a, filename);
+    return readerFn(data);
 }
+
+pub fn commit(cm: *CommitMap) !void {
+    var buf: [2048]u8 = undefined;
+    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmtmap", .{ cm.repo, cm.hexsha });
+    const file = try Types.commit(.commit_map, filename);
+    defer file.close();
+    var writer = file.writer();
+    try writerFn(cm, &writer);
+}
+
+const typeio = Types.readerWriter(CommitMap, .{ .repo = &.{}, .hexsha = @splat(0) });
+const writerFn = typeio.write;
+const readerFn = typeio.read;
+
+const std = @import("std");
+const builtin = @import("builtin");
+const Allocator = std.mem.Allocator;
+const endian = builtin.cpu.arch.endian();
+const Types = @import("../types.zig");
