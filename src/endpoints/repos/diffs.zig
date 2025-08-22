@@ -341,23 +341,22 @@ fn resolveLineRefRepo(
 
     const cmt = try repo.headCommit(a);
     var files: Git.Tree = try cmt.loadTree(a, repo);
-    var blob_sha: Git.SHA = undefined;
     var itr = splitScalar(u8, filename, '/');
-    root: while (itr.next()) |dirname| {
+    const blob_sha: Git.SHA = root: while (itr.next()) |dirname| {
         for (files.blobs) |obj| {
             if (eql(u8, obj.name, dirname)) {
                 if (obj.isFile()) {
-                    if (itr.peek() != null) return error.InvalidFile;
-                    blob_sha = obj.sha;
-                    break :root;
+                    if (itr.peek() != null) return null;
+                    break :root obj.sha;
                 }
                 files = try obj.toTree(a, repo);
                 continue :root;
             }
         } else {
             std.debug.print("unable to resolve file {s} at {s}\n", .{ filename, dirname });
+            return null;
         }
-    }
+    } else return null;
 
     var file = try repo.loadBlob(a, blob_sha);
     var start: usize = 0;
@@ -492,6 +491,68 @@ test lineNumberStride {
     try std.testing.expectEqual(20, right);
 }
 
+const FileLineRef = struct {
+    file: []const u8,
+    line: u32,
+    stride: ?u32,
+};
+
+fn fileLineRef(str: []const u8) ?FileLineRef {
+    var w_start: usize = 0;
+
+    while (w_start + 3 < str.len) {
+        w_start = indexOfAnyPos(u8, str, w_start, "/.") orelse return null;
+        var file_start = w_start;
+        while (file_start > 0 and str[file_start] != ' ') file_start -= 1;
+        if (str[file_start] == ' ') file_start += 1;
+
+        if (indexOfAnyPos(u8, str, w_start, " #:@")) |loc| {
+            w_start = loc;
+            if (str[loc] == ' ') continue;
+            const line, const stride = lineNumberStride(str[loc..]) catch return null;
+            return .{
+                .file = str[file_start..loc],
+                .line = line,
+                .stride = stride,
+            };
+        } else w_start += 1;
+    }
+    return null;
+}
+
+test fileLineRef {
+    try std.testing.expect(fileLineRef("") == null);
+    try std.testing.expect(fileLineRef("src/main.zig") == null);
+    try std.testing.expect(fileLineRef("srcmainzig#11") == null);
+
+    try std.testing.expectEqualDeep(
+        FileLineRef{ .file = "src/main.zig", .line = 12, .stride = null },
+        fileLineRef("src/main.zig#12").?,
+    );
+    try std.testing.expectEqualDeep(
+        FileLineRef{ .file = "src/main.zig", .line = 12, .stride = null },
+        fileLineRef("src/main.zig:12").?,
+    );
+    try std.testing.expectEqualDeep(
+        FileLineRef{ .file = "src/main.zig", .line = 12, .stride = null },
+        fileLineRef("src/main.zig@12").?,
+    );
+
+    try std.testing.expectEqualDeep(
+        FileLineRef{ .file = "src/srctree.zig", .line = 13, .stride = null },
+        fileLineRef("some before text src/srctree.zig#13 and some after text").?,
+    );
+
+    try std.testing.expectEqualDeep(
+        FileLineRef{ .file = "main.zig", .line = 14, .stride = null },
+        fileLineRef("main.zig#14").?,
+    );
+    try std.testing.expectEqualDeep(
+        FileLineRef{ .file = "src/main", .line = 15, .stride = null },
+        fileLineRef("src/main#15").?,
+    );
+}
+
 const Side = enum { del, add };
 fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *const Git.Repo) ![]u8 {
     var message_lines = std.ArrayList([]const u8).init(a);
@@ -499,24 +560,15 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
 
     var itr = splitScalar(u8, comment, '\n');
     while (itr.next()) |line_| {
-        // Windows can eat a dick
         const line = std.mem.trim(u8, line_, "\r ");
         for (patch.diffs.?) |*diff| {
             const filename = diff.filename orelse continue;
             //std.debug.print("files {s}\n", .{filename});
             if (indexOf(u8, line, filename)) |filepos| {
                 if (indexOfAny(u8, line, "#:@")) |h| {
-                    const linenums = try lineNumberStride(line[h..]);
+                    const left, const right = try lineNumberStride(line[h..]);
 
-                    if (try resolveLineRefDiff(
-                        a,
-                        line,
-                        filename,
-                        diff,
-                        linenums[0],
-                        linenums[1],
-                        filepos,
-                    )) |lines| {
+                    if (try resolveLineRefDiff(a, line, filename, diff, left, right, filepos)) |lines| {
                         try message_lines.appendSlice(lines);
                         var end: usize = h;
                         while (end < line.len and !isWhitespace(line[end])) {
@@ -525,15 +577,7 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                         if (end < line.len) try message_lines.append(
                             try abx.Html.cleanAlloc(a, line[end..]),
                         );
-                    } else if (resolveLineRefRepo(
-                        a,
-                        line,
-                        filename,
-                        repo,
-                        linenums[0],
-                        linenums[1],
-                    ) catch |err| switch (err) {
-                        error.InvalidFile => null,
+                    } else if (resolveLineRefRepo(a, line, filename, repo, left, right) catch |err| switch (err) {
                         error.LineNotFound => null,
                         else => return err,
                     }) |lines| {
@@ -604,7 +648,7 @@ fn view(ctx: *Frame) Error!void {
     const udata = ctx.request.data.query.validate(PatchView) catch return error.DataInvalid;
     const inline_html = udata.@"inline" orelse true;
 
-    var patch_formatted: ?Template.Structs.PatchHtml = null;
+    var patch_formatted: ?S.PatchHtml = null;
     const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
     var patch_applies: bool = false;
     var patch: ?Patch = null;
@@ -749,6 +793,7 @@ const eql = std.mem.eql;
 const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 const indexOf = std.mem.indexOf;
 const indexOfAny = std.mem.indexOfAny;
+const indexOfAnyPos = std.mem.indexOfAnyPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
 const isDigit = std.ascii.isDigit;
 const isWhitespace = std.ascii.isWhitespace;
