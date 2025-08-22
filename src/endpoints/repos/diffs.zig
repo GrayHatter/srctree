@@ -85,13 +85,13 @@ fn new(ctx: *Frame) Error!void {
         patchuri = null;
     }
 
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
+    if (ctx.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
     var page = DiffNewHtml.init(.{
-        .meta_head = .{
-            .open_graph = .{},
-        },
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try RepoEndpoint.navButtons(ctx),
-        } },
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = body_header,
         .err = null,
         .title = title,
         .desc = desc,
@@ -674,9 +674,13 @@ fn view(ctx: *Frame) Error!void {
         .patch = .{ .files = &.{} },
     };
 
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
+    if (ctx.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
     var page = DiffViewPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } },
+        .body_header = body_header,
         .patch = patch_data,
         .comments = .{ .thread = root_thread },
         .delta_id = delta_id,
@@ -721,6 +725,10 @@ fn list(ctx: *Frame) Error!void {
     const meta_head = Template.Structs.MetaHeadHtml{
         .open_graph = .{},
     };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
+    if (ctx.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
     var page = DeltaListPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{

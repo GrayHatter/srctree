@@ -37,11 +37,14 @@ const IssueNewPage = template.PageData("issue-new.html");
 
 fn new(ctx: *verse.Frame) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
+
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
+    if (ctx.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
-        } },
+        .body_header = body_header,
     });
     try ctx.sendPage(&page);
 }
@@ -138,11 +141,14 @@ fn view(ctx: *verse.Frame) Error!void {
 
     const username = if (ctx.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
+
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
+    if (ctx.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
-        } },
+        .body_header = body_header,
         .title = verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
         .description = description,
         .delta_id = delta_id,
@@ -203,12 +209,14 @@ fn list(ctx: *verse.Frame) Error!void {
     const def_search = try bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
 
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
+    if (ctx.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
 
     var page = DeltaListHtml.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(ctx),
-        } },
+        .body_header = body_header,
         .delta_list = try d_list.toOwnedSlice(),
         .search = def_search,
     });
