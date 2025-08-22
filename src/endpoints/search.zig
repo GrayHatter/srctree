@@ -61,22 +61,23 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
 
     var d_list: ArrayList(S.DeltaList) = .{};
     var search_results = Delta.search(ctx.alloc, rules.items);
-    while (search_results.next(ctx.alloc) catch null) |next_| {
-        var d: Delta = next_;
-        const cmtsmeta = d.countComments();
-
-        _ = d.loadThread(ctx.alloc) catch return error.Unknown;
+    while (search_results.next(ctx.alloc) catch null) |deltaC| {
+        if (deltaC.title.len == 0) continue;
+        var delt: Delta = deltaC;
+        _ = delt.loadThread(ctx.alloc) catch return error.Unknown;
+        const cmtsmeta = delt.countComments();
+        const desc = if (delt.message.len == 0) "&nbsp;" else try abx.Html.cleanAlloc(ctx.alloc, delt.message);
         try d_list.append(ctx.alloc, .{
-            .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
+            .index = try allocPrint(ctx.alloc, "0x{x}", .{delt.index}),
             .title_uri = try allocPrint(
                 ctx.alloc,
                 "/repo/{s}/{s}/{x}",
-                .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
+                .{ delt.repo, if (delt.attach == .issue) "issues" else "diffs", delt.index },
             ),
-            .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
+            .title = try abx.Html.cleanAlloc(ctx.alloc, delt.title),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
-            .desc = try abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .desc = desc,
         });
     }
 
