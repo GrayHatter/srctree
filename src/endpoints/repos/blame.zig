@@ -57,11 +57,10 @@ pub fn blame(f: *Frame) Router.Error!void {
         dst.age_block = @truncate(style_blocks.len - 1 - block);
     }
 
-    const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang| fmt: {
-        const pre = try Highlight.highlight(f.alloc, lang, source_lines.items);
-        const end = std.mem.lastIndexOf(u8, pre, "</pre></div>") orelse pre.len -| 12;
-        break :fmt pre[28..end];
-    } else verse.abx.Html.cleanAlloc(f.alloc, source_lines.items) catch return error.Unknown;
+    const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang|
+        try Highlight.highlight(f.alloc, lang, source_lines.items)
+    else
+        verse.abx.Html.cleanAlloc(f.alloc, source_lines.items) catch return error.Unknown;
 
     var litr = std.mem.splitScalar(u8, formatted, '\n');
     for (lines) |*line|

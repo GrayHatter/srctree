@@ -112,9 +112,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
         const file_name = try verse.abx.Html.cleanAlloc(a, file.name);
         var formatted: []const u8 = undefined;
         if (Highlight.Language.guessFromFilename(file.name)) |lang| {
-            var raw = try Highlight.highlight(a, lang, file.blob);
-            raw = raw[28..];
-            formatted = raw[0 .. std.mem.lastIndexOf(u8, raw, "</pre>") orelse raw.len];
+            formatted = try Highlight.highlight(a, lang, file.blob);
         } else {
             formatted = verse.abx.Html.cleanAlloc(a, file.blob) catch return error.Unknown;
         }

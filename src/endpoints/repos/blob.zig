@@ -105,8 +105,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     if (!resolve.isFile()) return error.Unknown;
     var formatted: []const u8 = undefined;
     if (Highlight.Language.guessFromFilename(blb.name)) |lang| {
-        const pre = try Highlight.highlight(frame.alloc, lang, resolve.data.?);
-        formatted = pre[28..][0 .. pre.len - 38];
+        formatted = try Highlight.highlight(frame.alloc, lang, resolve.data.?);
     } else if (excludedExt(blb.name)) {
         formatted = "This file type is currently unsupported";
     } else {

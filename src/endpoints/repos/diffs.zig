@@ -380,10 +380,10 @@ fn resolveLineRefRepo(
     const found_line = file.data.?[start..end];
     const formatted = if (found_line.len == 0)
         "&nbsp;"
-    else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
-        var pre = try Highlighting.highlight(a, lang, found_line[1..]);
-        break :fmt pre[28..][0 .. pre.len - 41];
-    } else try abx.Html.cleanAlloc(a, found_line[1..]);
+    else if (Highlighting.Language.guessFromFilename(filename)) |lang|
+        try Highlighting.highlight(a, lang, found_line[1..])
+    else
+        try abx.Html.cleanAlloc(a, found_line[1..]);
 
     const wrapped_line = try allocPrint(
         a,
@@ -429,10 +429,10 @@ fn resolveLineRefDiff(
                 };
                 const formatted = if (found_line.len <= 1)
                     "&nbsp;"
-                else if (Highlighting.Language.guessFromFilename(filename)) |lang| fmt: {
-                    var pre = try Highlighting.highlight(a, lang, found_line[1..]);
-                    break :fmt pre[28..][0 .. pre.len - 41];
-                } else try abx.Html.cleanAlloc(a, found_line[1..]);
+                else if (Highlighting.Language.guessFromFilename(filename)) |lang|
+                    try Highlighting.highlight(a, lang, found_line[1..])
+                else
+                    try abx.Html.cleanAlloc(a, found_line[1..]);
 
                 const wrapped_line = try allocPrint(
                     a,

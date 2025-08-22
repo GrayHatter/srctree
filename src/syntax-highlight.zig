@@ -156,20 +156,24 @@ pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8
     child.stdin = null;
     var buf = std.ArrayList(u8).init(a);
     const abuf = try a.alloc(u8, 0xffffff);
+    defer a.free(abuf);
     while (true) {
         const events_len = std.posix.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
         if (events_len == 0) continue;
         if (poll_fd[0].revents & std.posix.POLL.IN != 0) {
             const amt = std.posix.read(poll_fd[0].fd, abuf) catch unreachable;
             if (amt == 0) break;
-            try buf.appendSlice(abuf[0..amt]);
+            const start: usize = if (std.mem.startsWith(u8, abuf, "<div class=\"highlight\"><pre>")) 28 else 0;
+            try buf.appendSlice(abuf[start..amt]);
         } else if (poll_fd[0].revents & err_mask != 0) {
             break;
         }
     }
-    a.free(abuf);
 
     _ = child.wait() catch unreachable;
+    if (std.mem.endsWith(u8, buf.items, "</pre></div>")) {
+        buf.items.len -= 12;
+    }
     return try buf.toOwnedSlice();
 }
 
