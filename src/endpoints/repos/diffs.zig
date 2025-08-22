@@ -601,8 +601,6 @@ fn view(ctx: *Frame) Error!void {
     //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     //}
 
-    _ = delta.loadThread(ctx.alloc) catch unreachable;
-
     const udata = ctx.request.data.query.validate(PatchView) catch return error.DataInvalid;
     const inline_html = udata.@"inline" orelse true;
 
@@ -668,18 +666,18 @@ fn view(ctx: *Frame) Error!void {
 
     const username = if (ctx.user) |usr| usr.username.? else "public";
 
+    const patch_data: S.Patch = if (patch_formatted) |pf| .{
+        .header = patch_header,
+        .patch = pf,
+    } else .{
+        .header = patch_header,
+        .patch = .{ .files = &.{} },
+    };
+
     var page = DiffViewPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try RepoEndpoint.navButtons(ctx),
-        } },
-        .patch = if (patch_formatted) |pf| .{
-            .header = patch_header,
-            .patch = pf,
-        } else .{
-            .header = patch_header,
-            .patch = .{ .files = &[0]Template.Structs.Files{} },
-        },
+        .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } },
+        .patch = patch_data,
         .comments = .{ .thread = root_thread },
         .delta_id = delta_id,
         .patch_warning = if (patch_applies) null else .{},
@@ -713,11 +711,8 @@ fn list(ctx: *Frame) Error!void {
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
             .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
-            .comments_icon = try allocPrint(
-                ctx.alloc,
-                "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
-                .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
-            ),
+            .comment_new = if (cmtsmeta.new) " new" else "",
+            .comment_count = cmtsmeta.count,
             .desc = try abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }

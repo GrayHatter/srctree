@@ -59,33 +59,27 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
             std.debug.print("rule = {s} : {s}\n", .{ rule.subject, rule.match });
     }
 
-    var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
+    var d_list: ArrayList(S.DeltaList) = .{};
     var search_results = Delta.search(ctx.alloc, rules.items);
     while (search_results.next(ctx.alloc) catch null) |next_| {
         var d: Delta = next_;
         const cmtsmeta = d.countComments();
 
         _ = d.loadThread(ctx.alloc) catch return error.Unknown;
-        try d_list.append(.{
+        try d_list.append(ctx.alloc, .{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
             .title_uri = try allocPrint(
                 ctx.alloc,
                 "/repo/{s}/{s}/{x}",
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
-            .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
-            .comments_icon = try allocPrint(
-                ctx.alloc,
-                "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
-                .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
-            ),
-            .desc = try verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
+            .comment_new = if (cmtsmeta.new) " new" else "",
+            .comment_count = cmtsmeta.count,
+            .desc = try abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
 
-    const meta_head = Template.Structs.MetaHeadHtml{
-        .open_graph = .{},
-    };
     const btns = [1]Template.Structs.NavButtons{.{
         .name = "inbox",
         .extra = 0,
@@ -93,11 +87,9 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
     }};
 
     var page = DeltaListPage.init(.{
-        .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .nav_buttons = &btns,
-        } },
-        .delta_list = try d_list.toOwnedSlice(),
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
+        .delta_list = d_list.items,
         .search = verse.abx.Html.cleanAlloc(ctx.alloc, search_str) catch unreachable,
     });
 
@@ -106,10 +98,12 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayListUnmanaged;
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
 
 const verse = @import("verse");
+const abx = verse.abx;
 const Frame = verse.Frame;
 const Template = verse.template;
 const Routes = verse.Router;

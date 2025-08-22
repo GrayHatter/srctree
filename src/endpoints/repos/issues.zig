@@ -193,11 +193,8 @@ fn list(ctx: *verse.Frame) Error!void {
                 .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
             ),
             .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
-            .comments_icon = try allocPrint(
-                ctx.alloc,
-                "<span><span class=\"icon{s}\">\xee\xa0\x9c</span> {}</span>",
-                .{ if (cmtsmeta.new) " new" else "", cmtsmeta.count },
-            ),
+            .comment_new = if (cmtsmeta.new) " new" else "",
+            .comment_count = cmtsmeta.count,
             .desc = try verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
