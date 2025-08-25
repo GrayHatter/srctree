@@ -111,8 +111,9 @@ fn wrapLineNumbersBlame(
         sha.* = src.sha.hex()[0..8].*;
         const parent_sha: Git.SHA = .init(bcommit.parent orelse (&[_]u8{'0'} ** 40));
         blame_line.* = .{
+            .num = i + 1,
+            .line = src.line,
             .repo_name = repo_name,
-            .m_sha = if (skip) null else sha,
             .sha = sha,
             .blame_skip_href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, parent_sha.hex(), path }),
             .time_style = style_blocks[bcommit.age_block],
@@ -120,9 +121,8 @@ fn wrapLineNumbersBlame(
                 .author = if (skip) null else abx.Html.cleanAlloc(a, bcommit.author.name) catch unreachable,
                 .email = email,
             },
+            .m_sha = if (skip) null else sha,
             .time = if (skip) null else try Humanize.unix(bcommit.author.timestamp).printAlloc(a),
-            .num = i + 1,
-            .line = src.line,
         };
     }
     return b_lines;
