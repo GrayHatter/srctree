@@ -170,8 +170,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         .commit = try commitCtx(f.alloc, current, repo_name),
         .comments = .{ .thread = thread },
         .patch = Diffs.patchStruct(f.alloc, &patch, !inline_html) catch return error.Unknown,
-        .inline_active = if (inline_html) "active" else null,
-        .split_active = if (inline_html) null else "active",
+        .inline_toggle = if (inline_html) .inlined else .split,
     });
 
     f.status = .ok;

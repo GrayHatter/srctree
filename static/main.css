@@ -927,7 +927,6 @@ blob, gist, patch {
 	margin: 0 0 0 auto;
 	padding: 4px 5px;
 	text-align: right;
-	white-space: pre;
 	width: fit-content;
 	> a {
 		margin: 2px 0;
