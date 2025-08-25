@@ -769,6 +769,7 @@ blob, gist, patch {
 		.split {
 			display: flex;
 			span {
+				white-space: collapse;
 				flex: auto;
 				margin: 0;
 				width: fit-content;

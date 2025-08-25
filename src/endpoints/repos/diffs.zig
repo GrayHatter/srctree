@@ -241,10 +241,31 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
             "added: {}, removed: {}, total {}",
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
-        const html: []u8 = if (unified)
-            try Patch.diffLineHtmlSplit(a, body)
-        else
-            try Patch.diffLineHtmlUnified(a, body);
+        const html: [][]u8 = if (unified) uni: {
+            const split = try Patch.diffLineHtmlSplit(a, body);
+            var lines: ArrayList([]u8) = .{};
+            try lines.append(a, try a.dupe(u8, "<div class=\"split\">"));
+            try lines.append(a, try a.dupe(u8, "<span>"));
+            for (split.left) |left| try lines.append(a, switch (left) {
+                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
+                .add => |add| try allocPrint(a, "<div class=\"add\">{s}</div>", .{add}),
+                .del => |del| try allocPrint(a, "<div class=\"del\">{s}</div>", .{del}),
+                .ctx => |ctx| try allocPrint(a, "<div>{s}</div>", .{ctx}),
+                .empty => try allocPrint(a, "<div>&nbsp;</div>", .{}),
+            });
+            try lines.append(a, try a.dupe(u8, "</span>"));
+            try lines.append(a, try a.dupe(u8, "<span>"));
+            for (split.right) |right| try lines.append(a, switch (right) {
+                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
+                .add => |add| try allocPrint(a, "<div class=\"add\">{s}</div>", .{add}),
+                .del => |del| try allocPrint(a, "<div class=\"del\">{s}</div>", .{del}),
+                .ctx => |ctx| try allocPrint(a, "<div>{s}</div>", .{ctx}),
+                .empty => try allocPrint(a, "<div>&nbsp;</div>", .{}),
+            });
+            try lines.append(a, try a.dupe(u8, "</span>"));
+            try lines.append(a, try a.dupe(u8, "</div>"));
+            break :uni try lines.toOwnedSlice(a);
+        } else try Patch.diffLineHtmlUnified(a, body);
         file.* = .{
             .diff_stat = stat,
             .filename = if (diff.filename) |name|
@@ -787,6 +808,7 @@ fn list(ctx: *Frame) Error!void {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayListUnmanaged;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;

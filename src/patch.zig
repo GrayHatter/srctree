@@ -337,115 +337,85 @@ pub fn loadFromRemote(a: Allocator, uri: []const u8) !Patch {
     return Patch{ .blob = try fetch(a, uri) };
 }
 
-pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) ![]u8 {
-    var dom: *DOM = .create(a);
+pub const DiffLine = union(enum) {
+    hdr: []const u8,
+    add: []const u8,
+    del: []const u8,
+    ctx: []const u8,
+    empty: void,
 
-    const a_splt = &HTML.Attr.class("split");
-    const a_add = &HTML.Attr.class("add");
-    const a_del = &HTML.Attr.class("del");
-    const a_block = &HTML.Attr.class("block");
-    const no_line = &HTML.Attr.class("no-line");
+    pub const Numbered = struct {
+        number: u32,
+        text: []const u8,
+    };
+};
 
+pub const Split = struct {
+    left: []DiffLine,
+    right: []DiffLine,
+};
+
+pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
     const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.splitScalar(u8, clean, '\n');
 
-    const LinePair = struct {
-        text: []const u8,
-        attr: ?[]const HTML.Attr,
-    };
-
-    var left = std.ArrayList(LinePair).init(a);
-    var right = std.ArrayList(LinePair).init(a);
-    defer left.clearAndFree();
-    defer right.clearAndFree();
+    var left: ArrayList(DiffLine) = .{};
+    var right: ArrayList(DiffLine) = .{};
     for (0..line_count + 1) |_| {
         const line = litr.next().?;
         if (line.len > 0) {
+            const spaced = if (line.len == 1) "&nbsp;" else line[1..];
             switch (line[0]) {
-                '-' => {
-                    try left.append(.{
-                        .text = line[1..],
-                        .attr = a_del,
-                    });
-                },
-                '+' => {
-                    try right.append(.{
-                        .text = line[1..],
-                        .attr = a_add,
-                    });
-                },
+                '-' => try left.append(a, .{ .del = spaced }),
+                '+' => try right.append(a, .{ .add = spaced }),
                 '@' => {
-                    try left.append(.{ .text = line, .attr = a_block });
-                    try right.append(.{ .text = line, .attr = a_block });
+                    try left.append(a, .{ .hdr = line });
+                    try right.append(a, .{ .hdr = line });
                 },
                 else => {
                     if (left.items.len > right.items.len) {
                         const rcount = left.items.len - right.items.len;
                         for (0..rcount) |_|
-                            try right.append(.{ .text = "", .attr = no_line });
+                            try right.append(a, .empty);
                     } else if (left.items.len < right.items.len) {
                         const lcount = right.items.len - left.items.len;
                         for (0..lcount) |_|
-                            try left.append(.{ .text = "", .attr = no_line });
+                            try left.append(a, .empty);
                     }
-                    try left.append(.{ .text = line[1..], .attr = null });
-                    try right.append(.{ .text = line[1..], .attr = null });
+                    try left.append(a, .{ .ctx = spaced });
+                    try right.append(a, .{ .ctx = spaced });
                 },
             }
         }
     }
 
-    dom = dom.open(HTML.span(null, a_splt));
-
-    dom = dom.open(HTML.span(null, null));
-    for (left.items) |line| {
-        dom.dupe(HTML.div(line.text, line.attr));
-    }
-    dom = dom.close();
-
-    dom = dom.open(HTML.span(null, null));
-    for (right.items) |line| {
-        dom.dupe(HTML.div(line.text, line.attr));
-    }
-    dom = dom.close();
-
-    dom = dom.close();
-
-    return dom.render(a, .full);
+    return .{ .left = try left.toOwnedSlice(a), .right = try right.toOwnedSlice(a) };
 }
 
-pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]u8 {
-    var dom = DOM.create(a);
-    dom = dom.open(HTML.span(null, null));
-
+pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![][]u8 {
     const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
+    var lines: ArrayList([]u8) = .{};
     var litr = splitScalar(u8, clean, '\n');
     for (0..line_count + 1) |_| {
-        const a_add = &HTML.Attr.class("add");
-        const a_del = &HTML.Attr.class("del");
-        const a_block = &HTML.Attr.class("block");
         const line = litr.next().?;
-        var attr: ?[]const HTML.Attr = null;
-        if (line.len > 0) {
-            switch (line[0]) {
-                '-' => attr = a_del,
-                '+' => attr = a_add,
-                '@' => attr = a_block,
-                else => {},
-            }
-        }
-        dom.dupe(HTML.div(
-            if (line.len > 1)
-                if (line[0] != '@') line[1..] else line
+        const text: []const u8 = if (line.len > 0) if (line[0] != '@') line[1..] else line else "&nbsp;";
+
+        try lines.append(a, try allocPrint(a, "<div{s}>{s}</div>", .{
+            if (line.len > 0)
+                switch (line[0]) {
+                    '-' => " class=\"del\"",
+                    '+' => " class=\"add\"",
+                    '@' => " class=\"block\"",
+                    else => "",
+                }
             else
-                "&nbsp;",
-            attr,
-        ));
+                "",
+            if (text.len > 0) text else "&nbsp;",
+        }));
     }
-    dom = dom.close();
-    return dom.render(a, .compact);
+    return try lines.toOwnedSlice(a);
 }
 
 test "simple rename" {
@@ -513,6 +483,7 @@ test "parseMode" {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayListUnmanaged;
 const count = std.mem.count;
 const startsWith = std.mem.startsWith;
 const assert = std.debug.assert;
@@ -520,6 +491,7 @@ const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const indexOfPos = std.mem.indexOfPos;
 const splitScalar = std.mem.splitScalar;
+const allocPrint = std.fmt.allocPrint;
 
 const CURL = @import("curl.zig");
 const verse = @import("verse");
