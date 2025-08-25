@@ -142,10 +142,10 @@ const BlameLine = struct {
     line: []const u8,
 };
 
-const BlameMap = std.AutoArrayHashMap(SHA, BlameCommit);
+const BlameMap = ArrayHashMap(SHA, BlameCommit);
 
 fn parseBlame(a: Allocator, blame_txt: []const u8) !struct { BlameMap, []BlameLine } {
-    var map = BlameMap.init(a);
+    var map: BlameMap = .{};
     const count = std.mem.count(u8, blame_txt, "\n\t");
     const lines = try a.alloc(BlameLine, count);
     var in_lines = std.mem.splitScalar(u8, blame_txt, '\n');
@@ -154,7 +154,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct { BlameMap, []BlameLi
         const line = in_lines.next() orelse break;
         if (line.len < 40) unreachable;
         blm.sha = .init(line[0..40]);
-        const gp = try map.getOrPut(blm.sha);
+        const gp = try map.getOrPut(a, blm.sha);
         const bcmt: *BlameCommit = gp.value_ptr;
         if (!gp.found_existing) {
             var parent: ?[]const u8 = null;
@@ -237,6 +237,7 @@ const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
+const ArrayHashMap = std.AutoArrayHashMapUnmanaged;
 
 const tree = @import("tree.zig").tree;
 const repos_ = @import("../repos.zig");
