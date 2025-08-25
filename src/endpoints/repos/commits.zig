@@ -54,7 +54,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(f.alloc) catch return error.Unknown;
         while (!std.mem.startsWith(u8, fallback.sha.hex()[0..], sha)) {
-            fallback = fallback.toParent(f.alloc, 0, &repo) catch return error.Unknown;
+            fallback = fallback.toParent(f.alloc, 0, &repo) catch return f.sendDefaultErrorPage(.not_found);
         }
         break :cmt fallback;
     };
