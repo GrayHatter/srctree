@@ -36,6 +36,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         for (files.blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
+                    const commit_title = try verse.abx.Html.cleanAlloc(ctx.alloc, ch.commit_title);
                     const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, ch.sha.hex()[0..8] });
                     const ctime = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(ch.timestamp)});
                     if (obj.isFile()) {
@@ -45,7 +46,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                         try list_files.append(ctx.alloc, .{
                             .name = ch.name,
                             .href = href,
-                            .commit_title = ch.commit_title,
+                            .commit_title = commit_title,
                             .commit_href = chref,
                             .commit_time = ctime,
                         });
@@ -56,7 +57,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                         try list_trees.append(ctx.alloc, .{
                             .name = ch.name,
                             .href = href,
-                            .commit_title = ch.commit_title,
+                            .commit_title = commit_title,
                             .commit_href = chref,
                             .commit_time = ctime,
                         });
