@@ -154,7 +154,7 @@ lines {
 	width: 50px;
 }
 
-.codeblock { 
+.codeblock {
 	background: #333;
 
 }
@@ -198,22 +198,22 @@ code {
 
 		}
 	}
+}
 
-	ln {
-		white-space: pre;
-		display: block;
-		&:before {
-			content: attr(num);
-			width: 3em;
-			display: inline-block;
-			text-align:center;
-			background: #fff1;
-			color: #fff8;
-			margin: 0 0.5em 0 0;
-		}
-		&:target {
-			background-color: #222;
-		}
+ln {
+	white-space: pre;
+	display: inline-block;
+	&:before {
+		content: attr(num);
+		width: 3em;
+		display: inline-block;
+		text-align:center;
+		background: #fff1;
+		color: #fff8;
+		margin: 0 0.5em 0 0;
+	}
+	&:target {
+		background-color: #222;
 	}
 }
 
@@ -603,7 +603,7 @@ form.pretty {
 		margin: 0 0.5em;
 		background: #333;
 	}
-	textarea { 
+	textarea {
 		height: 10em;
 	}
 }
@@ -763,6 +763,7 @@ blob, gist, patch {
 		text-align: left;
 		background: #333;
 		width: 100%;
+		:first-child { margin: 0; }
 		div {
 			white-space: break-spaces;
 		}
@@ -777,34 +778,25 @@ blob, gist, patch {
 				display: inline-block;
 				overflow: scroll;
 				> div {
+					height: 1em;
 					white-space: pre;
 					min-height: 14px;
+					margin: 0 2px;
+					&.block {
+						margin: 0;
+						padding-left: 15px;
+					}
 				}
 			}
 		}
-		&.del {
-			background: #5b0000;
-		}
-		&.add {
-			background: #003e00;
-		}
-		&.no-line {
-			background: #2228;
-		}
-		:first-child {
-			margin: 0;
-		}
 		.block {
-			&:first-child {
-				margin-top: 0;
-			}
+			&:first-child { margin-top: 0; }
+			background: #569;
+			margin: 8px 0 8px auto;
 			border-top: 1px solid #999;
 			border-bottom: 2px solid #222;
-			background: #569;
 			/* background: #4a4a91; might want to revert to this color */
-			display: block;
-			width: auto;
-			margin: 8px auto;
+
 			padding: 8px;
 		}
 	}
@@ -819,7 +811,11 @@ blob, gist, patch {
 
 	.del { background: #633 }
 	.add { background: #353 }
-	.no-line { background: #8881; margin: 0 3px; }
+	.nul {
+		background: #2228;
+		height: 1em;
+		margin 0 2px;
+	}
 }
 
 .journal {

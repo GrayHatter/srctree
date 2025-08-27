@@ -248,19 +248,43 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
             try lines.append(a, try a.dupe(u8, "<span>"));
             for (split.left) |left| try lines.append(a, switch (left) {
                 .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
-                .add => |add| try allocPrint(a, "<div class=\"add\">{s}</div>", .{add}),
-                .del => |del| try allocPrint(a, "<div class=\"del\">{s}</div>", .{del}),
-                .ctx => |ctx| try allocPrint(a, "<div>{s}</div>", .{ctx}),
-                .empty => try allocPrint(a, "<div>&nbsp;</div>", .{}),
+                .add => |add| try allocPrint(
+                    a,
+                    "<div class=\"add\"><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
+                    .{ add.number, add.text },
+                ),
+                .del => |del| try allocPrint(
+                    a,
+                    "<div class=\"del\"><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
+                    .{ del.number, del.text },
+                ),
+                .ctx => |ctx| try allocPrint(
+                    a,
+                    "<div><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
+                    .{ ctx.number, ctx.text },
+                ),
+                .empty => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
             try lines.append(a, try a.dupe(u8, "</span>"));
             try lines.append(a, try a.dupe(u8, "<span>"));
             for (split.right) |right| try lines.append(a, switch (right) {
                 .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
-                .add => |add| try allocPrint(a, "<div class=\"add\">{s}</div>", .{add}),
-                .del => |del| try allocPrint(a, "<div class=\"del\">{s}</div>", .{del}),
-                .ctx => |ctx| try allocPrint(a, "<div>{s}</div>", .{ctx}),
-                .empty => try allocPrint(a, "<div>&nbsp;</div>", .{}),
+                .add => |add| try allocPrint(
+                    a,
+                    "<div class=\"add\"><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
+                    .{ add.number, add.text },
+                ),
+                .del => |del| try allocPrint(
+                    a,
+                    "<div class=\"del\"><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
+                    .{ del.number, del.text },
+                ),
+                .ctx => |ctx| try allocPrint(
+                    a,
+                    "<div><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
+                    .{ ctx.number, ctx.text },
+                ),
+                .empty => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
             try lines.append(a, try a.dupe(u8, "</span>"));
             try lines.append(a, try a.dupe(u8, "</div>"));

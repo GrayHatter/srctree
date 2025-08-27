@@ -339,9 +339,9 @@ pub fn loadFromRemote(a: Allocator, uri: []const u8) !Patch {
 
 pub const DiffLine = union(enum) {
     hdr: []const u8,
-    add: []const u8,
-    del: []const u8,
-    ctx: []const u8,
+    add: Numbered,
+    del: Numbered,
+    ctx: Numbered,
     empty: void,
 
     pub const Numbered = struct {
@@ -355,6 +355,22 @@ pub const Split = struct {
     right: []DiffLine,
 };
 
+fn lineNumberFromHeader(str: []const u8) !struct { u32, u32 } {
+    std.debug.assert(std.mem.startsWith(u8, str, "@@ -"));
+    var idx = indexOfScalarPos(u8, str, 4, ',') orelse return error.InvalidHeader;
+    const left: u32 = try std.fmt.parseInt(u32, str[4..idx], 10);
+    idx = indexOfScalarPos(u8, str, idx, '+') orelse return error.InvalidHeader;
+    const end = indexOfScalarPos(u8, str, idx, ',') orelse return error.InvalidHeader;
+    const right: u32 = try std.fmt.parseInt(u32, str[idx + 1 .. end], 10);
+    return .{ left, right };
+}
+
+test lineNumberFromHeader {
+    const l, const r = try lineNumberFromHeader("@@ -11,6 +11,8 @@ pub const verse_routes = [_]Match{");
+    try std.testing.expectEqual(@as(u32, 11), l);
+    try std.testing.expectEqual(@as(u32, 11), r);
+}
+
 pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
     const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
@@ -362,14 +378,23 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
 
     var left: ArrayList(DiffLine) = .{};
     var right: ArrayList(DiffLine) = .{};
+    var linenum_l: u32 = 0;
+    var linenum_r: u32 = 0;
     for (0..line_count + 1) |_| {
         const line = litr.next().?;
         if (line.len > 0) {
             const spaced = if (line.len == 1) "&nbsp;" else line[1..];
             switch (line[0]) {
-                '-' => try left.append(a, .{ .del = spaced }),
-                '+' => try right.append(a, .{ .add = spaced }),
+                '-' => {
+                    try left.append(a, .{ .del = .{ .text = spaced, .number = linenum_l } });
+                    linenum_l += 1;
+                },
+                '+' => {
+                    try right.append(a, .{ .add = .{ .text = spaced, .number = linenum_r } });
+                    linenum_r += 1;
+                },
                 '@' => {
+                    linenum_l, linenum_r = try lineNumberFromHeader(line);
                     try left.append(a, .{ .hdr = line });
                     try right.append(a, .{ .hdr = line });
                 },
@@ -383,8 +408,10 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
                         for (0..lcount) |_|
                             try left.append(a, .empty);
                     }
-                    try left.append(a, .{ .ctx = spaced });
-                    try right.append(a, .{ .ctx = spaced });
+                    try left.append(a, .{ .ctx = .{ .text = spaced, .number = linenum_l } });
+                    linenum_l += 1;
+                    try right.append(a, .{ .ctx = .{ .text = spaced, .number = linenum_r } });
+                    linenum_r += 1;
                 },
             }
         }
@@ -490,6 +517,7 @@ const assert = std.debug.assert;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const indexOfPos = std.mem.indexOfPos;
+const indexOfScalarPos = std.mem.indexOfScalarPos;
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
 
