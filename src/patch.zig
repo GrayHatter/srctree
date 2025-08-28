@@ -346,6 +346,7 @@ pub const DiffLine = union(enum) {
 
     pub const Numbered = struct {
         number: u32,
+        number_right: u32 = 0,
         text: []const u8,
     };
 };
@@ -420,27 +421,35 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
     return .{ .left = try left.toOwnedSlice(a), .right = try right.toOwnedSlice(a) };
 }
 
-pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![][]u8 {
+pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]DiffLine {
     const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
-    var lines: ArrayList([]u8) = .{};
+    var lines: ArrayList(DiffLine) = .{};
     var litr = splitScalar(u8, clean, '\n');
+    var linenum_l: u32 = 0;
+    var linenum_r: u32 = 0;
     for (0..line_count + 1) |_| {
         const line = litr.next().?;
         const text: []const u8 = if (line.len > 0) if (line[0] != '@') line[1..] else line else "&nbsp;";
-
-        try lines.append(a, try allocPrint(a, "<div{s}>{s}</div>", .{
-            if (line.len > 0)
-                switch (line[0]) {
-                    '-' => " class=\"del\"",
-                    '+' => " class=\"add\"",
-                    '@' => " class=\"block\"",
-                    else => "",
-                }
-            else
-                "",
-            if (text.len > 0) text else "&nbsp;",
-        }));
+        if (line.len > 0) switch (line[0]) {
+            '@' => {
+                linenum_l, linenum_r = try lineNumberFromHeader(line);
+                try lines.append(a, .{ .hdr = text });
+            },
+            '-' => {
+                try lines.append(a, .{ .del = .{ .text = text, .number = linenum_l } });
+                linenum_l += 1;
+            },
+            '+' => {
+                try lines.append(a, .{ .add = .{ .text = text, .number = 0, .number_right = linenum_r } });
+                linenum_r += 1;
+            },
+            else => {
+                try lines.append(a, .{ .ctx = .{ .text = text, .number = linenum_l, .number_right = linenum_r } });
+                linenum_l += 1;
+                linenum_r += 1;
+            },
+        };
     }
     return try lines.toOwnedSlice(a);
 }

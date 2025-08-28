@@ -1,11 +1,19 @@
-	<For Files>
+        <For Files>
         <patch>
           <header>
             <span><Filename /></span>
-	    <strong><DiffStat /></strong>
+            <strong><DiffStat /></strong>
           </header>
           <changes>
-            <Split DiffLines />
+            <With PatchInline>
+              <Split DiffLines />  
+            </With>
+            <With PatchSplit>
+            <div class="split">
+              <span><Split DiffLinesLeft /></span>
+              <span><Split DiffLinesRight /></span>
+            </div>
+            </With>
           </changes>
         </patch>
         </For>

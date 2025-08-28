@@ -241,12 +241,12 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
             "added: {}, removed: {}, total {}",
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
-        const html: [][]u8 = if (unified) uni: {
+        //<div class="<DClass />"><ln num="<Num type="usize" />" id="LL<Num type="usize" />" href="#LL<Num type="usize" />"><Line /></ln></div>
+        if (unified) {
             const split = try Patch.diffLineHtmlSplit(a, body);
-            var lines: ArrayList([]u8) = .{};
-            try lines.append(a, try a.dupe(u8, "<div class=\"split\">"));
-            try lines.append(a, try a.dupe(u8, "<span>"));
-            for (split.left) |left| try lines.append(a, switch (left) {
+            var lines_left: ArrayList([]u8) = .{};
+            var lines_right: ArrayList([]u8) = .{};
+            for (split.left) |left| try lines_left.append(a, switch (left) {
                 .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
                 .add => |add| try allocPrint(
                     a,
@@ -265,9 +265,7 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
                 ),
                 .empty => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
-            try lines.append(a, try a.dupe(u8, "</span>"));
-            try lines.append(a, try a.dupe(u8, "<span>"));
-            for (split.right) |right| try lines.append(a, switch (right) {
+            for (split.right) |right| try lines_right.append(a, switch (right) {
                 .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
                 .add => |add| try allocPrint(
                     a,
@@ -286,18 +284,56 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
                 ),
                 .empty => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
-            try lines.append(a, try a.dupe(u8, "</span>"));
-            try lines.append(a, try a.dupe(u8, "</div>"));
-            break :uni try lines.toOwnedSlice(a);
-        } else try Patch.diffLineHtmlUnified(a, body);
-        file.* = .{
-            .diff_stat = stat,
-            .filename = if (diff.filename) |name|
-                try allocPrint(a, "{s}", .{name})
-            else
-                try allocPrint(a, "{s} was Deleted", .{"filename"}),
-            .diff_lines = html,
-        };
+            file.* =
+                .{
+                    .diff_stat = stat,
+                    .filename = if (diff.filename) |name|
+                        try allocPrint(a, "{s}", .{name})
+                    else
+                        try allocPrint(a, "{s} was Deleted", .{"filename"}),
+                    .patch_inline = null,
+                    .patch_split = .{
+                        .diff_lines_left = try lines_left.toOwnedSlice(a),
+                        .diff_lines_right = try lines_right.toOwnedSlice(a),
+                    },
+                    //.diff_lines = html,
+                };
+        } else {
+            var lines: ArrayList([]u8) = .{};
+            for (try Patch.diffLineHtmlUnified(a, body)) |line| {
+                try lines.append(a, switch (line) {
+                    .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
+                    .ctx => |ctx| try allocPrint(
+                        a,
+                        "<div><ln num=\"{0d}\" id=\"L{0d}\" href=\"#L{0d}\"></ln><ln num=\"{1d}\" id=\"L{1d}\" href=\"#L{1d}\">{2s}</ln></div>",
+                        .{ ctx.number, ctx.number_right, ctx.text },
+                    ),
+                    .del => |del| try allocPrint(
+                        a,
+                        "<div class=\"del\"><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\"></ln><ln>{1s}</ln></div>",
+                        .{ del.number, del.text },
+                    ),
+                    .add => |add| try allocPrint(
+                        a,
+                        "<div class=\"add\"><ln></ln><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
+                        .{ add.number_right, add.text },
+                    ),
+                    .empty => unreachable,
+                });
+            }
+            file.* =
+                .{
+                    .diff_stat = stat,
+                    .filename = if (diff.filename) |name|
+                        try allocPrint(a, "{s}", .{name})
+                    else
+                        try allocPrint(a, "{s} was Deleted", .{"filename"}),
+                    .patch_inline = .{
+                        .diff_lines = try lines.toOwnedSlice(a),
+                    },
+                    .patch_split = null,
+                };
+        }
     }
     return .{
         .files = files,
