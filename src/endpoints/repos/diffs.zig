@@ -242,6 +242,13 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
         //<div class="<DClass />"><ln num="<Num type="usize" />" id="LL<Num type="usize" />" href="#LL<Num type="usize" />"><Line /></ln></div>
+        const name = if (diff.filename) |name| try allocPrint(a, "{s}", .{name}) else "File Was Deleted";
+        file.* = .{
+            .diff_stat = stat,
+            .filename = name,
+            .patch_inline = null,
+            .patch_split = null,
+        };
         if (unified) {
             const split = try Patch.diffLineHtmlSplit(a, body);
             var lines_left: ArrayList([]u8) = .{};
@@ -284,20 +291,10 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
                 ),
                 .empty => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
-            file.* =
-                .{
-                    .diff_stat = stat,
-                    .filename = if (diff.filename) |name|
-                        try allocPrint(a, "{s}", .{name})
-                    else
-                        try allocPrint(a, "{s} was Deleted", .{"filename"}),
-                    .patch_inline = null,
-                    .patch_split = .{
-                        .diff_lines_left = try lines_left.toOwnedSlice(a),
-                        .diff_lines_right = try lines_right.toOwnedSlice(a),
-                    },
-                    //.diff_lines = html,
-                };
+            file.*.patch_split = .{
+                .diff_lines_left = try lines_left.toOwnedSlice(a),
+                .diff_lines_right = try lines_right.toOwnedSlice(a),
+            };
         } else {
             var lines: ArrayList([]u8) = .{};
             for (try Patch.diffLineHtmlUnified(a, body)) |line| {
@@ -321,18 +318,9 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
                     .empty => unreachable,
                 });
             }
-            file.* =
-                .{
-                    .diff_stat = stat,
-                    .filename = if (diff.filename) |name|
-                        try allocPrint(a, "{s}", .{name})
-                    else
-                        try allocPrint(a, "{s} was Deleted", .{"filename"}),
-                    .patch_inline = .{
-                        .diff_lines = try lines.toOwnedSlice(a),
-                    },
-                    .patch_split = null,
-                };
+            file.patch_inline = .{
+                .diff_lines = try lines.toOwnedSlice(a),
+            };
         }
     }
     return .{
