@@ -305,17 +305,17 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
                     .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
                     .ctx => |ctx| try allocPrint(
                         a,
-                        "<div><ln num=\"{0d}\" id=\"L{0d}\" href=\"#L{0d}\"></ln><ln num=\"{1d}\" id=\"L{1d}\" href=\"#L{1d}\">{2s}</ln></div>",
+                        "<div><ln num=\"{0d}\" href=\"#L{1d}\"></ln><ln num=\"{1d}\" id=\"L{1d}\" href=\"#L{1d}\">{2s}</ln></div>",
                         .{ ctx.number, ctx.number_right, ctx.text },
                     ),
                     .del => |del| try allocPrint(
                         a,
-                        "<div class=\"del\"><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\"></ln><ln>{1s}</ln></div>",
+                        "<div class=\"del\"><ln num=\"{0d}\" href=\"#LL{0d}\"></ln><ln id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
                         .{ del.number, del.text },
                     ),
                     .add => |add| try allocPrint(
                         a,
-                        "<div class=\"add\"><ln></ln><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
+                        "<div class=\"add\"><ln href=\"#RL{0d}\"></ln><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
                         .{ add.number_right, add.text },
                     ),
                     .empty => unreachable,
