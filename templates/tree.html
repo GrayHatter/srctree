@@ -13,14 +13,22 @@
         <intro>
         <span><a href="/repo/<RepoName />/branches"><BranchCount type="usize" /> branches</a></span>
         <span><CommitSlug /></span>
-        <span class="muted"><CommitTimeHuman/>&nbsp;<a href="/repo/<RepoName />/commit/<CommitHexShort/>"><CommitHexShort /></a></span>
+        <span class="muted"><CommitTimeHuman />&nbsp;<a href="/repo/<RepoName />/commit/<CommitHexShort/>"><CommitHexShort /></a></span>
         </intro>
         <div class="treelist">
           <With DotDot><tree><a href="<Href />">..</a></tree></With>
           <For CommitFilelistTrees>
-          <tree><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></tree></For>
+          <span class="tree"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
           <For CommitFilelistFiles>
-          <file><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></file></For>
+          <span class="file"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
+          <With CommitFilelistHidden>
+          <input class="magic" type="checkbox" id="dotfiles" style="display: none">
+          <div class="magic">
+            <label for="dotfiles" class="muted"><Count type="usize" /> hidden files</label>
+            <For CommitFilelistHiddenFiles>
+            <span class="<Class />"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
+          </div>
+          </With>
         </div>
       </repo>
       <Readme ornull>

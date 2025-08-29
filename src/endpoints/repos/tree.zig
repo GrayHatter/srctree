@@ -29,6 +29,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
 
     var list_trees: std.ArrayListUnmanaged(S.CommitFilelistTrees) = .{};
     var list_files: std.ArrayListUnmanaged(S.CommitFilelistFiles) = .{};
+    var list_hidden: std.ArrayListUnmanaged(S.CommitFilelistHiddenFiles) = .{};
 
     if (path) |p| try files.pushPath(ctx.alloc, p);
     if (files.changedSetFrom(ctx.alloc, repo, c.sha)) |changed| {
@@ -39,7 +40,22 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                     const commit_title = try verse.abx.Html.cleanAlloc(ctx.alloc, ch.commit_title);
                     const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, ch.sha.hex()[0..8] });
                     const ctime = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(ch.timestamp)});
-                    if (obj.isFile()) {
+                    if (ch.name.len > 0 and ch.name[0] == '.') {
+                        const href: []const u8, const class: []const u8 = if (obj.isFile()) .{ try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
+                            prefix, path orelse "", obj.name,
+                        }), "file" } else .{ try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
+                            prefix, path orelse "", obj.name,
+                        }), "tree" };
+
+                        try list_hidden.append(ctx.alloc, .{
+                            .name = ch.name,
+                            .href = href,
+                            .commit_title = commit_title,
+                            .commit_href = chref,
+                            .commit_time = ctime,
+                            .class = class,
+                        });
+                    } else if (obj.isFile()) {
                         const href = try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
                             prefix, path orelse "", obj.name,
                         });
@@ -121,6 +137,10 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .branch_count = branch_count,
         .commit_filelist_trees = list_trees.items,
         .commit_filelist_files = list_files.items,
+        .commit_filelist_hidden = if (list_hidden.items.len == 0) null else .{
+            .count = list_hidden.items.len,
+            .commit_filelist_hidden_files = list_hidden.items,
+        },
     });
 
     try ctx.sendPage(&page);

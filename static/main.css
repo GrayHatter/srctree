@@ -347,7 +347,7 @@ readme {
 .treelist {
 	padding: 0 8px 8px;
 	font-family: "Ubuntu Mono", monospace, sans-serif;
-	tree, file {
+	span.tree, span.file {
 		border-top: 1px solid gray;
 		margin: auto;
 		padding: 4px;
@@ -365,8 +365,14 @@ readme {
 			flex-grow: 1;
 		}
 	}
-	> tree > a::before { content: "📁"; padding-right: 8px;}
-	> file > a::before { content: "📄"; padding-right: 8px;}
+	label {
+		border-top: 1px solid gray;
+		display: flex;
+		justify-content: center;
+	}
+
+	span.tree > a::before { content: "📁"; padding-right: 8px;}
+	span.file > a::before { content: "📄"; padding-right: 8px;}
 }
 
 
@@ -723,6 +729,16 @@ span.coderef {
 	}
 }
 
+input.magic:not(:checked) + div span.tree {
+	display: none;
+}
+input.magic:not(:checked) + div span.file {
+	display: none;
+}
+input.magic:checked + div label {
+	display: none;
+}
+
 blob, gist, patch {
 	text-align: left;
 	display: block;
@@ -750,6 +766,9 @@ blob, gist, patch {
 		border: 1px gray solid;
 		border-bottom: 0px;
 		border-top: 0px;
+		code {
+			white-space: pre;
+		}
 	}
 
 	changes {
