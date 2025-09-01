@@ -28,7 +28,7 @@ pub fn index(ctx: *Frame) Error!void {
 const DeltaListPage = Template.PageData("delta-list.html");
 
 fn custom(ctx: *Frame, search_str: []const u8) Error!void {
-    var rules = std.ArrayList(Delta.SearchRule).init(ctx.alloc);
+    var rules: ArrayList(Delta.SearchRule) = .{};
 
     var itr = splitScalar(u8, search_str, ' ');
     while (itr.next()) |r_line| {
@@ -40,13 +40,13 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
             line = line[1..];
         }
         if (std.mem.indexOf(u8, line, ":")) |i| {
-            try rules.append(Delta.SearchRule{
+            try rules.append(ctx.alloc, Delta.SearchRule{
                 .subject = line[0..i],
                 .match = line[i + 1 ..],
                 .inverse = inverse,
             });
         } else {
-            try rules.append(Delta.SearchRule{
+            try rules.append(ctx.alloc, Delta.SearchRule{
                 .subject = "",
                 .match = line,
                 .inverse = inverse,

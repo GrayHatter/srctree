@@ -11,7 +11,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
 
     const branch_count = repo.refs.len;
     const commit_slug = std.mem.trim(u8, c.title[0..@min(c.title.len, 50)], " \n");
-    const commit_time = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(c.committer.timestamp)});
+    const commit_time = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(c.committer.timestamp)});
     const commit_hex = c.sha.hex()[0..40];
     const commit_hex_short = commit_hex[0..8];
 
@@ -39,7 +39,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                 if (std.mem.eql(u8, ch.name, obj.name)) {
                     const commit_title = try verse.abx.Html.cleanAlloc(ctx.alloc, ch.commit_title);
                     const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, ch.sha.hex()[0..8] });
-                    const ctime = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(ch.timestamp)});
+                    const ctime = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(ch.timestamp)});
                     if (ch.name.len > 0 and ch.name[0] == '.') {
                         const href: []const u8, const class: []const u8 = if (obj.isFile()) .{ try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
                             prefix, path orelse "", obj.name,
@@ -92,7 +92,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         if (isReadme(obj.name)) {
             const resolve = repo.blob(ctx.alloc, obj.sha) catch return error.Unknown;
             const readme_html = htmlReadme(ctx.alloc, resolve.data.?) catch unreachable;
-            readme = try allocPrint(ctx.alloc, "{pretty}", .{readme_html[0]});
+            readme = try allocPrint(ctx.alloc, "{f}", .{readme_html[0]});
             break;
         }
     }
@@ -112,7 +112,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
     const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
-        .href = try allocPrint(ctx.alloc, "{link}", .{up}),
+        .href = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
     var page = TreePage.init(.{

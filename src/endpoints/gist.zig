@@ -138,9 +138,9 @@ fn view(vrs: *Frame) Error!void {
     const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
     var page = GistPage.init(.{
         .meta_head = .{ .open_graph = .{
-            .title = try allocPrint(vrs.alloc, "A perfect paste from {}", .{verse.abx.Html{ .text = gist.owner }}),
+            .title = try allocPrint(vrs.alloc, "A perfect paste from {f}", .{verse.abx.Html{ .text = gist.owner }}),
             .desc = if (gist.file_count == 1)
-                try allocPrint(vrs.alloc, "{}", .{verse.abx.Html{ .text = gist.files[0].name }})
+                try allocPrint(vrs.alloc, "{f}", .{verse.abx.Html{ .text = gist.files[0].name }})
             else
                 try allocPrint(vrs.alloc, "{} files", .{gist.file_count}),
         } },

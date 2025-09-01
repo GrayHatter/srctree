@@ -99,9 +99,8 @@ pub fn raze(self: Issue, a: std.mem.Allocator) void {
 
 test "reader/writer" {
     const a = std.testing.allocator;
-    var list = std.ArrayList(u8).init(a);
-    defer list.clearAndFree();
-    var writer = list.writer();
+    var writer = std.Io.Writer.Allocating.init(a);
+    defer writer.deinit();
 
     const this: Issue = .{
         .index = 55,
@@ -113,7 +112,7 @@ test "reader/writer" {
         .desc = "desc",
         .comment_data = null,
     };
-    try writerFn(&this, &writer);
+    try writerFn(&this, &writer.writer);
 
     const expected =
         \\# issues/0
@@ -130,10 +129,10 @@ test "reader/writer" {
     const expected_var = try a.dupe(u8, expected);
     defer a.free(expected_var);
 
-    try std.testing.expectEqualStrings(expected, list.items);
+    try std.testing.expectEqualStrings(expected, writer.written());
 
     {
-        const read_this = readerFn(list.items);
+        const read_this = readerFn(writer.written());
         try std.testing.expectEqualDeep(this, read_this);
     }
 

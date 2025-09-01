@@ -35,12 +35,12 @@ const AST = struct {
 
 pub const Translate = struct {
     pub fn source(a: Allocator, src: []const u8) ![]u8 {
-        var dst = std.ArrayList(u8).init(a);
+        var dst: ArrayList(u8) = .{};
         var used = try block(src, &dst, a);
         while (used < src.len) {
             used += try block(src[used..], &dst, a);
         }
-        return try dst.toOwnedSlice();
+        return try dst.toOwnedSlice(a);
     }
 
     fn block(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
@@ -65,45 +65,45 @@ pub const Translate = struct {
             },
             '#' => {
                 const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
-                try header(src[idx..until], dst);
+                try header(a, src[idx..until], dst);
                 idx = until;
                 if (idx < src.len) {
-                    try dst.append('\n');
+                    try dst.append(a, '\n');
                     continue :sw src[idx];
                 }
             },
             '>' => {
-                _ = try quote(src[idx..], dst, indent);
+                _ = try quote(a, src[idx..], dst, indent);
             },
             '`' => {
                 if (idx + 7 < src.len and
                     src[idx + 1] == '`' and src[idx + 2] == '`' and
                     indexOfPos(u8, src, idx + 3, "\n```") != null)
                 {
-                    idx += try code(src[idx..], dst, a);
+                    idx += try code(a, src[idx..], dst);
                 } else {
-                    idx = idx + try paragraph(src[idx..], dst, indent);
+                    idx = idx + try paragraph(a, src[idx..], dst, indent);
                 }
                 if (idx < src.len) continue :sw src[idx];
             },
             '-', '*', '+' => {
                 if (idx + 2 < src.len) {
-                    idx = idx + try list(src[idx..], dst, indent);
+                    idx = idx + try list(a, src[idx..], dst, indent);
                     if (idx < src.len) continue :sw src[idx];
                 } else {
-                    idx = idx + try paragraph(src[idx..], dst, indent);
+                    idx = idx + try paragraph(a, src[idx..], dst, indent);
                     if (idx < src.len) continue :sw src[idx];
                 }
             },
             else => {
-                idx = idx + try paragraph(src[idx..], dst, indent);
+                idx = idx + try paragraph(a, src[idx..], dst, indent);
                 if (idx < src.len) continue :sw src[idx];
             },
         }
         return idx;
     }
 
-    fn header(src: []const u8, dst: *ArrayList(u8)) !void {
+    fn header(a: Allocator, src: []const u8, dst: *ArrayList(u8)) !void {
         var idx: usize = 0;
         var hlvl: u8 = 0;
         while (idx < src.len) : (idx += 1) {
@@ -120,51 +120,51 @@ pub const Translate = struct {
             5 => "<h5>",
             6 => "<h6>",
             else => t: {
-                for (0..hlvl) |_| try dst.append('#');
+                for (0..hlvl) |_| try dst.append(a, '#');
                 break :t "";
             },
         };
 
         while (idx < src.len and src[idx] == ' ') idx += 1;
-        try dst.appendSlice(tag);
+        try dst.appendSlice(a, tag);
         if (indexOfScalarPos(u8, src, idx, '\n')) |eol| {
             var i = eol;
             while (src[i] == '#' or src[i] == ' ' or src[i] == '\n') i -= 1;
-            try dst.appendSlice(src[idx .. i + 1]);
+            try dst.appendSlice(a, src[idx .. i + 1]);
             idx = eol;
         } else {
-            try dst.appendSlice(src[idx..]);
+            try dst.appendSlice(a, src[idx..]);
             idx = src.len - 1;
         }
         if (tag.len > 1) {
-            try dst.appendSlice("</");
-            try dst.appendSlice(tag[1..]);
+            try dst.appendSlice(a, "</");
+            try dst.appendSlice(a, tag[1..]);
         }
         if (src[idx] != '\n') idx += 1;
     }
 
-    fn quote(src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+    fn quote(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
         _ = indent;
         const idx: usize = 0;
         const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
-        try dst.appendSlice("<blockquote>");
-        try line(src[idx..until], dst);
-        try dst.appendSlice("</blockquote>\n");
+        try dst.appendSlice(a, "<blockquote>");
+        try line(a, src[idx..until], dst);
+        try dst.appendSlice(a, "</blockquote>\n");
         return until;
     }
 
-    fn paragraph(src: []const u8, dst: *ArrayList(u8), indent: usize) error{OutOfMemory}!usize {
-        try dst.appendSlice("<p>");
+    fn paragraph(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) error{OutOfMemory}!usize {
+        try dst.appendSlice(a, "<p>");
         const until = indexOfPos(u8, src, 0, "\n\n") orelse indexOfPos(u8, src, 0, "\r\n\r\n") orelse src.len;
-        try leaf(src[0..until], dst, indent);
-        try dst.appendSlice("</p>\n");
+        try leaf(a, src[0..until], dst, indent);
+        try dst.appendSlice(a, "</p>\n");
         if (until < src.len and src[until] == '\r') {
             return until + 4;
         }
         return until + 2;
     }
 
-    fn code(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
+    fn code(a: Allocator, src: []const u8, dst: *ArrayList(u8)) !usize {
         var idx: usize = 0;
         if (src.len > idx + 7) {
             if (src[idx + 1] == '`' and src[idx + 2] == '`') {
@@ -183,10 +183,10 @@ pub const Translate = struct {
                         }
                     }
 
-                    try dst.appendSlice("<div class=\"codeblock\">");
+                    try dst.appendSlice(a, "<div class=\"codeblock\">");
                     idx += 3;
-                    try dst.appendSlice(std.mem.trim(u8, highlighted orelse src[idx..i], " \n"));
-                    try dst.appendSlice("</div>");
+                    try dst.appendSlice(a, std.mem.trim(u8, highlighted orelse src[idx..i], " \n"));
+                    try dst.appendSlice(a, "</div>");
                     idx = i + 4;
                 }
             }
@@ -194,9 +194,9 @@ pub const Translate = struct {
         return idx;
     }
 
-    fn leaf(src: []const u8, dst: *ArrayList(u8), indent: usize) !void {
+    fn leaf(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !void {
         var idx: usize = 0;
-        while (indexOfScalarPos(u8, src, idx, '\n')) |i| : (try dst.append(' ')) {
+        while (indexOfScalarPos(u8, src, idx, '\n')) |i| : (try dst.append(a, ' ')) {
             var line_indent: usize = 0;
             while (src[idx + line_indent] == ' ') {
                 line_indent += 1;
@@ -205,58 +205,59 @@ pub const Translate = struct {
                 switch (src[idx + line_indent]) {
                     '-', '*', '+' => {
                         if (idx + 2 < src.len) {
-                            idx = idx + try list(src[idx..], dst, line_indent);
+                            idx = idx + try list(a, src[idx..], dst, line_indent);
                         } else {
-                            idx = idx + try paragraph(src[idx..], dst, line_indent);
+                            idx = idx + try paragraph(a, src[idx..], dst, line_indent);
                         }
                     },
                     else => {
-                        try line(src[idx..i], dst);
+                        try line(a, src[idx..i], dst);
                         idx = i + 1;
                     },
                 }
                 if (i + 1 >= src.len) return;
                 continue;
             }
-            try line(src[idx..i], dst);
+            try line(a, src[idx..i], dst);
             if (i + 1 >= src.len) return;
             idx = i + 1;
         }
         if (idx >= src.len) return;
-        try line(src[idx..], dst);
+        try line(a, src[idx..], dst);
     }
 
-    fn list(src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
-        try dst.appendSlice("<ul>\n");
+    fn list(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+        try dst.appendSlice(a, "<ul>\n");
         var idx: usize = 0;
         l: while (indexOfScalarPos(u8, src, idx, '\n')) |until| {
             while (idx < src.len and (src[idx] == ' ' or src[idx] == '-')) idx += 1;
-            try dst.appendSlice("<li>");
+            try dst.appendSlice(a, "<li>");
             if (src[idx] == '[' and src[idx + 2] == ']') {
-                try dst.appendSlice("<input type=\"checkbox\"");
-                if (src[idx + 1] == 'x') try dst.appendSlice(" checked");
-                try dst.appendSlice(" >");
+                try dst.appendSlice(a, "<input type=\"checkbox\"");
+                if (src[idx + 1] == 'x') try dst.appendSlice(a, " checked");
+                try dst.appendSlice(a, " >");
                 idx += 4;
             }
-            try line(src[idx..until], dst);
-            try dst.appendSlice("</li>\n");
+            try line(a, src[idx..until], dst);
+            try dst.appendSlice(a, "</li>\n");
             idx = until + 1;
             if (idx + indent + 2 >= src.len) break;
             for (0..indent) |i| if (src[idx + i] != ' ') break :l;
             idx += indent;
         }
-        try dst.appendSlice("</ul>\n");
+        try dst.appendSlice(a, "</ul>\n");
 
         return idx;
     }
 
-    fn listOrdered(src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+    fn listOrdered(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+        _ = a;
         _ = src;
         _ = dst;
         _ = indent;
     }
 
-    fn line(src: []const u8, dst: *ArrayList(u8)) !void {
+    fn line(a: Allocator, src: []const u8, dst: *ArrayList(u8)) !void {
         var backtick: bool = false;
         var idx: usize = 0;
         while (idx < src.len) : (idx += 1) {
@@ -264,26 +265,26 @@ pub const Translate = struct {
                 '\\' => {
                     idx += 1;
                     if (idx >= src.len) {
-                        try dst.append(src[idx]);
+                        try dst.append(a, src[idx]);
                     }
                 },
                 '`' => {
                     if (backtick) {
                         backtick = false;
-                        try dst.appendSlice("</span>");
+                        try dst.appendSlice(a, "</span>");
                     } else if (indexOfScalarPos(u8, src, idx + 1, '`') != null) {
                         backtick = true;
-                        try dst.appendSlice("<span class=\"coderef\">");
+                        try dst.appendSlice(a, "<span class=\"coderef\">");
                     } else {
-                        try dst.append('`');
+                        try dst.append(a, '`');
                     }
                 },
                 '\r' => {},
                 else => {
                     if (abx.Html.clean(src[idx])) |clean| {
-                        try dst.appendSlice(clean);
+                        try dst.appendSlice(a, clean);
                     } else {
-                        try dst.append(src[idx]);
+                        try dst.append(a, src[idx]);
                     }
                 },
             }

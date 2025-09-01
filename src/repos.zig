@@ -85,7 +85,7 @@ pub fn open(name: []const u8, vis: Visability) !?Git.Repo {
 }
 
 pub fn allNames(a: Allocator) ![][]u8 {
-    var list = std.ArrayList([]u8).init(a);
+    var list: std.ArrayList([]u8) = .{};
 
     var dir_set = try dirs.directory(.public);
     defer dir_set.close();
@@ -94,9 +94,9 @@ pub fn allNames(a: Allocator) ![][]u8 {
     while (itr_repo.next() catch null) |dir| {
         if (dir.kind != .directory and dir.kind != .sym_link) continue;
         if (isHidden(dir.name)) continue;
-        try list.append(try a.dupe(u8, dir.name));
+        try list.append(a, try a.dupe(u8, dir.name));
     }
-    return try list.toOwnedSlice();
+    return try list.toOwnedSlice(a);
 }
 
 pub const RepoIterator = struct {
@@ -163,8 +163,8 @@ pub const Agent = struct {
         downstream_push: i64 = 0,
         downstream_pull: i64 = 0,
 
-        pub fn format(u: Updated, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-            try out.print(
+        pub fn format(u: Updated, w: *Writer) !void {
+            try w.print(
                 \\upstream_push {}
                 \\upstream_pull {}
                 \\downstream_push {}
@@ -197,7 +197,7 @@ pub const Agent = struct {
 
     fn setUpdated(dir: std.fs.Dir, update: Updated) void {
         var buffer: [1024]u8 = undefined;
-        const text = std.fmt.bufPrint(&buffer, "{}", .{update}) catch unreachable;
+        const text = std.fmt.bufPrint(&buffer, "{f}", .{update}) catch unreachable;
         dir.writeFile(.{ .sub_path = "srctree_sync", .data = text }) catch {};
     }
 
@@ -330,7 +330,8 @@ pub const Agent = struct {
 const std = @import("std");
 const log = std.log.scoped(.update_thread);
 const Allocator = std.mem.Allocator;
-const sleep = std.time.sleep;
+const Writer = std.Io.Writer;
+const sleep = std.Thread.sleep;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const indexOfPos = std.mem.indexOfPos;

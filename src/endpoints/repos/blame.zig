@@ -36,10 +36,10 @@ pub fn blame(f: *Frame) Router.Error!void {
     const git_blame = actions.blame(blame_file, ref) catch return error.InvalidURI;
 
     const map, const lines = parseBlame(f.alloc, git_blame) catch return error.Unknown;
-    var source_lines = std.ArrayList(u8).init(f.alloc);
+    var source_lines: ArrayList(u8) = .{};
     for (lines) |line| {
-        try source_lines.appendSlice(line.line);
-        try source_lines.append('\n');
+        try source_lines.appendSlice(f.alloc, line.line);
+        try source_lines.append(f.alloc, '\n');
     }
 
     const count = map.count();
@@ -71,7 +71,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     const wrapped_blames = try wrapLineNumbersBlame(f.alloc, lines, map, rd.name, file_name, show_emails);
 
     const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
-        .href = try allocPrint(f.alloc, "{link}", .{up}),
+        .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
     var page = BlamePage.init(.{
@@ -233,6 +233,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct { BlameMap, []BlameLi
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;

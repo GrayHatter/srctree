@@ -4,47 +4,51 @@ fetch: ?[]const u8,
 
 const Remote = @This();
 
-pub fn format(r: Remote, comptime fmt: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    if (comptime eql(u8, fmt, "diff")) {
-        if (r.url) |url| {
-            var printable = url;
-            if (startsWith(u8, printable, "https://")) {
-                printable = printable[8..];
-            }
-            if (indexOf(u8, printable, "@")) |i| {
-                printable = printable[i + 1 ..];
-            }
-            if (endsWith(u8, printable, ".git")) {
-                printable = printable[0 .. printable.len - 4];
-            }
-            try out.writeAll(printable);
-            try out.writeAll(" [");
-            try out.writeAll(r.name);
-            try out.writeAll("]");
+pub fn format(r: Remote, w: *Writer) !void {
+    try w.print("Git.Remote: {s}", .{r.name});
+}
+
+pub fn formatDiff(r: Remote, w: *Writer) !void {
+    if (r.url) |url| {
+        var printable = url;
+        if (startsWith(u8, printable, "https://")) {
+            printable = printable[8..];
         }
-    } else if (comptime eql(u8, fmt, "link")) {
-        if (r.url) |url| {
-            var printable = url;
-            if (startsWith(u8, printable, "https://")) {
-                printable = printable[8..];
-            }
-            if (indexOf(u8, printable, "@")) |i| {
-                printable = printable[i + 1 ..];
-            }
-            if (endsWith(u8, printable, ".git")) {
-                printable = printable[0 .. printable.len - 4];
-            }
-            if (indexOf(u8, printable, ":")) |i| {
-                try out.writeAll("https://"); // LOL, sorry
-                try out.writeAll(printable[0..i]);
-                try out.writeAll("/");
-                try out.writeAll(printable[i + 1 ..]);
-            } else {
-                try out.writeAll("https://"); // LOL, sorry
-                try out.writeAll(printable);
-            }
+        if (indexOf(u8, printable, "@")) |i| {
+            printable = printable[i + 1 ..];
         }
-    } else try out.print("Git.Remote: {s}", .{r.name});
+        if (endsWith(u8, printable, ".git")) {
+            printable = printable[0 .. printable.len - 4];
+        }
+        try w.writeAll(printable);
+        try w.writeAll(" [");
+        try w.writeAll(r.name);
+        try w.writeAll("]");
+    }
+}
+
+pub fn formatLink(r: Remote, w: *Writer) !void {
+    if (r.url) |url| {
+        var printable = url;
+        if (startsWith(u8, printable, "https://")) {
+            printable = printable[8..];
+        }
+        if (indexOf(u8, printable, "@")) |i| {
+            printable = printable[i + 1 ..];
+        }
+        if (endsWith(u8, printable, ".git")) {
+            printable = printable[0 .. printable.len - 4];
+        }
+        if (indexOf(u8, printable, ":")) |i| {
+            try w.writeAll("https://"); // LOL, sorry
+            try w.writeAll(printable[0..i]);
+            try w.writeAll("/");
+            try w.writeAll(printable[i + 1 ..]);
+        } else {
+            try w.writeAll("https://"); // LOL, sorry
+            try w.writeAll(printable);
+        }
+    }
 }
 
 /// Half supported alloc function
@@ -55,6 +59,7 @@ pub fn raze(r: Remote, a: std.mem.Allocator) void {
 }
 
 const std = @import("std");
+const Writer = std.Io.Writer;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const endsWith = std.mem.endsWith;

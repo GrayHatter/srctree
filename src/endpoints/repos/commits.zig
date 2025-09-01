@@ -107,7 +107,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
                             .comment => {
                                 pg_comment.* = .{
                                     .author = try Verse.abx.Html.cleanAlloc(f.alloc, msg.author.?),
-                                    .date = try allocPrint(f.alloc, "{}", .{Humanize.unix(msg.updated)}),
+                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated)}),
                                     .message = try Verse.abx.Html.cleanAlloc(f.alloc, msg.message.?),
                                     .direct_reply = null,
                                     .sub_thread = null,
@@ -151,7 +151,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     }
 
     const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
-        .href = try allocPrint(f.alloc, "{link}", .{up}),
+        .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
     const repo_name = try f.alloc.dupe(u8, repo_name_);
@@ -280,9 +280,9 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
             .link_target = email,
             .name = try abx.Html.cleanAlloc(a, trim(u8, c.author.name, ws)),
         },
-        .day = try allocPrint(a, "{Y-m-d}", .{date}),
+        .day = try allocPrint(a, "{f}", .{std.fmt.alt(date, .format)}),
         .weekday = date.weekdaySlice(),
-        .time = try allocPrint(a, "{time}", .{date}),
+        .time = try allocPrint(a, "{f}", .{std.fmt.alt(date, .fmtDay)}),
         .sha = try allocPrint(a, "{s}", .{c.sha.hex()[0..8]}),
     };
 }

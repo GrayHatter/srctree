@@ -239,7 +239,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
 
     var upstream: ?[]const u8 = null;
     if (try repo.findRemote("upstream")) |remote| {
-        upstream = try allocPrint(a, "{link}", .{remote});
+        upstream = try allocPrint(a, "{f}", .{std.fmt.alt(remote, .formatLink)});
     }
     var updated: []const u8 = "new repo";
     if (repo.headCommit(a)) |cmt| {
@@ -247,7 +247,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
         const committer = cmt.committer;
         updated = try allocPrint(
             a,
-            "updated about {}",
+            "updated about {f}",
             .{Humanize.unix(committer.timestamp)},
         );
     } else |_| {}
@@ -257,7 +257,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
     if (repo.tags) |rtags| {
         tag = .{
             .tag = try a.dupe(u8, rtags[0].name),
-            .title = try allocPrint(a, "created {}", .{Humanize.unix(rtags[0].tagger.timestamp)}),
+            .title = try allocPrint(a, "created {f}", .{Humanize.unix(rtags[0].tagger.timestamp)}),
             .uri = try allocPrint(a, "/repo/{s}/tags", .{name}),
         };
     }
@@ -283,7 +283,7 @@ fn list(ctx: *Frame) Router.Error!void {
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
     var repo_iter = repos.allRepoIterator(.public) catch return error.Unknown;
-    var current_repos = std.ArrayList(Git.Repo).init(ctx.alloc);
+    var current_repos: ArrayList(Git.Repo) = .{};
     while (repo_iter.next() catch return error.Unknown) |rpo_| {
         var rpo = rpo_;
         rpo.loadData(ctx.alloc) catch |err| {
@@ -295,7 +295,7 @@ fn list(ctx: *Frame) Router.Error!void {
         if (rpo.tags != null) {
             std.sort.heap(Git.Tag, rpo.tags.?, {}, tags.sort);
         }
-        try current_repos.append(rpo);
+        try current_repos.append(ctx.alloc, rpo);
     }
 
     std.sort.heap(Git.Repo, current_repos.items, repoctx{
@@ -336,6 +336,7 @@ const branches = @import("repos/branches.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const log = std.log.scoped(.srctree);

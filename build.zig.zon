@@ -1,16 +1,16 @@
 .{
     .name = .srctree,
     .version = "0.0.0",
-    .minimum_zig_version = "0.14.1",
+    .minimum_zig_version = "0.15.1",
     .fingerprint = 0x4eee355ffa6e50b7,
     .dependencies = .{
         .verse = .{
             //.url = "git+https://srctree.gr.ht/repo/verse",
             // The above URL is the real upstream source but Zig's TLS
             // implementation is currently broken so an alt is provided
-            .url = "git+https://github.com/GrayHatter/verse.git#83473c723c07b3ca6d7afaa66b120ecd73b16708",
-            .hash = "verse-0.0.1-B0Iw6xWeBQCr1vQz3-f3zCAzkV9lK-8SUJfHAzxegujF",
-            // .path = "../verse",
+            .url = "git+https://github.com/GrayHatter/verse.git#v0.0.2",
+            .hash = "verse-0.0.2-B0Iw6yWbBQCpEpjgN8ZsDQQGC_rfyVmceiP_DOLrxmaq",
+            //.path = "../verse",
         },
     },
 

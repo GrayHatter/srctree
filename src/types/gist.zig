@@ -38,8 +38,9 @@ pub const File = struct {
         const name = file.filename();
         const data_file = try Types.commit(.gist_files, &name);
         defer data_file.close();
-        var data_writer = data_file.writer();
-        try File.writerFn(&file, &data_writer);
+        var w_b: [2048]u8 = undefined;
+        var data_writer = data_file.writer(&w_b);
+        try File.writerFn(&file, &data_writer.interface);
         return name[0..64].*;
     }
 
@@ -50,7 +51,7 @@ pub const File = struct {
         sha.update(f.blob);
         var bin: [32]u8 = undefined;
         sha.final(&bin);
-        _ = bufPrint(&output, "{s}", .{hexLower(&bin)}) catch unreachable;
+        _ = bufPrint(&output, "{x}", .{&bin}) catch unreachable;
         return output;
     }
 
@@ -75,7 +76,7 @@ pub fn new(owner: []const u8, files: []const File) ![64]u8 {
 
     var buf: [64]u8 = undefined;
     const hash = gist.genHash();
-    const filename = try bufPrint(&buf, "{s}", .{hexLower(hash)});
+    const filename = try bufPrint(&buf, "{x}", .{hash});
     try gist.commit();
     return filename[0..64].*;
 }
@@ -104,17 +105,19 @@ pub fn open(a: Allocator, hash: [64]u8) !Gist {
 pub fn commit(gist: *Gist) !void {
     var buf: [69]u8 = undefined;
     const hash = gist.genHash();
-    const filename = try bufPrint(&buf, "{s}.gist", .{hexLower(hash)});
+    const filename = try bufPrint(&buf, "{x}.gist", .{hash});
     const file = try Types.commit(.gist, filename);
     defer file.close();
-    var writer = file.writer();
-    try writerFn(gist, &writer);
+    var w_b: [2048]u8 = undefined;
+    var writer = file.writer(&w_b);
+    try writerFn(gist, &writer.interface);
 
     for (gist.files) |gistfile| {
         const f_name = try gistfile.commit();
-        try writer.print("{s}\n", .{f_name[0..64]});
+        try writer.interface.print("{s}\n", .{f_name[0..64]});
     }
-    try writer.print("\n", .{});
+    try writer.interface.print("\n", .{});
+    try writer.interface.flush();
 }
 
 pub fn genHash(gist: *Gist) *const Types.DefaultHash {
@@ -159,20 +162,20 @@ test {
     };
     _ = gist.genHash();
 
-    var out = std.ArrayList(u8).init(a);
-    defer out.clearAndFree();
-    var writer = out.writer();
-    try writerFn(&gist, &writer);
+    var writer = std.Io.Writer.Allocating.init(a);
+    defer writer.deinit();
+    try writerFn(&gist, &writer.writer);
 
     for (gist.files) |gistfile| {
         const name = gistfile.filename();
         const data_file = try Types.commit(.gist_files, &name);
         defer data_file.close();
-        var data_writer = data_file.writer();
-        try File.writerFn(&gistfile, &data_writer);
-        try writer.print("{s}\n", .{name[0..64]});
+        var w_b: [2048]u8 = undefined;
+        var data_writer = data_file.writer(&w_b);
+        try File.writerFn(&gistfile, &data_writer.interface);
+        try writer.writer.print("{s}\n", .{name[0..64]});
     }
-    try writer.print("\n", .{});
+    try writer.writer.print("\n", .{});
 
     const v0_text =
         \\# gist/0
@@ -188,12 +191,12 @@ test {
         \\
         \\
     ;
-    try std.testing.expectEqualStrings(v0_text, out.items);
+    try std.testing.expectEqualStrings(v0_text, writer.written());
 
     try gist.commit();
 
     var buf: [69]u8 = undefined;
-    const filename = try bufPrint(&buf, "{s}.gist", .{hexLower(&gist.hash)});
+    const filename = try bufPrint(&buf, "{x}.gist", .{&gist.hash});
     const from_file = try Types.loadData(.gist, a, filename);
     defer a.free(from_file);
 
@@ -204,7 +207,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const indexOf = std.mem.indexOf;
-const hexLower = std.fmt.fmtSliceHexLower;
 const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();
 const Sha256 = std.crypto.hash.sha2.Sha256;

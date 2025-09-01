@@ -89,8 +89,9 @@ pub fn commit(delta: Delta) !void {
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ delta.repo, delta.index });
     const file = try Types.commit(.deltas, filename);
     defer file.close();
-    var writer = file.writer();
-    try writerFn(&delta, &writer);
+    var w_b: [2048]u8 = undefined;
+    var fd_writer = file.writer(&w_b);
+    try writerFn(&delta, &fd_writer.interface);
 }
 
 pub fn loadThread(delta: *Delta, a: Allocator) !*Thread {
@@ -273,10 +274,9 @@ test Delta {
     d.created = std.time.timestamp() & mask;
     d.updated = std.time.timestamp() & mask;
 
-    var out = std.ArrayList(u8).init(a);
-    defer out.clearAndFree();
-    var writer = out.writer();
-    try writerFn(&d, &writer);
+    var writer = std.Io.Writer.Allocating.init(a);
+    defer writer.deinit();
+    try writerFn(&d, &writer.writer);
 
     const v1_text: []const u8 =
         \\# deltas/0
@@ -299,7 +299,7 @@ test Delta {
         \\
     ;
 
-    try std.testing.expectEqualStrings(v1_text, out.items);
+    try std.testing.expectEqualStrings(v1_text, writer.written());
 }
 
 const std = @import("std");

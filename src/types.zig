@@ -14,8 +14,6 @@ pub const Viewers = @import("types/viewers.zig");
 pub const DefaultHash = [sha256.digest_length]u8;
 pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
 
-pub const Writer = std.fs.File.Writer;
-
 pub const Storage = std.fs.Dir;
 
 var storage_dir: Storage = undefined;
@@ -66,15 +64,19 @@ pub fn currentIndex(comptime type_name: @TypeOf(.enum_literal)) !usize {
         error.FileNotFound => {
             var new_file = try storage_dir.createFile(name, .{});
             defer new_file.close();
-            var writer = new_file.writer();
+            var fd_writer = new_file.writer(&.{});
+            const writer = &fd_writer.interface;
             try writer.writeInt(usize, 0, .big);
+            try writer.flush();
             return 0;
         },
         else => return err,
     };
     defer index_file.close();
-    var reader = index_file.reader();
-    const idx = reader.readInt(usize, .big) catch 0;
+    var r_b: [10]u8 = undefined;
+    var fd_reader = index_file.reader(&r_b);
+    const reader = &fd_reader.interface;
+    const idx = reader.takeInt(usize, .big) catch 0;
     return idx;
 }
 
@@ -82,12 +84,16 @@ pub fn nextIndex(comptime type_name: @TypeOf(.enum_literal)) !usize {
     const name = "_" ++ @tagName(type_name) ++ ".index";
     var index_file = try storage_dir.createFile(name, .{ .read = true, .truncate = false });
     defer index_file.close();
-    var reader = index_file.reader();
-    var idx = reader.readInt(usize, .big) catch 0;
+    var r_b: [10]u8 = undefined;
+    var fd_reader = index_file.reader(&r_b);
+    const reader = &fd_reader.interface;
+    var idx = reader.takeInt(usize, .big) catch 0;
     idx += 1;
     try index_file.seekTo(0);
-    var writer = index_file.writer();
+    var fd_writer = index_file.writer(&.{});
+    const writer = &fd_writer.interface;
     try writer.writeInt(usize, idx, .big);
+    try writer.flush();
     return idx;
 }
 
@@ -101,15 +107,19 @@ pub fn currentIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name:
         error.FileNotFound => {
             var new_file = try storage_dir.createFile(name, .{});
             defer new_file.close();
-            var writer = new_file.writer();
+            var fd_writer = new_file.writer(&.{});
+            const writer = &fd_writer.interface;
             try writer.writeInt(usize, 0, .big);
+            try writer.flush();
             return 0;
         },
         else => return err,
     };
     defer index_file.close();
-    var reader = index_file.reader();
-    const idx = reader.readInt(usize, .big) catch 0;
+    var r_b: [10]u8 = undefined;
+    var fd_reader = index_file.reader(&r_b);
+    var reader = &fd_reader.interface;
+    const idx = reader.takeInt(usize, .big) catch 0;
     return idx;
 }
 
@@ -121,12 +131,16 @@ pub fn nextIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []
     });
     var index_file = try storage_dir.createFile(name, .{ .read = true, .truncate = false });
     defer index_file.close();
-    var reader = index_file.reader();
-    var idx = reader.readInt(usize, .big) catch 0;
+    var r_b: [10]u8 = undefined;
+    var fd_reader = index_file.reader(&r_b);
+    const reader = &fd_reader.interface;
+    var idx = reader.takeInt(usize, .big) catch 0;
     idx += 1;
     try index_file.seekTo(0);
-    var writer = index_file.writer();
+    var fd_writer = index_file.writer(&.{});
+    const writer = &fd_writer.interface;
     try writer.writeInt(usize, idx, .big);
+    try writer.flush();
     return idx;
 }
 
@@ -190,7 +204,7 @@ pub fn readerWriter(T: type, default: T) type {
             return output;
         }
 
-        pub fn write(t: *const T, w: anytype) anyerror!void {
+        pub fn write(t: *const T, w: *Writer) error{WriteFailed}!void {
             if (@hasDecl(T, "type_prefix") and @hasDecl(T, "type_version")) {
                 try w.print("# {s}/{d}\n", .{ T.type_prefix, T.type_version });
             }
@@ -217,7 +231,7 @@ pub fn readerWriter(T: type, default: T) type {
                         }
                         try w.writeAll("\n");
                     },
-                    [32]u8 => try w.print("{s}: {s}\n", .{ field.name, std.fmt.fmtSliceHexLower(&@field(t, field.name)) }),
+                    [32]u8 => try w.print("{s}: {x}\n", .{ field.name, &@field(t, field.name) }),
                     usize, isize, i64, i32 => try w.print("{s}: {d}\n", .{ field.name, @field(t, field.name) }),
                     bool => try w.print("{s}: {s}\n", .{ field.name, if (@field(t, field.name)) "true" else "false" }),
                     else => switch (@typeInfo(field.type)) {
@@ -232,12 +246,14 @@ pub fn readerWriter(T: type, default: T) type {
                 }
             }
             try w.writeAll("\n");
+            try w.flush();
         }
     };
 }
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Writer = std.Io.Writer;
 const parseInt = std.fmt.parseInt;
 const sha256 = std.crypto.hash.sha2.Sha256;
 // TODO buildtime const/flag

@@ -81,12 +81,15 @@ test "read" {
         },
         else => return err,
     };
-    var b: [1 << 16]u8 = undefined;
 
-    var d = zlib.decompressor(file.reader());
-    const count = try d.read(&b);
+    var r_b: [2048]u8 = undefined;
+    var reader = file.reader(&r_b);
+    var z_b: [8 * 1024 * 1024]u8 = undefined;
+    var d = zstd.Decompress.init(&reader.interface, &z_b, .{});
+    try d.reader.fillMore();
+    const b = d.reader.buffered();
     //std.debug.print("{s}\n", .{b[0..count]});
-    const commit = try Commit.init(SHA.init("370303630b3fc631a0cb3942860fb6f77446e9c1"), b[11 .. count - 11]);
+    const commit = try Commit.init(SHA.init("370303630b3fc631a0cb3942860fb6f77446e9c1"), b[11..]);
     //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree.hex()[0..]);
     try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha.hex()[0..]);
@@ -108,8 +111,11 @@ test "file" {
         },
         else => return err,
     };
-    var d = zlib.decompressor(file.reader());
-    const dz = try d.reader().readAllAlloc(a, 0xffff);
+    var r_b: [2048]u8 = undefined;
+    var reader = file.reader(&r_b);
+    var z_b: [8 * 1024 * 1024]u8 = undefined;
+    var d = zstd.Decompress.init(&reader.interface, &z_b, .{});
+    const dz = try d.reader.readAlloc(a, 0xffff);
     defer a.free(dz);
     const blob = dz[(indexOf(u8, dz, "\x00") orelse unreachable) + 1 ..];
     var commit = try Commit.init(SHA.init("370303630b3fc631a0cb3942860fb6f77446e9c1"), blob);
@@ -176,7 +182,7 @@ test "read pack" {
         for (0..@byteSwap(pack.idx_header.fanout[255])) |oi| {
             const hexy = pack.objnames[oi * 20 .. oi * 20 + 20];
             if (hexy[0] != 0xd2) continue;
-            if (false) std.debug.print("{} {} -> {}\n", .{ pi, oi, hexLower(hexy) });
+            if (false) std.debug.print("{} {} -> {x}\n", .{ pi, oi, hexy });
             if (hexy[1] == 0xb4 and hexy[2] == 0xd1) {
                 if (false) std.debug.print("{s} -> {}\n", .{ pack.name, pack.offsets[oi] });
                 lol = hexy;
@@ -451,5 +457,4 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
-const zlib = std.compress.zlib;
-const hexLower = std.fmt.fmtSliceHexLower;
+const zstd = std.compress.zstd;

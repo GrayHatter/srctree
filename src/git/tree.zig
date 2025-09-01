@@ -173,11 +173,14 @@ test "tree decom" {
         },
         else => return err,
     };
-    var b: [1 << 16]u8 = undefined;
 
-    var d = zlib.decompressor(file.reader());
-    const count = try d.read(&b);
-    const buf = try a.dupe(u8, b[0..count]);
+    var r_b: [2048]u8 = undefined;
+    var reader = file.reader(&r_b);
+    var z_b: [2048]u8 = undefined;
+    var d = zstd.Decompress.init(&reader.interface, &z_b, .{});
+    try d.reader.fillMore();
+    const b = d.reader.buffered();
+    const buf = try a.dupe(u8, b[0..]);
     defer a.free(buf);
     const blob = buf[(indexOf(u8, buf, "\x00") orelse unreachable) + 1 ..];
     //std.debug.print("{s}\n", .{buf});
@@ -285,5 +288,5 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const hexLower = std.fmt.fmtSliceHexLower;
 const bufPrint = std.fmt.bufPrint;
-const zlib = std.compress.zlib;
+const zstd = std.compress.zstd;
 const indexOf = std.mem.indexOf;

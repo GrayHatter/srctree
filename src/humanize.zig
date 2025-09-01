@@ -74,16 +74,14 @@ fn reduced(self: Humanize) i16 {
     }));
 }
 
-pub fn format(self: Humanize, comptime f: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    if (f.len > 0) return error.NotImplemented;
-
-    if (self.seconds < 0) {
-        try out.print("{} {s} ago", .{ self.reduced(), @tagName(self.width()) });
+pub fn format(self: Humanize, w: *std.Io.Writer) !void {
+    if (self.seconds <= 0) {
+        try w.print("{} {s} ago", .{ self.reduced(), @tagName(self.width()) });
     } else {
-        try out.print("{} {s} in the future", .{ self.reduced(), @tagName(self.width()) });
+        try w.print("{} {s} in the future", .{ self.reduced(), @tagName(self.width()) });
     }
 }
 
 pub fn printAlloc(self: Humanize, a: std.mem.Allocator) ![]u8 {
-    return std.fmt.allocPrint(a, "{}", .{self});
+    return std.fmt.allocPrint(a, "{f}", .{self});
 }

@@ -154,7 +154,7 @@ pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8
     _ = std.posix.write(child.stdin.?.handle, text) catch unreachable;
     std.posix.close(child.stdin.?.handle);
     child.stdin = null;
-    var buf = std.ArrayList(u8).init(a);
+    var buf: std.ArrayList(u8) = .{};
     const abuf = try a.alloc(u8, 0xffffff);
     defer a.free(abuf);
     while (true) {
@@ -164,7 +164,7 @@ pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8
             const amt = std.posix.read(poll_fd[0].fd, abuf) catch unreachable;
             if (amt == 0) break;
             const start: usize = if (std.mem.startsWith(u8, abuf, "<div class=\"highlight\"><pre>")) 28 else 0;
-            try buf.appendSlice(abuf[start..amt]);
+            try buf.appendSlice(a, abuf[start..amt]);
         } else if (poll_fd[0].revents & err_mask != 0) {
             break;
         }
@@ -174,7 +174,7 @@ pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8
     if (std.mem.endsWith(u8, buf.items, "</pre></div>")) {
         buf.items.len -= 12;
     }
-    return try buf.toOwnedSlice();
+    return try buf.toOwnedSlice(a);
 }
 
 const std = @import("std");

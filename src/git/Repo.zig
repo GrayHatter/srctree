@@ -99,19 +99,19 @@ fn loadConfig(self: *Repo) !void {
 
 fn loadRemotes(self: *Repo) !void {
     const a = self.alloc orelse unreachable;
-    var list = std.ArrayList(Remote).init(a);
-    errdefer list.clearAndFree();
+    var list: std.ArrayList(Remote) = .{};
+    errdefer list.clearAndFree(a);
     const cfg = self.config orelse return;
     for (0..cfg.ctx.ns.len) |i| {
         const ns = cfg.ctx.filter("remote", i) orelse break;
-        try list.append(.{
+        try list.append(a, .{
             .name = try a.dupe(u8, std.mem.trim(u8, ns.name[6..], "' \t\n\"")),
             .url = if (ns.get("url")) |url| try a.dupe(u8, url) else null,
             .fetch = if (ns.get("fetch")) |fetch| try a.dupe(u8, fetch) else null,
         });
     }
 
-    self.remotes = try list.toOwnedSlice();
+    self.remotes = try list.toOwnedSlice(a);
 }
 
 pub fn findRemote(self: Repo, name: []const u8) !?Remote {
@@ -141,11 +141,10 @@ fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
         else => return err,
     };
     defer a.free(compressed);
-    var fbs = std.io.fixedBufferStream(compressed);
-    const fbsr = fbs.reader();
-    var decom = zlib.decompressor(fbsr);
-    const decomr = decom.reader();
-    const data = try decomr.readAllAlloc(a, 0xffffff);
+    var reader = Reader.fixed(compressed);
+    var z_b: [zlib.max_window_len]u8 = undefined;
+    var zl: std.compress.flate.Decompress = .init(&reader, .zlib, &z_b);
+    const data = try zl.reader.allocRemaining(a, .limited(0xffffff));
     errdefer a.free(data);
     if (indexOf(u8, data, "\x00")) |i| {
         const header = data[0..i];
@@ -242,7 +241,7 @@ pub fn loadPacks(self: *Repo) !void {
 
 pub fn loadRefs(self: *Repo) !void {
     const a = self.alloc orelse unreachable;
-    var list = std.ArrayList(Ref).init(a);
+    var list: std.ArrayList(Ref) = .{};
     var idir = try self.dir.openDir("refs/heads", .{ .iterate = true });
     defer idir.close();
     var itr = idir.iterate();
@@ -256,7 +255,7 @@ pub fn loadRefs(self: *Repo) !void {
         var buf: [40]u8 = undefined;
         const read = try f.readAll(&buf);
         std.debug.assert(read == 40);
-        try list.append(Ref{ .branch = .{
+        try list.append(a, Ref{ .branch = .{
             .name = try a.dupe(u8, file.name),
             .sha = SHA.init(&buf),
         } });
@@ -267,7 +266,7 @@ pub fn loadRefs(self: *Repo) !void {
         _ = p_itr.next();
         while (p_itr.next()) |line| {
             if (std.mem.indexOf(u8, line, "refs/heads")) |_| {
-                try list.append(Ref{ .branch = .{
+                try list.append(a, Ref{ .branch = .{
                     .name = try a.dupe(u8, line[52..]),
                     .sha = SHA.init(line[0..40]),
                 } });
@@ -277,7 +276,7 @@ pub fn loadRefs(self: *Repo) !void {
         error.FileNotFound => {},
         else => std.debug.print("unable to read packed ref {}\n", .{err}),
     }
-    self.refs = try list.toOwnedSlice();
+    self.refs = try list.toOwnedSlice(a);
 }
 
 /// TODO write the real function that goes here
@@ -402,7 +401,7 @@ fn loadBranches(self: *Repo) !void {
 
     var branchdir = try self.dir.openDir("refs/heads", .{ .iterate = true });
     defer branchdir.close();
-    var list = std.ArrayList(Branch).init(a);
+    var list: ArrayList(Branch) = .{};
     var itr = branchdir.iterate();
     while (try itr.next()) |file| {
         if (file.kind != .file) continue;
@@ -410,12 +409,12 @@ fn loadBranches(self: *Repo) !void {
         const fname = try bufPrint(&fnbuf, "refs/heads/{s}", .{file.name});
         var shabuf: [41]u8 = undefined;
         _ = try self.dir.readFile(fname, &shabuf);
-        try list.append(.{
+        try list.append(a, .{
             .name = try a.dupe(u8, file.name),
             .sha = SHA.init(shabuf[0..40]),
         });
     }
-    self.branches = try list.toOwnedSlice();
+    self.branches = try list.toOwnedSlice(a);
 }
 
 pub fn resolvePartial(repo: *const Repo, sha: SHA) !?SHA {
@@ -588,9 +587,11 @@ const system = @import("../system.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
+const Reader = std.Io.Reader;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
-const zlib = std.compress.zlib;
+const zlib = std.compress.flate;
 const bufPrint = std.fmt.bufPrint;

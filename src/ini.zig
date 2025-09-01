@@ -24,10 +24,10 @@ pub const Namespace = struct {
     block: []const u8,
 
     pub fn init(a: Allocator, name: []const u8, itr: *ScalarIter) !Namespace {
-        var list = std.ArrayList(Setting).init(a);
+        var list: std.ArrayList(Setting) = .{};
         errdefer {
             for (list.items) |itm| itm.raze(a);
-            list.deinit();
+            list.deinit(a);
         }
         const ns_start = itr.index.?;
         const ns_block = itr.buffer[ns_start..];
@@ -44,14 +44,14 @@ pub const Namespace = struct {
                 continue;
             }
             const pair = try Setting.pair(a, line);
-            try list.append(pair);
+            try list.append(a, pair);
             _ = itr.next();
         }
 
         const ns_end = itr.index orelse itr.buffer.len;
         return .{
             .name = try a.dupe(u8, name[1 .. name.len - 1]),
-            .settings = try list.toOwnedSlice(),
+            .settings = try list.toOwnedSlice(a),
             .block = ns_block[0 .. ns_end - ns_start],
         };
     }
@@ -187,10 +187,10 @@ pub fn Config(B: anytype) type {
         pub fn init(a: Allocator, data: []const u8) !Self {
             var itr = splitScalar(u8, data, '\n');
 
-            var list = std.ArrayList(Namespace).init(a);
+            var list: std.ArrayList(Namespace) = .{};
             errdefer {
                 for (list.items) |itm| itm.raze(a);
-                list.deinit();
+                list.deinit(a);
             }
 
             while (itr.next()) |wide| {
@@ -198,12 +198,12 @@ pub fn Config(B: anytype) type {
                 if (line.len == 0) continue;
 
                 if (line[0] == '[' and line[line.len - 1] == ']') {
-                    try list.append(try Namespace.init(a, line, &itr));
+                    try list.append(a, try Namespace.init(a, line, &itr));
                 }
             }
 
             const ctx: IniData = .{
-                .ns = try list.toOwnedSlice(),
+                .ns = try list.toOwnedSlice(a),
                 .data = data,
                 .owned = null,
             };

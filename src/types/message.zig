@@ -37,17 +37,18 @@ pub fn new(tid: usize, author: []const u8, message: []const u8) !Message {
 
 pub fn commit(msg: Message) !void {
     var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{x}.message", .{fmtSliceHexLower(&msg.hash)});
+    const filename = try bufPrint(&buf, "{x}.message", .{&msg.hash});
     const file = try Types.commit(.message, filename);
     defer file.close();
 
-    var writer = file.writer();
-    try writerFn(&msg, &writer);
+    var w_b: [2048]u8 = undefined;
+    var fd_writer = file.writer(&w_b);
+    try writerFn(&msg, &fd_writer.interface);
 }
 
 pub fn open(a: Allocator, hash: DefaultHash) !Message {
     var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{x}.message", .{fmtSliceHexLower(&hash)});
+    const filename = try bufPrint(&buf, "{x}.message", .{&hash});
     const file = try Types.loadData(.message, a, filename);
     return readerFn(file);
 }
@@ -91,7 +92,7 @@ test "comment" {
     try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
 
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{std.fmt.fmtSliceHexLower(hash)});
+    const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{hash});
     try std.testing.expectEqualStrings(
         "a3e16bd746dc52437bbc3899970ed8ec77fd991687a41950126a1dcdca61c6b3.message",
         filename,
@@ -100,8 +101,9 @@ test "comment" {
     {
         var file = try Types.commit(.message, filename);
         defer file.close();
-        var writer = file.writer();
-        try writerFn(&c, &writer);
+        var w_b: [2048]u8 = undefined;
+        var writer = file.writer(&w_b);
+        try writerFn(&c, &writer.interface);
     }
     const data = try Types.loadData(.message, a, filename);
     defer a.free(data);
@@ -137,10 +139,9 @@ test Message {
     c.created = std.time.timestamp() & mask;
     c.updated = std.time.timestamp() & mask;
     _ = c.genHash();
-    var out = std.ArrayList(u8).init(a);
-    defer out.clearAndFree();
-    var writer = out.writer();
-    try writerFn(&c, &writer);
+    var writer = std.Io.Writer.Allocating.init(a);
+    defer writer.deinit();
+    try writerFn(&c, &writer.writer);
 
     const v0_text =
         \\# messages/0
@@ -157,7 +158,7 @@ test Message {
         \\
     ;
 
-    try std.testing.expectEqualStrings(v0_text, out.items);
+    try std.testing.expectEqualStrings(v0_text, writer.written());
 }
 
 const std = @import("std");
@@ -167,7 +168,6 @@ const endian = builtin.cpu.arch.endian();
 const Sha256 = std.crypto.hash.sha2.Sha256;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
-const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 const DefaultHash = Types.DefaultHash;
 
 const Humanize = @import("../humanize.zig");

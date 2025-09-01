@@ -117,12 +117,11 @@ fn view(ctx: *verse.Frame) Error!void {
                 .comment => {
                     c_ctx.* = .{
                         .author = try verse.abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
-                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
+                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
                         .message = try verse.abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
-                        .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
-                            idx,
-                            fmtSliceHexLower(msg.hash[0..]),
-                        }) },
+                        .direct_reply = .{
+                            .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ idx, msg.hash[0..] }),
+                        },
                         .sub_thread = null,
                     };
                 },
@@ -153,8 +152,8 @@ fn view(ctx: *verse.Frame) Error!void {
         .description = description,
         .delta_id = delta_id,
         .current_username = username,
-        .created = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(delta.created)}),
-        .updated = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(delta.updated)}),
+        .created = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.created)}),
+        .updated = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.updated)}),
         .comments = .{
             .thread = root_thread,
         },
@@ -178,7 +177,7 @@ fn list(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
     const last = (Types.currentIndexNamed(.deltas, rd.name) catch 0) + 1;
-    var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
+    var d_list: ArrayList(S.DeltaList) = .{};
     for (0..last) |i| {
 
         // TODO implement seen
@@ -191,7 +190,7 @@ fn list(ctx: *verse.Frame) Error!void {
         _ = d.loadThread(ctx.alloc) catch return error.Unknown;
         const cmtsmeta = d.countComments();
 
-        try d_list.append(.{
+        try d_list.append(ctx.alloc, .{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
             .title_uri = try allocPrint(
                 ctx.alloc,
@@ -217,7 +216,7 @@ fn list(ctx: *verse.Frame) Error!void {
     var page = DeltaListHtml.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
-        .delta_list = try d_list.toOwnedSlice(),
+        .delta_list = try d_list.toOwnedSlice(ctx.alloc),
         .search = def_search,
     });
 
@@ -226,9 +225,9 @@ fn list(ctx: *verse.Frame) Error!void {
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
-const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 
 const verse = @import("verse");
 const abx = verse.abx;

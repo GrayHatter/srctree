@@ -242,37 +242,43 @@ pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
     return fromEpochTz(epoch, tz);
 }
 
-pub fn format(self: DateTime, comptime fstr: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    if (comptime eql(u8, fstr, "dtime")) {
-        return out.print(
-            "{s} {:0>2}:{:0>2}:{:0>2}",
-            .{ Names.Day[self.weekday], self.hours, self.minutes, self.seconds },
-        );
-    } else if (comptime eql(u8, fstr, "day")) {
-        return out.print(
-            "{s}",
-            .{self.weekdaySlice()},
-        );
-    } else if (comptime eql(u8, fstr, "time") or eql(u8, fstr, "HH:mm:ss")) {
-        return out.print(
-            "{:0>2}:{:0>2}:{:0>2}",
-            .{ self.hours, self.minutes, self.seconds },
-        );
-    } else if (comptime eql(u8, fstr, "Y-m-d")) {
-        return out.print(
-            "{}-{:0>2}-{:0>2}",
-            .{ self.year, @intFromEnum(self.month), @intFromEnum(self.day) },
-        );
-    }
+pub fn fmtTime(self: DateTime, w: *Writer) !void {
+    return w.print(
+        "{:0>2}:{:0>2}:{:0>2}",
+        .{ self.hours, self.minutes, self.seconds },
+    );
+}
 
+pub fn fmtDay(self: DateTime, w: *Writer) !void {
+    return w.print(
+        "{s}",
+        .{self.weekdaySlice()},
+    );
+}
+
+pub fn fmtYMD(self: DateTime, w: *Writer) !void {
+    return w.print(
+        "{}-{:0>2}-{:0>2}",
+        .{ self.year, @intFromEnum(self.month), @intFromEnum(self.day) },
+    );
+}
+
+pub fn fmtDTime(self: DateTime, w: *Writer) !void {
+    return w.print(
+        "{s} {:0>2}:{:0>2}:{:0>2}",
+        .{ Names.Day[self.weekday], self.hours, self.minutes, self.seconds },
+    );
+}
+
+pub fn format(self: DateTime, w: *Writer) !void {
     if (self.flags.has_date) {
-        try out.print(
+        try w.print(
             "{}-{:0>2}-{:0>2} {s}",
             .{ self.year, @intFromEnum(self.month), @intFromEnum(self.day), Names.Day[self.weekday] },
         );
     }
     if (self.flags.has_time) {
-        try out.print(
+        try w.print(
             "{:0>2}:{:0>2}:{:0>2}",
             .{ self.hours, self.minutes, self.seconds },
         );
@@ -356,4 +362,5 @@ test "datetime" {
 }
 
 const std = @import("std");
+const Writer = std.Io.Writer;
 const eql = std.mem.eql;

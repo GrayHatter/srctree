@@ -10,7 +10,7 @@ const Journal = struct {
     email: []const u8,
     repos: []JRepo,
     hits: HeatMapArray,
-    list: std.ArrayList(Scribe.Commit),
+    list: ArrayList(Scribe.Commit),
 
     pub const JRepo = struct {
         name: []const u8,
@@ -25,7 +25,7 @@ const Journal = struct {
             .email = try a.dupe(email),
             .repos = &.{},
             .hits = @splat(0),
-            .list = std.ArrayList(Scribe.Commit).init(a),
+            .list = .{},
         };
 
         return j;
@@ -33,13 +33,13 @@ const Journal = struct {
 
     pub fn raze(j: *Journal) void {
         j.alloc.free(j.email);
-        j.list.deinit();
+        j.list.deinit(j.alloc);
         j.alloc.destroy(j);
     }
 
     pub fn build(
         a: Allocator,
-        list: *std.ArrayList(Scribe.Commit),
+        list: *ArrayList(Scribe.Commit),
         email: ?[]const u8,
         name: []const u8,
         repo: *const Git.Repo,
@@ -57,7 +57,7 @@ const Journal = struct {
             if (commit_time < until) break;
             if (std.mem.eql(u8, email.?, commit.author.email)) {
                 const ws = " \t\n";
-                try list.append(.{
+                try list.append(a, .{
                     .name = try abx.Html.cleanAlloc(a, trim(u8, commit.author.name, ws)),
                     .title = try abx.Html.cleanAlloc(a, trim(u8, commit.title, ws)),
                     .body = if (commit.body.len > 0)
@@ -192,9 +192,9 @@ const Scribe = struct {
                     .link_target = self.repo,
                     .name = self.repo,
                 },
-                .day = try allocPrint(a, "{Y-m-d}", .{self.date}),
+                .day = try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtYMD)}),
                 .weekday = self.date.weekdaySlice(),
-                .time = try allocPrint(a, "{time}", .{self.date}),
+                .time = try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtTime)}),
                 .sha = shahex[0..8],
             };
         }
@@ -281,7 +281,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var seen = std.BufSet.init(ctx.alloc);
     var repo_count: usize = 0;
 
-    var scribe_list = std.ArrayList(Scribe.Commit).init(ctx.alloc);
+    var scribe_list: ArrayList(Scribe.Commit) = .{};
 
     var count_all: HeatMapArray = .{0} ** HEATMAPSIZE;
 
@@ -366,7 +366,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
             m.title = try std.fmt.allocPrint(
                 ctx.alloc,
-                "{} commits on {}",
+                "{} commits on {f}",
                 .{ count_all[day_idx], date.timeTruncate() },
             );
         }
@@ -455,6 +455,7 @@ const std = @import("std");
 const eql = std.mem.eql;
 const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;
 const log = std.log;
 

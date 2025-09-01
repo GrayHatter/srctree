@@ -62,7 +62,7 @@ fn _curlRequest(a: Allocator, uri: []const u8) !CURLResult {
 }
 
 fn curlWriteCB(data: *anyopaque, size: c_uint, nmemb: c_uint, user_data: *anyopaque) callconv(.C) c_uint {
-    var buffer: *std.ArrayList(u8) = @alignCast(@ptrCast(user_data));
+    var buffer: *std.ArrayList(u8) = @ptrCast(@alignCast(user_data));
     var typed_data: [*]u8 = @ptrCast(data);
     buffer.appendSlice(typed_data[0 .. nmemb * size]) catch return 0;
     return nmemb * size;

@@ -311,17 +311,17 @@ fn fetch(a: Allocator, uri: []const u8) ![]u8 {
     var client = std.http.Client{ .allocator = a };
     //defer client.deinit();
 
-    var response = std.ArrayList(u8).init(a);
-    defer response.clearAndFree();
+    var response: std.ArrayList(u8) = .{};
+    defer response.deinit(a);
     const request = client.fetch(.{
         .location = .{ .url = uri },
-        .response_storage = .{ .dynamic = &response },
-        .max_append_size = 0xffffff,
+        //.response_storage = .{ .dynamic = &response },
+        //.max_append_size = 0xffffff,
     });
     if (request) |req| {
         std.debug.print("request code {}\n", .{req.status});
         std.debug.print("request body {s}\n", .{response.items});
-        return try response.toOwnedSlice();
+        return try response.toOwnedSlice(a);
     } else |err| {
         std.debug.print("stdlib request failed with error {}\n", .{err});
     }

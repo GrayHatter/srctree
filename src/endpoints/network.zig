@@ -19,7 +19,7 @@ pub fn index(ctx: *Frame) Error!void {
             if (remote.url) |_| {
                 dom = dom.open(html.h3(null, &html.Attr.class("upstream")));
                 dom.push(html.text("Upstream: "));
-                const purl = try allocPrint(ctx.alloc, "{link}", .{remote});
+                const purl = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(remote, .formatLink)});
                 dom.push(html.anch(purl, try html.Attr.create(ctx.alloc, "href", purl)));
                 dom = dom.close();
             }

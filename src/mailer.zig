@@ -119,11 +119,12 @@ pub fn send(a: Allocator, srv: *Server, msg: Message) !void {
 }
 
 fn receive() !void {
-    var stdin = std.io.getStdIn();
-    const in_reader = stdin.reader();
-    const reader = in_reader.any();
+    var stdin = std.fs.File.stdin();
+    var r_b: [0x20000]u8 = undefined;
+    var fd_reader = stdin.reader(&r_b);
+    const reader = &fd_reader.interface;
     const a = std.heap.page_allocator;
-    const message = reader.readAllAlloc(a, 0xA00000) catch |err| {
+    const message = reader.readAlloc(a, 0xA00000) catch |err| {
         switch (err) {
             else => std.log.err("something went wrong {}", .{err}),
         }

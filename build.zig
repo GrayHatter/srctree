@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
     const enable_libcurl = b.option(bool, "libcurl", "enable linking with libcurl") orelse false;
     const options = b.addOptions();
     options.addOption(bool, "libcurl", enable_libcurl);
-    const use_llvm = optimize != .Debug;
+    const use_llvm = optimize != .Debug or true;
 
     // Dependencies
     const verse = b.dependency("verse", .{
@@ -23,9 +23,11 @@ pub fn build(b: *std.Build) void {
     // srctree
     const exe = b.addExecutable(.{
         .name = "srctree",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
         .use_llvm = use_llvm,
         .use_lld = use_llvm,
     });
@@ -44,9 +46,11 @@ pub fn build(b: *std.Build) void {
 
     // srctree tests
     const unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
         .use_llvm = use_llvm,
         .use_lld = use_llvm,
     });
@@ -59,9 +63,11 @@ pub fn build(b: *std.Build) void {
     // Partner Binaries
     const maild = b.addExecutable(.{
         .name = "srctree-maild",
-        .root_source_file = b.path("src/mailer.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/mailer.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
         .use_llvm = use_llvm,
         .use_lld = use_llvm,
     });

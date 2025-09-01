@@ -69,7 +69,7 @@ fn new(ctx: *Frame) Error!void {
             for (remotes, network_remotes) |src, *dst| {
                 dst.* = .{
                     .value = src.name,
-                    .name = try allocPrint(ctx.alloc, "{diff}", .{src}),
+                    .name = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(src, .formatDiff)}),
                 };
             }
 
@@ -154,7 +154,10 @@ fn createDiff(vrs: *Frame) Error!void {
             }) catch unreachable;
             var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
             defer file.close();
-            file.writer().writeAll(data.blob) catch unreachable;
+            var w_b: [0x8000]u8 = undefined;
+            var writer = file.writer(&w_b);
+            writer.interface.writeAll(data.blob) catch unreachable;
+            try writer.interface.flush();
             var buf: [2048]u8 = undefined;
             const loc = try bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
             return vrs.redirect(loc, .see_other) catch unreachable;
@@ -406,7 +409,7 @@ fn resolveLineRefRepo(
     line_number: u32,
     line_stride: ?u32,
 ) !?[][]const u8 {
-    var found_lines = std.ArrayList([]const u8).init(a);
+    var found_lines: ArrayList([]const u8) = .{};
 
     const cmt = try repo.headCommit(a);
     var files: Git.Tree = try cmt.loadTree(a, repo);
@@ -459,8 +462,8 @@ fn resolveLineRefRepo(
         "<div title=\"{s}\" class=\"coderef\">{s}</div>",
         .{ try abx.Html.cleanAlloc(a, line), formatted },
     );
-    try found_lines.append(wrapped_line);
-    return try found_lines.toOwnedSlice();
+    try found_lines.append(a, wrapped_line);
+    return try found_lines.toOwnedSlice(a);
 }
 
 fn resolveLineRefDiff(
@@ -481,7 +484,7 @@ fn resolveLineRefDiff(
         }
     else
         null;
-    var found_lines = std.ArrayList([]const u8).init(a);
+    var found_lines: ArrayList([]const u8) = .{};
     const blocks = try diff.blocksAlloc(a);
     for (blocks) |block| {
         const change = try parseBlockHeader(block);
@@ -508,12 +511,12 @@ fn resolveLineRefDiff(
                     "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
                     .{ try abx.Html.cleanAlloc(a, line), color, formatted },
                 );
-                try found_lines.append(wrapped_line);
+                try found_lines.append(a, wrapped_line);
             }
             break;
         }
     } else return null;
-    return try found_lines.toOwnedSlice();
+    return try found_lines.toOwnedSlice(a);
 }
 
 fn lineNumberStride(target: []const u8) !struct { u32, ?u32 } {
@@ -624,8 +627,8 @@ test fileLineRef {
 
 const Side = enum { del, add };
 fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *const Git.Repo) ![]u8 {
-    var message_lines = std.ArrayList([]const u8).init(a);
-    defer message_lines.clearAndFree();
+    var message_lines: ArrayList([]const u8) = .{};
+    defer message_lines.clearAndFree(a);
 
     var itr = splitScalar(u8, comment, '\n');
     while (itr.next()) |line_| {
@@ -638,21 +641,22 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                     const left, const right = try lineNumberStride(line[h..]);
 
                     if (try resolveLineRefDiff(a, line, filename, diff, left, right, filepos)) |lines| {
-                        try message_lines.appendSlice(lines);
+                        try message_lines.appendSlice(a, lines);
                         var end: usize = h;
                         while (end < line.len and !isWhitespace(line[end])) {
                             end += 1;
                         }
                         if (end < line.len) try message_lines.append(
+                            a,
                             try abx.Html.cleanAlloc(a, line[end..]),
                         );
                     } else if (resolveLineRefRepo(a, line, filename, repo, left, right) catch |err| switch (err) {
                         error.LineNotFound => null,
                         else => return err,
                     }) |lines| {
-                        try message_lines.appendSlice(lines);
+                        try message_lines.appendSlice(a, lines);
                     } else {
-                        try message_lines.append(try allocPrint(
+                        try message_lines.append(a, try allocPrint(
                             a,
                             "<span title=\"line not found in this diff\">{s}</span>",
                             .{try abx.Html.cleanAlloc(a, line)},
@@ -662,7 +666,7 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                 break;
             }
         } else {
-            try message_lines.append(try abx.Html.cleanAlloc(a, line));
+            try message_lines.append(a, try abx.Html.cleanAlloc(a, line));
         }
     }
 
@@ -749,14 +753,14 @@ fn view(ctx: *Frame) Error!void {
                 .comment => {
                     c_ctx.* = .{
                         .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
-                        .date = try allocPrint(ctx.alloc, "{}", .{Humanize.unix(msg.updated)}),
+                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
                         .message = if (patch) |pt|
                             translateComment(ctx.alloc, msg.message.?, pt, &repo) catch unreachable
                         else
                             try abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
                             index,
-                            fmtSliceHexLower(msg.hash[0..]),
+                            msg.hash[0..],
                         }) },
                         .sub_thread = null,
                     };
@@ -810,7 +814,7 @@ fn list(ctx: *Frame) Error!void {
 
     const last = (Types.currentIndex(.deltas) catch 0) + 1;
 
-    var d_list = std.ArrayList(S.DeltaList).init(ctx.alloc);
+    var d_list: ArrayList(S.DeltaList) = .{};
     for (0..last) |i| {
         var d = Delta.open(ctx.alloc, rd.name, i) catch continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .diff) {
@@ -820,7 +824,7 @@ fn list(ctx: *Frame) Error!void {
 
         _ = d.loadThread(ctx.alloc) catch unreachable;
         const cmtsmeta = d.countComments();
-        try d_list.append(.{
+        try d_list.append(ctx.alloc, .{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
             .title_uri = try allocPrint(
                 ctx.alloc,
@@ -847,7 +851,7 @@ fn list(ctx: *Frame) Error!void {
         .body_header = .{ .nav = .{
             .nav_buttons = &try RepoEndpoint.navButtons(ctx),
         } },
-        .delta_list = try d_list.toOwnedSlice(),
+        .delta_list = d_list.items,
         .search = def_search,
     });
 
@@ -860,7 +864,6 @@ const ArrayList = std.ArrayListUnmanaged;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
-const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 const indexOf = std.mem.indexOf;
 const indexOfAny = std.mem.indexOfAny;
 const indexOfAnyPos = std.mem.indexOfAnyPos;

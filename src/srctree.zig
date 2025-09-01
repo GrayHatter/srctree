@@ -86,8 +86,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
     fr.response_data.add(bh) catch {};
     return call(fr) catch |err| switch (err) {
         error.InvalidURI => builder(fr, notFound), // TODO catch inline
-        error.BrokenPipe => std.debug.print("client disconnect", .{}),
-        error.IOWriteFailure => std.debug.print("Unexpected IOWriteFailure\n", .{}),
+        error.WriteFailed => std.debug.print("Unexpected WriteFailure\n", .{}),
         error.Unrouteable => {
             std.debug.print("Unrouteable", .{});
             if (@errorReturnTrace()) |trace| {

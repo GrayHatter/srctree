@@ -3,7 +3,9 @@ alloc: Allocator,
 const Auth = @This();
 
 pub fn init(a: Allocator) Auth {
-    return .{ .alloc = a };
+    return .{
+        .alloc = a,
+    };
 }
 
 pub fn raze(_: Auth) void {}
@@ -38,7 +40,7 @@ pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
     log.debug("lookup user {s}", .{user_id});
     const auth: *Auth = @ptrCast(@alignCast(ptr));
     const user: *types.User = auth.alloc.create(types.User) catch @panic("OOM");
-    user.* = types.User.findMTLSFingerprint(user_id) catch |err| {
+    user.* = types.User.findMTLSFingerprint(auth.alloc, user_id) catch |err| {
         std.debug.print("mtls lookup error {}\n", .{err});
         return error.UnknownUser;
     };

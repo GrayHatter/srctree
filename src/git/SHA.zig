@@ -46,7 +46,7 @@ pub fn hexAlloc(sha: SHA, a: Allocator) !*Hex {
 
 pub fn toHex(sha: Bin) Hex {
     var hex_: Hex = undefined;
-    _ = bufPrint(&hex_, "{}", .{hexLower(sha[0..])}) catch unreachable;
+    _ = bufPrint(&hex_, "{x}", .{sha[0..]}) catch unreachable;
     return hex_;
 }
 
@@ -87,14 +87,12 @@ pub fn eqlIsh(self: SHA, peer: SHA) bool {
     return mem.eql(u8, self.bin[0..peer.len], peer.bin[0..peer.len]);
 }
 
-pub fn format(sha: SHA, comptime fmt: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    if (comptime std.mem.eql(u8, "bin", fmt)) {
-        return try out.print("{any}", .{sha.bin[0..sha.len]});
-    } else if (comptime std.mem.eql(u8, "any", fmt)) {
-        return try out.print("{any}", .{sha.bin[0..sha.len]});
-    } else {
-        return try out.print("{s}", .{hexLower(sha.bin[0..sha.len])});
-    }
+pub fn formatHex(sha: SHA, w: *std.Io.Writer) !void {
+    return try w.print("{x}", .{sha.bin[0..sha.len]});
+}
+
+pub fn formatBin(sha: SHA, w: *std.Io.Writer) !void {
+    return try w.print("{any}", .{sha.bin[0..sha.len]});
 }
 
 test "hex tranlations" {
@@ -118,4 +116,3 @@ const Allocator = std.mem.Allocator;
 const mem = std.mem;
 const bufPrint = std.fmt.bufPrint;
 const parseInt = std.fmt.parseInt;
-const hexLower = std.fmt.fmtSliceHexLower;

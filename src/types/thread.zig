@@ -44,7 +44,7 @@ pub fn open(a: std.mem.Allocator, index: usize) !Thread {
     var thread = readerFn(data);
 
     if (indexOf(u8, data, "\n\n")) |start| {
-        var list: std.ArrayListUnmanaged(Message) = .{};
+        var list: ArrayList(Message) = .{};
         var itr = std.mem.splitScalar(u8, data[start + 2 ..], '\n');
         while (itr.next()) |next| {
             if (next.len != 64) continue;
@@ -67,17 +67,21 @@ pub fn commit(thread: Thread) !void {
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{thread.index});
     const file = try Types.commit(.thread, filename);
     defer file.close();
-    var writer = file.writer();
-    try writerFn(&thread, &writer);
+
+    var w_b: [2048]u8 = undefined;
+    var fd_writer = file.writer(&w_b);
+    const writer = &fd_writer.interface;
+    try writerFn(&thread, writer);
 
     // Make a best effort to save/protect all data
     for (thread.messages) |msg| {
         msg.commit() catch continue;
         var hash_str: [@sizeOf(Types.DefaultHash) * 2 + 1]u8 = undefined;
         try writer.writeAll(
-            bufPrint(&hash_str, "{}\n", .{fmtSliceHexLower(&msg.hash)}) catch unreachable,
+            bufPrint(&hash_str, "{x}\n", .{&msg.hash}) catch unreachable,
         );
     }
+    try writer.flush();
 }
 
 pub fn addComment(thread: *Thread, a: Allocator, author: []const u8, message: []const u8) !void {
@@ -133,11 +137,11 @@ pub fn iterator() Iterator {
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const bufPrint = std.fmt.bufPrint;
 const indexOf = std.mem.indexOf;
 const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
-const fmtSliceHexLower = std.fmt.fmtSliceHexLower;
 const parseInt = std.fmt.parseInt;
 
 pub const Message = @import("message.zig");

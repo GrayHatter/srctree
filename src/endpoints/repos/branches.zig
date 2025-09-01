@@ -20,7 +20,7 @@ pub fn list(frame: *Frame) Router.Error!void {
     }
 
     const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
-        .href = try allocPrint(frame.alloc, "{link}", .{up}),
+        .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
     const open_graph: S.OpenGraph = .{
