@@ -16,6 +16,33 @@ pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
 
 pub const Storage = std.fs.Dir;
 
+pub fn VarString(comptime size: usize) type {
+    return struct {
+        buffer: [size]u8 = undefined,
+        len: usize = 0,
+
+        pub const is_var_string = true;
+        pub const Self = @This();
+
+        pub fn init(str: []const u8) Self {
+            const len = @min(size, str.len);
+            var self: Self = .{
+                .len = len,
+            };
+            @memcpy(self.buffer[0..len], str[0..len]);
+            return self;
+        }
+
+        pub fn slice(str: *const Self) []const u8 {
+            return str.buffer[0..str.len];
+        }
+
+        pub fn writeableSlice(str: *Self) []u8 {
+            return str.buffer[str.len..];
+        }
+    };
+}
+
 var storage_dir: Storage = undefined;
 
 pub fn init(dir: Storage) !void {
@@ -174,8 +201,17 @@ pub fn readerWriter(T: type, default: T) type {
                 if (line_itr.index != 0) {
                     const name, const value: []u8 = split(line) orelse .{ &.{}, &.{} };
                     if (std.mem.eql(u8, name, field.name)) switch (field.type) {
-                        [32]u8 => for (0..32) |i| {
-                            @field(output, field.name)[i] = parseInt(u8, value[i * 2 .. i * 2 + 2], 16) catch 0;
+                        [32]u8 => {
+                            if (value.len == 32) {
+                                for (0..32) |i| {
+                                    @field(output, field.name)[i] = parseInt(u8, value[i * 2 .. i * 2 + 2], 16) catch 0;
+                                }
+                            }
+                        },
+                        [40]u8 => {
+                            if (value.len == 40) {
+                                @memcpy(@field(output, field.name)[0..40], value[0..40]);
+                            }
                         },
                         []u8, []const u8, ?[]const u8 => {
                             for (value) |*chr| {
@@ -187,6 +223,8 @@ pub fn readerWriter(T: type, default: T) type {
                         i64 => @field(output, field.name) = parseInt(i64, value, 10) catch @field(output, field.name),
                         i32 => @field(output, field.name) = parseInt(i32, value, 10) catch @field(output, field.name),
                         bool => @field(output, field.name) = std.mem.eql(u8, value, "true"),
+                        VarString(128) => @field(output, field.name) = VarString(128).init(value),
+                        VarString(256) => @field(output, field.name) = VarString(256).init(value),
                         else => switch (@typeInfo(field.type)) {
                             .@"enum" => |enumT| {
                                 if (!enumT.is_exhaustive) @compileError("non-exaustive enums are not supported");
@@ -211,10 +249,20 @@ pub fn readerWriter(T: type, default: T) type {
 
             inline for (@typeInfo(T).@"struct".fields) |field| {
                 switch (field.type) {
-                    ?[]const u8 => {
-                        if (@field(t, field.name)) |value| {
+                    []u8,
+                    []const u8,
+                    ?[]const u8,
+                    VarString(128),
+                    VarString(256),
+                    => |kind| {
+                        const value: ?[]const u8 = switch (kind) {
+                            []u8, []const u8, ?[]const u8 => @field(t, field.name),
+                            VarString(128), VarString(256) => @field(t, field.name).slice(),
+                            else => comptime unreachable,
+                        };
+                        if (value) |v| {
                             try w.print("{s}: ", .{field.name});
-                            var itr = std.mem.splitScalar(u8, value, '\n');
+                            var itr = std.mem.splitScalar(u8, v, '\n');
                             while (itr.next()) |line| {
                                 try w.writeAll(line);
                                 if (itr.peek()) |_| try w.writeAll("\x1a");
@@ -222,17 +270,14 @@ pub fn readerWriter(T: type, default: T) type {
                             try w.writeAll("\n");
                         }
                     },
-                    []u8, []const u8 => {
-                        try w.print("{s}: ", .{field.name});
-                        var itr = std.mem.splitScalar(u8, @field(t, field.name), '\n');
-                        while (itr.next()) |line| {
-                            try w.writeAll(line);
-                            if (itr.peek()) |_| try w.writeAll("\x1a");
-                        }
-                        try w.writeAll("\n");
-                    },
+
                     [32]u8 => try w.print("{s}: {x}\n", .{ field.name, &@field(t, field.name) }),
-                    usize, isize, i64, i32 => try w.print("{s}: {d}\n", .{ field.name, @field(t, field.name) }),
+                    [40]u8 => try w.print("{s}: {s}\n", .{ field.name, &@field(t, field.name) }),
+                    usize,
+                    isize,
+                    i64,
+                    i32,
+                    => try w.print("{s}: {d}\n", .{ field.name, @field(t, field.name) }),
                     bool => try w.print("{s}: {s}\n", .{ field.name, if (@field(t, field.name)) "true" else "false" }),
                     else => switch (@typeInfo(field.type)) {
                         .@"enum" => |enumT| {

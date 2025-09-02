@@ -63,30 +63,6 @@ pub fn commit(issue: Issue) !void {
     try writerFn(&issue, &writer);
 }
 
-//pub fn getComments(self: *Issue, a: Allocator) ![]Comment {
-//    if (self.comments) |_| return self.comments.?;
-//
-//    if (self.comment_data) |cd| {
-//        self.comments = try Comment.loadFromData(a, cd);
-//    }
-//    return &[0]Comment{};
-//}
-//
-//pub fn addComment(self: *Issue, a: Allocator, c: Comment) !void {
-//    const target = (self.comments orelse &[0]Comment{}).len;
-//    if (self.comments) |*comments| {
-//        if (a.resize(comments.*, target + 1)) {
-//            comments.*.len = target + 1;
-//        } else {
-//            self.comments = try a.realloc(comments.*, target + 1);
-//        }
-//    } else {
-//        self.comments = try a.alloc(Comment, target + 1);
-//    }
-//    self.comments.?[target] = c;
-//    try self.writeOut();
-//}
-
 pub fn raze(self: Issue, a: std.mem.Allocator) void {
     //if (self.alloc_data) |data| {
     //    a.free(data);
