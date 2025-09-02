@@ -94,10 +94,10 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
             const amt = std.posix.read(poll_fd[0].fd, buf) catch unreachable;
             if (amt == 0) break;
             if (headers_required) {
-                _ = ctx.sendRawSlice("HTTP/1.1 200 OK\r\n") catch unreachable;
+                _ = ctx.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch unreachable;
                 headers_required = false;
             }
-            ctx.sendRawSlice(buf[0..amt]) catch unreachable;
+            ctx.downstream.writer.writeAll(buf[0..amt]) catch unreachable;
         } else if (poll_fd[0].revents & err_mask != 0) {
             break;
         }
@@ -144,8 +144,8 @@ fn __objects(ctx: *Verse.Frame) Error!void {
     //var data = repo.findBlob(ctx.alloc, &sha) catch unreachable;
 
     ctx.status = .ok;
-    ctx.sendHeaders() catch return Error.Unknown;
-    ctx.sendRawSlice(data) catch return Error.Unknown;
+    try ctx.sendHeaders();
+    try ctx.downstream.writer.writeAll(data);
 }
 
 fn __info(ctx: *Verse.Frame) Error!void {
