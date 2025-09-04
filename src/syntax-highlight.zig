@@ -171,8 +171,8 @@ pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8
     }
 
     _ = child.wait() catch unreachable;
-    if (std.mem.endsWith(u8, buf.items, "</pre></div>")) {
-        buf.items.len -= 12;
+    if (std.mem.endsWith(u8, buf.items, "</pre></div>\n")) {
+        buf.items.len -= 13;
     }
     return try buf.toOwnedSlice(a);
 }
