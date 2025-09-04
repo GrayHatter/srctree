@@ -74,7 +74,7 @@ fn gistPost(frame: *Frame) Error!void {
 }
 
 fn new(ctx: *Frame) Error!void {
-    const files = [1]S.GistFiles{.{ .file_name = &.{}, .blob_lines = &.{} }};
+    const files = [1]S.GistFiles{.{ .file_name = &.{}, .numbered_lines = &.{} }};
     return edit(ctx, &files);
 }
 
@@ -90,10 +90,10 @@ fn edit(vrs: *Frame, files: []const S.GistFiles) Error!void {
     return vrs.sendPage(&page);
 }
 
-fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.BlobLines {
+fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.NumberedLines {
     var litr = std.mem.splitScalar(u8, text, '\n');
     const count = std.mem.count(u8, text, "\n");
-    const lines = try a.alloc(S.BlobLines, count + 1);
+    const lines = try a.alloc(S.NumberedLines, count + 1);
     var i: usize = 0;
     while (litr.next()) |line| {
         lines[i] = .{
@@ -121,7 +121,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
 
         o.* = .{
             .file_name = file_name,
-            .blob_lines = wrapped,
+            .numbered_lines = wrapped,
         };
     }
     return out;

@@ -103,14 +103,12 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
 
     var resolve = repo.loadBlob(frame.alloc, blb.sha) catch return error.Unknown;
     if (!resolve.isFile()) return error.Unknown;
-    var formatted: []const u8 = undefined;
-    if (Highlight.Language.guessFromFilename(blb.name)) |lang| {
-        formatted = try Highlight.highlight(frame.alloc, lang, resolve.data.?);
-    } else if (excludedExt(blb.name)) {
-        formatted = "This file type is currently unsupported";
-    } else {
-        formatted = verse.abx.Html.cleanAlloc(frame.alloc, resolve.data.?) catch return error.Unknown;
-    }
+    const formatted: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
+        try Highlight.highlight(frame.alloc, lang, resolve.data.?)
+    else if (excludedExt(blb.name))
+        "This file type is currently unsupported"
+    else
+        abx.Html.cleanAlloc(frame.alloc, resolve.data.?) catch return error.Unknown;
 
     const wrapped = try wrapLineNumbers(frame.alloc, formatted);
 
@@ -134,7 +132,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
             .upstream = upstream,
         },
         .filename = blb.name,
-        .blob_lines = wrapped,
+        .numbered_lines = wrapped,
     });
 
     try frame.sendPage(&page);
@@ -153,12 +151,10 @@ fn excludedExt(name: []const u8) bool {
     return false;
 }
 
-fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.BlobLines {
-    // TODO
-
+fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.NumberedLines {
     var litr = splitScalar(u8, text, '\n');
     const count = std.mem.count(u8, text, "\n");
-    const lines = try a.alloc(S.BlobLines, count + 1);
+    const lines = try a.alloc(S.NumberedLines, count + 1);
     var i: usize = 0;
     while (litr.next()) |line| {
         lines[i] = .{
@@ -189,6 +185,7 @@ const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 
 const verse = @import("verse");
+const abx = verse.abx;
 const Frame = verse.Frame;
 const S = verse.template.Structs;
 const PageData = verse.template.PageData;
