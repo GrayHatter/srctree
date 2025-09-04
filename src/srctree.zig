@@ -69,10 +69,10 @@ fn builder(fr: *Frame, call: BuildFn) void {
     }
 
     const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
-    var bh: S.BodyHeaderHtml = fr.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
+    var bh: S.BodyHeaderHtml = (fr.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
         .nav_auth = "Error",
         .nav_buttons = &btns,
-    } };
+    } }).*;
 
     if (fr.user) |usr| {
         if (usr.username) |un| {
@@ -83,7 +83,8 @@ fn builder(fr: *Frame, call: BuildFn) void {
     } else {
         bh.nav.nav_auth = "Public";
     }
-    fr.response_data.add(bh) catch {};
+
+    fr.response_data.clone(S.BodyHeaderHtml, fr.alloc, bh) catch {};
     return call(fr) catch |err| switch (err) {
         error.InvalidURI => builder(fr, notFound), // TODO catch inline
         error.WriteFailed => std.debug.print("Unexpected WriteFailure\n", .{}),

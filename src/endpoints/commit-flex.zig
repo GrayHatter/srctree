@@ -440,7 +440,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     const page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
         .flex_weeks = flex_weeks,
         .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),

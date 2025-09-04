@@ -117,7 +117,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
 
     var page = TreePage.init(.{
         .meta_head = .{ .title = page_title, .open_graph = open_graph },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .tree_blob_header = .{
             .git_uri = .{
                 .host = "srctree.gr.ht",

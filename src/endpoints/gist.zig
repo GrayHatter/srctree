@@ -83,7 +83,7 @@ fn edit(vrs: *Frame, files: []const S.GistFiles) Error!void {
         .meta_head = .{
             .open_graph = .{ .title = "Create A New Gist" },
         },
-        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = vrs.response_data.get(S.BodyHeaderHtml).?.*,
         .gist_files = files,
     });
 
@@ -129,7 +129,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
 
 fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
-    const body_header = vrs.response_data.get(S.BodyHeaderHtml) catch S.BodyHeaderHtml{ .nav = .{ .nav_buttons = &.{} } };
+    const body_header: *const S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{ .nav_buttons = &.{} } };
 
     const hash = vrs.uri.next() orelse return error.InvalidURI;
     if (hash.len != 64) return error.DataInvalid;
@@ -144,7 +144,7 @@ fn view(vrs: *Frame) Error!void {
             else
                 try allocPrint(vrs.alloc, "{} files", .{gist.file_count}),
         } },
-        .body_header = body_header,
+        .body_header = body_header.*,
         .gist_files = files,
     });
 

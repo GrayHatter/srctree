@@ -76,7 +76,7 @@ pub fn blame(f: *Frame) Router.Error!void {
 
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = f.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .filename = file_name,
         .uri_filename = rd.path.?.buffer,
         .repo_name = rd.name,

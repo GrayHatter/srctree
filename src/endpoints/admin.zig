@@ -10,21 +10,22 @@ pub const verse_endpoints = verse.Endpoints(.{Repo});
 
 const AdminPage = template.PageData("admin.html");
 
-pub fn index(ctx: *Frame) Error!void {
-    try ctx.requireValidUser();
-    if (ctx.request.data.post) |pd| {
+pub fn index(f: *Frame) Error!void {
+    try f.requireValidUser();
+    if (f.request.data.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
-        return Repo.create(ctx);
+        return Repo.create(f);
     }
-    return default(ctx);
+    return default(f);
 }
 
-fn default(ctx: *Frame) Error!void {
-    try ctx.requireValidUser();
+fn default(f: *Frame) Error!void {
+    try f.requireValidUser();
 
+    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+        .body_header = bhdr.*,
         .active_admin = .default,
         .admin_settings = null,
         .admin_remotes = null,
@@ -32,7 +33,7 @@ fn default(ctx: *Frame) Error!void {
         .admin_repo_delete = null,
         .admin_repo_clone = null,
     });
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const SettingsReq = struct {
@@ -52,9 +53,9 @@ fn settingsPost(vrs: *Frame) Router.Error!void {
     return vrs.redirect("/admin/settings", .see_other) catch unreachable;
 }
 
-pub fn settings(vrs: *Frame) Router.Error!void {
-    try vrs.requireValidUser();
-    var blocks: []S.ConfigBlocks = try vrs.alloc.alloc(S.ConfigBlocks, global_config.ctx.ns.len);
+pub fn settings(f: *Frame) Router.Error!void {
+    try f.requireValidUser();
+    var blocks: []S.ConfigBlocks = try f.alloc.alloc(S.ConfigBlocks, global_config.ctx.ns.len);
     for (global_config.ctx.ns, blocks) |ns, *block| {
         block.* = .{
             .config_name = ns.name,
@@ -62,10 +63,10 @@ pub fn settings(vrs: *Frame) Router.Error!void {
             .count = mem.count(u8, ns.block, "\n") + 2,
         };
     }
-
+    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = vrs.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+        .body_header = bhdr.*,
         .active_admin = .settings,
         .admin_settings = .{ .config_blocks = blocks[0..] },
         .admin_remotes = null,
@@ -74,15 +75,16 @@ pub fn settings(vrs: *Frame) Router.Error!void {
         .admin_repo_clone = null,
     });
 
-    try vrs.sendPage(&page);
+    try f.sendPage(&page);
 }
 
-fn remotes(ctx: *Frame) Error!void {
-    try ctx.requireValidUser();
+fn remotes(f: *Frame) Error!void {
+    try f.requireValidUser();
 
+    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+        .body_header = bhdr.*,
         .active_admin = .remotes,
         .admin_settings = null,
         .admin_remotes = null,
@@ -90,7 +92,7 @@ fn remotes(ctx: *Frame) Error!void {
         .admin_repo_delete = null,
         .admin_repo_clone = null,
     });
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const Repo = struct {
@@ -115,9 +117,9 @@ const Repo = struct {
         repo_name: []const u8,
     };
 
-    fn createPost(ctx: *Frame) Error!void {
-        try ctx.requireValidUser();
-        var post = ctx.request.data.post orelse return error.DataMissing;
+    fn createPost(f: *Frame) Error!void {
+        try f.requireValidUser();
+        var post = f.request.data.post orelse return error.DataMissing;
         const repo_req = post.validate(CreateRepoReq) catch return error.DataInvalid;
 
         if (repo_req.repo_name.len > 40) return error.DataInvalid;
@@ -133,19 +135,20 @@ const Repo = struct {
 
         if (std.fs.cwd().openDir(dir_name, .{})) |_| return error.Unknown else |_| {}
 
-        //const new_repo = git.Repo.createNew(ctx.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
+        //const new_repo = git.Repo.createNew(f.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
         //std.debug.print("creating {any}\n", .{new_repo});
 
         const redirect_uri = try std.fmt.bufPrint(&buf, "/repo/{s}", .{repo_req.repo_name});
-        return ctx.redirect(redirect_uri, .see_other) catch unreachable;
+        return f.redirect(redirect_uri, .see_other) catch unreachable;
     }
 
-    fn create(ctx: *Frame) Error!void {
-        try ctx.requireValidUser();
+    fn create(f: *Frame) Error!void {
+        try f.requireValidUser();
 
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
-            .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+            .body_header = bhdr.*,
             .active_admin = .repo_create,
             .admin_settings = null,
             .admin_remotes = null,
@@ -153,16 +156,17 @@ const Repo = struct {
             .admin_repo_delete = null,
             .admin_repo_clone = null,
         });
-        try ctx.sendPage(&page);
+        try f.sendPage(&page);
     }
 
     const deletePost = delete;
 
-    fn delete(ctx: *Frame) Error!void {
-        try ctx.requireValidUser();
+    fn delete(f: *Frame) Error!void {
+        try f.requireValidUser();
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
-            .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+            .body_header = bhdr.*,
             .active_admin = .repo_delete,
             .admin_settings = null,
             .admin_remotes = null,
@@ -170,19 +174,20 @@ const Repo = struct {
             .admin_repo_delete = .{},
             .admin_repo_clone = null,
         });
-        try ctx.sendPage(&page);
+        try f.sendPage(&page);
     }
 
     const CloneUpstreamReq = struct {
         repo_uri: []const u8,
     };
 
-    fn clonePost(ctx: *Frame) Error!void {
-        try ctx.requireValidUser();
+    fn clonePost(f: *Frame) Error!void {
+        try f.requireValidUser();
 
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
-            .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+            .body_header = bhdr.*,
             .active_admin = .repo_clone,
             .admin_settings = null,
             .admin_remotes = null,
@@ -191,7 +196,7 @@ const Repo = struct {
             .admin_repo_clone = null,
         });
 
-        var post = ctx.request.data.post orelse return error.DataMissing;
+        var post = f.request.data.post orelse return error.DataMissing;
         const clone_req = post.validate(CloneUpstreamReq) catch return error.DataInvalid;
 
         std.debug.print("repo uri {s}\n", .{clone_req.repo_uri});
@@ -201,28 +206,29 @@ const Repo = struct {
         // TODO sanitize requested repo name
         const dir = std.fs.cwd().openDir("repos", .{}) catch |err| {
             page.data.admin_repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
-            return try ctx.sendPage(&page);
+            return try f.sendPage(&page);
         };
 
-        var agent = git.Agent{ .alloc = ctx.alloc, .cwd = dir };
+        var agent = git.Agent{ .alloc = f.alloc, .cwd = dir };
         std.debug.print("fork bare {s}\n", .{
             agent.forkRemote(clone_req.repo_uri, new_repo_name) catch |err| {
                 page.data.admin_repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
-                return try ctx.sendPage(&page);
+                return try f.sendPage(&page);
             },
         });
 
         // TODO redirect to new repo
         var buf: [2048]u8 = undefined;
         const redirect_uri = try std.fmt.bufPrint(&buf, "/repo/{s}", .{new_repo_name});
-        return ctx.redirect(redirect_uri, .see_other) catch unreachable;
+        return f.redirect(redirect_uri, .see_other) catch unreachable;
     }
 
-    fn clone(ctx: *Frame) Error!void {
-        try ctx.requireValidUser();
+    fn clone(f: *Frame) Error!void {
+        try f.requireValidUser();
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
-            .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{ .nav_buttons = &.{} } },
+            .body_header = bhdr.*,
             .active_admin = .repo_clone,
             .admin_settings = null,
             .admin_remotes = null,
@@ -230,7 +236,7 @@ const Repo = struct {
             .admin_repo_delete = null,
             .admin_repo_clone = .{ .post_error = null },
         });
-        try ctx.sendPage(&page);
+        try f.sendPage(&page);
     }
 };
 

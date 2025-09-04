@@ -19,20 +19,20 @@ const APIRouteData = struct {
     alloc: Allocator,
     version: usize = 0,
 
-    pub fn init(a: Allocator) !APIRouteData {
+    pub fn init(a: Allocator) APIRouteData {
         return .{
             .alloc = a,
         };
     }
 };
 
-pub fn router(vrs: *Frame) Router.RoutingError!Router.BuildFn {
-    const uri_api = vrs.uri.next() orelse return heartbeat;
+pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
+    const uri_api = f.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
-    const rd = APIRouteData.init(vrs.alloc) catch @panic("OOM");
-    vrs.response_data.add(rd) catch unreachable;
+    const rd: APIRouteData = .init(f.alloc);
+    f.response_data.clone(APIRouteData, f.alloc, rd) catch unreachable;
 
-    return Router.defaultRouter(vrs, &endpoints);
+    return Router.defaultRouter(f, &endpoints);
 }
 
 const Diff = struct {

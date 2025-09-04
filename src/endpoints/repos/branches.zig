@@ -30,7 +30,7 @@ pub fn list(frame: *Frame) Router.Error!void {
 
     var page = BranchPage.init(.{
         .meta_head = .{ .open_graph = open_graph },
-        .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
         .upstream = upstream,
         .repo_name = rd.name,
         .repo_branches = branches,

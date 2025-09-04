@@ -28,10 +28,7 @@ pub fn index(ctx: *Frame) Error!void {
 
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
-            .nav_auth = "Error",
-            .nav_buttons = &[_]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }},
-        } },
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .netlist = try dom.render(ctx.alloc, .compact),
     });
 

@@ -23,7 +23,7 @@ pub fn list(frame: *Frame) Router.Error!void {
 
     var page = TagPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = frame.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
         .upstream = upstream,
         .tags = tstack,
         .repo_name = rd.name,

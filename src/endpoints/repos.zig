@@ -133,27 +133,29 @@ pub fn navButtons(ctx: *Frame) ![2]S.NavButtons {
     return btns;
 }
 
-pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
-    const rd = RouteData.init(ctx.uri) orelse return list;
+pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
+    const rd = RouteData.init(f.uri) orelse return list;
 
     if (rd.exists()) {
-        var bh: S.BodyHeaderHtml = ctx.response_data.get(S.BodyHeaderHtml) catch .{ .nav = .{
-            .nav_auth = "Error",
-            .nav_buttons = undefined,
-        } };
-        bh.nav.nav_buttons = ctx.alloc.dupe(S.NavButtons, &(navButtons(ctx) catch @panic("unreachable"))) catch unreachable;
-        ctx.response_data.add(bh) catch unreachable;
+        const bh: *S.BodyHeaderHtml = if (f.response_data.get(S.BodyHeaderHtml)) |bhP| bhP else bhP: {
+            f.response_data.clone(S.BodyHeaderHtml, f.alloc, .{ .nav = .{
+                .nav_auth = "Error",
+                .nav_buttons = undefined,
+            } }) catch unreachable;
+            break :bhP f.response_data.get(S.BodyHeaderHtml).?;
+        };
+        bh.nav.nav_buttons = f.alloc.dupe(S.NavButtons, &(navButtons(f) catch @panic("unreachable"))) catch unreachable;
 
-        _ = ctx.uri.next();
-        _ = ctx.uri.next();
+        _ = f.uri.next();
+        _ = f.uri.next();
 
         if (rd.verb) |verb| {
             return switch (verb) {
-                inline else => |v| Router.targetRouter(ctx, @tagName(v), &routes),
+                inline else => |v| Router.targetRouter(f, @tagName(v), &routes),
             };
         }
         return treeBlob;
-        //return Router.defaultRouter(ctx, &routes);
+        //return Router.defaultRouter(f, &routes);
     }
     return error.Unrouteable;
 }
@@ -320,7 +322,7 @@ fn list(ctx: *Frame) Router.Error!void {
 
     var page = ReposPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml) catch return error.Unknown,
+        .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .buttons = repo_buttons,
         .repo_list = repos_compiled,
     });
