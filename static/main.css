@@ -127,6 +127,7 @@ content {
 	}
 	&.search {
 		min-width: 50rem;
+		width: auto;
 	}
 }
 
@@ -379,43 +380,45 @@ readme {
 
 search {
 	font-family: 'Titillium Web', sans-serif;
+	margin: 0 2.5%;
 	background: #333;
-	height: 45px;
-	border-radius: 4px 4px 0 0;
-	border: 1px gray solid;
-	border-bottom: 0px;
-	padding: 4px ;
+	height: 3rem;
+	border-radius: 2px;
+	padding: 0.4rem 1%;
 	display: flex;
-	justify-content: space-around;
+	gap: 1em;
+	form {
+		flex-grow: 1;
+		display: flex;
+		input { flex-grow: 1; }
+	}
 }
 
 actionable {
-	border: 1px gray solid;
-	border-bottom: #4e0029 solid 2px;
-	border-radius: 0 0 4px 4px;
+	margin: 1rem 2.5%;
 	display: block;
-	margin-bottom: 20px;
 	min-height: 50px;
-	padding: 14px;
 	row  {
-		> div {
-			display: flex;
-			justify-content: space-between;
-			.muted {
-				margin: 0 3px 0 0 ;
-				display: inline-block;
-				width: 2em;
-			}
-		}
-		border: none;
-		border-bottom: #808080 solid 1px;
-		color: rgb(255, 255, 235);
-		display: block;
+		color: white;
+		display: flex;
+		justify-content: space-between;
 		margin-bottom: 15px;
+		border-bottom: 1px solid gray;
 		text-align: left;
-		desc {
-			display: block;
+		a { display: block; }
+		> div { margin: 0 1%; }
+		div.main {
+			flex-grow: 1;
+			font-size: 124%;
+			width: auto;
 		}
+		.meta { width: auto; }
+		.muted {
+			margin: 0 3px 0 0 ;
+			display: inline-block;
+			font-size: 1rem;
+		}
+		desc { display: block; }
 
 	}
 }

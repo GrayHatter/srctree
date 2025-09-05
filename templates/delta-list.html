@@ -15,14 +15,15 @@
       <actionable>
       <For DeltaList>
         <row>
-          <div>
-            <div>
-              <span class="muted"><Index></span>
-              <a href="<TitleUri>"><Title></a>
-            </div>
+          <div class="main">
+            <a href="<TitleUri/>">
+              <div><span class="muted"><Index /></span> <Title /></div>
+              <desc class="muted"><Desc default="&nbsp;" /></desc>
+            </a>
+          </div>
+          <div class="meta">
             <span><span class="icon <CommentNew default="" />"></span><CommentCount type="usize" /></span>
           </div>
-          <desc class="muted"><Desc default="&nbsp;"></desc>
         </row>
         </For>
       </actionable>
