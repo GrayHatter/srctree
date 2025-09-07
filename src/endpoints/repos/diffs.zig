@@ -702,11 +702,6 @@ fn view(ctx: *Frame) Error!void {
         else => return error.DataInvalid,
     }
 
-    const patch_header = S.Header{
-        .title = abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
-        .message = abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
-    };
-
     // meme saved to protect history
     //for ([_]Comment{ .{
     //    .author = "grayhatter",
@@ -783,13 +778,12 @@ fn view(ctx: *Frame) Error!void {
 
     const username = if (ctx.user) |usr| usr.username.? else "public";
 
-    const patch_data: S.Patch = if (patch_formatted) |pf| .{
-        .header = patch_header,
-        .patch = pf,
-    } else .{
-        .header = patch_header,
-        .patch = .{ .files = &.{} },
-    };
+    const patch_data: S.Patch = .{ .patch = patch_formatted orelse .{ .files = &.{} } };
+
+    const status: []const u8 = if (delta.closed)
+        "<span class=closed>closed</span>"
+    else
+        "<span class=open>open</span>";
 
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
     if (ctx.user) |usr| {
@@ -799,6 +793,12 @@ fn view(ctx: *Frame) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
         .patch = patch_data,
+        .title = abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
+        .description = abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
+        .status = status,
+        .created = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.created)}),
+        .updated = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.updated)}),
+        .creator = if (delta.author) |author| try abx.Html.cleanAlloc(ctx.alloc, author) else null,
         .comments = .{ .thread = root_thread },
         .delta_id = delta_id,
         .patch_warning = if (patch_applies) null else .{},

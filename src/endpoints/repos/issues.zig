@@ -126,7 +126,13 @@ fn view(ctx: *verse.Frame) Error!void {
                     };
                 },
                 //else => {
-                //    c_ctx.* = .{ .author = "", .date = "", .message = "unsupported message type", .direct_reply = null, .sub_thread = null };
+                //    c_ctx.* = .{
+                //        .author = "",
+                //        .date = "",
+                //        .message = "unsupported message type",
+                //        .direct_reply = null,
+                //        .sub_thread = null,
+                //    };
                 //},
             }
         }
@@ -145,6 +151,12 @@ fn view(ctx: *verse.Frame) Error!void {
     if (ctx.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
+
+    const status: []const u8 = if (delta.closed)
+        "<span class=closed>closed</span>"
+    else
+        "<span class=open>open</span>";
+
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
@@ -152,6 +164,8 @@ fn view(ctx: *verse.Frame) Error!void {
         .description = description,
         .delta_id = delta_id,
         .current_username = username,
+        .creator = if (delta.author) |author| try abx.Html.cleanAlloc(ctx.alloc, author) else null,
+        .status = status,
         .created = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.created)}),
         .updated = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.updated)}),
         .comments = .{

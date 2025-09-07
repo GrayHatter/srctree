@@ -9,8 +9,10 @@
     <delta class="issue">
       <main>
         <name><Title /></name>
+        <div class=muted><Status /> | Created <Created /> by <Creator ornull /> | Updated <Updated /></div>
         <desc><Description /></desc>
       </main>
+      <extra>
       <comments>
         <Build Comments _comment_thread.html />
         <form class="pretty" action="add-comment" method="POST">
@@ -20,10 +22,11 @@
           <input type="hidden" name="did" value="<Delta_id />" />
         </form>
       </comments>
-      <extra>
-        Created: <Created /><br>
-        Updated: <Updated /><br>
-        Tags: none
+        <sidebar>
+          Created: <Created /><br>
+          Updated: <Updated /><br>
+          Tags: none
+        </sidebar>
       </extra>
     </delta>
     </content>

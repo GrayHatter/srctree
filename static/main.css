@@ -98,9 +98,8 @@ header {
 
 content {
 	display: block;
-	margin: auto;
+	margin: auto 1%;
 	text-align: center;
-	width: fit-content;
 	&.full{
 		min-width: 97%;
 	}
@@ -475,29 +474,27 @@ textarea.paste {
 }
 
 delta {
-	display: flex;
-	justify-content: space-between;
-	flex-wrap: wrap;
 	margin: 1em 0;
-	gap: 1em;
 
 	main {
-		width: 100%;
-		margin: 1em 0;
+		width: auto;
+		margin: 1em 1%;
 		text-align: left;
 		name {
+			font-family: 'Titillium Web', sans-serif;
 			background: #333;
-			border-radius: 3px 3px 0 0;
-			border: 1px gray solid;
-			border-bottom: 0px;
+			border-radius: 2px;
+			padding: 0.4rem;
 			display: flex;
+			font-size: 160%;
 			justify-content: space-between;
-			height: 1.5em;
-			padding: 4px 12px;
 		}
 		desc {
-			border: 1px solid gray;
+			border-bottom: 1px solid gray;
 			display: block;
+			padding: 8px;
+		}
+		div {
 			padding: 8px;
 		}
 	}
@@ -506,21 +503,27 @@ delta {
 		flex-grow: 10;
 	}
 
-	comments {
-		min-width: 30rem;
-		width: 48%;
-		margin: 0;
-		flex-grow: 4;
-	}
 	extra {
-		flex-grow: 2;
-		min-width: 20rem;
-		margin: 0;
-		flex-direction: column;
+
+		display: flex;
+		justify-content: space-between;
+		flex-wrap: wrap;
 		gap: 1em;
-		border: 1px solid gray;
-		border-bottom: 0;
-		padding-bottom: 1em;
+		margin: 1em 1%;
+		comments {
+			min-width: 30rem;
+			flex-grow: 4;
+		}
+		sidebar{
+			flex-grow: 2;
+			max-width: 20rem;
+			margin: 0;
+			flex-direction: column;
+			gap: 1em;
+			border: 1px solid gray;
+			border-bottom: 0;
+			padding-bottom: 1em;
+		}
 	}
 }
 
