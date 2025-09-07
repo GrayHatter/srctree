@@ -68,6 +68,17 @@ fn builder(fr: *Frame, call: BuildFn) void {
         fr.dumpDebugData(.{});
     }
 
+    if (fr.request.user_agent) |ua| {
+        switch (ua.resolved) {
+            .bot => |_| {
+                if (ua.bot_validation) |bv| {
+                    if (bv.malicious) return fr.sendDefaultErrorPage(.not_found);
+                }
+            },
+            else => {},
+        }
+    }
+
     const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
     var bh: S.BodyHeaderHtml = (fr.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
         .nav_auth = "Error",
