@@ -143,7 +143,7 @@ const Journal = struct {
                 }
 
                 const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
-                hits[day_off] += 1;
+                if (day_off < hits.len) hits[day_off] += 1;
             }
             for (commit.parent[1..], 1..) |par, pidx| {
                 if (par != null) {
