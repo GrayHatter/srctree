@@ -85,9 +85,7 @@ header {
 			margin: 0 0.3rem;
 			border-bottom: #4e0029 solid 2px;
 			border-radius: 0 0 2px 2px;
-			&:hover, &.active {
-				border-bottom: #880046 solid 2px;
-			}
+			&:hover, &.active { border-bottom: #880046 solid 2px; }
 			a {
 				font-size: 108%;
 				padding: 0 1rem;
@@ -100,23 +98,18 @@ content {
 	display: block;
 	margin: auto 1%;
 	text-align: center;
-	&.full{
-		min-width: 97%;
-	}
-	&.fw{
-		min-width: 97%;
-	}
-	&.mw{
+	header { max-width: none; }
+	h3 { text-align: left; }
+	&.full { min-width: 97%; }
+	&.fw { min-width: 97%; }
+	&.mw {
 		width: 1050px;
+		margin: auto;
 	}
-	&.lw{
+	&.lw {
 		width: 1050px;
 		text-align:left;
 	}
-	header {
-		max-width: none;
-	}
-	h3 { text-align: left; }
 	&.diff {
 		display: flex;
 		justify-content: flex-start;
@@ -137,14 +130,10 @@ button {
 	border-bottom-color: #4e0029;
 	border-radius: 3px;
 	font-family: 'Titillium Web', sans-serif;
-	padding: 6px 18px;
+	padding: 0.25em 1em;
 
-	&:hover, &.active {
-		border-bottom: #880046 solid 2px;
-	}
-	&.red {
-		color: red;
-	}
+	&:hover, &.active { border-bottom: #880046 solid 2px; }
+	&.red { color: red; }
 }
 
 lines {
@@ -171,10 +160,7 @@ code {
 			display: inline-block;
 			color: #aaa;
 			min-width: 20rem;
-
-			a {
-				color: #aaa;
-			}
+			a { color: #aaa; }
 			.muted {
 				color: #888;
 				max-height: 17px;
@@ -193,10 +179,7 @@ code {
 				text-align: right;
 			}
 		}
-		ln {
-			display: inline-block;
-
-		}
+		ln { display: inline-block; }
 	}
 }
 
@@ -266,9 +249,7 @@ repos {
 	color: #bbb;
 	font-family: 'Titillium Web', sans-serif;
 	font-size: 80%;
-	&a:visited {
-		color: #bbb;
-	}
+	&a:visited { color: #bbb; }
 }
 
 repo {
@@ -284,9 +265,7 @@ repo {
 			justify-content: space-between;
 			align-items: baseline;
 			text-align: left;
-			span:first-child {
-				min-width: 30%;
-			}
+			span:first-child { min-width: 30%; }
 			span:nth-child(2) {
 				display: flex;
 				flex-grow:1;
@@ -295,8 +274,7 @@ repo {
 
 	}
 
-	name {
-	}
+	name { }
 	desc {
 		display: block;
 		border: 1px gray solid;
@@ -316,9 +294,7 @@ repo {
 			display: flex;
 			justify-content: space-between;
 		}
-		.updated:only-child {
-			margin: 0
-		}
+		.updated:only-child { margin: 0 }
 	}
 }
 
@@ -336,12 +312,8 @@ readme {
 		align-items: baseline;
 		text-align: left;
 	}
-	.codeblock {
-		white-space: pre;
-	}
-	code {
-		width: 98%;
-	}
+	.codeblock { white-space: pre; }
+	code { width: 98%; }
 }
 
 .treelist {
@@ -494,17 +466,12 @@ delta {
 			display: block;
 			padding: 8px;
 		}
-		div {
-			padding: 8px;
-		}
+		div { padding: 8px; }
 	}
 
-	diff {
-		flex-grow: 10;
-	}
+	diff { flex-grow: 10; }
 
 	extra {
-
 		display: flex;
 		justify-content: space-between;
 		flex-wrap: wrap;
@@ -514,7 +481,7 @@ delta {
 			min-width: 30rem;
 			flex-grow: 4;
 		}
-		sidebar{
+		sidebar {
 			flex-grow: 2;
 			max-width: 20rem;
 			margin: 0;
@@ -614,10 +581,9 @@ form.pretty {
 	button {
 		margin: 0 0.5em;
 		background: #333;
+		max-height: 3em;
 	}
-	textarea {
-		height: 10em;
-	}
+	textarea { height: 10em; }
 }
 
 input, textarea {
@@ -632,8 +598,6 @@ comment {
 	text-align: left;
 	display: block;
 	margin-bottom: 1em;
-	/* max-width: 45em; */
-
 	context {
 		background: #333;
 		border-radius: 3px 3px 0 0;
@@ -689,15 +653,9 @@ div.coderef {
 	padding: 2px 15px;
 	background: #333;
 	white-space: pre;
-	&.red {
-		background: #433;
-	}
-	&.green {
-		background: #343;
-	}
-	&.yellow {
-		background: #333;
-	}
+	&.red { background: #433; }
+	&.green { background: #343; }
+	&.yellow { background: #333; }
 }
 
 span.gituri {
@@ -724,15 +682,9 @@ span.coderef {
 	padding: 1px 3px;
 	background: #333;
 	white-space: pre;
-	&.red {
-		background: #433;
-	}
-	&.green {
-		background: #343;
-	}
-	&.yellow {
-		background: #333;
-	}
+	&.red { background: #433; }
+	&.green { background: #343; }
+	&.yellow { background: #333; }
 }
 
 input.magic:not(:checked) + div span.tree {
@@ -772,9 +724,7 @@ blob, gist, patch {
 		border: 1px gray solid;
 		border-bottom: 0px;
 		border-top: 0px;
-		code {
-			white-space: pre;
-		}
+		code { white-space: pre; }
 	}
 
 	changes {
@@ -789,9 +739,7 @@ blob, gist, patch {
 		background: #333;
 		width: 100%;
 		:first-child { margin: 0; }
-		div {
-			white-space: break-spaces;
-		}
+		div { white-space: break-spaces; }
 		.split {
 			display: flex;
 			span {
@@ -815,14 +763,13 @@ blob, gist, patch {
 			}
 		}
 		.block {
-			&:first-child { margin-top: 0; }
 			background: #569;
 			margin: 8px 0 8px auto;
 			border-top: 1px solid #999;
 			border-bottom: 2px solid #222;
 			/* background: #4a4a91; might want to revert to this color */
-
 			padding: 8px;
+			&:first-child { margin-top: 0; }
 		}
 	}
 	.buttons {
@@ -859,9 +806,7 @@ blob, gist, patch {
 		margin: 0 2px;
 		display: inline-table;
 		text-align: right;
-		> .day {
-			padding: 0 0 1px;
-		}
+		> .day { padding: 0 0 1px; }
 	}
 	.col {
 		width: 13px;
@@ -912,9 +857,7 @@ blob, gist, patch {
 .flex-month {
 	display: block;
 	margin: 2rem 0 1rem;
-	div.flex-list {
-		border-left: 1px solid gray;
-	}
+	div.flex-list { border-left: 1px solid gray; }
 	intro {
 		border-bottom: 1px solid gray;
 		display: inline-block;
@@ -978,15 +921,11 @@ blob, gist, patch {
 		background: #aaa2;
 		padding: 0 2px;
 	}
-	li.active {
-		background: #a112;
-	}
+	li.active { background: #a112; }
 }
 .admin-content {
 	display: none;
-	textarea {
-		min-width: 35rem;
-	}
+	textarea { min-width: 35rem; }
 }
 .admin-content.active {
 	display: inline-block;
@@ -996,21 +935,13 @@ blob, gist, patch {
 }
 
 .verse-stats-line {
-	td:nth-child(7), td:nth-child(8) {
-		text-align: right;
-	}
-	td:nth-child(9) {
-		padding-left: 1.5rem;
-	}
+	td:nth-child(7), td:nth-child(8) { text-align: right; }
+	td:nth-child(9) { padding-left: 1.5rem; }
+	&.verse-stats-200 td:nth-child(4) { color: green; }
+	&.verse-stats-500 td:nth-child(4) { color: red; }
 	&.verse-bot {
 		background-color: #333;
 		color: #888;
-	}
-	&.verse-stats-200 td:nth-child(4) {
-		color: green;
-	}
-	&.verse-stats-500 td:nth-child(4) {
-		color: red;
 	}
 }
 
