@@ -17,10 +17,6 @@ const Thread = @This();
 pub const type_prefix = "threads";
 pub const type_version = 0;
 
-const typeio = Types.readerWriter(Thread, .{ .index = 0 });
-const writerFn = typeio.write;
-const readerFn = typeio.read;
-
 pub fn new(delta: Delta) !Thread {
     const max: usize = try Types.nextIndex(.thread);
     const thread = Thread{
@@ -117,6 +113,10 @@ pub fn iterator() Iterator {
     return Iterator.init();
 }
 
+const typeio = Types.readerWriter(Thread, .{ .index = 0 });
+const writerFn = typeio.write;
+const readerFn = typeio.read;
+
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
@@ -127,7 +127,7 @@ const endian = builtin.cpu.arch.endian();
 const sha256 = std.crypto.hash.sha2.Sha256;
 const parseInt = std.fmt.parseInt;
 
-pub const Message = @import("message.zig");
+const Message = @import("message.zig");
 const Delta = @import("delta.zig");
 
 const Types = @import("../types.zig");
