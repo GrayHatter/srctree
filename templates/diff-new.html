@@ -10,23 +10,28 @@
         <form class="pretty" action="create" method="POST">
           <context>Suggest New Diff</context>
           <input name="title" placeholder="Diff Title" value="<Title ornull />" />
-          <With Network>
-              <div style="display:flex">
-              <select name="network">
-              <For Remotes>
-                <option value="<Value>"><Name></option>
-              </For>
-              </select><span style="font-size: 130%;margin: auto;">/</span>
-              <select name="branch">
-              <For Branches>
-                <option value="<Value>"><Name></option>
-              </For>
-              </select>
-              </div>
-          </With>
+          <div style="display:flex">
           <With PatchUri>
-          <div style="display:flex"><input name="patch_uri" placeholder="Patch URL" value="<Uri default="" />"/><button name="from_network" value="true" formaction="new">Use Network</button></div>
+            <input name="patch_uri" placeholder="Patch URL" value="<Uri default="" />"/>
+            <button name="from_network" value="true" formaction="new">Use Network</button>
+            <button name="from_paste" value="true" formaction="new">Use Paste</button>
           </With>
+          <With PatchNetwork>
+            <select name="network">
+              <For Remotes><option value="<Value>"><Name></option></For>
+            </select><span style="font-size: 130%;margin: auto;">/</span>
+            <select name="branch">
+              <For Branches><option value="<Value>"><Name></option></For>
+            </select>
+            <button name="from_uri" value="true" formaction="new">Use URL</button>
+            <button name="from_paste" value="true" formaction="new">Use Paste</button>
+          </With>
+          <With PatchPaste>
+            <textarea name="patch_paste" placeholder="Paste Patch Here"><PatchBlob ornull /></textarea>
+            <button name="from_uri" value="true" formaction="new">Use URL</button>
+            <button name="from_network" value="true" formaction="new">Use Network</button>
+          </With>
+          </div>
           <textarea name="desc" placeholder="Additional information about this patch suggestion"><Desc ornull /></textarea>
           <buttons>
             <button name="preview">Preview (does nothing)</button>

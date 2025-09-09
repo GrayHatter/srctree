@@ -33,38 +33,41 @@ pub fn router(ctx: *Frame) Route.RoutingError!Route.BuildFn {
 
 const DiffNewHtml = Template.PageData("diff-new.html");
 
-const DiffCreateChangeReq = struct {
+const DiffCreateReq = struct {
     from_network: ?bool = null,
-    patch_uri: []const u8,
+    from_uri: ?bool = null,
+    from_paste: ?bool = null,
+
     title: []const u8,
     desc: []const u8,
+
+    patch_uri: ?[]const u8 = null,
+    patch_paste: ?[]const u8 = null,
+    network: ?[]const u8 = null,
+    branch: ?[]const u8 = null,
 };
 
 fn new(ctx: *Frame) Error!void {
-    var network: ?S.Network = null;
-    var patchuri: ?S.PatchUri = .{};
+    var network: ?S.PatchNetwork = null;
+    var patchuri: ?S.PatchUri = null;
+    var patchpaste: ?S.PatchPaste = null;
     var title: ?[]const u8 = null;
     var desc: ?[]const u8 = null;
+
+    const routing_data = RouteData.init(ctx.uri) orelse return error.Unrouteable;
+    var repo = (Repos.open(routing_data.name, .public) catch return error.DataInvalid) orelse return error.DataInvalid;
+    repo.loadData(ctx.alloc) catch return error.ServerFault;
+    defer repo.raze();
+
     if (ctx.request.data.post) |post| {
-        const udata = post.validate(DiffCreateChangeReq) catch return error.DataInvalid;
+        const udata = post.validate(DiffCreateReq) catch return error.DataInvalid;
         title = udata.title;
         desc = udata.desc;
 
-        if (udata.from_network) |_| {
-            const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
-            var cwd = std.fs.cwd();
-            const filename = try allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-            const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-            var repo = Git.Repo.init(dir) catch return error.Unrouteable;
-            defer repo.raze();
-            repo.loadData(ctx.alloc) catch return error.Unknown;
-
+        if (udata.from_paste) |_| {
+            patchpaste = .{};
+        } else if (udata.from_network) |_| {
             const remotes = repo.remotes orelse unreachable;
-            defer {
-                for (remotes) |r| r.raze(ctx.alloc);
-                ctx.alloc.free(remotes);
-            }
-
             const network_remotes = try ctx.alloc.alloc(S.Remotes, remotes.len);
             for (remotes, network_remotes) |src, *dst| {
                 dst.* = .{
@@ -81,8 +84,9 @@ fn new(ctx: *Frame) Error!void {
                     .{ .value = "master", .name = "master" },
                 },
             };
+        } else {
+            patchuri = .{};
         }
-        patchuri = null;
     }
 
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
@@ -95,8 +99,9 @@ fn new(ctx: *Frame) Error!void {
         .err = null,
         .title = title,
         .desc = desc,
-        .network = network,
+        .patch_network = network,
         .patch_uri = patchuri,
+        .patch_paste = patchpaste,
     });
 
     try ctx.sendPage(&page);
@@ -109,16 +114,6 @@ fn inNetwork(str: []const u8) bool {
     return true;
 }
 
-const DiffCreateReq = struct {
-    patch_uri: []const u8,
-    title: []const u8,
-    desc: []const u8,
-    //action: ?union(enum) {
-    //    submit: bool,
-    //    preview: bool,
-    //},
-};
-
 fn createDiff(vrs: *Frame) Error!void {
     const rd = RouteData.init(vrs.uri) orelse return error.Unrouteable;
     if (vrs.request.data.post) |post| {
@@ -128,13 +123,13 @@ fn createDiff(vrs: *Frame) Error!void {
         var remote_addr: []const u8 = "unknown";
         remote_addr = vrs.request.remote_addr;
 
-        if (inNetwork(udata.patch_uri)) {
-            const data = Patch.loadFromRemote(vrs.alloc, udata.patch_uri) catch
+        if (udata.patch_uri) |uri| if (inNetwork(uri)) {
+            const data = Patch.loadFromRemote(vrs.alloc, uri) catch
                 return createError(vrs, udata, .{ .remote_error = "connection failed" });
 
             std.debug.print(
                 "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
-                .{ udata.patch_uri, udata.title, udata.desc, "unimplemented" },
+                .{ uri, udata.title, udata.desc, "unimplemented" },
             );
             var delta = Delta.new(
                 rd.name,
@@ -161,7 +156,7 @@ fn createDiff(vrs: *Frame) Error!void {
             var buf: [2048]u8 = undefined;
             const loc = try bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
             return vrs.redirect(loc, .see_other) catch unreachable;
-        }
+        };
     }
 
     return try new(vrs);
@@ -182,10 +177,9 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
         },
         .title = try abx.Html.cleanAlloc(ctx.alloc, udata.title),
         .desc = try abx.Html.cleanAlloc(ctx.alloc, udata.desc),
-        .network = null,
-        .patch_uri = .{
-            .uri = try abx.Html.cleanAlloc(ctx.alloc, udata.patch_uri),
-        },
+        .patch_network = if (udata.network) |_| null else null, // TODO fixme
+        .patch_uri = if (udata.patch_uri) |uri| .{ .uri = try abx.Html.cleanAlloc(ctx.alloc, uri) } else null,
+        .patch_paste = if (udata.patch_paste) |pst| .{ .patch_blob = try abx.Html.cleanAlloc(ctx.alloc, pst) } else null,
     });
 
     try ctx.sendPage(&page);
