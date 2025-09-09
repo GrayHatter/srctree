@@ -205,7 +205,6 @@ fn newComment(ctx: *Frame) Error!void {
 
         var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch return error.Unknown;
         const username = if (ctx.user) |usr| usr.username.? else "public";
-        //var thread = delta.loadThread(ctx.alloc) catch unreachable;
         delta.addComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch unreachable;
         // TODO record current revision at comment time
         return ctx.redirect(loc, .see_other) catch unreachable;
@@ -693,13 +692,16 @@ fn view(ctx: *Frame) Error!void {
     };
 
     switch (delta.attach) {
-        .diff => {},
+        .diff, .nos => {},
         .issue => {
             var buf: [100]u8 = undefined;
             const loc = try bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
             return ctx.redirect(loc, .see_other) catch unreachable;
         },
-        else => return error.DataInvalid,
+        else => {
+            std.debug.print("can't redirect attach {s}\n", .{@tagName(delta.attach)});
+            return error.DataInvalid;
+        },
     }
 
     // meme saved to protect history
@@ -713,7 +715,7 @@ fn view(ctx: *Frame) Error!void {
     //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     //}
 
-    const udata = ctx.request.data.query.validate(PatchView) catch return error.DataInvalid;
+    const udata = ctx.request.data.query.validate(PatchView) catch unreachable;
     const inline_html = udata.@"inline" orelse true;
 
     var patch_formatted: ?S.PatchHtml = null;

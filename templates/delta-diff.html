@@ -12,11 +12,11 @@
           <div class=muted><Status /> | Created <Created /> by <Creator ornull /> | Updated <Updated /></div>
           <desc><Description /></desc>
         </main>
-        <With Patch>
-          <diff><Build Patch _patch.html /></diff>
-        </With>
 
         <extra>
+          <With Patch>
+            <diff><Build Patch _patch.html /></diff>
+          </With>
           <comments>
             <Build Comments _comment_thread.html />
             <form class="pretty" action="add-comment" method="POST">
