@@ -13,6 +13,7 @@ pub const Viewers = @import("types/viewers.zig");
 
 pub const DefaultHash = [sha256.digest_length]u8;
 pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
+pub const Sha1Hex = [40]u8;
 
 pub const Storage = std.fs.Dir;
 
@@ -201,14 +202,16 @@ pub fn readerWriter(T: type, default: T) type {
                 if (line_itr.index != 0) {
                     const name, const value: []u8 = split(line) orelse .{ &.{}, &.{} };
                     if (std.mem.eql(u8, name, field.name)) switch (field.type) {
-                        [32]u8 => {
-                            if (value.len == 32) {
+                        DefaultHash => {
+                            if (value.len == 64) {
+                                var hex: []const u8 = value;
                                 for (0..32) |i| {
-                                    @field(output, field.name)[i] = parseInt(u8, value[i * 2 .. i * 2 + 2], 16) catch 0;
+                                    @field(output, field.name)[i] = parseInt(u8, hex[0..2], 16) catch 0;
+                                    hex = hex[2..];
                                 }
                             }
                         },
-                        [40]u8 => {
+                        Sha1Hex => {
                             if (value.len == 40) {
                                 @memcpy(@field(output, field.name)[0..40], value[0..40]);
                             }
@@ -271,8 +274,8 @@ pub fn readerWriter(T: type, default: T) type {
                         }
                     },
 
-                    [32]u8 => try w.print("{s}: {x}\n", .{ field.name, &@field(t, field.name) }),
-                    [40]u8 => try w.print("{s}: {s}\n", .{ field.name, &@field(t, field.name) }),
+                    DefaultHash => try w.print("{s}: {x}\n", .{ field.name, &@field(t, field.name) }),
+                    Sha1Hex => try w.print("{s}: {s}\n", .{ field.name, &@field(t, field.name) }),
                     usize,
                     isize,
                     i64,

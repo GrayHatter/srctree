@@ -101,8 +101,8 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
             .delta => {
                 var delta = Delta.open(f.alloc, repo_name_, map.attach_target) catch return error.DataInvalid;
                 if (delta.loadThread(f.alloc)) |dthread| {
-                    thread = try f.alloc.alloc(Template.Structs.Thread, dthread.messages.len);
-                    for (dthread.messages, thread) |msg, *pg_comment| {
+                    thread = try f.alloc.alloc(Template.Structs.Thread, dthread.messages.items.len);
+                    for (dthread.messages.items, thread) |msg, *pg_comment| {
                         switch (msg.kind) {
                             .comment => {
                                 pg_comment.* = .{

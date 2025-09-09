@@ -10,8 +10,7 @@ locked: bool = false,
 embargoed: bool = false,
 padding: u61 = 0,
 
-message_data: ?[]const u8 = &.{},
-messages: []Message = &.{},
+messages: ArrayList(Message) = .{},
 
 const Thread = @This();
 
@@ -44,7 +43,6 @@ pub fn open(a: std.mem.Allocator, index: usize) !Thread {
     var thread = readerFn(data);
 
     if (indexOf(u8, data, "\n\n")) |start| {
-        var list: ArrayList(Message) = .{};
         var itr = std.mem.splitScalar(u8, data[start + 2 ..], '\n');
         while (itr.next()) |next| {
             if (next.len != 64) continue;
@@ -54,9 +52,8 @@ pub fn open(a: std.mem.Allocator, index: usize) !Thread {
                 std.debug.print("unable to load message {}\n", .{err});
                 continue;
             };
-            try list.append(a, message);
+            try thread.messages.append(a, message);
         }
-        thread.messages = try list.toOwnedSlice(a);
     }
 
     return thread;
@@ -74,29 +71,15 @@ pub fn commit(thread: Thread) !void {
     try writerFn(&thread, writer);
 
     // Make a best effort to save/protect all data
-    for (thread.messages) |msg| {
+    for (thread.messages.items) |msg| {
         msg.commit() catch continue;
-        var hash_str: [@sizeOf(Types.DefaultHash) * 2 + 1]u8 = undefined;
-        try writer.writeAll(
-            bufPrint(&hash_str, "{x}\n", .{&msg.hash}) catch unreachable,
-        );
+        try writer.print("{x}\n", .{&msg.hash});
     }
     try writer.flush();
 }
 
 pub fn addComment(thread: *Thread, a: Allocator, author: []const u8, message: []const u8) !void {
-    const new_len = thread.messages.len + 1;
-    if (thread.messages.len == 0) {
-        thread.messages = try a.alloc(Message, 1);
-    } else {
-        if (a.resize(thread.messages, new_len)) {
-            thread.messages.len = new_len;
-        } else {
-            thread.messages = try a.realloc(thread.messages, new_len);
-        }
-    }
-
-    thread.messages[new_len - 1] = try .new(thread.index, author, message);
+    try thread.messages.append(a, try .new(thread.index, author, message));
     thread.updated = std.time.timestamp();
     try thread.commit();
 }

@@ -120,11 +120,9 @@ pub const Comment = struct {
 };
 
 pub fn addComment(delta: *Delta, a: Allocator, c: Comment) !void {
-    if (delta.thread == null) {
-        _ = try delta.loadThread(a);
-    }
-
-    try delta.thread.?.addComment(a, c.author, c.message);
+    var thread: *Thread = delta.thread orelse try delta.loadThread(a);
+    try thread.addComment(a, c.author, c.message);
+    try thread.commit();
     delta.updated = std.time.timestamp();
     try delta.commit();
 }
@@ -134,7 +132,7 @@ pub fn countComments(delta: Delta) struct { count: usize, new: bool } {
     const ts = std.time.timestamp() - 86400;
     var cmtnew: bool = false;
     var cmtlen: usize = 0;
-    for (thread.messages) |m| switch (m.kind) {
+    for (thread.messages.items) |m| switch (m.kind) {
         .comment => {
             cmtnew = cmtnew or m.updated > ts;
             cmtlen += 1;

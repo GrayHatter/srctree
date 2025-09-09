@@ -111,8 +111,8 @@ fn view(ctx: *verse.Frame) Error!void {
 
     var root_thread: []S.Thread = &[0]S.Thread{};
     if (delta.loadThread(ctx.alloc)) |thread| {
-        root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.len);
-        for (thread.messages, root_thread) |msg, *c_ctx| {
+        root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.items.len);
+        for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
                     c_ctx.* = .{

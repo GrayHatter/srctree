@@ -6,20 +6,20 @@ target: usize,
 author: ?[]const u8 = null,
 message: ?[]const u8 = null,
 kind: Kind,
-hash: DefaultHash = @splat(0),
+hash: DefaultHash,
 
 const Message = @This();
-
-pub const type_prefix = "messages";
-pub const type_version = 0;
-
-const typeio = Types.readerWriter(Message, .{ .target = undefined, .kind = undefined });
-const writerFn = typeio.write;
-const readerFn = typeio.read;
 
 pub const Kind = enum(u16) {
     comment,
 };
+
+pub const type_prefix = "messages";
+pub const type_version = 0;
+
+const typeio = Types.readerWriter(Message, .{ .target = undefined, .kind = undefined, .hash = @splat(0) });
+const writerFn = typeio.write;
+const readerFn = typeio.read;
 
 pub fn new(tid: usize, author: []const u8, message: []const u8) !Message {
     var m = Message{
@@ -29,6 +29,7 @@ pub fn new(tid: usize, author: []const u8, message: []const u8) !Message {
         .updated = std.time.timestamp(),
         .author = author,
         .message = message,
+        .hash = @splat(0),
     };
     _ = m.genHash();
     try m.commit();
@@ -41,6 +42,7 @@ pub fn commit(msg: Message) !void {
     const file = try Types.commit(.message, filename);
     defer file.close();
 
+    std.debug.assert(!std.mem.eql(u8, msg.hash[0..], &[_]u8{0} ** 32));
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(&w_b);
     try writerFn(&msg, &fd_writer.interface);
@@ -54,15 +56,16 @@ pub fn open(a: Allocator, hash: DefaultHash) !Message {
 }
 
 pub fn genHash(msg: *Message) *const DefaultHash {
+    std.debug.assert(std.mem.eql(u8, msg.hash[0..], &[_]u8{0} ** 32));
     var h = Sha256.init(.{});
-    h.update(std.mem.asBytes(&msg.created));
-    h.update(std.mem.asBytes(&msg.updated));
+    h.update(asBytes(&msg.target));
+    h.update(asBytes(&msg.created));
+    h.update(asBytes(&msg.updated));
     switch (msg.kind) {
         .comment => {
             h.update(msg.author orelse "");
             h.update(msg.message orelse "");
         },
-        //else => comptime unreachable,
     }
     h.final(&msg.hash);
     return &msg.hash;
@@ -75,14 +78,15 @@ test "comment" {
         .kind = .comment,
         .author = "grayhatter",
         .message = "test comment, please ignore",
+        .hash = @splat(0),
     };
 
     const hash = c.genHash();
     try std.testing.expectEqualSlices(
         u8,
         &[_]u8{
-            0xA3, 0xE1, 0x6B, 0xD7, 0x46, 0xDC, 0x52, 0x43, 0x7B, 0xBC, 0x38, 0x99, 0x97, 0x0E, 0xD8, 0xEC,
-            0x77, 0xFD, 0x99, 0x16, 0x87, 0xA4, 0x19, 0x50, 0x12, 0x6A, 0x1D, 0xCD, 0xCA, 0x61, 0xC6, 0xB3,
+            0x4A, 0x3C, 0x01, 0x61, 0x69, 0x59, 0xEE, 0x54, 0x92, 0x66, 0x78, 0xE1, 0x74, 0xFC, 0x7E, 0x42,
+            0x16, 0x48, 0x0A, 0xB2, 0xA7, 0x1C, 0xB7, 0x45, 0x13, 0xD5, 0xD1, 0x36, 0xDE, 0x35, 0xBA, 0xCE,
         },
         hash,
     );
@@ -94,7 +98,7 @@ test "comment" {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{hash});
     try std.testing.expectEqualStrings(
-        "a3e16bd746dc52437bbc3899970ed8ec77fd991687a41950126a1dcdca61c6b3.message",
+        "4a3c01616959ee54926678e174fc7e4216480ab2a71cb74513d5d136de35bace.message",
         filename,
     );
 
@@ -118,7 +122,7 @@ test "comment" {
         \\author: grayhatter
         \\message: test comment, please ignore
         \\kind: comment
-        \\hash: a3e16bd746dc52437bbc3899970ed8ec77fd991687a41950126a1dcdca61c6b3
+        \\hash: 4a3c01616959ee54926678e174fc7e4216480ab2a71cb74513d5d136de35bace
         \\
         \\
     ;
@@ -138,6 +142,8 @@ test Message {
     const mask: i64 = ~@as(i64, 0xffffff);
     c.created = std.time.timestamp() & mask;
     c.updated = std.time.timestamp() & mask;
+    // required to overwrite the timestamp
+    c.hash = @splat(0);
     _ = c.genHash();
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
@@ -153,7 +159,7 @@ test Message {
         \\author: author
         \\message: message
         \\kind: comment
-        \\hash: eb67086c9a948168cd49f13a46c81603c21851c46dd068fc534c85bfbc0b0cbc
+        \\hash: cd72e644d5a5c4c99fd9a813959b428a2eaafbbfbed03737c9b075d3fc12f8c4
         \\
         \\
     ;
@@ -168,6 +174,7 @@ const endian = builtin.cpu.arch.endian();
 const Sha256 = std.crypto.hash.sha2.Sha256;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
+const asBytes = std.mem.asBytes;
 const DefaultHash = Types.DefaultHash;
 
 const Humanize = @import("../humanize.zig");
