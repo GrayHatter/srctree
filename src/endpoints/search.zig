@@ -65,11 +65,7 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         });
     }
 
-    const btns = [1]Template.Structs.NavButtons{.{
-        .name = "inbox",
-        .extra = 0,
-        .url = "/inbox",
-    }};
+    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
 
     var page = DeltaListPage.init(.{
         .meta_head = .{ .open_graph = .{} },
