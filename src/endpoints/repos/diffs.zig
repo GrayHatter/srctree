@@ -736,7 +736,7 @@ fn view(ctx: *Frame) Error!void {
         std.debug.print("Unable to load patch {} {s}\n", .{ err, patch_filename });
     }
 
-    var root_thread: []S.Thread = &[0]S.Thread{};
+    var root_thread: []S.Thread = &.{};
     if (delta.loadThread(ctx.alloc)) |thread| {
         root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.items.len);
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
@@ -808,45 +808,34 @@ const DeltaListPage = Template.PageData("delta-list.html");
 fn list(ctx: *Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
-    const last = (Types.currentIndex(.deltas) catch 0) + 1;
-
     var d_list: ArrayList(S.DeltaList) = .{};
-    for (0..last) |i| {
-        var d = Delta.open(ctx.alloc, rd.name, i) catch continue;
-        if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .diff) {
-            d.raze(ctx.alloc);
-            continue;
-        }
+    var itr = Delta.iterator(ctx.alloc, rd.name);
+    while (itr.next()) |deltaC| {
+        var d = deltaC;
+        if (d.attach != .diff) continue;
+        if (d.closed) continue;
 
         _ = d.loadThread(ctx.alloc) catch unreachable;
         const cmtsmeta = d.countComments();
         try d_list.append(ctx.alloc, .{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
-            .title_uri = try allocPrint(
-                ctx.alloc,
-                "/repo/{s}/{s}/{x}",
-                .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
-            ),
+            .title_uri = try allocPrint(ctx.alloc, "/repo/{s}/diffs/{x}", .{ d.repo, d.index }),
             .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
             .desc = try abx.Html.cleanAlloc(ctx.alloc, d.message),
         });
     }
+
     var default_search_buf: [0xFF]u8 = undefined;
-    const def_search = try bufPrint(&default_search_buf, "is:diffs repo:{s} ", .{rd.name});
-    const meta_head = Template.Structs.MetaHeadHtml{
-        .open_graph = .{},
-    };
+    const def_search = try bufPrint(&default_search_buf, "is:diff repo:{s} ", .{rd.name});
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
     if (ctx.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
     var page = DeltaListPage.init(.{
-        .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try RepoEndpoint.navButtons(ctx),
-        } },
+        .meta_head = .{ .open_graph = .{} },
+        .body_header = body_header,
         .delta_list = d_list.items,
         .search = def_search,
     });

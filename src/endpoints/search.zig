@@ -35,23 +35,7 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         var line = r_line;
         line = std.mem.trim(u8, line, " ");
         if (line.len == 0) continue;
-        const inverse = line[0] == '-';
-        if (inverse) {
-            line = line[1..];
-        }
-        if (std.mem.indexOf(u8, line, ":")) |i| {
-            try rules.append(ctx.alloc, Delta.SearchRule{
-                .subject = line[0..i],
-                .match = line[i + 1 ..],
-                .inverse = inverse,
-            });
-        } else {
-            try rules.append(ctx.alloc, Delta.SearchRule{
-                .subject = "",
-                .match = line,
-                .inverse = inverse,
-            });
-        }
+        try rules.append(ctx.alloc, .parse(line));
     }
 
     for (rules.items) |rule| {

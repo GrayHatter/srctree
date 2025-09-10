@@ -169,12 +169,48 @@ pub fn iterator(a: Allocator, repo: []const u8) Iterator {
     };
 }
 
+pub const SearchSpecifier = enum {
+    search,
+    target,
+    is,
+    repo,
+};
+
 /// By assumption, a subject of len 0 will search across anything
-pub const SearchRule = struct {
-    subject: []const u8,
-    match: []const u8,
-    inverse: bool = false,
-    around: bool = false,
+pub const SearchRule = union(SearchSpecifier) {
+    search: String,
+    target: struct { tag: []const u8, string: String },
+    is: String,
+    repo: String,
+
+    pub const String = struct {
+        match: []const u8,
+        inverse: bool = false,
+        around: bool = false,
+    };
+
+    pub fn parse(str: []const u8) SearchRule {
+        var s = str;
+        std.debug.assert(s.len > 2);
+        const inverse = str[0] == '-';
+        if (inverse) s = s[1..];
+
+        if (indexOf(u8, s, ":")) |i| {
+            const string: String = .{ .match = s[i + 1 ..], .inverse = inverse };
+
+            const pre: []const u8 = s[0..i];
+            if (eql(u8, pre, "is")) {
+                return .{ .is = string };
+            } else if (eql(u8, pre, "repo")) {
+                return .{ .repo = string };
+            } else {
+                return .{ .target = .{ .tag = pre, .string = string } };
+            }
+        } else {
+            const string: String = .{ .match = s, .inverse = inverse };
+            return .{ .search = string };
+        }
+    }
 };
 
 pub fn SearchList(T: type) type {
@@ -188,21 +224,14 @@ pub fn SearchList(T: type) type {
 
         pub fn next(self: *Self, a: Allocator) anyerror!?T {
             const line = (try self.iterable.next()) orelse return null;
-            if (line.kind == .file and std.mem.endsWith(u8, line.name, ".delta")) {
-                if (std.mem.lastIndexOf(u8, line.name[0 .. line.name.len - 6], ".")) |i| {
-                    const num = std.fmt.parseInt(
-                        usize,
-                        line.name[i + 1 .. line.name.len - 6],
-                        16,
-                    ) catch return self.next(a);
-                    const current = try open(a, line.name[0..i], num);
-
-                    if (!self.evalRules(current)) {
-                        return self.next(a);
-                    }
-
-                    return current;
-                } else {}
+            if (line.kind != .file) return self.next(a);
+            if (!std.mem.endsWith(u8, line.name, ".delta")) return self.next(a);
+            const name = line.name[0 .. line.name.len - 6];
+            const i = lastIndexOf(u8, name, ".") orelse return self.next(a);
+            const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a);
+            const current = open(a, name[0..i], num) catch return self.next(a);
+            if (self.evalRules(current)) {
+                return current;
             }
             return self.next(a);
         }
@@ -220,24 +249,41 @@ pub fn SearchList(T: type) type {
                 return target.searchEval(rule);
             }
 
-            const any = rule.subject.len == 0;
-
-            inline for (comptime std.meta.fieldNames(T)) |name| {
-                if (any or std.mem.eql(u8, rule.subject, name)) {
-                    if (@TypeOf(@field(target, name)) == []const u8) {
-                        const found = if (rule.around or any)
-                            std.mem.count(u8, @field(target, name), rule.match) > 0
-                        else
-                            std.mem.eql(u8, @field(target, name), rule.match);
-                        if (found) {
-                            return true;
-                        } else if (!any) {
-                            return false;
+            switch (rule) {
+                .is => |is| {
+                    if (eql(u8, is.match, "diff")) {
+                        if (target.attach == .diff) return true;
+                    } else if (eql(u8, is.match, "issue")) {
+                        if (target.attach == .issue) return true;
+                    } else {
+                        if (target.attach == .nos) return true;
+                    }
+                    return false;
+                },
+                .repo => |repo| return eql(u8, repo.match, target.repo),
+                .target => |trgt| {
+                    inline for (comptime std.meta.fieldNames(T)) |name| {
+                        if (eql(u8, trgt.tag, name)) {
+                            if (@TypeOf(@field(target, name)) == []const u8) {
+                                if (indexOf(u8, @field(target, name), trgt.string.match)) |_| {
+                                    return true;
+                                }
+                            }
                         }
                     }
-                }
+                    return false;
+                },
+                .search => |any| {
+                    inline for (comptime std.meta.fieldNames(T)) |name| {
+                        if (@TypeOf(@field(target, name)) == []const u8) {
+                            if (indexOf(u8, @field(target, name), any.match)) |_| {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                },
             }
-            return true and !any;
         }
 
         pub fn raze(_: Self) void {}
@@ -303,6 +349,10 @@ test Delta {
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const lastIndexOf = std.mem.lastIndexOf;
+const indexOf = std.mem.indexOf;
+const eql = std.mem.eql;
+const parseInt = std.fmt.parseInt;
 const endian = builtin.cpu.arch.endian();
 const AnyReader = std.io.AnyReader;
 
