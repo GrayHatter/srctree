@@ -7,7 +7,7 @@
     <Build BodyHeader _body_header.html />
     <content class="search">
       <search>
-        <form action="/search" style="width:95%">
+        <form action="<SearchAction default="/search">" style="width:95%">
           <input name="q" type="text" placeholder="Search" value="<Search ornull>" style="width:97%">
         </form>
         <a class="btn" href="new" style="width:5%">New</a>
@@ -16,8 +16,9 @@
       <For DeltaList>
         <row>
           <div class="main">
-            <a href="<TitleUri/>">
+            <a href="<UriBase /><Index />">
               <div><span class="muted"><Index /></span> <Title /></div>
+              <With DeltaMeta><span class="meta muted"><Repo /> - <Flavor /></span></With>
               <desc class="muted"><Desc default="&nbsp;" /></desc>
             </a>
           </div>

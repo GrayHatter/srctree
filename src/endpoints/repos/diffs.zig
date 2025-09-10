@@ -810,6 +810,7 @@ fn list(ctx: *Frame) Error!void {
 
     var d_list: ArrayList(S.DeltaList) = .{};
     var itr = Delta.iterator(ctx.alloc, rd.name);
+    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diffs", .{rd.name});
     while (itr.next()) |deltaC| {
         var d = deltaC;
         if (d.attach != .diff) continue;
@@ -819,16 +820,17 @@ fn list(ctx: *Frame) Error!void {
         const cmtsmeta = d.countComments();
         try d_list.append(ctx.alloc, .{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
-            .title_uri = try allocPrint(ctx.alloc, "/repo/{s}/diffs/{x}", .{ d.repo, d.index }),
+            .uri_base = uri_base,
             .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
             .desc = try abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .delta_meta = null,
         });
     }
 
     var default_search_buf: [0xFF]u8 = undefined;
-    const def_search = try bufPrint(&default_search_buf, "is:diff repo:{s} ", .{rd.name});
+    const def_search = try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
     if (ctx.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
@@ -836,6 +838,7 @@ fn list(ctx: *Frame) Error!void {
     var page = DeltaListPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
+        //.search_action = uri_base,
         .delta_list = d_list.items,
         .search = def_search,
     });

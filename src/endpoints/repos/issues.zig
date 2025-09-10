@@ -190,6 +190,7 @@ const DeltaListHtml = template.PageData("delta-list.html");
 fn list(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
+    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diffs", .{rd.name});
     const last = (Types.currentIndexNamed(.deltas, rd.name) catch 0) + 1;
     var d_list: ArrayList(S.DeltaList) = .{};
     for (0..last) |i| {
@@ -206,20 +207,17 @@ fn list(ctx: *verse.Frame) Error!void {
 
         try d_list.append(ctx.alloc, .{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
-            .title_uri = try allocPrint(
-                ctx.alloc,
-                "/repo/{s}/{s}/{x}",
-                .{ d.repo, if (d.attach == .issue) "issues" else "diffs", d.index },
-            ),
+            .uri_base = uri_base,
             .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
             .desc = try verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .delta_meta = null,
         });
     }
 
     var default_search_buf: [0xFF]u8 = undefined;
-    const def_search = try bufPrint(&default_search_buf, "is:issue repo:{s} ", .{rd.name});
+    const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue", .{rd.name});
 
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
@@ -230,6 +228,7 @@ fn list(ctx: *verse.Frame) Error!void {
     var page = DeltaListHtml.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
+        //.search_action = uri_base,
         .delta_list = try d_list.toOwnedSlice(ctx.alloc),
         .search = def_search,
     });

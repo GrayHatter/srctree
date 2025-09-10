@@ -53,15 +53,16 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         const desc = if (delt.message.len == 0) "&nbsp;" else try abx.Html.cleanAlloc(ctx.alloc, delt.message);
         try d_list.append(ctx.alloc, .{
             .index = try allocPrint(ctx.alloc, "0x{x}", .{delt.index}),
-            .title_uri = try allocPrint(
+            .uri_base = try allocPrint(
                 ctx.alloc,
-                "/repo/{s}/{s}/{x}",
-                .{ delt.repo, if (delt.attach == .issue) "issues" else "diffs", delt.index },
+                "/repo/{s}/{s}/",
+                .{ delt.repo, if (delt.attach == .issue) "issues" else "diffs" },
             ),
             .title = try abx.Html.cleanAlloc(ctx.alloc, delt.title),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
             .desc = desc,
+            .delta_meta = .{ .repo = delt.repo, .flavor = if (delt.attach == .issue) "issue" else "diff" },
         });
     }
 
