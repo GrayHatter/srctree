@@ -8,6 +8,7 @@ pub const verse_router = &router;
 
 pub const verse_endpoints_ = verse.Endpoints(.{
     @import("repos/issues.zig"),
+    @import("repos/diffs.zig"),
 });
 
 pub const routes = [_]Router.Match{
@@ -16,7 +17,7 @@ pub const routes = [_]Router.Match{
     ROUTE("branches", branches.list),
     ROUTE("commit", &Commits.router),
     ROUTE("commits", &Commits.router),
-    ROUTE("diffs", &Diffs.router),
+    //ROUTE("diffs", &Diffs.router),
     ROUTE("ref", treeBlob),
     ROUTE("tags", tags.list),
     ROUTE("tree", treeBlob),
@@ -38,7 +39,9 @@ pub const RouteData = struct {
         commits,
         ref,
         tree,
+        issue,
         issues,
+        diff,
         diffs,
         tags,
         // gitweb endpoints

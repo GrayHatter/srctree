@@ -1,9 +1,19 @@
+pub const verse_name = .diffs;
+
+pub const verse_aliases = .{
+    .diff,
+};
+
+pub const verse_router: Route.RouteFn = router;
+
 pub const routes = [_]Route.Match{
     ROUTE("", list),
     ROUTE("new", new),
     POST("create", createDiff),
     POST("add-comment", newComment),
 };
+
+pub const index = list;
 
 fn isHex(input: []const u8) ?usize {
     for (input) |c| {
@@ -13,8 +23,9 @@ fn isHex(input: []const u8) ?usize {
 }
 
 pub fn router(ctx: *Frame) Route.RoutingError!Route.BuildFn {
-    if (!eql(u8, "diffs", ctx.uri.next() orelse return error.Unrouteable))
-        return error.Unrouteable;
+    const current = ctx.uri.next() orelse return error.Unrouteable;
+    if (!eql(u8, "diffs", current) and !eql(u8, "diff", current)) return error.Unrouteable;
+
     const verb = ctx.uri.peek() orelse return Route.defaultRouter(ctx, &routes);
 
     if (isHex(verb)) |_| {
@@ -672,13 +683,13 @@ fn view(ctx: *Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
     const delta_id = ctx.uri.next().?;
-    const index = isHex(delta_id) orelse return error.Unrouteable;
+    const idx = isHex(delta_id) orelse return error.Unrouteable;
 
     var repo = (Repos.open(rd.name, .public) catch return error.DataInvalid) orelse return error.DataInvalid;
     repo.loadData(ctx.alloc) catch return error.ServerFault;
     defer repo.raze();
 
-    var delta = Delta.open(ctx.alloc, rd.name, index) catch |err| switch (err) {
+    var delta = Delta.open(ctx.alloc, rd.name, idx) catch |err| switch (err) {
         //error.InvalidTarget => return error.Unrouteable,
         error.InputOutput => unreachable,
         //error.Other => unreachable,
@@ -750,7 +761,7 @@ fn view(ctx: *Frame) Error!void {
                         else
                             try abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
                         .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
-                            index,
+                            idx,
                             msg.hash[0..],
                         }) },
                         .sub_thread = null,
@@ -768,7 +779,7 @@ fn view(ctx: *Frame) Error!void {
             }
         }
     } else |err| {
-        std.debug.print("Unable to load comments for thread {} {}\n", .{ index, err });
+        std.debug.print("Unable to load comments for thread {} {}\n", .{ idx, err });
         @panic("oops");
     }
 

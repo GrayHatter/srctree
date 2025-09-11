@@ -4,14 +4,14 @@ pub const verse_aliases = .{
     .issue,
 };
 
+pub const verse_router: Router.RouteFn = router;
+
 pub const routes = [_]Router.Match{
     ROUTE("", list),
     GET("new", new),
     POST("new", newPost),
     POST("add-comment", addComment),
 };
-
-pub const verse_router: Router.RouteFn = router;
 
 pub const index = list;
 
@@ -23,7 +23,8 @@ fn isHex(input: []const u8) ?usize {
 }
 
 pub fn router(ctx: *verse.Frame) Router.RoutingError!Router.BuildFn {
-    std.debug.assert(std.mem.eql(u8, "issues", ctx.uri.next().?));
+    const current = ctx.uri.next() orelse return error.Unrouteable;
+    if (!eql(u8, "issues", current) and !eql(u8, "issue", current)) return error.Unrouteable;
     const verb = ctx.uri.peek() orelse return Router.defaultRouter(ctx, &routes);
 
     if (isHex(verb)) |_| {
@@ -241,6 +242,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
+const eql = std.mem.eql;
 
 const verse = @import("verse");
 const abx = verse.abx;
