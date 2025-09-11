@@ -11,6 +11,7 @@ pub const verse_routes = [_]Match{
         .{ .name = "barkrowler", .allow = false }, // selfish bot
         .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
         .{ .name = "Amazonbot", .allow = false }, // aggressive, selfish
+        .{ .name = "AhrefsBot", .allow = false }, // selfish
         // Disallowed for being too aggressive, and substituting it's own crawl delay
         .{ .name = "MJ12bot", .allow = false, .extra = "Crawl-Delay: 90\n" },
         .{
@@ -58,25 +59,19 @@ fn debug(_: *Frame) Router.Error!void {
 }
 
 fn builder(fr: *Frame, call: BuildFn) void {
-    if (fr.request.user_agent) |ua| {
+    if (fr.request.user_agent) |*ua| {
         if (ua.resolved == .bot and ua.resolved.bot.name == .googlebot or fr.user != null) {} else {
             fr.dumpDebugData(.{});
             ua.botDetectionDump(fr.request);
         }
+        const ua_: *verse.Request.UserAgent = @constCast(ua);
+        if (!try ua_.validate(fr.request)) {
+            std.debug.print("Dropping malicious traffic\n", .{});
+            return fr.sendDefaultErrorPage(.not_found);
+        }
     } else {
         std.debug.print("No User agent for request\n\n\n\n", .{});
         fr.dumpDebugData(.{});
-    }
-
-    if (fr.request.user_agent) |ua| {
-        switch (ua.resolved) {
-            .bot => |_| {
-                if (ua.bot_validation) |bv| {
-                    if (bv.malicious) return fr.sendDefaultErrorPage(.not_found);
-                }
-            },
-            else => {},
-        }
     }
 
     const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
@@ -86,11 +81,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
     } }).*;
 
     if (fr.user) |usr| {
-        if (usr.username) |un| {
-            bh.nav.nav_auth = un;
-        } else {
-            bh.nav.nav_auth = "Error No Username";
-        }
+        bh.nav.nav_auth = if (usr.username) |un| un else "Error No Username";
     } else {
         bh.nav.nav_auth = "Public";
     }
