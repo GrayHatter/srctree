@@ -19,9 +19,7 @@ fn inbox(ctx: *Frame) Error!void {
 
 pub fn index(ctx: *Frame) Error!void {
     const udata = ctx.request.data.query.validate(SearchReq) catch return error.DataInvalid;
-
     const query_str = udata.q orelse "";
-
     return custom(ctx, query_str);
 }
 
@@ -44,8 +42,8 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
     }
 
     var d_list: ArrayList(S.DeltaList) = .{};
-    var search_results = Delta.search(ctx.alloc, rules.items);
-    while (search_results.next(ctx.alloc) catch null) |deltaC| {
+    var search_results = Delta.searchAny(rules.items);
+    while (search_results.next(ctx.alloc)) |deltaC| {
         if (deltaC.title.len == 0) continue;
         var delt: Delta = deltaC;
         _ = delt.loadThread(ctx.alloc) catch return error.Unknown;
@@ -72,7 +70,7 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &btns } },
         .delta_list = d_list.items,
-        .search = verse.abx.Html.cleanAlloc(ctx.alloc, search_str) catch unreachable,
+        .search = abx.Html.cleanAlloc(ctx.alloc, search_str) catch unreachable,
     });
 
     try ctx.sendPage(&page);

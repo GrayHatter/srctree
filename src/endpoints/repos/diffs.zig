@@ -815,46 +815,74 @@ fn view(ctx: *Frame) Error!void {
     try ctx.sendPage(&page);
 }
 
+const SearchReq = struct {
+    q: ?[]const u8,
+};
+
 const DeltaListPage = Template.PageData("delta-list.html");
-fn list(ctx: *Frame) Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
+fn list(f: *Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+
+    const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
+    if (udata.q) |q| {
+        var b: [0xFF]u8 = undefined;
+        if (indexOf(u8, q, "is:diff") == null or
+            indexOf(u8, q, try bufPrint(&b, "repo:{s}", .{rd.name})) == null)
+        {
+            var buf: [0x2FF]u8 = undefined;
+            for (f.request.data.query.rawquery) |c| if (!std.ascii.isAscii(c)) return error.Abuse;
+            const loc = bufPrint(&buf, "/search?{s}", .{f.request.data.query.rawquery}) catch &buf;
+            return f.redirect(loc, .see_other) catch unreachable;
+        }
+    }
+
+    var rules: ArrayList(Delta.SearchRule) = .{};
+    {
+        var itr = splitScalar(u8, udata.q orelse "", ' ');
+        while (itr.next()) |r_line| {
+            var line = r_line;
+            line = std.mem.trim(u8, line, " ");
+            if (line.len == 0) continue;
+            try rules.append(f.alloc, .parse(line));
+        }
+    }
 
     var d_list: ArrayList(S.DeltaList) = .{};
-    var itr = Delta.iterator(ctx.alloc, rd.name);
-    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diff", .{rd.name});
-    while (itr.next()) |deltaC| {
+    var itr = Delta.searchRepo(rd.name, rules.items);
+    const uri_base = try allocPrint(f.alloc, "/repo/{s}/diffs", .{rd.name});
+    while (itr.next(f.alloc)) |deltaC| {
         var d = deltaC;
         if (d.attach != .diff) continue;
         if (d.closed) continue;
 
-        _ = d.loadThread(ctx.alloc) catch unreachable;
+        _ = d.loadThread(f.alloc) catch unreachable;
         const cmtsmeta = d.countComments();
-        try d_list.append(ctx.alloc, .{
-            .index = try allocPrint(ctx.alloc, "{x}", .{d.index}),
-            .uri_base = uri_base,
-            .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
+        try d_list.append(f.alloc, .{
+            .index = try allocPrint(f.alloc, "{x}", .{d.index}),
+            .uri_base = uri_base[0 .. uri_base.len - 1],
+            .title = try abx.Html.cleanAlloc(f.alloc, d.title),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
-            .desc = try abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .desc = try abx.Html.cleanAlloc(f.alloc, d.message),
             .delta_meta = null,
         });
     }
 
     var default_search_buf: [0xFF]u8 = undefined;
-    const def_search = try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
-    if (ctx.user) |usr| {
+    const search_str = if (udata.q) |q| abx.Html.cleanAlloc(f.alloc, q) catch unreachable else try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
+    if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
     var page = DeltaListPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
-        //.search_action = uri_base,
+        .search_action = uri_base,
         .delta_list = d_list.items,
-        .search = def_search,
+        .search = search_str,
     });
 
-    return try ctx.sendPage(&page);
+    return try f.sendPage(&page);
 }
 
 const std = @import("std");

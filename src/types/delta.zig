@@ -147,27 +147,25 @@ pub fn raze(_: Delta, _: std.mem.Allocator) void {
 }
 
 pub const Iterator = struct {
-    alloc: Allocator,
     index: usize = 0,
     last: usize = 0,
     repo: []const u8,
 
-    pub fn next(self: *Iterator) ?Delta {
+    pub fn init(repo: []const u8) Iterator {
+        return .{
+            .repo = repo,
+            .last = Types.currentIndexNamed(.deltas, repo) catch 0,
+        };
+    }
+
+    pub fn next(self: *Iterator, a: Allocator) ?Delta {
         while (self.index <= self.last) {
             defer self.index +|= 1;
-            return open(self.alloc, self.repo, self.index) catch continue;
+            return open(a, self.repo, self.index) catch continue;
         }
         return null;
     }
 };
-
-pub fn iterator(a: Allocator, repo: []const u8) Iterator {
-    return .{
-        .alloc = a,
-        .repo = repo,
-        .last = Types.currentIndexNamed(.deltas, repo) catch 0,
-    };
-}
 
 pub const SearchSpecifier = enum {
     search,
@@ -213,23 +211,17 @@ pub const SearchRule = union(SearchSpecifier) {
     }
 };
 
-pub fn SearchList(T: type) type {
+pub fn SearchIter(T: type, I: type) type {
     return struct {
         rules: []const SearchRule,
 
         // TODO better ABI
-        iterable: std.fs.Dir.Iterator,
+        iterable: I,
 
         const Self = @This();
 
-        pub fn next(self: *Self, a: Allocator) anyerror!?T {
-            const line = (try self.iterable.next()) orelse return null;
-            if (line.kind != .file) return self.next(a);
-            if (!std.mem.endsWith(u8, line.name, ".delta")) return self.next(a);
-            const name = line.name[0 .. line.name.len - 6];
-            const i = lastIndexOf(u8, name, ".") orelse return self.next(a);
-            const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a);
-            const current = open(a, name[0..i], num) catch return self.next(a);
+        pub fn next(self: *Self, a: Allocator) ?T {
+            const current = self.iterable.next(a) orelse return null;
             if (self.evalRules(current)) {
                 return current;
             }
@@ -290,18 +282,39 @@ pub fn SearchList(T: type) type {
     };
 }
 
-pub fn searchRepo(
-    _: std.mem.Allocator,
-    _: []const u8,
-    _: []const SearchRule,
-) SearchList(Delta) {
-    unreachable;
-}
+pub const AnyIterator = struct {
+    dir: std.fs.Dir.Iterator,
 
-pub fn search(_: std.mem.Allocator, rules: []const SearchRule) SearchList(Delta) {
+    pub fn init() AnyIterator {
+        return .{
+            .dir = (Types.iterableDir(.deltas) catch unreachable).iterate(),
+        };
+    }
+
+    pub fn next(self: *AnyIterator, a: Allocator) ?Delta {
+        const line = (self.dir.next() catch return null) orelse return null;
+        if (line.kind != .file) return self.next(a);
+        if (!std.mem.endsWith(u8, line.name, ".delta")) return self.next(a);
+        const name = line.name[0 .. line.name.len - 6];
+        const i = lastIndexOf(u8, name, ".") orelse return self.next(a);
+        const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a);
+        const current = open(a, name[0..i], num) catch return self.next(a);
+
+        return current;
+    }
+};
+
+pub fn searchAny(rules: []const SearchRule) SearchIter(Delta, AnyIterator) {
     return .{
         .rules = rules,
-        .iterable = (Types.iterableDir(.deltas) catch unreachable).iterate(),
+        .iterable = .init(),
+    };
+}
+
+pub fn searchRepo(repo: []const u8, rules: []const SearchRule) SearchIter(Delta, Iterator) {
+    return .{
+        .rules = rules,
+        .iterable = .init(repo),
     };
 }
 
