@@ -52,11 +52,11 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         const cmtsmeta = delt.countComments();
         const desc = if (delt.message.len == 0) "&nbsp;" else try abx.Html.cleanAlloc(ctx.alloc, delt.message);
         try d_list.append(ctx.alloc, .{
-            .index = try allocPrint(ctx.alloc, "0x{x}", .{delt.index}),
+            .index = try allocPrint(ctx.alloc, "{x}", .{delt.index}),
             .uri_base = try allocPrint(
                 ctx.alloc,
                 "/repo/{s}/{s}/",
-                .{ delt.repo, if (delt.attach == .issue) "issues" else "diffs" },
+                .{ delt.repo, if (delt.attach == .issue) "issue" else "diff" },
             ),
             .title = try abx.Html.cleanAlloc(ctx.alloc, delt.title),
             .comment_new = if (cmtsmeta.new) " new" else "",

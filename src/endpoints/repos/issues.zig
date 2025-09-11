@@ -190,7 +190,7 @@ const DeltaListHtml = template.PageData("delta-list.html");
 fn list(ctx: *verse.Frame) Error!void {
     const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
 
-    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diffs", .{rd.name});
+    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diff", .{rd.name});
     const last = (Types.currentIndexNamed(.deltas, rd.name) catch 0) + 1;
     var d_list: ArrayList(S.DeltaList) = .{};
     for (0..last) |i| {
@@ -206,7 +206,7 @@ fn list(ctx: *verse.Frame) Error!void {
         const cmtsmeta = d.countComments();
 
         try d_list.append(ctx.alloc, .{
-            .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
+            .index = try allocPrint(ctx.alloc, "{x}", .{d.index}),
             .uri_base = uri_base,
             .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comment_new = if (cmtsmeta.new) " new" else "",

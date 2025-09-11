@@ -810,7 +810,7 @@ fn list(ctx: *Frame) Error!void {
 
     var d_list: ArrayList(S.DeltaList) = .{};
     var itr = Delta.iterator(ctx.alloc, rd.name);
-    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diffs", .{rd.name});
+    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diff", .{rd.name});
     while (itr.next()) |deltaC| {
         var d = deltaC;
         if (d.attach != .diff) continue;
@@ -819,7 +819,7 @@ fn list(ctx: *Frame) Error!void {
         _ = d.loadThread(ctx.alloc) catch unreachable;
         const cmtsmeta = d.countComments();
         try d_list.append(ctx.alloc, .{
-            .index = try allocPrint(ctx.alloc, "0x{x}", .{d.index}),
+            .index = try allocPrint(ctx.alloc, "{x}", .{d.index}),
             .uri_base = uri_base,
             .title = try abx.Html.cleanAlloc(ctx.alloc, d.title),
             .comment_new = if (cmtsmeta.new) " new" else "",
