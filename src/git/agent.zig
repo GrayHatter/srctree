@@ -94,24 +94,34 @@ pub fn initRepo(self: Agent, dir: []const u8, opt: struct { bare: bool = true })
     });
 }
 
-pub fn show(self: Agent, sha: []const u8) ![]u8 {
+pub fn show(self: Agent, sha: SHA) ![]u8 {
     return try self.exec(&[_][]const u8{
         "git",
         "show",
         "--histogram",
         "--diff-merges=1",
         "-p",
-        sha,
+        sha.hex()[0 .. sha.len * 2],
     });
 }
 
-pub fn formatPatch(self: Agent, sha: []const u8) ![]u8 {
+pub fn formatPatch(self: Agent, sha: SHA) ![]u8 {
     return try self.exec(&[_][]const u8{
         "git",
         "format-patch",
         "--histogram",
         "--stdout",
-        sha,
+        sha.hex()[0 .. sha.len * 2],
+    });
+}
+
+pub fn formatPatchRange(self: Agent, range: []const u8) ![]u8 {
+    return try self.exec(&[_][]const u8{
+        "git",
+        "format-patch",
+        "--histogram",
+        "--stdout",
+        range,
     });
 }
 
@@ -258,7 +268,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.git_agent);
 
-const Git = @import("../git.zig");
-const Repo = Git.Repo;
-const Tree = Git.Tree;
-const Ref = Git.Ref;
+const Repo = @import("Repo.zig");
+const Tree = @import("tree.zig");
+const Ref = @import("ref.zig").Ref;
+const SHA = @import("SHA.zig");

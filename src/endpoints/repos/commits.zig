@@ -60,7 +60,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     };
 
     var git = repo.getAgent(f.alloc);
-    var diff = git.show(sha) catch |err| switch (err) {
+    var diff = git.show(current.sha) catch |err| switch (err) {
         error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
         else => return error.Unknown,
     };
@@ -184,7 +184,7 @@ pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
         const commit_only = sha[0 .. sha.len - 6];
         const range = try bufPrint(rbuf[0..], "{s}^..{s}", .{ commit_only, commit_only });
 
-        const diff = acts.formatPatch(range) catch return error.ServerFault;
+        const diff = acts.formatPatchRange(range) catch return error.ServerFault;
         f.status = .ok;
         f.content_type = null;
         f.headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
