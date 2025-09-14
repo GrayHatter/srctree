@@ -1,35 +1,44 @@
-state: usize = 0,
+hash: DefaultHash,
+state: usize,
+target: usize,
+kind: Kind,
 created: i64 = 0,
 updated: i64 = 0,
 src_tz: i32 = 0,
-target: usize,
 author: ?[]const u8 = null,
 message: ?[]const u8 = null,
-kind: Kind,
-hash: DefaultHash,
+// TODO stabilize or replace this hack
+extra0: usize = 0,
 
 const Message = @This();
 
 pub const Kind = enum(u16) {
     comment,
+    diff_update,
 };
 
 pub const type_prefix = "messages";
 pub const type_version = 0;
 
-const typeio = Types.readerWriter(Message, .{ .target = undefined, .kind = undefined, .hash = @splat(0) });
+const typeio = Types.readerWriter(Message, .{
+    .hash = @splat(0),
+    .state = 0,
+    .target = undefined,
+    .kind = undefined,
+});
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 
-pub fn new(tid: usize, author: []const u8, message: []const u8) !Message {
+pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8) !Message {
     var m = Message{
+        .hash = @splat(0),
+        .state = 0,
+        .kind = kind,
         .target = tid,
-        .kind = .comment,
         .created = std.time.timestamp(),
         .updated = std.time.timestamp(),
         .author = author,
         .message = message,
-        .hash = @splat(0),
     };
     _ = m.genHash();
     try m.commit();
@@ -61,10 +70,16 @@ pub fn genHash(msg: *Message) *const DefaultHash {
     h.update(asBytes(&msg.target));
     h.update(asBytes(&msg.created));
     h.update(asBytes(&msg.updated));
+    h.update(asBytes(&@intFromEnum(msg.kind)));
     switch (msg.kind) {
         .comment => {
             h.update(msg.author orelse "");
             h.update(msg.message orelse "");
+        },
+        .diff_update => {
+            h.update(msg.author orelse "");
+            // Message is required for diff patch updates
+            h.update(msg.message.?);
         },
     }
     h.final(&msg.hash);
@@ -75,6 +90,7 @@ test "comment" {
     const a = std.testing.allocator;
     var c = Message{
         .target = 0,
+        .state = 0,
         .kind = .comment,
         .author = "grayhatter",
         .message = "test comment, please ignore",
@@ -85,8 +101,8 @@ test "comment" {
     try std.testing.expectEqualSlices(
         u8,
         &[_]u8{
-            0x4A, 0x3C, 0x01, 0x61, 0x69, 0x59, 0xEE, 0x54, 0x92, 0x66, 0x78, 0xE1, 0x74, 0xFC, 0x7E, 0x42,
-            0x16, 0x48, 0x0A, 0xB2, 0xA7, 0x1C, 0xB7, 0x45, 0x13, 0xD5, 0xD1, 0x36, 0xDE, 0x35, 0xBA, 0xCE,
+            0x5A, 0x6E, 0x83, 0xD6, 0xDE, 0xC1, 0x97, 0x77, 0x8A, 0x73, 0x79, 0xBB, 0x32, 0x76, 0xDF, 0xF2,
+            0xB3, 0x74, 0xBB, 0x02, 0x19, 0x45, 0xB0, 0x29, 0x44, 0xEF, 0x00, 0xDC, 0x91, 0x62, 0x29, 0x41,
         },
         hash,
     );
@@ -98,7 +114,7 @@ test "comment" {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{hash});
     try std.testing.expectEqualStrings(
-        "4a3c01616959ee54926678e174fc7e4216480ab2a71cb74513d5d136de35bace.message",
+        "5a6e83d6dec197778a7379bb3276dff2b374bb021945b02944ef00dc91622941.message",
         filename,
     );
 
@@ -114,15 +130,16 @@ test "comment" {
 
     const expected =
         \\# messages/0
+        \\hash: 5a6e83d6dec197778a7379bb3276dff2b374bb021945b02944ef00dc91622941
         \\state: 0
+        \\target: 0
+        \\kind: comment
         \\created: 0
         \\updated: 0
         \\src_tz: 0
-        \\target: 0
         \\author: grayhatter
         \\message: test comment, please ignore
-        \\kind: comment
-        \\hash: 4a3c01616959ee54926678e174fc7e4216480ab2a71cb74513d5d136de35bace
+        \\extra0: 0
         \\
         \\
     ;
@@ -136,7 +153,7 @@ test Message {
     defer tempdir.cleanup();
     try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
 
-    var c = try Message.new(0, "author", "message");
+    var c = try Message.new(.comment, 0, "author", "message");
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0xffffff);
@@ -151,15 +168,16 @@ test Message {
 
     const v0_text =
         \\# messages/0
+        \\hash: ec491fbb9d29b35270925653168a308e1d978fda0397d3993eb15990a1fcb80e
         \\state: 0
+        \\target: 0
+        \\kind: comment
         \\created: 1744830464
         \\updated: 1744830464
         \\src_tz: 0
-        \\target: 0
         \\author: author
         \\message: message
-        \\kind: comment
-        \\hash: cd72e644d5a5c4c99fd9a813959b428a2eaafbbfbed03737c9b075d3fc12f8c4
+        \\extra0: 0
         \\
         \\
     ;

@@ -53,7 +53,7 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
             .index = try allocPrint(ctx.alloc, "{x}", .{delt.index}),
             .uri_base = try allocPrint(
                 ctx.alloc,
-                "/repo/{s}/{s}/",
+                "/repo/{s}/{s}",
                 .{ delt.repo, if (delt.attach == .issue) "issue" else "diff" },
             ),
             .title = try abx.Html.cleanAlloc(ctx.alloc, delt.title),

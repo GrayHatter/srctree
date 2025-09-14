@@ -136,6 +136,26 @@ pub fn navButtons(ctx: *Frame) ![2]S.NavButtons {
     return btns;
 }
 
+pub const PatchView = struct {
+    @"inline": ?bool = null,
+};
+
+pub fn getAndSavePatchView(f: *Frame) bool {
+    const udata: PatchView = f.request.data.query.validate(PatchView) catch .{ .@"inline" = null };
+    if (udata.@"inline") |inln| {
+        f.cookie_jar.add(.{
+            .name = "diff-inline",
+            .value = if (inln) "1" else "0",
+        }) catch {};
+        return inln;
+    } else {
+        if (f.request.cookie_jar.get("diff-inline")) |cookie| {
+            return (cookie.value.len > 0 and cookie.value[0] == '1');
+        }
+    }
+    return true;
+}
+
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     const rd = RouteData.init(f.uri) orelse return list;
 

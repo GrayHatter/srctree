@@ -75,7 +75,11 @@ pub fn commit(thread: Thread) !void {
 }
 
 pub fn addComment(thread: *Thread, a: Allocator, author: []const u8, message: []const u8) !void {
-    try thread.messages.append(a, try .new(thread.index, author, message));
+    try thread.addMessage(a, try .new(.comment, thread.index, author, message));
+}
+
+pub fn addMessage(thread: *Thread, a: Allocator, m: Message) !void {
+    try thread.messages.append(a, m);
     thread.updated = std.time.timestamp();
     try thread.commit();
 }

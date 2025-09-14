@@ -38,10 +38,6 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     return try patch.diffsVerseSlice(a);
 }
 
-pub const PatchView = struct {
-    @"inline": ?bool = null,
-};
-
 fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
     if (!Git.commitish(sha)) {
         std.debug.print("Abuse ''{s}''\n", .{sha});
@@ -113,6 +109,15 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
                                     .sub_thread = null,
                                 };
                             },
+                            .diff_update => {
+                                pg_comment.* = .{
+                                    .author = try abx.Html.cleanAlloc(f.alloc, msg.author.?),
+                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated)}),
+                                    .message = msg.message.?,
+                                    .direct_reply = null,
+                                    .sub_thread = null,
+                                };
+                            },
                             //else => {
                             //    pg_comment.* = .{
                             //        .author = "",
@@ -136,19 +141,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         }
     } else |_| {}
 
-    var inline_html: bool = true;
-    const udata = f.request.data.query.validate(PatchView) catch return error.DataInvalid;
-    if (udata.@"inline") |uinline| {
-        inline_html = uinline;
-        f.cookie_jar.add(.{
-            .name = "diff-inline",
-            .value = if (uinline) "1" else "0",
-        }) catch @panic("OOM");
-    } else {
-        if (f.request.cookie_jar.get("diff-inline")) |cookie| {
-            inline_html = if (cookie.value.len > 0 and cookie.value[0] == '1') true else false;
-        }
-    }
+    const inline_html: bool = getAndSavePatchView(f);
 
     const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
@@ -439,6 +432,7 @@ const Diffs = @import("diffs.zig");
 
 const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
+const getAndSavePatchView = Repos.getAndSavePatchView;
 
 const Datetime = @import("../../datetime.zig");
 const Git = @import("../../git.zig");

@@ -333,8 +333,10 @@ fn fetch(a: Allocator, uri: []const u8) ![]u8 {
     return error.EpmtyReponse;
 }
 
-pub fn loadFromRemote(a: Allocator, uri: []const u8) !Patch {
-    return Patch{ .blob = try fetch(a, uri) };
+pub fn fromRemote(a: Allocator, uri: []const u8) !Patch {
+    return Patch{
+        .blob = try fetch(a, uri),
+    };
 }
 
 pub const DiffLine = union(enum) {

@@ -65,7 +65,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
             ua.botDetectionDump(fr.request);
         }
         const ua_: *verse.Request.UserAgent = @constCast(ua);
-        if (!try ua_.validate(fr.request) and fr.user == null) {
+        if (!ua_.validate(fr.request) and fr.user == null) {
             std.debug.print("Dropping malicious traffic\n", .{});
             return fr.sendDefaultErrorPage(.not_found);
         }

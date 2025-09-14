@@ -8,8 +8,8 @@
             //.url = "git+https://srctree.gr.ht/repo/verse",
             // The above URL is the real upstream source but Zig's TLS
             // implementation is currently broken so an alt is provided
-            .url = "git+https://github.com/GrayHatter/verse.git#004343cee85bdd3422315893706f5460b4b242a0",
-            .hash = "verse-0.0.3-B0Iw6_6IBQDBXb71kG2s7Klrr1GeBsxpuRMNqZwGt2j4",
+            .url = "git+https://github.com/GrayHatter/verse.git#a022f30f1285501162c3436a6fa3dff7d0683a06",
+            .hash = "verse-0.0.3-B0Iw64CIBQA2FZbPFotrGVsuZGb4NF7Bti_CtrNehuO7",
             //.path = "../verse",
         },
     },

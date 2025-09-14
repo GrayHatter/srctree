@@ -122,8 +122,16 @@ pub const Comment = struct {
 pub fn addComment(delta: *Delta, a: Allocator, c: Comment) !void {
     var thread: *Thread = delta.thread orelse try delta.loadThread(a);
     try thread.addComment(a, c.author, c.message);
+    thread.messages.items[thread.messages.items.len - 1].extra0 = delta.attach_target;
     try thread.commit();
     delta.updated = std.time.timestamp();
+    try delta.commit();
+}
+
+pub fn addMessage(delta: *Delta, a: Allocator, m: Message) !void {
+    var thread: *Thread = delta.thread orelse try delta.loadThread(a);
+    try thread.addMessage(a, m);
+    delta.updated = thread.updated;
     try delta.commit();
 }
 
@@ -137,7 +145,9 @@ pub fn countComments(delta: Delta) struct { count: usize, new: bool } {
             cmtnew = cmtnew or m.updated > ts;
             cmtlen += 1;
         },
-        //else => {},
+        .diff_update => {
+            cmtnew = cmtnew or m.updated > ts;
+        },
     };
     return .{ .count = cmtlen, .new = cmtnew };
 }
@@ -371,4 +381,4 @@ const AnyReader = std.io.AnyReader;
 
 const Types = @import("../types.zig");
 const Thread = Types.Thread;
-const Message = Thread.Message;
+const Message = Types.Message;

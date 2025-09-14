@@ -29,14 +29,16 @@ pub fn router(ctx: *Frame) Route.RoutingError!Route.BuildFn {
     const verb = ctx.uri.peek() orelse return Route.defaultRouter(ctx, &routes);
 
     if (isHex(verb)) |_| {
-        const uri_save = ctx.uri.index;
-        defer ctx.uri.index = uri_save;
-        _ = ctx.uri.next();
-        if (ctx.uri.peek()) |action| {
+        var uri_d = ctx.uri;
+        _ = uri_d.next();
+        if (uri_d.peek()) |action| {
             if (eql(u8, action, "direct_reply")) return directReply;
         }
 
-        return view;
+        if (ctx.request.method == .POST)
+            return updatePatch
+        else
+            return view;
     }
 
     return Route.defaultRouter(ctx, &routes);
@@ -53,12 +55,31 @@ const DiffCreateReq = struct {
     desc: []const u8,
 
     patch_uri: ?[]const u8 = null,
-    patch_paste: ?[]const u8 = null,
+    patch: ?[]const u8 = null,
     network: ?[]const u8 = null,
     branch: ?[]const u8 = null,
 };
 
-fn new(ctx: *Frame) Error!void {
+fn new(f: *Frame) Error!void {
+    return switch (f.request.method) {
+        .GET => newGET(f),
+        .POST => newPOST(f),
+        .PUT => newPUT(f),
+        else => newGET(f),
+    };
+}
+
+fn newPUT(f: *Frame) Error!void {
+    std.debug.print("new put {any}\n", .{f.request.data});
+    return newGET(f);
+}
+
+fn newPOST(f: *Frame) Error!void {
+    // TODO implementent
+    return newGET(f);
+}
+
+fn newGET(ctx: *Frame) Error!void {
     var network: ?S.PatchNetwork = null;
     var patchuri: ?S.PatchUri = null;
     var patchpaste: ?S.PatchPaste = null;
@@ -125,49 +146,84 @@ fn inNetwork(str: []const u8) bool {
     return true;
 }
 
+const DiffUpdateReq = struct {
+    author: ?[]const u8 = null,
+    patch: []const u8,
+};
+
+fn updatePatch(f: *Frame) Error!void {
+    std.debug.print("update\n", .{});
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+
+    const delta_id = f.uri.next().?;
+    const idx = isHex(delta_id) orelse return error.InvalidURI;
+
+    const post = f.request.data.post orelse return error.DataMissing;
+    std.debug.print("post {any}\n", .{post});
+    for (post.items) |itm| {
+        std.debug.print("post itm {any}\n", .{itm});
+    }
+    const udata = post.validate(DiffUpdateReq) catch return error.DataInvalid; // TODO return custom text for curl
+
+    var delta = Delta.open(f.alloc, rd.name, idx) catch |err| switch (err) {
+        error.InputOutput => unreachable,
+        else => unreachable,
+    };
+
+    const author: []const u8 = &.{};
+    const diff: Diff = Diff.new(f.alloc, &delta, author, udata.patch) catch |err| {
+        std.debug.print("unable to create new diff {}\n", .{err});
+        unreachable;
+    };
+
+    _ = diff;
+}
+
+fn createDiffCore(a: Allocator, rd: RouteData, req: DiffCreateReq, user: []const u8) !usize {
+    if (req.title.len == 0) return error.DataInvalid;
+
+    if (req.patch_uri) |uri| if (inNetwork(uri)) {
+        const data = try Patch.fromRemote(a, uri);
+        _ = data;
+
+        std.debug.print(
+            "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
+            .{ uri, req.title, req.desc, "unimplemented" },
+        );
+        var delta = Delta.new(rd.name, req.title, req.desc, user) catch return error.ServerError;
+        delta.commit() catch unreachable;
+
+        //const filename = allocPrint(a, "data/patch/{s}.{x}.patch", .{
+        //    rd.name,
+        //    delta.index,
+        //}) catch unreachable;
+        //var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
+        //defer file.close();
+        //var w_b: [0x8000]u8 = undefined;
+        //var writer = file.writer(&w_b);
+        //writer.interface.writeAll(data.blob) catch unreachable;
+        //try writer.interface.flush();
+        return delta.index;
+    };
+    return error.Unknown;
+}
+
 fn createDiff(vrs: *Frame) Error!void {
     const rd = RouteData.init(vrs.uri) orelse return error.Unrouteable;
     if (vrs.request.data.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.DataInvalid;
-        if (udata.title.len == 0) return error.DataInvalid;
+        const username = if (vrs.user) |usr|
+            usr.username.?
+        else
+            try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{vrs.request.remote_addr});
 
-        var remote_addr: []const u8 = "unknown";
-        remote_addr = vrs.request.remote_addr;
-
-        if (udata.patch_uri) |uri| if (inNetwork(uri)) {
-            const data = Patch.loadFromRemote(vrs.alloc, uri) catch
-                return createError(vrs, udata, .{ .remote_error = "connection failed" });
-
-            std.debug.print(
-                "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
-                .{ uri, udata.title, udata.desc, "unimplemented" },
-            );
-            var delta = Delta.new(
-                rd.name,
-                udata.title,
-                udata.desc,
-                if (vrs.user) |usr|
-                    usr.username.?
-                else
-                    try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{remote_addr}),
-            ) catch unreachable;
-            delta.commit() catch unreachable;
-            std.debug.print("commit id {x}\n", .{delta.index});
-
-            const filename = allocPrint(vrs.alloc, "data/patch/{s}.{x}.patch", .{
-                rd.name,
-                delta.index,
-            }) catch unreachable;
-            var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
-            defer file.close();
-            var w_b: [0x8000]u8 = undefined;
-            var writer = file.writer(&w_b);
-            writer.interface.writeAll(data.blob) catch unreachable;
-            try writer.interface.flush();
-            var buf: [2048]u8 = undefined;
-            const loc = try bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta.index });
-            return vrs.redirect(loc, .see_other) catch unreachable;
+        const idx = createDiffCore(vrs.alloc, rd, udata, username) catch {
+            return createError(vrs, udata, .{ .remote_error = "connection failed" });
         };
+
+        var buf: [2048]u8 = undefined;
+        const loc = try bufPrint(&buf, "/repo/{s}/diff/{x}", .{ rd.name, idx });
+        return vrs.redirect(loc, .see_other) catch unreachable;
     }
 
     return try new(vrs);
@@ -190,7 +246,7 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
         .desc = try abx.Html.cleanAlloc(ctx.alloc, udata.desc),
         .patch_network = if (udata.network) |_| null else null, // TODO fixme
         .patch_uri = if (udata.patch_uri) |uri| .{ .uri = try abx.Html.cleanAlloc(ctx.alloc, uri) } else null,
-        .patch_paste = if (udata.patch_paste) |pst| .{ .patch_blob = try abx.Html.cleanAlloc(ctx.alloc, pst) } else null,
+        .patch_paste = if (udata.patch) |pst| .{ .patch_blob = try abx.Html.cleanAlloc(ctx.alloc, pst) } else null,
     });
 
     try ctx.sendPage(&page);
@@ -203,7 +259,7 @@ fn newComment(ctx: *Frame) Error!void {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const delta_index = isHex(delta_id.value) orelse return error.Unrouteable;
-        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/{x}", .{ rd.name, delta_index });
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diff/{x}", .{ rd.name, delta_index });
 
         const msg = try valid.require("comment");
         if (msg.value.len < 2) return ctx.redirect(loc, .see_other) catch unreachable;
@@ -334,10 +390,6 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
         .files = files,
     };
 }
-
-pub const PatchView = struct {
-    @"inline": ?bool = true,
-};
 
 const ParsedHeader = struct {
     pub const Numbers = struct {
@@ -637,7 +689,8 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
     var itr = splitScalar(u8, comment, '\n');
     while (itr.next()) |line_| {
         const line = std.mem.trim(u8, line_, "\r ");
-        for (patch.diffs.?) |*diff| {
+        const diffs: []Patch.Diff = patch.diffs orelse &.{};
+        for (diffs) |*diff| {
             const filename = diff.filename orelse continue;
             //std.debug.print("files {s}\n", .{filename});
             if (indexOf(u8, line, filename)) |filepos| {
@@ -696,8 +749,10 @@ fn view(ctx: *Frame) Error!void {
         else => unreachable,
     };
 
+    var diffM: ?Diff = null;
     switch (delta.attach) {
-        .diff, .nos => {},
+        .nos => {},
+        .diff => diffM = Diff.open(ctx.alloc, delta.attach_target) catch return error.Unknown,
         .issue => {
             var buf: [100]u8 = undefined;
             const loc = try bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
@@ -720,43 +775,58 @@ fn view(ctx: *Frame) Error!void {
     //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
     //}
 
-    const udata = ctx.request.data.query.validate(PatchView) catch unreachable;
-    const inline_html = udata.@"inline" orelse true;
+    const inline_html: bool = getAndSavePatchView(ctx);
 
     var patch_formatted: ?S.PatchHtml = null;
-    const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
-    var patch_applies: bool = false;
+    //const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
+
     var patch: ?Patch = null;
-    if (std.fs.cwd().openFile(patch_filename, .{})) |f| {
-        const fdata = f.readToEndAlloc(ctx.alloc, 0xFFFFF) catch return error.Unknown;
-        patch = .init(fdata);
+    var applies: bool = false;
+    if (diffM) |*diff| {
+        patch = .init(diff.patch.blob);
         if (patchStruct(ctx.alloc, &patch.?, !inline_html)) |phtml| {
             patch_formatted = phtml;
         } else |err| {
             std.debug.print("Unable to generate patch {any}\n", .{err});
         }
-        f.close();
+        const cmt = repo.headCommit(ctx.alloc) catch return error.ServerFault;
+        if (eql(u8, &cmt.sha.hex(), &diff.applies_hash)) {
+            applies = diff.applies;
+        } else {
+            var agent = repo.getAgent(ctx.alloc);
+            if (agent.checkPatch(diff.patch.blob)) |_| {
+                applies = true;
+                diff.applies = true;
+            } else |err| {
+                std.debug.print("git apply failed {any}\n", .{err});
+                diff.applies = false;
+            }
 
-        var agent = repo.getAgent(ctx.alloc);
-        const applies = agent.checkPatch(fdata) catch |err| apl: {
-            std.debug.print("git apply failed {any}\n", .{err});
-            break :apl "";
-        };
-        if (applies == null) patch_applies = true;
-    } else |err| {
-        std.debug.print("Unable to load patch {} {s}\n", .{ err, patch_filename });
+            @memcpy(diff.applies_hash[0..40], cmt.sha.hex()[0..40]);
+            diff.commit() catch return error.ServerFault;
+        }
     }
 
     var root_thread: []S.Thread = &.{};
     if (delta.loadThread(ctx.alloc)) |thread| {
         root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.items.len);
+        var cmt_diff = diffM;
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
+                    var comment_patch: ?Patch = patch;
+                    if (cmt_diff) |cd| {
+                        if (cd.index != msg.extra0) {
+                            cmt_diff = Diff.open(ctx.alloc, msg.extra0) catch cd;
+                            comment_patch = .init(cmt_diff.?.patch.blob);
+                        }
+                    }
+
+                    if (comment_patch) |*cp| if (cp.diffs == null) cp.parse(ctx.alloc) catch {};
                     c_ctx.* = .{
                         .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
                         .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
-                        .message = if (patch) |pt|
+                        .message = if (comment_patch) |pt|
                             translateComment(ctx.alloc, msg.message.?, pt, &repo) catch unreachable
                         else
                             try abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
@@ -764,6 +834,15 @@ fn view(ctx: *Frame) Error!void {
                             idx,
                             msg.hash[0..],
                         }) },
+                        .sub_thread = null,
+                    };
+                },
+                .diff_update => {
+                    c_ctx.* = .{
+                        .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
+                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
+                        .message = msg.message.?,
+                        .direct_reply = null,
                         .sub_thread = null,
                     };
                 },
@@ -808,7 +887,7 @@ fn view(ctx: *Frame) Error!void {
         .creator = if (delta.author) |author| try abx.Html.cleanAlloc(ctx.alloc, author) else null,
         .comments = .{ .thread = root_thread },
         .delta_id = delta_id,
-        .patch_warning = if (patch_applies) null else .{},
+        .patch_warning = if (applies) null else .{},
         .current_username = username,
     });
 
@@ -902,6 +981,7 @@ const splitScalar = std.mem.splitScalar;
 
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.RouteData;
+const getAndSavePatchView = RepoEndpoint.getAndSavePatchView;
 
 const verse = @import("verse");
 const abx = verse.abx;
@@ -922,3 +1002,4 @@ const Route = verse.Router;
 const S = Template.Structs;
 const Types = @import("../../types.zig");
 const Delta = Types.Delta;
+const Diff = Types.Diff;

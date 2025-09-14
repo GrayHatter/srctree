@@ -126,6 +126,16 @@ fn view(ctx: *verse.Frame) Error!void {
                         .sub_thread = null,
                     };
                 },
+                .diff_update => {
+                    // TODO Is this unreachable?
+                    c_ctx.* = .{
+                        .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
+                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
+                        .message = msg.message.?,
+                        .direct_reply = null,
+                        .sub_thread = null,
+                    };
+                },
                 //else => {
                 //    c_ctx.* = .{
                 //        .author = "",
