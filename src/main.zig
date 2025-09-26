@@ -75,11 +75,12 @@ pub const SrcConfig = Ini.Config(struct {
     },
     repos: ?struct {
         /// Directory of public repos
-        repos: ?[]const u8,
+        dir: ?[]const u8,
         /// Directory of private repos
-        private_repos: ?[]const u8,
+        private_dir: ?[]const u8,
         /// List of repos that should be hidden
-        @"hidden-repos": ?[]const u8,
+        @"private-repos": ?[]const u8,
+        @"unlisted-repos": ?[]const u8,
     },
 
     pub const Agent = struct {

@@ -8,47 +8,63 @@ pub const RepoDirs = struct {
     private: ?[]const u8 = null,
     secret: ?[]const u8 = null,
 
-    pub fn directory(rds: RepoDirs, vis: Visability) !std.fs.Dir {
+    pub fn directory(rds: RepoDirs, vis: Visibility) !std.fs.Dir {
         var cwd = std.fs.cwd();
         return cwd.openDir(switch (vis) {
             .public => rds.public orelse return error.NoDirectory,
             .private => rds.private orelse return error.NoDirectory,
             .secret => rds.secret orelse return error.NoDirectory,
+            .unlisted => rds.secret orelse return error.NoDirectory,
         }, .{ .iterate = true });
     }
 };
 
-pub const Visability = enum {
+pub const Visibility = enum {
     public,
+    unlisted,
     private,
     secret,
 
-    pub const len = @typeInfo(Visability).@"enum".fields.len;
+    pub fn isVisible(v: Visibility, target: Visibility) bool {
+        return switch (target) {
+            .public => v == .public,
+            .unlisted => v == .public or v == .unlisted,
+            .private => v != .secret,
+            .secret => true,
+        };
+    }
+
+    pub const len = @typeInfo(Visibility).@"enum".fields.len;
 };
 
 /// public, but use with caution, might cause side channel leakage
-pub fn isHiddenVis(name: []const u8, vis: Visability) bool {
+pub fn visibility(name: []const u8) Visibility {
     if (global_config.repos) |crepos| {
-        if (crepos.@"hidden-repos") |hr| {
+        if (crepos.@"private-repos") |hr| {
             // if you actually use null, I hate you!
             var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
-            while (repo_itr.next()) |r|
-                if (eql(u8, name, r)) return switch (vis) {
-                    .public => true,
-                    .private => false,
-                    .secret => @panic("not implemented"),
-                };
+            while (repo_itr.next()) |r| {
+                if (eql(u8, name, r))
+                    return .private;
+            }
+        } else if (crepos.@"unlisted-repos") |hr| {
+            // if you actually use null, I hate you!
+            var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
+            while (repo_itr.next()) |r| {
+                if (eql(u8, name, r))
+                    return .unlisted;
+            }
         }
     }
-    return false;
+    return .public;
 }
 
 /// public, but use with caution, might cause side channel leakage
 pub fn isHidden(name: []const u8) bool {
-    return isHiddenVis(name, .public);
+    return visibility(name) != .public;
 }
 
-pub fn exists(name: []const u8, vis: Visability) bool {
+pub fn exists(name: []const u8, vis: Visibility) bool {
     var dir = dirs.directory(vis) catch return false;
     defer dir.close();
     var itr = dir.iterate();
@@ -58,7 +74,7 @@ pub fn exists(name: []const u8, vis: Visability) bool {
             // lol, crap, there's a side channel leak no matter where I put
             // this... given near zero thought I've decided this is the better
             // option
-            if (isHiddenVis(name, vis)) return false;
+            if (!visibility(name).isVisible(vis)) return false;
             return true;
         }
     }
@@ -72,8 +88,8 @@ pub fn exists(name: []const u8, vis: Visability) bool {
 //
 //pub fn openAny(name: []const u8) !?Git.Repo {
 
-pub fn open(name: []const u8, vis: Visability) !?Git.Repo {
-    if (isHiddenVis(name, vis)) return null;
+pub fn open(name: []const u8, vis: Visibility) !?Git.Repo {
+    if (!visibility(name).isVisible(vis)) return null;
     var root = try dirs.directory(vis);
     defer root.close();
     const dir = root.openDir(name, .{}) catch |err| switch (err) {
@@ -102,7 +118,7 @@ pub fn allNames(a: Allocator) ![][]u8 {
 pub const RepoIterator = struct {
     dir: std.fs.Dir,
     itr: std.fs.Dir.Iterator,
-    vis: Visability,
+    vis: Visibility,
     /// only valid until the following call to next()
     current_name: ?[]const u8 = null,
 
@@ -110,7 +126,7 @@ pub const RepoIterator = struct {
         while (try ri.itr.next()) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
-            if (isHidden(file.name)) continue;
+            if (!visibility(file.name).isVisible(ri.vis)) continue;
             const rdir = ri.dir.openDir(file.name, .{}) catch continue;
             ri.current_name = file.name;
             return try Git.Repo.init(rdir);
@@ -120,7 +136,7 @@ pub const RepoIterator = struct {
     }
 };
 
-pub fn allRepoIterator(vis: Visability) !RepoIterator {
+pub fn allRepoIterator(vis: Visibility) !RepoIterator {
     const dir = try dirs.directory(vis);
     return .{
         .dir = dir,
