@@ -100,7 +100,7 @@ pub fn open(name: []const u8, vis: Visibility) !?Git.Repo {
     return try Git.Repo.init(dir);
 }
 
-pub fn allNames(a: Allocator) ![][]u8 {
+pub fn allNames(a: Allocator) !ArrayList([]u8) {
     var list: std.ArrayList([]u8) = .{};
 
     var dir_set = try dirs.directory(.public);
@@ -112,7 +112,7 @@ pub fn allNames(a: Allocator) ![][]u8 {
         if (isHidden(dir.name)) continue;
         try list.append(a, try a.dupe(u8, dir.name));
     }
-    return try list.toOwnedSlice(a);
+    return list;
 }
 
 pub const RepoIterator = struct {
@@ -159,6 +159,7 @@ pub const Agent = struct {
         sleep_for: usize = 60 * 60 * SECONDS,
         upstream: Direction = .both,
         downstream: Direction = .both,
+        skips: ?[]const u8,
 
         pub const Direction = packed struct(u2) {
             push: bool,
@@ -287,10 +288,24 @@ pub const Agent = struct {
         }
     }
 
+    pub fn skipRepo(skips: []const u8, name: []const u8) bool {
+        // if you actually use null, I hate you!
+        var skippable = std.mem.tokenizeAny(u8, skips, "\x00|;, \t");
+        while (skippable.next()) |skip| {
+            if (eql(u8, skip, name))
+                return true;
+        } else return false;
+    }
+
     pub fn updateThread(a: *Agent) void {
         log.debug("Spawning update thread", .{});
+        // TODO past me is evil for doing this (replace with sane alloc source)
         const alloc = std.heap.page_allocator;
-        const names = allNames(alloc) catch unreachable;
+        var n_array = allNames(alloc) catch unreachable;
+        // TODO drop skipped repos here
+        const names = n_array.toOwnedSlice(alloc) catch unreachable;
+        defer alloc.free(names);
+
         defer {
             for (names) |n| alloc.free(n);
             alloc.free(names);
@@ -300,6 +315,9 @@ pub const Agent = struct {
         running: while (a.enabled) {
             log.info("Starting sync for {} repos", .{names.len});
             for (names) |rname| {
+                if (a.config.skips) |skips|
+                    if (skipRepo(skips, rname)) continue;
+
                 log.debug("starting update for {s}", .{rname});
                 var repo: Git.Repo = open(rname, .public) catch {
                     log.warn("unable to load public repo {s}", .{rname});
@@ -346,6 +364,7 @@ pub const Agent = struct {
 const std = @import("std");
 const log = std.log.scoped(.update_thread);
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const Writer = std.Io.Writer;
 const sleep = std.Thread.sleep;
 const eql = std.mem.eql;

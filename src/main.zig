@@ -89,6 +89,7 @@ pub const SrcConfig = Ini.Config(struct {
         upstream_pull: bool = false,
         downstream_push: bool = false,
         downstream_pull: bool = false,
+        @"skip-repos": ?[]const u8 = null,
     };
 
     pub const empty: SrcConfig.Base = .{
@@ -172,6 +173,7 @@ pub fn main() !void {
             .push = global_config.config.agent.?.downstream_push,
             .pull = global_config.config.agent.?.downstream_pull,
         },
+        .skips = global_config.config.agent.?.@"skip-repos",
     });
     try agent.startThread();
     defer agent.joinThread();
