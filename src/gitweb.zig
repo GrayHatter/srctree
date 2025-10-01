@@ -46,7 +46,7 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
     defer map.deinit();
 
     //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
-    if (ctx.request.data.post == null) {
+    if (ctx.request.method == .GET) {
         try map.put("PATH_TRANSLATED", path_tr);
         try map.put("QUERY_STRING", "service=git-upload-pack");
         try map.put("REQUEST_METHOD", "GET");
@@ -80,11 +80,15 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
             .revents = undefined,
         },
     };
-    if (ctx.request.data.post) |pd| {
-        _ = std.posix.write(child.stdin.?.handle, pd.rawpost) catch unreachable;
+
+    const post_data: ?[]const u8 = if (ctx.request.data.post) |pd| pd.rawpost else null;
+
+    if (post_data) |pd| {
+        _ = std.posix.write(child.stdin.?.handle, pd) catch unreachable;
         std.posix.close(child.stdin.?.handle);
         child.stdin = null;
     }
+
     var buf = try ctx.alloc.alloc(u8, 0xffffff);
     var headers_required = true;
     while (true) {
