@@ -84,9 +84,12 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
     const post_data: ?[]const u8 = if (ctx.request.data.post) |pd| pd.rawpost else null;
 
     if (post_data) |pd| {
-        _ = std.posix.write(child.stdin.?.handle, pd) catch unreachable;
-        std.posix.close(child.stdin.?.handle);
-        child.stdin = null;
+        var w_b: [6400]u8 = undefined; // This is what I saw while debugging
+        var writer = child.stdin.?.writer(&w_b);
+        defer child.stdin = null;
+        defer child.stdin.?.close();
+        defer writer.interface.flush() catch unreachable;
+        writer.interface.writeAll(pd) catch unreachable;
     }
 
     var buf = try ctx.alloc.alloc(u8, 0xffffff);
