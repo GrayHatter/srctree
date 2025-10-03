@@ -1,20 +1,3 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const POLL = std.posix.POLL;
-
-const Verse = @import("verse");
-const Request = Verse.Request;
-const HTML = Verse.HTML;
-const elm = HTML.element;
-const DOM = Verse.DOM;
-const Template = Verse.Template;
-
-const Router = Verse.Router;
-const Error = Router.Error;
-const UriIter = Router.UriIter;
-
-const git = @import("git.zig");
-
 pub const endpoints = [_]Router.Match{
     Router.ANY("objects", gitUploadPack),
     Router.ROUTE("info", &[_]Router.Match{
@@ -194,3 +177,20 @@ fn __info(ctx: *Verse.Frame) Error!void {
     ctx.write(data) catch return Error.Unknown;
     ctx.finish() catch return Error.Unknown;
 }
+
+const std = @import("std");
+const Allocator = std.mem.Allocator;
+const POLL = std.posix.POLL;
+
+const Verse = @import("verse");
+const Request = Verse.Request;
+const HTML = Verse.HTML;
+const elm = HTML.element;
+const DOM = Verse.DOM;
+const Template = Verse.Template;
+
+const Router = Verse.Router;
+const Error = Router.Error;
+const UriIter = Router.UriIter;
+
+const git = @import("git.zig");
