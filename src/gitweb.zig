@@ -17,7 +17,7 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
     _ = ctx.uri.first();
     const name = ctx.uri.next() orelse return error.Unknown;
     const target = ctx.uri.rest();
-    if (!std.mem.eql(u8, target, "info/refs") and !std.mem.eql(u8, target, "git-upload-pack")) {
+    if (!eql(u8, target, "info/refs") and !eql(u8, target, "git-upload-pack")) {
         return error.Abuse;
     }
 
@@ -27,7 +27,7 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
 
     var map = std.process.EnvMap.init(ctx.alloc);
     defer map.deinit();
-
+    var gz_encoding = false;
     //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
     if (ctx.request.method == .GET) {
         try map.put("PATH_TRANSLATED", path_tr);
@@ -44,10 +44,27 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
     try map.put("GIT_PROTOCOL", "version=2");
     try map.put("GIT_HTTP_EXPORT_ALL", "true");
 
+    switch (ctx.downstream.gateway) {
+        .zwsgi => |z| {
+            for (z.vars.items) |vars| {
+                std.debug.print("each {s} {s} \n", .{ vars.key, vars.val });
+                if (eql(u8, vars.key, "HTTP_CONTENT_ENCODING")) {
+                    if (eql(u8, vars.val, "gzip")) {
+                        gz_encoding = true;
+                    } else {
+                        std.debug.print("unexpected encoding\n", .{});
+                    }
+                }
+            }
+        },
+        else => @panic("not implemented"),
+    }
+
     var child = std.process.Child.init(&[_][]const u8{ "git", "http-backend" }, ctx.alloc);
     child.stdin_behavior = .Pipe;
     child.stdout_behavior = .Pipe;
     child.stderr_behavior = .Ignore;
+    //child.stderr_behavior = .Pipe;
     child.env_map = &map;
     child.expand_arg0 = .no_expand;
 
@@ -57,22 +74,25 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
 
     const err_mask = POLL.ERR | POLL.NVAL | POLL.HUP;
     var poll_fd = [_]std.posix.pollfd{
-        .{
-            .fd = child.stdout.?.handle,
-            .events = POLL.IN,
-            .revents = undefined,
-        },
+        .{ .fd = child.stdout.?.handle, .events = POLL.IN, .revents = undefined },
     };
 
     const post_data: ?[]const u8 = if (ctx.request.data.post) |pd| pd.rawpost else null;
-
     if (post_data) |pd| {
         var w_b: [6400]u8 = undefined; // This is what I saw while debugging
         var writer = child.stdin.?.writer(&w_b);
         defer child.stdin = null;
         defer child.stdin.?.close();
         defer writer.interface.flush() catch unreachable;
-        writer.interface.writeAll(pd) catch unreachable;
+
+        if (gz_encoding) {
+            var post_reader: Reader = .fixed(pd);
+            var gz_b: [std.compress.flate.max_window_len]u8 = undefined;
+            var gzip: std.compress.flate.Decompress = .init(&post_reader, .gzip, &gz_b);
+            _ = gzip.reader.streamRemaining(&writer.interface) catch unreachable;
+        } else {
+            writer.interface.writeAll(pd) catch unreachable;
+        }
     }
 
     var buf = try ctx.alloc.alloc(u8, 0xffffff);
@@ -92,105 +112,24 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
             break;
         }
     }
+
+    if (child.stderr) |stderr| {
+        var stderr_buf = try ctx.alloc.alloc(u8, 0xffffff);
+        const stderr_read = std.posix.read(stderr.handle, stderr_buf) catch unreachable;
+        std.debug.print("stderr\n{s}\n", .{stderr_buf[0..stderr_read]});
+    }
     _ = child.wait() catch unreachable;
-}
-
-fn __objects(ctx: *Verse.Frame) Error!void {
-    std.debug.print("gitweb objects\n", .{});
-
-    const rd = @import("endpoints/repos.zig").RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-
-    var cwd = std.fs.cwd();
-    var filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze();
-
-    ctx.uri.reset();
-    _ = ctx.uri.first();
-    _ = ctx.uri.next();
-    _ = ctx.uri.next();
-    const o2 = ctx.uri.next() orelse return error.Unrouteable;
-    const o38 = ctx.uri.next() orelse return error.Unrouteable;
-
-    if (o2.len != 2 or o38 != 38) return error.Abuse;
-    for (o2[0..2] ++ o38[0..38]) |c| {
-        switch (c) {
-            'a'...'f', '0'...'9' => continue,
-            else => return error.Abuse,
-        }
-    }
-    if (std.mem.indexOf(u8, rd.name, "..")) |_| return error.Abuse;
-
-    filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}/objects/{s}/{s}", .{ rd.name, o2, o38 });
-    var file = cwd.openFile(filename, .{}) catch unreachable;
-    const data = file.readToEndAlloc(ctx.alloc, 0xffffff) catch unreachable;
-
-    //var sha: [40]u8 = undefined;
-    //@memcpy(sha[0..2], o2[0..2]);
-    //@memcpy(sha[2..40], o38[0..38]);
-
-    //var data = repo.findBlob(ctx.alloc, &sha) catch unreachable;
-
-    ctx.status = .ok;
-    try ctx.sendHeaders();
-    try ctx.downstream.writer.writeAll(data);
-}
-
-fn __info(ctx: *Verse.Frame) Error!void {
-    std.debug.print("gitweb info\n", .{});
-
-    // TODO HARDEN & fixup
-    comptime unreachable;
-
-    const rd = @import("endpoints/repos.zig").RouteData.make(&ctx.uri) orelse return error.Unrouteable;
-
-    var cwd = std.fs.cwd();
-    const filename = try std.fmt.allocPrint(ctx.alloc, "./repos/{s}", .{rd.name});
-    const dir = cwd.openDir(filename, .{}) catch return error.Unknown;
-    var repo = git.Repo.init(dir) catch return error.Unknown;
-    repo.loadData(ctx.alloc) catch return error.Unknown;
-    defer repo.raze();
-
-    var adata = std.ArrayList(u8).init(ctx.alloc);
-
-    for (repo.refs) |ref| {
-        std.debug.print("{}\n", .{ref});
-        switch (ref) {
-            .branch => |b| {
-                std.debug.print("{s}\n", .{b.name});
-                try adata.appendSlice(b.sha);
-                try adata.appendSlice("\t");
-                try adata.appendSlice("refs/heads/");
-                try adata.appendSlice(b.name);
-                try adata.appendSlice("\n");
-            },
-            else => std.debug.print("else\n", .{}),
-        }
-    }
-
-    const data = try adata.toOwnedSlice();
-
-    ctx.status = .ok;
-    ctx.start() catch return Error.Unknown;
-    ctx.write(data) catch return Error.Unknown;
-    ctx.finish() catch return Error.Unknown;
 }
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Reader = std.Io.Reader;
 const POLL = std.posix.POLL;
+const eql = std.mem.eql;
 
 const Verse = @import("verse");
 const Request = Verse.Request;
-const HTML = Verse.HTML;
-const elm = HTML.element;
-const DOM = Verse.DOM;
-const Template = Verse.Template;
-
 const Router = Verse.Router;
 const Error = Router.Error;
-const UriIter = Router.UriIter;
 
 const git = @import("git.zig");
