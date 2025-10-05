@@ -50,6 +50,7 @@ const DiffCreateReq = struct {
     from_network: ?bool = null,
     from_uri: ?bool = null,
     from_paste: ?bool = null,
+    from_curl: ?bool = null,
 
     title: []const u8,
     desc: []const u8,
@@ -58,6 +59,7 @@ const DiffCreateReq = struct {
     patch: ?[]const u8 = null,
     network: ?[]const u8 = null,
     branch: ?[]const u8 = null,
+    via_curl: ?[]const u8 = null,
 };
 
 fn new(f: *Frame) Error!void {
@@ -80,9 +82,10 @@ fn newPOST(f: *Frame) Error!void {
 }
 
 fn newGET(ctx: *Frame) Error!void {
-    var network: ?S.PatchNetwork = null;
-    var patchuri: ?S.PatchUri = null;
-    var patchpaste: ?S.PatchPaste = null;
+    var patch_network: ?S.PatchNetwork = null;
+    var patch_uri: ?S.PatchUri = null;
+    var patch_paste: ?S.PatchPaste = null;
+    var patch_curl: ?S.PatchCurl = null;
     var title: ?[]const u8 = null;
     var desc: ?[]const u8 = null;
 
@@ -97,7 +100,7 @@ fn newGET(ctx: *Frame) Error!void {
         desc = udata.desc;
 
         if (udata.from_paste) |_| {
-            patchpaste = .{};
+            patch_paste = .{};
         } else if (udata.from_network) |_| {
             const remotes = repo.remotes orelse unreachable;
             const network_remotes = try ctx.alloc.alloc(S.Remotes, remotes.len);
@@ -108,7 +111,7 @@ fn newGET(ctx: *Frame) Error!void {
                 };
             }
 
-            network = .{
+            patch_network = .{
                 .remotes = network_remotes,
                 .branches = &.{
                     .{ .value = "main", .name = "main" },
@@ -116,9 +119,13 @@ fn newGET(ctx: *Frame) Error!void {
                     .{ .value = "master", .name = "master" },
                 },
             };
+        } else if (udata.patch_uri) |_| {
+            patch_uri = .{};
         } else {
-            patchuri = .{};
+            patch_curl = .{};
         }
+    } else {
+        patch_curl = .{};
     }
 
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
@@ -131,9 +138,10 @@ fn newGET(ctx: *Frame) Error!void {
         .err = null,
         .title = title,
         .desc = desc,
-        .patch_network = network,
-        .patch_uri = patchuri,
-        .patch_paste = patchpaste,
+        .patch_network = patch_network,
+        .patch_uri = patch_uri,
+        .patch_paste = patch_paste,
+        .patch_curl = patch_curl,
     });
 
     try ctx.sendPage(&page);
@@ -171,40 +179,51 @@ fn updatePatch(f: *Frame) Error!void {
     };
 
     const author: []const u8 = &.{};
-    const diff: Diff = Diff.new(f.alloc, &delta, author, udata.patch) catch |err| {
+    var diff: Diff = Diff.new(f.alloc, &delta, author, udata.patch) catch |err| {
         std.debug.print("unable to create new diff {}\n", .{err});
         unreachable;
     };
-
-    _ = diff;
+    diff.state = .curl;
+    diff.commit() catch unreachable;
 }
 
 fn createDiffCore(a: Allocator, rd: RouteData, req: DiffCreateReq, user: []const u8) !usize {
     if (req.title.len == 0) return error.DataInvalid;
 
-    if (req.patch_uri) |uri| if (inNetwork(uri)) {
-        const data = try Patch.fromRemote(a, uri);
-        _ = data;
+    if (req.patch_uri) |uri| {
+        if (inNetwork(uri)) {
+            const data = try Patch.fromRemote(a, uri);
 
+            std.debug.print(
+                "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
+                .{ uri, req.title, req.desc, "unimplemented" },
+            );
+            var delta = Delta.new(rd.name, req.title, req.desc, user) catch return error.ServerError;
+            delta.commit() catch unreachable;
+
+            const diff: Diff = Diff.new(a, &delta, user, data.blob) catch |err| {
+                std.debug.print("unable to create new diff {}\n", .{err});
+                unreachable;
+            };
+            _ = diff;
+            return delta.index;
+        }
+    } else if (req.via_curl) |_| {
         std.debug.print(
-            "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
-            .{ uri, req.title, req.desc, "unimplemented" },
+            "title {s}\ndesc {s}\naction {s}\n",
+            .{ req.title, req.desc, "unimplemented" },
         );
         var delta = Delta.new(rd.name, req.title, req.desc, user) catch return error.ServerError;
-        delta.commit() catch unreachable;
-
-        //const filename = allocPrint(a, "data/patch/{s}.{x}.patch", .{
-        //    rd.name,
-        //    delta.index,
-        //}) catch unreachable;
-        //var file = std.fs.cwd().createFile(filename, .{}) catch unreachable;
-        //defer file.close();
-        //var w_b: [0x8000]u8 = undefined;
-        //var writer = file.writer(&w_b);
-        //writer.interface.writeAll(data.blob) catch unreachable;
-        //try writer.interface.flush();
+        try delta.commit();
+        var diff: Diff = Diff.new(a, &delta, user, "") catch |err| {
+            std.debug.print("unable to create new diff {}\n", .{err});
+            unreachable;
+        };
+        diff.state = .pending_curl;
+        try diff.commit();
+        try delta.commit();
         return delta.index;
-    };
+    }
     return error.Unknown;
 }
 
@@ -247,6 +266,7 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
         .patch_network = if (udata.network) |_| null else null, // TODO fixme
         .patch_uri = if (udata.patch_uri) |uri| .{ .uri = try abx.Html.cleanAlloc(ctx.alloc, uri) } else null,
         .patch_paste = if (udata.patch) |pst| .{ .patch_blob = try abx.Html.cleanAlloc(ctx.alloc, pst) } else null,
+        .patch_curl = if (udata.via_curl) |_| .{} else null,
     });
 
     try ctx.sendPage(&page);
@@ -781,29 +801,38 @@ fn view(ctx: *Frame) Error!void {
     //const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
 
     var patch: ?Patch = null;
+    var curl_hint: ?S.CurlHint = null;
     var applies: bool = false;
     if (diffM) |*diff| {
-        patch = .init(diff.patch.blob);
-        if (patchStruct(ctx.alloc, &patch.?, !inline_html)) |phtml| {
-            patch_formatted = phtml;
-        } else |err| {
-            std.debug.print("Unable to generate patch {any}\n", .{err});
-        }
-        const cmt = repo.headCommit(ctx.alloc) catch return error.ServerFault;
-        if (eql(u8, &cmt.sha.hex(), &diff.applies_hash)) {
-            applies = diff.applies;
-        } else {
-            var agent = repo.getAgent(ctx.alloc);
-            if (agent.checkPatch(diff.patch.blob)) |_| {
-                applies = true;
-                diff.applies = true;
+        if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {
+            patch = .init(diff.patch.blob);
+            if (patchStruct(ctx.alloc, &patch.?, !inline_html)) |phtml| {
+                patch_formatted = phtml;
             } else |err| {
-                std.debug.print("git apply failed {any}\n", .{err});
-                diff.applies = false;
+                std.debug.print("Unable to generate patch {any}\n", .{err});
             }
+            const cmt = repo.headCommit(ctx.alloc) catch return error.ServerFault;
+            if (eql(u8, &cmt.sha.hex(), &diff.applies_hash)) {
+                applies = diff.applies;
+            } else {
+                var agent = repo.getAgent(ctx.alloc);
+                if (agent.checkPatch(diff.patch.blob)) |_| {
+                    applies = true;
+                    diff.applies = true;
+                } else |err| {
+                    std.debug.print("git apply failed {any}\n", .{err});
+                    diff.applies = false;
+                }
 
-            @memcpy(diff.applies_hash[0..40], cmt.sha.hex()[0..40]);
-            diff.commit() catch return error.ServerFault;
+                @memcpy(diff.applies_hash[0..40], cmt.sha.hex()[0..40]);
+                diff.commit() catch return error.ServerFault;
+            }
+        } else {
+            curl_hint = .{
+                .repo_name = rd.name,
+                .diff_idx = delta_id,
+                .host = ctx.request.host orelse "127.0.0.1",
+            };
         }
     }
 
@@ -879,6 +908,7 @@ fn view(ctx: *Frame) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
         .patch = patch_data,
+        .curl_hint = curl_hint,
         .title = abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
         .description = abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
         .status = status,

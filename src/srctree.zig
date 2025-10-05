@@ -66,11 +66,11 @@ fn builder(fr: *Frame, call: BuildFn) void {
             fr.dumpDebugData(.{});
             ua.botDetectionDump(fr.request);
         }
-        //const ua_: *verse.Request.UserAgent = @constCast(ua);
-        //if (!ua_.validate(fr.request) and fr.user == null) {
-        //    std.debug.print("Dropping malicious traffic\n", .{});
-        //    return fr.sendDefaultErrorPage(.not_found);
-        //}
+        const ua_: *verse.Request.UserAgent = @constCast(ua);
+        if (!ua_.validate(fr.request) and fr.user == null) {
+            std.debug.print("Dropping malicious traffic\n", .{});
+            return fr.sendDefaultErrorPage(.not_found);
+        }
     } else {
         std.debug.print("No User agent for request\n\n\n\n", .{});
         fr.dumpDebugData(.{});

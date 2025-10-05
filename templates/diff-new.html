@@ -15,6 +15,7 @@
             <input name="patch_uri" placeholder="Patch URL" value="<Uri default="" />"/>
             <button name="from_network" value="true" formaction="new">Use Network</button>
             <button name="from_paste" value="true" formaction="new">Use Paste</button>
+            <button name="from_curl" value="true" formaction="new">Use Curl</button>
           </With>
           <With PatchNetwork>
             <select name="network">
@@ -25,11 +26,20 @@
             </select>
             <button name="from_uri" value="true" formaction="new">Use URL</button>
             <button name="from_paste" value="true" formaction="new">Use Paste</button>
+            <button name="from_curl" value="true" formaction="new">Use Curl</button>
           </With>
           <With PatchPaste>
             <textarea name="patch" placeholder="Paste Patch Here"><PatchBlob ornull /></textarea>
             <button name="from_uri" value="true" formaction="new">Use URL</button>
             <button name="from_network" value="true" formaction="new">Use Network</button>
+            <button name="from_curl" value="true" formaction="new">Use Curl</button>
+          </With>
+          <With PatchCurl>
+            <input name="via_curl" type="hidden" value="html makes me sad :<"/>
+            <input disabled="true" value="curl URL will be generated with successful draft"/>
+            <button name="from_uri" value="true" formaction="new">Use URL</button>
+            <button name="from_network" value="true" formaction="new">Use Network</button>
+            <button name="from_paste" value="true" formaction="new">Use Paste</button>
           </With>
           </div>
           <textarea name="desc" placeholder="Additional information about this patch suggestion"><Desc ornull /></textarea>

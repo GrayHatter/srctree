@@ -1,5 +1,5 @@
 index: usize,
-state: usize,
+state: State = .nos,
 created: i64,
 updated: i64,
 applies: bool = false,
@@ -16,9 +16,17 @@ const Diff = @This();
 pub const type_prefix = "diffs";
 pub const type_version: usize = 1;
 
+// TODO reimplement as packed struct once supported by Types.readerWriter
+pub const State = enum(usize) {
+    nos = 0,
+    // Bool bits
+    pending = 1,
+    curl = 2,
+    pending_curl = 3,
+};
+
 const typeio = Types.readerWriter(Diff, .{
     .index = 0,
-    .state = 0,
     .created = 0,
     .updated = 0,
     .author = &.{},
@@ -34,7 +42,7 @@ pub fn new(a: Allocator, delta: *Delta, author: []const u8, patch: []const u8) !
     const idx: usize = try Types.nextIndex(.diffs);
     const d = Diff{
         .index = idx,
-        .state = 0,
+        .state = .nos,
         .created = std.time.timestamp(),
         .updated = std.time.timestamp(),
         .delta_hash = delta.hash,
@@ -47,10 +55,9 @@ pub fn new(a: Allocator, delta: *Delta, author: []const u8, patch: []const u8) !
 
     var old_attach: ?usize = null;
     switch (delta.attach) {
-        .diff => {
-            old_attach = delta.attach_target;
-        },
-        else => unreachable,
+        .nos => old_attach = null,
+        .diff => old_attach = delta.attach_target,
+        .issue, .commit, .line => unreachable, // not implemented
     }
 
     delta.attach = .diff;

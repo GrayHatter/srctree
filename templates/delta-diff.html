@@ -17,6 +17,9 @@
           <With Patch>
             <diff><Build Patch _patch.html /></diff>
           </With>
+          <With CurlHint>
+          <div>Submit changes using curl<br><span class="coderef" style="padding: 1rem 2rem;">git log -p [base commit]..HEAD | curl -F "patch=@-" https://<Host />/repo/<RepoName />/diff/<DiffIdx /></span></div>
+          </With>
           <comments>
             <Build Comments _comment_thread.html />
             <form class="pretty" action="add-comment" method="POST">
