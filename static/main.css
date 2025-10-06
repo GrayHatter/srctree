@@ -103,7 +103,7 @@ content {
 	&.full { min-width: 97%; }
 	&.fw { min-width: 97%; }
 	&.mw {
-		width: 1050px;
+		width: 1079px;
 		margin: auto;
 	}
 	&.lw {

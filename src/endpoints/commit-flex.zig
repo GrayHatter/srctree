@@ -1,6 +1,10 @@
 /// we might add up to 6 days to align the grid
 const DISPLAY_YEARS = 1;
-const HEATMAPSIZE = DISPLAY_YEARS * 366 + 6;
+const WEEKS_PER_YEAR: f64 = 52.1429;
+const HEATMAPSIZE = DISPLAY_YEARS * @as(usize, @intFromFloat(@ceil(WEEKS_PER_YEAR + 1))) * 7;
+const DAY = 86400;
+const WEEK = DAY * 7;
+const YEAR = DAY * 365;
 const HeatMapArray = [HEATMAPSIZE]u16;
 
 const empty_heat_map: HeatMapArray = @splat(0);
@@ -8,24 +12,33 @@ const empty_heat_map: HeatMapArray = @splat(0);
 const Journal = struct {
     alloc: Allocator,
     email: []const u8,
-    repos: []JRepo,
+    repos: ArrayList(JRepo),
+    until: i64,
     hits: HeatMapArray,
-    list: ArrayList(Scribe.Commit),
+    total_count: usize,
+    streak: usize,
+    streak_last: ?usize,
+    scribe: ArrayList(Scribe.Commit),
 
     pub const JRepo = struct {
         name: []const u8,
-        sha: Git.SHA,
+        repo: Git.Repo,
+        bufset: std.BufSet,
     };
 
-    pub fn init(a: Allocator, email: []const u8) !*Journal {
+    pub fn init(a: Allocator, email: []const u8, until: i64) !*Journal {
         const j = try a.create(Journal);
 
         j.* = .{
             .alloc = a,
-            .email = try a.dupe(email),
-            .repos = &.{},
+            .email = try a.dupe(u8, email),
+            .repos = .{},
+            .until = until,
             .hits = @splat(0),
-            .list = .{},
+            .total_count = 0,
+            .streak = 0,
+            .streak_last = null,
+            .scribe = .{},
         };
 
         return j;
@@ -33,20 +46,38 @@ const Journal = struct {
 
     pub fn raze(j: *Journal) void {
         j.alloc.free(j.email);
-        j.list.deinit(j.alloc);
+        for (j.repos.items) |repo| {
+            repo.repo.raze();
+            j.alloc.free(repo.name);
+        }
+        j.repos.deinit(j.alloc);
+        j.scribe.deinit(j.alloc);
         j.alloc.destroy(j);
     }
 
-    pub fn build(
-        a: Allocator,
-        list: *ArrayList(Scribe.Commit),
-        email: ?[]const u8,
-        name: []const u8,
-        repo: *const Git.Repo,
-    ) !void {
-        var lseen = std.BufSet.init(a);
+    pub fn addRepo(j: *Journal, name: []const u8, repo: Git.Repo) !void {
+        try j.repos.append(j.alloc, .{
+            .name = try j.alloc.dupe(u8, name),
+            .repo = repo,
+            .bufset = .init(j.alloc),
+        });
+    }
+
+    pub fn build(j: *Journal) !void {
+        for (j.repos.items) |*repo| {
+            j.buildScribe(repo) catch |err| {
+                log.err("unable to build the commit list for repo {s} [error {}]", .{ repo.name, err });
+            };
+            j.cachedHeatMap(repo) catch |err| {
+                log.err("unable to build journal for repo {s} [error {}]", .{ repo.name, err });
+            };
+        }
+    }
+
+    fn buildScribe(j: *Journal, jrepo: *JRepo) !void {
+        var lseen = std.BufSet.init(j.alloc);
         const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
-        var commit = try repo.headCommit(a);
+        var commit = try jrepo.repo.headCommit(j.alloc);
 
         while (true) {
             if (lseen.contains(commit.sha.bin[0..])) break;
@@ -55,103 +86,107 @@ const Journal = struct {
                 commit_time += tzs.seconds;
             }
             if (commit_time < until) break;
-            if (std.mem.eql(u8, email.?, commit.author.email)) {
+            if (std.mem.eql(u8, j.email, commit.author.email)) {
                 const ws = " \t\n";
-                try list.append(a, .{
-                    .name = try abx.Html.cleanAlloc(a, trim(u8, commit.author.name, ws)),
-                    .title = try abx.Html.cleanAlloc(a, trim(u8, commit.title, ws)),
+                try j.scribe.append(j.alloc, .{
+                    .name = try abx.Html.cleanAlloc(j.alloc, trim(u8, commit.author.name, ws)),
+                    .title = try abx.Html.cleanAlloc(j.alloc, trim(u8, commit.title, ws)),
                     .body = if (commit.body.len > 0)
-                        try Verse.abx.Html.cleanAlloc(a, trim(u8, commit.body, ws))
+                        try Verse.abx.Html.cleanAlloc(j.alloc, trim(u8, commit.body, ws))
                     else
                         null,
                     .date = DateTime.fromEpoch(commit_time),
                     .sha = commit.sha,
-                    .repo = try a.dupe(u8, name),
+                    .repo = jrepo.name,
                 });
             }
 
-            commit = commit.toParent(a, 0, repo) catch |err| switch (err) {
+            commit = commit.toParent(j.alloc, 0, &jrepo.repo) catch |err| switch (err) {
                 error.NoParent => break,
                 else => |e| return e,
             };
         }
     }
 
-    pub fn buildCommitList(
-        a: Allocator,
-        seen: *std.BufSet,
-        until: i64,
-        email: []const u8,
-        rname: []const u8,
-        repo: *const Git.Repo,
-    ) !*const HeatMapArray {
-        if (email.len < 5) return &empty_heat_map;
+    pub fn cachedHeatMap(j: *Journal, jrepo: *JRepo) !void {
+        if (j.email.len < 5) return;
 
         // TODO return empty hits here
-        const commit = repo.headCommit(a) catch |err| {
+        const commit = jrepo.repo.headCommit(j.alloc) catch |err| {
             std.debug.print("Error building commit list on repo {s} because {}\n", .{
-                rname, err,
+                jrepo.name, err,
             });
-            return &empty_heat_map;
+            return;
         };
 
-        const email_gop = try cached_emails.getOrPut(email);
+        const email_gop = try cached_emails.getOrPut(j.email);
         if (!email_gop.found_existing) {
-            email_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, email);
+            email_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, j.email);
             email_gop.value_ptr.* = CachedRepo.init(cached_emails.allocator);
         }
 
-        const repo_gop = try email_gop.value_ptr.*.getOrPut(rname);
+        const repo_gop = try email_gop.value_ptr.*.getOrPut(jrepo.name);
         var heatmap: *HeatMap = repo_gop.value_ptr;
 
-        var hits: *HeatMapArray = &heatmap.hits;
-
         if (!repo_gop.found_existing) {
-            repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, rname);
-            @memset(hits[0..], 0);
+            repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, jrepo.name);
+            @memset(&heatmap.hits, 0);
         }
 
         if (!eql(u8, heatmap.shahex[0..], commit.sha.hex()[0..])) {
             heatmap.shahex = commit.sha.hex();
-            @memset(hits[0..], 0);
-            try countCommits(a, hits, seen, until, commit, repo, email);
+            try j.buildHeatMap(jrepo, &heatmap.hits, commit); //a, hits, seen, until, commit, repo, email, streak, streak_last);
         }
 
-        return hits;
+        for (&j.hits, heatmap.hits) |*dst, src| dst.* += src;
+
+        return;
     }
 
-    pub fn countCommits(
-        a: Allocator,
+    fn buildHeatMap(
+        j: *Journal,
+        jrepo: *JRepo,
         hits: *HeatMapArray,
-        seen: *std.BufSet,
-        until: i64,
         root_cmt: Git.Commit,
-        repo: *const Git.Repo,
-        email: []const u8,
     ) !void {
         var commit = root_cmt;
         while (true) {
-            const search_time = @max(commit.author.timestamp, commit.committer.timestamp);
-            if (search_time < until) return;
-            if (seen.contains(commit.sha.bin[0..])) return;
-
-            seen.insert(commit.sha.bin[0..]) catch unreachable;
-            if (eql(u8, email, commit.author.email)) {
-                var commit_time = commit.author.timestamp;
-                if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs| {
-                    commit_time += tzs.seconds;
-                }
-
-                const day_off: usize = @abs(@divFloor(commit_time - until, DAY));
-                if (day_off < hits.len) hits[day_off] += 1;
+            if (j.until > @max(commit.author.timestamp, commit.committer.timestamp)) {
+                return;
             }
-            for (commit.parent[1..], 1..) |par, pidx| {
-                if (par != null) {
-                    const parent = try commit.toParent(a, @truncate(pidx), repo);
-                    try countCommits(a, hits, seen, until, parent, repo, email);
+
+            const commit_time = if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs|
+                commit.author.timestamp + tzs.seconds
+            else
+                commit.author.timestamp;
+
+            const commit_offset: isize = commit_time - j.until;
+
+            if (jrepo.bufset.contains(commit.sha.bin[0..])) return;
+            jrepo.bufset.insert(commit.sha.bin[0..]) catch unreachable;
+            if (eql(u8, j.email, commit.author.email)) {
+                const day_off: usize = @abs(@divFloor(commit_offset, DAY));
+                if (day_off < hits.len) {
+                    //if (j.until > @max(commit.author.timestamp, commit.committer.timestamp)) return;
+                    hits[day_off] += 1;
+                    j.total_count += 1;
+                    j.streak_last = day_off;
+                } else if (j.streak_last) |_| {
+                    if (j.streak_last.? == day_off) {} else if (j.streak_last.? == day_off - 1) {
+                        j.streak += 1;
+                        j.streak_last = day_off;
+                    } else {
+                        j.streak_last = null;
+                    }
                 }
             }
-            commit = commit.toParent(a, 0, repo) catch |err| switch (err) {
+            for (commit.parent[1..], 1..) |parent_sha, pidx| {
+                if (parent_sha) |_| {
+                    const parent = try commit.toParent(j.alloc, @truncate(pidx), &jrepo.repo);
+                    try j.buildHeatMap(jrepo, hits, parent); //a, hits, seen, until, parent, repo, email, streak, streak_last);
+                }
+            }
+            commit = commit.toParent(j.alloc, 0, &jrepo.repo) catch |err| switch (err) {
                 error.NoParent => break,
                 else => |e| return e,
             };
@@ -243,10 +278,6 @@ pub fn razeCache(a: Allocator) void {
     cached_emails.deinit();
 }
 
-const DAY = 86400;
-const WEEK = DAY * 7;
-const YEAR = 31_536_000;
-
 const UserCommitsPage = Template.PageData("user_commits.html");
 
 pub fn commitFlex(ctx: *Verse.Frame) Error!void {
@@ -271,19 +302,14 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             }
         }
     }
-    var date = nowish.timeTruncate();
-    date = .fromEpoch(date.timestamp + DAY - DISPLAY_YEARS * YEAR);
-    while (date.weekday != 0) {
-        date = .fromEpoch(date.timestamp - DAY);
+    var start_date = nowish.timeTruncate();
+    start_date = .fromEpoch(start_date.timestamp + DAY - DISPLAY_YEARS * YEAR - 7 * DAY);
+    while (start_date.weekday != 0) {
+        start_date = .fromEpoch(start_date.timestamp - DAY);
     }
-    const start_date = date.timestamp;
 
-    var seen = std.BufSet.init(ctx.alloc);
     var repo_count: usize = 0;
-
-    var scribe_list: ArrayList(Scribe.Commit) = .{};
-
-    var count_all: HeatMapArray = .{0} ** HEATMAPSIZE;
+    const journal: *Journal = try .init(ctx.alloc, email, start_date.timestamp);
 
     var all_repos = repos.allRepoIterator(.public) catch return error.Unknown;
     while (all_repos.next() catch return error.Unknown) |input| {
@@ -292,45 +318,27 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             log.err("unable to load data for repo {s}", .{all_repos.current_name.?});
             continue;
         };
-        defer repo.raze();
-        const count_repo = Journal.buildCommitList(
-            ctx.alloc,
-            &seen,
-            start_date,
-            email,
-            all_repos.current_name.?,
-            &repo,
-        ) catch {
-            log.err("unable to build the commit list for repo {s}", .{all_repos.current_name.?});
-            continue;
-        };
-        Journal.build(
-            ctx.alloc,
-            &scribe_list,
-            email,
-            all_repos.current_name.?,
-            &repo,
-        ) catch {
-            log.err("unable to build journal for repo {s}", .{all_repos.current_name.?});
-            continue;
-        };
+        errdefer repo.raze();
+        try journal.addRepo(all_repos.current_name.?, repo);
         repo_count +|= 1;
-        for (&count_all, count_repo) |*a, r| a.* += r;
     }
 
+    try journal.build();
     var tcount: u16 = 0;
-    for (count_all) |h| tcount +|= h;
+    for (journal.hits) |h| tcount +|= h;
 
-    var printed_month: usize = (@as(usize, @intFromEnum(date.month)) + 10) % 12;
+    var printed_month: usize = (@as(usize, @intFromEnum(start_date.month)) + 10) % 12;
     var day_idx: usize = 0;
     var streak: usize = 0;
     var committed_today: bool = false;
     const weeks = HEATMAPSIZE / 7;
     const flex_weeks: []S.FlexWeeks = try ctx.alloc.alloc(S.FlexWeeks, weeks);
+
+    var date = start_date;
     for (flex_weeks) |*flex_week| {
         flex_week.month = "&nbsp;";
-        if ((printed_month % 12) != @intFromEnum(date.month) - 1) {
-            const next_week = DateTime.fromEpoch(date.timestamp + WEEK);
+        if ((printed_month % 12) != @intFromEnum(start_date.month) - 1) {
+            const next_week = DateTime.fromEpoch(start_date.timestamp + WEEK);
             printed_month += 1;
             if ((printed_month % 12) != @intFromEnum(next_week.month) - 1) {} else {
                 flex_week.month = DateTime.Names.Month[printed_month % 12 + 1][0..3];
@@ -340,19 +348,20 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         for (&flex_week.days) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
             defer day_idx += 1;
-            const count = 16 - @clz(count_all[day_idx]);
-            const future_date = date.timestamp > nowish.timestamp;
-            if (!future_date) {
+            const count = 16 - @clz(journal.hits[day_idx]);
+            const date_is_future = date.timestamp > nowish.timestamp;
+            if (!date_is_future) {
                 if (count > 0) {
                     streak +|= 1;
                     committed_today = true;
                 } else if (date.timestamp + 86400 < nowish.timestamp) {
                     streak = 0;
                 } else {
+                    streak +|= 1;
                     committed_today = false;
                 }
             }
-            m.class = if (future_date)
+            m.class = if (date_is_future)
                 " day-hide"
             else switch (count) {
                 0 => "",
@@ -367,7 +376,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             m.title = try std.fmt.allocPrint(
                 ctx.alloc,
                 "{} commits on {f}",
-                .{ count_all[day_idx], date.timeTruncate() },
+                .{ journal.hits[day_idx], date.timeTruncate() },
             );
         }
     }
@@ -381,7 +390,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         }),
     };
 
-    std.sort.pdq(Scribe.Commit, scribe_list.items, {}, Scribe.sorted);
+    std.sort.pdq(Scribe.Commit, journal.scribe.items, {}, Scribe.sorted);
 
     var scribe_blocks = try std.ArrayListUnmanaged(Template.Structs.Months).initCapacity(ctx.alloc, 6);
 
@@ -401,7 +410,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         const last_week = DateTime.fromEpoch(yesterday.timestamp - 86400 * 7);
 
         var blocks: DefaultBlocks = .{};
-        for (scribe_list.items) |each| {
+        for (journal.scribe.items) |each| {
             if (today.timestamp < each.date.timestamp) {
                 try blocks.todays.append(ctx.alloc, try each.toTemplate(ctx.alloc));
             } else if (yesterday.timestamp < each.date.timestamp) {
