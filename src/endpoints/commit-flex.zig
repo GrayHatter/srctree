@@ -13,7 +13,8 @@ const Journal = struct {
     alloc: Allocator,
     email: []const u8,
     repos: ArrayList(JRepo),
-    until: i64,
+    heatmap_until: i64,
+    scribe_until: i64,
     hits: HeatMapArray,
     total_count: usize,
     streak: usize,
@@ -33,7 +34,8 @@ const Journal = struct {
             .alloc = a,
             .email = try a.dupe(u8, email),
             .repos = .{},
-            .until = until,
+            .heatmap_until = until,
+            .scribe_until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp,
             .hits = @splat(0),
             .total_count = 0,
             .streak = 0,
@@ -76,8 +78,8 @@ const Journal = struct {
 
     fn buildScribe(j: *Journal, jrepo: *JRepo) !void {
         var lseen = std.BufSet.init(j.alloc);
-        const until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * 90)).timestamp;
         var commit = try jrepo.repo.headCommit(j.alloc);
+        const until = j.scribe_until;
 
         while (true) {
             if (lseen.contains(commit.sha.bin[0..])) break;
@@ -135,7 +137,7 @@ const Journal = struct {
 
         if (!eql(u8, heatmap.shahex[0..], commit.sha.hex()[0..])) {
             heatmap.shahex = commit.sha.hex();
-            try j.buildHeatMap(jrepo, &heatmap.hits, commit); //a, hits, seen, until, commit, repo, email, streak, streak_last);
+            try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until);
         }
 
         for (&j.hits, heatmap.hits) |*dst, src| dst.* += src;
@@ -143,15 +145,10 @@ const Journal = struct {
         return;
     }
 
-    fn buildHeatMap(
-        j: *Journal,
-        jrepo: *JRepo,
-        hits: *HeatMapArray,
-        root_cmt: Git.Commit,
-    ) !void {
+    fn buildHeatMap(j: *Journal, jrepo: *JRepo, hits: *HeatMapArray, root_cmt: Git.Commit, until: i64) !void {
         var commit = root_cmt;
         while (true) {
-            if (j.until > @max(commit.author.timestamp, commit.committer.timestamp)) {
+            if (until > @max(commit.author.timestamp, commit.committer.timestamp)) {
                 return;
             }
 
@@ -160,14 +157,13 @@ const Journal = struct {
             else
                 commit.author.timestamp;
 
-            const commit_offset: isize = commit_time - j.until;
+            const commit_offset: isize = commit_time - until;
 
             if (jrepo.bufset.contains(commit.sha.bin[0..])) return;
             jrepo.bufset.insert(commit.sha.bin[0..]) catch unreachable;
             if (eql(u8, j.email, commit.author.email)) {
                 const day_off: usize = @abs(@divFloor(commit_offset, DAY));
                 if (day_off < hits.len) {
-                    //if (j.until > @max(commit.author.timestamp, commit.committer.timestamp)) return;
                     hits[day_off] += 1;
                     j.total_count += 1;
                     j.streak_last = day_off;
@@ -183,7 +179,7 @@ const Journal = struct {
             for (commit.parent[1..], 1..) |parent_sha, pidx| {
                 if (parent_sha) |_| {
                     const parent = try commit.toParent(j.alloc, @truncate(pidx), &jrepo.repo);
-                    try j.buildHeatMap(jrepo, hits, parent); //a, hits, seen, until, parent, repo, email, streak, streak_last);
+                    try j.buildHeatMap(jrepo, hits, parent, until);
                 }
             }
             commit = commit.toParent(j.alloc, 0, &jrepo.repo) catch |err| switch (err) {
