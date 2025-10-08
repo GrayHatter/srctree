@@ -133,10 +133,12 @@ const Journal = struct {
         if (!repo_gop.found_existing) {
             repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, jrepo.name);
             @memset(&heatmap.hits, 0);
+            heatmap.shahex = @splat(0);
         }
 
         if (!eql(u8, heatmap.shahex[0..], commit.sha.hex()[0..])) {
             heatmap.shahex = commit.sha.hex();
+            @memset(&heatmap.hits, 0);
             try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until);
         }
 
