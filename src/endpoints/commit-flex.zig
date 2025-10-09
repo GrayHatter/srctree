@@ -7,8 +7,6 @@ const WEEK = DAY * 7;
 const YEAR = DAY * 365;
 const HeatMapArray = [HEATMAPSIZE]u16;
 
-const empty_heat_map: HeatMapArray = @splat(0);
-
 const Journal = struct {
     alloc: Allocator,
     email: []const u8,
