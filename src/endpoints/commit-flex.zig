@@ -76,7 +76,7 @@ const Journal = struct {
                 log.err("unable to build journal for repo {s} [error {}]", .{ repo.name, err });
             };
         }
-        //try j.buildBestStreak();
+        _ = try j.buildBestStreak();
     }
 
     fn buildScribe(j: *Journal, jrepo: *JRepo) !void {
@@ -220,7 +220,7 @@ const Journal = struct {
                     break;
                 }
                 std.debug.print(" {s}", .{repo.name});
-                _ = j.buildBestStreak(repo, commit, now) catch |err| {
+                _ = j.buildBestStreakRepo(repo, commit, now) catch |err| {
                     log.err("unable to build the streak list for repo {s} [error {}]", .{ repo.name, err });
                     repo.head = null;
                 };
@@ -278,7 +278,7 @@ const Journal = struct {
             for (commit.parent[1..], 1..) |parent_sha, pidx| {
                 if (parent_sha) |_| {
                     const parent = try commit.toParent(j.alloc, @truncate(pidx), &jrepo.repo);
-                    if (try j.buildBestStreak(jrepo, parent, now)) return true;
+                    if (try j.buildBestStreakRepo(jrepo, parent, now)) return true;
                 }
             }
         }
