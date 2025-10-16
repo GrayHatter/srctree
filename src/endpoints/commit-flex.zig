@@ -253,26 +253,28 @@ const Journal = struct {
             if (commit_time > now) continue;
             const days: isize = @divFloor((now - commit_time), DAY);
 
-            if (eql(u8, j.email, commit.author.email)) {
-                jrepo.best = @max(jrepo.best, @as(usize, @intCast(days)));
-                if (days > last + 1) {
+            const owner = eql(u8, j.email, commit.author.email);
+            if (days >= last + 1) {
+                jrepo.head = commit;
+                if (owner) {
+                    jrepo.best = @max(jrepo.best, @as(usize, @intCast(days)));
+                    jrepo.head = commit;
+                    if (days == last + 1) {
+                        j.streak_last = @intCast(days);
+                        return true;
+                    }
+                    return false;
+                } else if (days > last + 90) {
+                    if (jrepo.best == 0 or jrepo.best < last) {
+                        std.debug.print(" - dropping repo \n", .{});
+                        jrepo.head = null;
+                        jrepo.best = 0;
+                        return false;
+                    }
                     const dt = DateTime.fromEpoch(commit_time);
                     std.debug.print(" too far {} {f} ", .{ days, dt });
-                    jrepo.best = @intCast(days);
-                    jrepo.head = commit;
                     return false;
-                } else if (days == last + 1) {
-                    j.streak_last = @intCast(days);
-                    jrepo.head = commit;
-                    return true;
                 }
-            } else if (days > last + 90) {
-                jrepo.head = commit;
-                if (jrepo.best == 0 or jrepo.best < last) {
-                    std.debug.print(" - dropping repo \n", .{});
-                    jrepo.head = null;
-                }
-                return false;
             }
 
             for (commit.parent[1..], 1..) |parent_sha, pidx| {
