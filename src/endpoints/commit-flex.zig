@@ -11,6 +11,7 @@ const HeatMapArray = [HEATMAPSIZE]u16;
 const Journal = struct {
     alloc: Allocator,
     email: []const u8,
+    tz_offset: ?i17,
     repos: ArrayList(JRepo),
     heatmap_until: i64,
     scribe_until: i64,
@@ -25,16 +26,17 @@ const Journal = struct {
         repo: Git.Repo,
         bufset: std.BufSet,
         head: ?Git.Commit,
-        best_day: usize = 0,
+        next_ts: i64 = 0,
     };
 
-    pub fn init(a: Allocator, email: []const u8, until: i64) !*Journal {
+    pub fn init(a: Allocator, email: []const u8, until: i64, tz: ?i17) !*Journal {
         const j = try a.create(Journal);
 
         const scribe_size = 90;
         j.* = .{
             .alloc = a,
             .email = try a.dupe(u8, email),
+            .tz_offset = tz,
             .repos = .{},
             .heatmap_until = until,
             .scribe_until = (DateTime.fromEpoch(DateTime.now().timestamp - DAY * scribe_size)).timestamp,
@@ -206,31 +208,40 @@ const Journal = struct {
                 });
                 return;
             };
+            if (repo.head) |head| {
+                repo.next_ts = head.author.timestamp;
+            } else {
+                repo.next_ts = now;
+            }
         }
 
+        //var after_ts: i64 = now + (j.tz_offset orelse 0);
+        var after_ts: i64 = now - DAY;
         while (j.streak_last != null) {
-            var last: i64 = j.streak_last orelse break;
-            last = last - @mod(last, DAY);
-            const best_day: usize = @intCast(@divFloor(now - last - DAY, DAY));
-            std.debug.print("checking {} ", .{best_day});
+            const best_day: i64 = @divFloor((now + DAY - after_ts), DAY);
+            after_ts = after_ts - DAY;
+            const debug_dt = DateTime.fromEpoch(after_ts);
+            std.debug.print("finding {} : {} ({f})", .{ best_day, after_ts, debug_dt });
             for (j.repos.items) |*repo| {
                 const commit = repo.head orelse continue;
-                if (repo.best_day > best_day + 1) {
+                if (repo.next_ts < after_ts) {
+                    std.debug.print("  skip {s} \n", .{repo.name});
                     continue;
-                } else if (repo.best_day == best_day + 1) {
-                    std.debug.print("already found streak {s}\n", .{repo.name});
-                    j.streak_last.? = last - DAY;
-                    j.streak += 1;
-                    break;
                 }
-                std.debug.print(" {s}", .{repo.name});
-                if (j.buildBestStreakRepo(repo, commit, now) catch |err| {
+                //else if (repo.best_day == best_day + 1) {
+                //    std.debug.print("already found streak {s}\n", .{repo.name});
+                //    j.streak_last.? = last - ;
+                //    j.streak += 1;
+                //    break;
+                //}
+                std.debug.print("\n checking {s}\n", .{repo.name});
+                if (j.buildBestStreakRepo(repo, commit, after_ts) catch |err| {
                     log.err("unable to build the streak list for repo {s} [error {}]", .{ repo.name, err });
                     repo.head = null;
                     continue;
                 }) {
                     j.streak += 1;
-                    std.debug.print(" found streak {s} {}\n", .{ repo.name, j.streak_last.? });
+                    std.debug.print(" found streak {s} {} {} {}\n", .{ repo.name, j.streak_last.? - after_ts, after_ts, j.streak_last.? });
                     break;
                 }
             } else {
@@ -240,72 +251,66 @@ const Journal = struct {
         }
     }
 
-    pub fn findBestTime(a: Allocator, email: []const u8, repo: *const Git.Repo, r_commit: Git.Commit, after: i64) !?Git.Commit {
+    pub fn findBestTime(
+        a: Allocator,
+        email: []const u8,
+        repo: *const Git.Repo,
+        r_commit: Git.Commit,
+        after: i64,
+        counter: *usize,
+    ) !?Git.Commit {
         var commit = r_commit;
+        const before = after + DAY;
 
         while (true) {
+            counter.* += 1;
             const commit_time = if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs|
                 commit.author.timestamp + tzs.seconds
             else
                 commit.author.timestamp;
-            if (commit_time < after) return null;
-            const before = after + DAY;
-            if (commit_time <= before) {
-                if (eql(u8, email, commit.author.email)) return commit;
+            //const commit_time = commit.author.timestamp;
+            std.debug.print("    {} (time) {} \n", .{ commit_time, commit_time - after });
+            if (commit_time < after) {
+                return null;
+            } else if (commit_time <= before) {
+                if (eql(u8, email, commit.author.email))
+                    return commit;
             }
+            std.debug.print("    {} (time2) {}\n", .{ commit_time, commit_time - after });
 
             if (commit.parent[1] != null) {
                 for (commit.parent[0..], 0..) |parent_sha, pidx| {
                     if (parent_sha == null) break;
                     const parent = try commit.toParent(a, @truncate(pidx), repo);
-                    if (try findBestTime(a, email, repo, parent, after)) |cmt| return cmt;
+                    if (try findBestTime(a, email, repo, parent, after, counter)) |cmt| return cmt;
                 }
             } else if (commit.parent[0] != null) {
                 commit = commit.toParent(a, 0, repo) catch return null;
-            } else {
-                return null;
+                continue;
             }
+            return null;
         }
     }
 
-    fn buildBestStreakRepo(j: *Journal, jrepo: *JRepo, r_commit: Git.Commit, now: i64) !bool {
-        var commit = r_commit;
-        const last = j.streak_last orelse return false;
-
-        var canidate: ?Git.Commit = null;
-
-        const after: i64 = last - @mod(last, DAY) - DAY;
-        for (commit.parent[0..], 0..) |parent_sha, pidx| {
-            if (parent_sha) |_| {
-                const parent = try commit.toParent(j.alloc, @truncate(pidx), &jrepo.repo);
-                if (try findBestTime(j.alloc, j.email, &jrepo.repo, parent, after)) |cmt| {
-                    if (canidate) |canidate_commit| {
-                        if (canidate_commit.author.timestamp < cmt.author.timestamp) {
-                            canidate = cmt;
-                        }
-                    } else {
-                        canidate = cmt;
-                    }
-                }
+    fn buildBestStreakRepo(j: *Journal, jrepo: *JRepo, r_commit: Git.Commit, after: i64) !bool {
+        var counter: usize = 0;
+        const commit: Git.Commit = try findBestTime(j.alloc, j.email, &jrepo.repo, r_commit, after, &counter) orelse {
+            //std.debug.print("    {} (debug)\n", .{r_commit.author.timestamp - after});
+            //std.debug.print("    {} (debug)\n", .{@divFloor(r_commit.author.timestamp - after, DAY)});
+            const day_depth = @divFloor(r_commit.author.timestamp - after, DAY);
+            if (counter > 5000 or day_depth > 100 and !eql(u8, j.email, r_commit.author.email)) {
+                //std.debug.print("dropping head\n", .{});
+                jrepo.head = null;
             }
-        }
-        jrepo.head = canidate;
-        commit = canidate orelse return false;
+            return false;
+        };
 
         const commit_time = if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs|
             commit.author.timestamp + tzs.seconds
         else
             commit.author.timestamp;
-
-        const days: isize = @divFloor((now - commit_time), DAY);
-        const dt = DateTime.fromEpoch(commit_time);
-
-        jrepo.best_day = @max(jrepo.best_day, @as(usize, @intCast(days)));
         jrepo.head = commit;
-        std.debug.print(" ( setting best to {} {f} ) ", .{ jrepo.best_day, dt });
-        if (days == last + 1) {
-            j.streak_last = commit_time;
-        }
+        j.streak_last = commit_time;
 
         return true;
     }
@@ -321,8 +326,9 @@ test "best streak" {
     defer repo.raze();
     const head = try repo.headCommit(a);
     const now = 1760659200;
-    const best = try Journal.findBestTime(a, "_@gr.ht", &repo, head, now - DAY - DAY);
-    const best2 = try Journal.findBestTime(a, "_@gr.ht", &repo, head, now - DAY - DAY - DAY);
+    var counter: usize = 0;
+    const best = try Journal.findBestTime(a, "_@gr.ht", &repo, head, now - DAY - DAY, &counter);
+    const best2 = try Journal.findBestTime(a, "_@gr.ht", &repo, head, now - DAY - DAY - DAY, &counter);
 
     std.debug.print("now ts {}\n", .{now});
     std.debug.print("head ts {}\n", .{head.author.timestamp});
@@ -447,7 +453,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     }
 
     var repo_count: usize = 0;
-    const journal: *Journal = try .init(ctx.alloc, email, start_date.timestamp);
+    const journal: *Journal = try .init(ctx.alloc, email, start_date.timestamp, tz_offset);
 
     var all_repos = repos.allRepoIterator(.public) catch return error.Unknown;
     while (all_repos.next() catch return error.Unknown) |input| {
