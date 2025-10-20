@@ -330,10 +330,12 @@ test "best streak" {
     const best = try Journal.findBestTime(a, "_@gr.ht", &repo, head, now - DAY - DAY, &counter);
     const best2 = try Journal.findBestTime(a, "_@gr.ht", &repo, head, now - DAY - DAY - DAY, &counter);
 
-    std.debug.print("now ts {}\n", .{now});
-    std.debug.print("head ts {}\n", .{head.author.timestamp});
-    std.debug.print("now ts {}\n", .{best.?.author.timestamp});
-    std.debug.print("now ts {}\n", .{best2.?.author.timestamp});
+    if (false) {
+        std.debug.print("now ts {}\n", .{now});
+        std.debug.print("head ts {}\n", .{head.author.timestamp});
+        std.debug.print("now ts {}\n", .{best.?.author.timestamp});
+        std.debug.print("now ts {}\n", .{best2.?.author.timestamp});
+    }
 
     try std.testing.expect(best != null);
 }
