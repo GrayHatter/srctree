@@ -89,10 +89,7 @@ const Journal = struct {
 
         while (true) {
             if (lseen.contains(commit.sha.bin[0..])) break;
-            var commit_time = commit.author.timestamp;
-            if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs| {
-                commit_time += tzs.seconds;
-            }
+            const commit_time: i64 = (try DateTime.fromEpochTzStr(commit.author.timestamp, commit.author.tzstr)).tzAdjusted();
             if (commit_time < until) break;
             if (std.mem.eql(u8, j.email, commit.author.email)) {
                 const ws = " \t\n";
@@ -164,10 +161,7 @@ const Journal = struct {
             jrepo.bufset.insert(commit.sha.bin[0..]) catch unreachable;
 
             if (eql(u8, j.email, commit.author.email)) {
-                const commit_time = if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs|
-                    commit.author.timestamp + tzs.seconds
-                else
-                    commit.author.timestamp;
+                const commit_time: i64 = (try DateTime.fromEpochTzStr(commit.author.timestamp, commit.author.tzstr)).tzAdjusted();
 
                 const commit_offset: isize = commit_time - until;
                 const day_off: usize = @abs(@divFloor(commit_offset, DAY));
@@ -264,11 +258,7 @@ const Journal = struct {
 
         while (true) {
             counter.* += 1;
-            const commit_time = if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs|
-                commit.author.timestamp + tzs.seconds
-            else
-                commit.author.timestamp;
-            //const commit_time = commit.author.timestamp;
+            const commit_time: i64 = (try DateTime.fromEpochTzStr(commit.author.timestamp, commit.author.tzstr)).tzAdjusted();
             std.debug.print("    {} (time) {} \n", .{ commit_time, commit_time - after });
             if (commit_time < after) {
                 return null;
@@ -305,10 +295,7 @@ const Journal = struct {
             return false;
         };
 
-        const commit_time = if (DateTime.Tz.fromStr(commit.author.tzstr) catch null) |tzs|
-            commit.author.timestamp + tzs.seconds
-        else
-            commit.author.timestamp;
+        const commit_time: i64 = (try DateTime.fromEpochTzStr(commit.author.timestamp, commit.author.tzstr)).tzAdjusted();
         jrepo.head = commit;
         j.streak_last = commit_time;
 

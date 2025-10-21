@@ -119,6 +119,11 @@ pub const Names = struct {
     };
 };
 
+pub fn tzAdjusted(dt: DateTime) i64 {
+    const tz = dt.tz orelse return dt.timestamp;
+    return dt.timestamp + tz.seconds;
+}
+
 pub fn now() DateTime {
     return fromEpoch(std.time.timestamp());
 }
@@ -235,10 +240,16 @@ pub fn fromEpochStr(str: []const u8) !DateTime {
     return fromEpoch(int);
 }
 
-/// Accepts a Unix Epoch int as a string of numbers and timezone in -HHMM format
-pub fn fromEpochTzStr(str: []const u8, tzstr: []const u8) !DateTime {
-    const epoch = try std.fmt.parseInt(i64, str, 10);
+/// Accepts a Unix Epoch in seconds and timezone in -HHMM format
+pub fn fromEpochTzStr(epoch: i64, tzstr: []const u8) !DateTime {
     const tz: Tz = try .fromStr(tzstr);
+    return fromEpochTz(epoch, tz);
+}
+
+/// Accepts a Unix Epoch int as a string of numbers and timezone in -HHMM format
+pub fn fromEpochStrTzStr(str: []const u8, tzstr: []const u8) !DateTime {
+    const epoch = try std.fmt.parseInt(i64, str, 10);
+    const tz: ?Tz = .fromStr(tzstr) catch |err| if (err) return err else null;
     return fromEpochTz(epoch, tz);
 }
 
