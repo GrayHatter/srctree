@@ -9,3 +9,5 @@ doesn't lie using the URL bar
 <3's Zig
 have you tried `git reset --hard` yet?
 large diffs are rendered by default
+response times best measured in microseconds
+
