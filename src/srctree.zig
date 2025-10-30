@@ -10,6 +10,8 @@ pub const verse_routes = [_]Match{
         .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
         .{ .name = "barkrowler", .allow = false }, // selfish bot
         .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
+        .{ .name = "GPTBot", .allow = false }, // aggressive, selfish
+        .{ .name = "OAI-SearchBot", .allow = false },
         .{ .name = "Amazonbot", .allow = false }, // aggressive, selfish
         .{ .name = "AhrefsBot", .allow = false }, // selfish
         .{ .name = "dotbot", .allow = false }, // selfish
