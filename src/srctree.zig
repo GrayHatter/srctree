@@ -62,20 +62,37 @@ fn debug(_: *Frame) Router.Error!void {
     return error.Unrouteable;
 }
 
-fn builder(fr: *Frame, call: BuildFn) void {
+fn userAgentResolution(fr: *Frame) ?BuildFn {
     if (fr.request.user_agent) |*ua| {
-        if (ua.resolved == .bot and ua.resolved.bot.name == .googlebot or fr.user != null) {} else {
+        if (fr.user == null) {
+            switch (ua.agent) {
+                .bot => |bot| if (bot.name == .googlebot) return null,
+                .browser => {
+                    const real_ua = ua.validate(fr.request);
+                    if (real_ua.agent == .bot and
+                        real_ua.agent.bot.name == .malicious and
+                        ua.agent.browser.version != 128)
+                    {
+                        std.debug.print("Dropping malicious traffic\n", .{});
+                        return Router.defaultResponse(.not_found);
+                    }
+                },
+                .script, .unknown => {},
+            }
             fr.dumpDebugData(.{});
             ua.botDetectionDump(fr.request);
         }
-        const ua_: *verse.Request.UserAgent = @constCast(ua);
-        if (!ua_.validate(fr.request) and fr.user == null) {
-            std.debug.print("Dropping malicious traffic\n", .{});
-            return fr.sendDefaultErrorPage(.not_found);
-        }
+        return null;
     } else {
         std.debug.print("No User agent for request\n\n\n\n", .{});
         fr.dumpDebugData(.{});
+        return null;
+    }
+}
+
+fn builder(fr: *Frame, call: BuildFn) void {
+    if (userAgentResolution(fr)) |resol| {
+        return resol(fr) catch {};
     }
 
     const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
