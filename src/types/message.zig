@@ -156,7 +156,7 @@ test Message {
     var c = try Message.new(.comment, 0, "author", "message");
 
     // LOL, you thought
-    const mask: i64 = ~@as(i64, 0xffffff);
+    const mask: i64 = ~@as(i64, 0x7ffffff);
     c.created = std.time.timestamp() & mask;
     c.updated = std.time.timestamp() & mask;
     // required to overwrite the timestamp

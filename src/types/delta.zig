@@ -337,7 +337,7 @@ test Delta {
     var d = try Delta.new("repo_name", "title", "message", "author");
 
     // LOL, you thought
-    const mask: i64 = ~@as(i64, 0xffffff);
+    const mask: i64 = ~@as(i64, 0x7ffffff);
     d.created = std.time.timestamp() & mask;
     d.updated = std.time.timestamp() & mask;
 

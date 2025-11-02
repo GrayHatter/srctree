@@ -138,7 +138,7 @@ test {
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
     try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
-    const mask: i64 = ~@as(i64, 0xffffff);
+    const mask: i64 = ~@as(i64, 0x7ffffff);
 
     var gist: Gist = .{
         .created = std.time.timestamp() & mask,
