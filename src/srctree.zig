@@ -69,6 +69,7 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 .bot => |bot| switch (bot.name) {
                     .googlebot => return null,
                     .gptbot => {
+                        if (eql(u8, fr.request.uri, "/robots.txt")) return null;
                         std.debug.print("Dropping malicious traffic\n", .{});
                         return Router.defaultResponse(.not_found);
                     },
@@ -80,6 +81,7 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         real_ua.agent.bot.name == .malicious and
                         ua.agent.browser.version != 128)
                     {
+                        if (eql(u8, fr.request.uri, "/robots.txt")) return null;
                         std.debug.print("Dropping malicious traffic\n", .{});
                         return Router.defaultResponse(.not_found);
                     }
