@@ -66,7 +66,14 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
     if (fr.request.user_agent) |*ua| {
         if (fr.user == null) {
             switch (ua.agent) {
-                .bot => |bot| if (bot.name == .googlebot) return null,
+                .bot => |bot| switch (bot.name) {
+                    .googlebot => return null,
+                    .gptbot => {
+                        std.debug.print("Dropping malicious traffic\n", .{});
+                        return Router.defaultResponse(.not_found);
+                    },
+                    else => {},
+                },
                 .browser => {
                     const real_ua = ua.validate(fr.request);
                     if (real_ua.agent == .bot and
