@@ -1,10 +1,12 @@
 alloc: Allocator,
+io: Io,
 
 const Auth = @This();
 
-pub fn init(a: Allocator) Auth {
+pub fn init(a: Allocator, io: Io) Auth {
     return .{
         .alloc = a,
+        .io = io,
     };
 }
 
@@ -16,9 +18,9 @@ pub fn provider(self: *Auth) verse.auth.Provider {
         .vtable = .{
             .authenticate = null,
             .valid = valid,
-            .create_session = null,
-            .get_cookie = null,
-            .lookup_user = lookupUser,
+            .createSession = null,
+            .getCookie = null,
+            .lookupUser = lookupUser,
         },
     };
 }
@@ -40,7 +42,7 @@ pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
     log.debug("lookup user {s}", .{user_id});
     const auth: *Auth = @ptrCast(@alignCast(ptr));
     const user: *types.User = auth.alloc.create(types.User) catch @panic("OOM");
-    user.* = types.User.findMTLSFingerprint(auth.alloc, user_id) catch |err| {
+    user.* = types.User.findMTLSFingerprint(user_id, auth.alloc, auth.io) catch |err| {
         std.debug.print("mtls lookup error {}\n", .{err});
         return error.UnknownUser;
     };
@@ -61,3 +63,4 @@ const verse = @import("verse");
 const std = @import("std");
 const log = std.log.scoped(.srctree_auth);
 const Allocator = std.mem.Allocator;
+const Io = std.Io;

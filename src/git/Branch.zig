@@ -1,8 +1,8 @@
 name: []const u8,
 sha: SHA,
 
-pub fn toCommit(self: Branch, a: Allocator, repo: *const Repo) !Commit {
-    switch (try repo.loadObject(a, self.sha)) {
+pub fn toCommit(self: Branch, repo: *const Repo, a: Allocator, io: std.Io) !Commit {
+    switch (try repo.loadObject(self.sha, a, io)) {
         .commit => |c| return c,
         else => return error.NotACommit,
     }

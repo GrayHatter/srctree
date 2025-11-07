@@ -44,16 +44,16 @@ pub const PackedObject = struct {
 };
 
 /// assumes name ownership
-pub fn init(dir: std.fs.Dir, name: []const u8) !Pack {
+pub fn init(dir: Io.Dir, name: []const u8, io: Io) !Pack {
     std.debug.assert(name.len <= 45);
     var filename: [50]u8 = undefined;
-    const ifd = try dir.openFile(try bufPrint(&filename, "{s}.idx", .{name}), .{});
-    defer ifd.close();
-    const pfd = try dir.openFile(try bufPrint(&filename, "{s}.pack", .{name}), .{});
-    defer pfd.close();
+    const ifd = try dir.openFile(io, try bufPrint(&filename, "{s}.idx", .{name}), .{});
+    defer ifd.close(io);
+    const pfd = try dir.openFile(io, try bufPrint(&filename, "{s}.pack", .{name}), .{});
+    defer pfd.close(io);
     var pack = Pack{
-        .pack = try mmap(pfd),
-        .idx = try mmap(ifd),
+        .pack = try mmap(.adaptFromNewApi(pfd)),
+        .idx = try mmap(.adaptFromNewApi(ifd)),
     };
     try pack.prepare();
     return pack;
@@ -215,7 +215,7 @@ fn parseObjHeader(reader: *Reader) PackedObject.Header {
     return h;
 }
 
-fn loadBlob(a: Allocator, reader: *Reader) ![]u8 {
+fn loadBlob(reader: *Reader, a: Allocator, _: Io) ![]u8 {
     var z_b: [zlib.max_window_len]u8 = undefined;
     var zl: std.compress.flate.Decompress = .init(reader, .zlib, &z_b);
     return try zl.reader.allocRemaining(a, .limited(0xffffff));
@@ -268,12 +268,12 @@ fn deltaInst(reader: *Reader, writer: *Writer, base: []const u8) !usize {
     }
 }
 
-fn loadRefDelta(_: Pack, a: Allocator, reader: *Reader, _: usize, repo: *const Repo) !PackedObject {
+fn loadRefDelta(_: Pack, reader: *Reader, _: usize, repo: *const Repo, a: Allocator, io: Io) !PackedObject {
     var buf: [20]u8 = (try reader.takeArray(20)).*;
     const sha = SHA.init(buf[0..]);
 
     const basefree: []u8, const basedata: []const u8, const basetype: PackedObjectTypes =
-        switch (repo.loadObjectOrDelta(a, sha) catch return error.BlobMissing) {
+        switch (repo.loadObjectOrDelta(sha, a, io) catch return error.BlobMissing) {
             .pack => |pk| .{ pk.data, pk.data, pk.header.kind },
             .file => |fdata| switch (fdata) {
                 .blob => |b| .{ b.memory.?, b.data.?, .blob },
@@ -302,7 +302,7 @@ fn loadRefDelta(_: Pack, a: Allocator, reader: *Reader, _: usize, repo: *const R
     };
 }
 
-fn loadDelta(self: Pack, a: Allocator, reader: *Reader, offset: usize, repo: *const Repo) Error!PackedObject {
+fn loadDelta(self: Pack, reader: *Reader, offset: usize, repo: *const Repo, a: Allocator, io: Io) Error!PackedObject {
     // fd pos is offset + 2-ish because of the header read
     const srclen = try readVarInt(reader);
 
@@ -316,7 +316,7 @@ fn loadDelta(self: Pack, a: Allocator, reader: *Reader, offset: usize, repo: *co
     _ = try readVarInt(&inst_reader);
 
     const baseobj_offset = offset - srclen;
-    const baseobj = try self.loadData(a, baseobj_offset, repo);
+    const baseobj = try self.loadData(baseobj_offset, repo, a, io);
     defer a.free(baseobj.data);
 
     var buffer: Writer.Allocating = .init(a);
@@ -331,16 +331,16 @@ fn loadDelta(self: Pack, a: Allocator, reader: *Reader, offset: usize, repo: *co
     };
 }
 
-pub fn loadData(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Error!PackedObject {
+pub fn loadData(self: Pack, offset: usize, repo: *const Repo, a: Allocator, io: Io) Error!PackedObject {
     var reader = std.Io.Reader.fixed(self.pack[offset..]);
     const h = parseObjHeader(&reader);
 
     return .{
         .header = h,
         .data = switch (h.kind) {
-            .commit, .tree, .blob, .tag => loadBlob(a, &reader) catch return error.PackCorrupt,
-            .ofs_delta => return try self.loadDelta(a, &reader, offset, repo),
-            .ref_delta => return try self.loadRefDelta(a, &reader, offset, repo),
+            .commit, .tree, .blob, .tag => loadBlob(&reader, a, io) catch return error.PackCorrupt,
+            .ofs_delta => return try self.loadDelta(&reader, offset, repo, a, io),
+            .ref_delta => return try self.loadRefDelta(&reader, offset, repo, a, io),
             .invalid => {
                 std.debug.print("obj type ({}) not implemened\n", .{h.kind});
                 @panic("not implemented");
@@ -349,8 +349,8 @@ pub fn loadData(self: Pack, a: Allocator, offset: usize, repo: *const Repo) Erro
     };
 }
 
-pub fn resolveObject(self: Pack, sha: SHA, a: Allocator, offset: usize, repo: *const Repo) !Object.Object {
-    const resolved = try self.loadData(a, offset, repo);
+pub fn resolveObject(self: Pack, sha: SHA, offset: usize, repo: *const Repo, a: Allocator, io: Io) !Object.Object {
+    const resolved = try self.loadData(offset, repo, a, io);
     errdefer a.free(resolved.data);
 
     return switch (resolved.header.kind) {
@@ -375,6 +375,8 @@ const Object = @import("Object.zig");
 const system = @import("../system.zig");
 
 const std = @import("std");
+const Io = std.Io;
+const fs = std.fs;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const zlib = std.compress.flate;

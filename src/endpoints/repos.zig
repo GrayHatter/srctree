@@ -60,7 +60,7 @@ pub const RouteData = struct {
         }
     };
 
-    pub fn init(uri_itr: Router.UriIterator) ?RouteData {
+    pub fn init(uri_itr: verse.Uri.Iterator) ?RouteData {
         var uri = uri_itr;
         uri.reset();
         _ = uri.next() orelse return null;
@@ -105,31 +105,31 @@ pub const RouteData = struct {
     }
 };
 
-pub fn navButtons(ctx: *Frame) ![2]S.NavButtons {
-    const rd = RouteData.init(ctx.uri) orelse return error.InvalidURI;
+pub fn navButtons(f: *Frame) ![2]S.NavButtons {
+    const rd = RouteData.init(f.uri) orelse return error.InvalidURI;
     if (!rd.exists()) return error.InvalidURI;
     var i_count: usize = 0;
     var d_count: usize = 0;
-    var itr: Delta.Iterator = .init(rd.name);
-    while (itr.next(ctx.alloc)) |dlt| {
+    var itr: Delta.Iterator = .init(rd.name, f.io);
+    while (itr.next(f.alloc, f.io)) |dlt| {
         switch (dlt.attach) {
             .diff => d_count += 1,
             .issue => i_count += 1,
             else => {},
         }
-        dlt.raze(ctx.alloc);
+        dlt.raze(f.alloc);
     }
 
     const btns = [2]S.NavButtons{
         .{
             .name = "issues",
             .extra = i_count,
-            .url = try allocPrint(ctx.alloc, "/repo/{s}/issues/", .{rd.name}),
+            .url = try allocPrint(f.alloc, "/repo/{s}/issues/", .{rd.name}),
         },
         .{
             .name = "diffs",
             .extra = d_count,
-            .url = try allocPrint(ctx.alloc, "/repo/{s}/diffs/", .{rd.name}),
+            .url = try allocPrint(f.alloc, "/repo/{s}/diffs/", .{rd.name}),
         },
     };
 
@@ -185,6 +185,7 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
 
 const repoctx = struct {
     alloc: Allocator,
+    io: Io,
     by: enum {
         commit,
         tag,
@@ -195,10 +196,10 @@ fn repoSorterNew(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     return !repoSorter(ctx, l, r);
 }
 
-fn commitSorter(a: Allocator, l: Git.Repo, r: Git.Repo) bool {
-    var lc = l.headCommit(a) catch return true;
+fn commitSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
+    var lc = l.headCommit(ctx.alloc, ctx.io) catch return true;
     defer lc.raze();
-    var rc = r.headCommit(a) catch return false;
+    var rc = r.headCommit(ctx.alloc, ctx.io) catch return false;
     defer rc.raze();
     return sorter({}, lc.committer.timestr, rc.committer.timestr);
 }
@@ -236,7 +237,7 @@ fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
 
     switch (ctx.by) {
         .commit => {
-            return commitSorter(ctx.alloc, l, r);
+            return commitSorter(ctx, l, r);
         },
         .tag => {
             if (l.tags) |lt| {
@@ -244,7 +245,7 @@ fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
                     if (lt.len == 0) return true;
                     if (rt.len == 0) return false;
                     if (lt[0].tagger.timestamp == rt[0].tagger.timestamp)
-                        return commitSorter(ctx.alloc, l, r);
+                        return commitSorter(ctx, l, r);
                     return lt[0].tagger.timestamp > rt[0].tagger.timestamp;
                 } else return false;
             } else return true;
@@ -256,8 +257,9 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
-    var desc: ?[]const u8 = try repo.description(a);
+fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.RepoList {
+    const now = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    var desc: ?[]const u8 = try repo.description(a, io);
     if (std.mem.startsWith(u8, desc.?, "Unnamed repository; edit this file")) {
         desc = null;
     }
@@ -267,13 +269,13 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
         upstream = try allocPrint(a, "{f}", .{std.fmt.alt(remote, .formatLink)});
     }
     var updated: []const u8 = "new repo";
-    if (repo.headCommit(a)) |cmt| {
+    if (repo.headCommit(a, io)) |cmt| {
         defer cmt.raze();
         const committer = cmt.committer;
         updated = try allocPrint(
             a,
             "updated about {f}",
-            .{Humanize.unix(committer.timestamp)},
+            .{Humanize.unix(committer.timestamp, now)},
         );
     } else |_| {}
 
@@ -282,7 +284,7 @@ fn repoBlock(a: Allocator, name: []const u8, repo: Git.Repo) !S.RepoList {
     if (repo.tags) |rtags| {
         tag = .{
             .tag = try a.dupe(u8, rtags[0].name),
-            .title = try allocPrint(a, "created {f}", .{Humanize.unix(rtags[0].tagger.timestamp)}),
+            .title = try allocPrint(a, "created {f}", .{Humanize.unix(rtags[0].tagger.timestamp, now)}),
             .uri = try allocPrint(a, "/repo/{s}/tags", .{name}),
         };
     }
@@ -303,54 +305,55 @@ const RepoSortReq = struct {
     sort: ?[]const u8,
 };
 
-fn list(ctx: *Frame) Router.Error!void {
-    const udata = ctx.request.data.query.validate(RepoSortReq) catch return error.DataInvalid;
+fn list(f: *Frame) Router.Error!void {
+    const udata = f.request.data.query.validate(RepoSortReq) catch return error.DataInvalid;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
     var repo_iter = repos.allRepoIterator(.public) catch return error.Unknown;
     var current_repos: ArrayList(Git.Repo) = .{};
-    while (repo_iter.next() catch return error.Unknown) |rpo_| {
+    while (repo_iter.next(f.io) catch return error.Unknown) |rpo_| {
         var rpo = rpo_;
-        rpo.loadData(ctx.alloc) catch |err| {
+        rpo.loadData(f.alloc, f.io) catch |err| {
             log.err("Error, unable to load data on repo {s} {}", .{ repo_iter.current_name.?, err });
             continue;
         };
-        rpo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
+        rpo.repo_name = f.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
         if (rpo.tags != null) {
             std.sort.heap(Git.Tag, rpo.tags.?, {}, tags.sort);
         }
-        try current_repos.append(ctx.alloc, rpo);
+        try current_repos.append(f.alloc, rpo);
     }
 
     std.sort.heap(Git.Repo, current_repos.items, repoctx{
-        .alloc = ctx.alloc,
+        .alloc = f.alloc,
+        .io = f.io,
         .by = if (tag_sort) .tag else .commit,
     }, repoSorterNew);
 
     var repo_buttons: ?[]const u8 = null;
-    if (ctx.user != null and ctx.user.?.valid()) {
+    if (f.user != null and f.user.?.valid()) {
         repo_buttons =
             \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
         ;
     }
 
-    const repos_compiled = try ctx.alloc.alloc(S.RepoList, current_repos.items.len);
+    const repos_compiled = try f.alloc.alloc(S.RepoList, current_repos.items.len);
     for (current_repos.items, repos_compiled) |*repo, *compiled| {
-        defer repo.raze();
-        compiled.* = repoBlock(ctx.alloc, repo.repo_name orelse "unknown", repo.*) catch {
+        defer repo.raze(f.alloc, f.io);
+        compiled.* = repoBlock(repo.repo_name orelse "unknown", repo.*, f.alloc, f.io) catch {
             return error.Unknown;
         };
     }
 
     var page = ReposPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .buttons = repo_buttons,
         .repo_list = repos_compiled,
     });
 
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const treeBlob = @import("repos/blob.zig").treeBlob;
@@ -362,6 +365,7 @@ const branches = @import("repos/branches.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const log = std.log.scoped(.srctree);

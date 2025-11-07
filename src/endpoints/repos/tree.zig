@@ -1,17 +1,18 @@
 const TreePage = PageData("tree.html");
 
 pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
+    const now: i64 = (Io.Clock.now(.real, ctx.io) catch unreachable).toSeconds();
     const c = if (rd.ref) |ref|
-        switch (repo.loadObject(ctx.alloc, .init(ref)) catch return error.InvalidURI) {
+        switch (repo.loadObject(.init(ref), ctx.alloc, ctx.io) catch return error.InvalidURI) {
             .commit => |cm| cm,
             else => return error.DataInvalid,
         }
     else
-        repo.headCommit(ctx.alloc) catch return error.Unknown;
+        repo.headCommit(ctx.alloc, ctx.io) catch return error.Unknown;
 
     const branch_count = repo.refs.len;
     const commit_slug = std.mem.trim(u8, c.title[0..@min(c.title.len, 50)], " \n");
-    const commit_time = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(c.committer.timestamp)});
+    const commit_time = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(c.committer.timestamp, now)});
     const commit_hex = c.sha.hex()[0..40];
     const commit_hex_short = commit_hex[0..8];
 
@@ -32,14 +33,14 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     var list_hidden: std.ArrayListUnmanaged(S.CommitFilelistHiddenFiles) = .{};
 
     if (path) |p| try files.pushPath(ctx.alloc, p);
-    if (files.changedSetFrom(ctx.alloc, repo, c.sha)) |changed| {
+    if (files.changedSetFrom(repo, c.sha, ctx.alloc, ctx.io)) |changed| {
         std.sort.pdq(Git.Blob, files.blobs, {}, sorter);
         for (files.blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
-                    const commit_title = try verse.abx.Html.cleanAlloc(ctx.alloc, ch.commit_title);
+                    const commit_title = try allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = ch.commit_title }});
                     const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, ch.sha.hex()[0..8] });
-                    const ctime = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(ch.timestamp)});
+                    const ctime = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(ch.timestamp, now)});
                     if (ch.name.len > 0 and ch.name[0] == '.') {
                         const href: []const u8, const class: []const u8 = if (obj.isFile()) .{ try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
                             prefix, path orelse "", obj.name,
@@ -90,7 +91,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     var readme: ?[]const u8 = null;
     for (files.blobs) |obj| {
         if (isReadme(obj.name)) {
-            const resolve = repo.blob(ctx.alloc, obj.sha) catch return error.Unknown;
+            const resolve = repo.blob(obj.sha, ctx.alloc, ctx.io) catch return error.Unknown;
             const readme_html = htmlReadme(ctx.alloc, resolve.data.?) catch unreachable;
             readme = try allocPrint(ctx.alloc, "{f}", .{readme_html[0]});
             break;
@@ -99,7 +100,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
 
     var open_graph: S.OpenGraph = .{ .title = rd.name };
     var page_desc: ?[]const u8 = null;
-    if (repo.description(ctx.alloc)) |desc| {
+    if (repo.description(ctx.alloc, ctx.io)) |desc| {
         if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
             page_desc = std.mem.trim(u8, desc, " \n\r\t");
             open_graph.desc = page_desc.?;
@@ -175,6 +176,7 @@ const RouteData = repos_.RouteData;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
@@ -182,6 +184,7 @@ const splitScalar = std.mem.splitScalar;
 
 const verse = @import("verse");
 const Frame = verse.Frame;
+const abx = verse.abx;
 const S = verse.template.Structs;
 const html = verse.template.html;
 const DOM = html.DOM;

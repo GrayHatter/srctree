@@ -108,13 +108,18 @@ fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.NumberedLines {
 fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
     const out = try a.alloc(S.GistFiles, files.len);
 
+    var w: Writer.Allocating = try .initCapacity(a, 20);
+    defer w.deinit();
     for (files, out) |file, *o| {
-        const file_name = try verse.abx.Html.cleanAlloc(a, file.name);
+        w.writer.print("{f}", .{abx.Html{ .text = file.name }}) catch return error.OutOfMemory;
+        const file_name = try w.toOwnedSlice();
         var formatted: []const u8 = undefined;
         if (Highlight.Language.guessFromFilename(file.name)) |lang| {
             formatted = try Highlight.highlight(a, lang, file.blob);
         } else {
-            formatted = verse.abx.Html.cleanAlloc(a, file.blob) catch return error.Unknown;
+            w.writer.print("{f}", .{verse.abx.Html{ .text = file.blob }}) catch return error.Unknown;
+
+            formatted = try w.toOwnedSlice();
         }
 
         const wrapped = try wrapLineNumbers(a, formatted);
@@ -134,7 +139,7 @@ fn view(vrs: *Frame) Error!void {
     const hash = vrs.uri.next() orelse return error.InvalidURI;
     if (hash.len != 64) return error.DataInvalid;
 
-    const gist = Gist.open(vrs.alloc, hash[0..64].*) catch return error.InvalidURI;
+    const gist = Gist.open(hash[0..64].*, vrs.alloc, vrs.io) catch return error.InvalidURI;
     const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
     var page = GistPage.init(.{
         .meta_head = .{ .open_graph = .{
@@ -155,11 +160,13 @@ const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
 
 const verse = @import("verse");
+const abx = verse.abx;
 const Frame = verse.Frame;
 const template = verse.template;
 const S = template.Structs;
 const RequestData = verse.RequestData.RequestData;
 const Allocator = std.mem.Allocator;
+const Writer = std.Io.Writer;
 
 const Highlight = @import("../syntax-highlight.zig");
 const Gist = @import("../types.zig").Gist;

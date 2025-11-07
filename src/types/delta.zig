@@ -54,59 +54,59 @@ const typeio = Types.readerWriter(Delta, .{
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 
-pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8) !Delta {
-    const max: usize = try Types.nextIndexNamed(.deltas, repo);
+pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8, io: Io) !Delta {
+    const max: usize = try Types.nextIndexNamed(.deltas, repo, io);
     var d = Delta{
         .index = max,
-        .created = std.time.timestamp(),
-        .updated = std.time.timestamp(),
+        .created = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
+        .updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
         .repo = repo,
         .title = title,
         .message = msg,
         .author = author,
     };
 
-    var thread = try Thread.new(d);
-    try thread.commit();
+    var thread = try Thread.new(d, io);
+    try thread.commit(io);
     d.thread_id = thread.index;
     return d;
 }
 
-pub fn open(a: std.mem.Allocator, repo: []const u8, index: usize) !Delta {
-    const max = try Types.currentIndexNamed(.deltas, repo);
+pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
+    const max = try Types.currentIndexNamed(.deltas, repo, io);
     if (index > max) return error.DeltaDoesNotExist;
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
-    const file = try Types.loadData(.deltas, a, filename);
+    const file = try Types.loadData(.deltas, filename, a, io);
     return readerFn(file);
 }
 
-pub fn commit(delta: Delta) !void {
-    if (delta.thread) |thr| thr.commit() catch {}; // Save thread as best effort
+pub fn commit(delta: Delta, io: Io) !void {
+    if (delta.thread) |thr| thr.commit(io) catch {}; // Save thread as best effort
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ delta.repo, delta.index });
-    const file = try Types.commit(.deltas, filename);
+    const file = try Types.commit(.deltas, filename, io);
     defer file.close();
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(&w_b);
     try writerFn(&delta, &fd_writer.interface);
 }
 
-pub fn loadThread(delta: *Delta, a: Allocator) !*Thread {
+pub fn loadThread(delta: *Delta, a: Allocator, io: Io) !*Thread {
     if (delta.thread) |thr| return thr;
     const t = try a.create(Thread);
-    t.* = Thread.open(a, delta.thread_id) catch |err| t: {
+    t.* = Thread.open(delta.thread_id, a, io) catch |err| t: {
         std.debug.print("Error loading thread!! {}", .{err});
         std.debug.print(" old thread_id {};", .{delta.thread_id});
-        const thread = Thread.new(delta.*) catch |err2| {
+        const thread = Thread.new(delta.*, io) catch |err2| {
             std.debug.print(" unable to create new {}\n", .{err2});
             return error.UnableToLoadThread;
         };
         std.debug.print("new thread_id {}\n", .{thread.index});
         delta.thread_id = thread.index;
-        try delta.commit();
+        try delta.commit(io);
         break :t thread;
     };
 
@@ -119,25 +119,25 @@ pub const Comment = struct {
     message: []const u8,
 };
 
-pub fn addComment(delta: *Delta, a: Allocator, c: Comment) !void {
-    var thread: *Thread = delta.thread orelse try delta.loadThread(a);
-    try thread.addComment(a, c.author, c.message);
+pub fn addComment(delta: *Delta, c: Comment, a: Allocator, io: Io) !void {
+    var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
+    try thread.addComment(c.author, c.message, a, io);
     thread.messages.items[thread.messages.items.len - 1].extra0 = delta.attach_target;
-    try thread.commit();
-    delta.updated = std.time.timestamp();
-    try delta.commit();
+    try thread.commit(io);
+    delta.updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    try delta.commit(io);
 }
 
-pub fn addMessage(delta: *Delta, a: Allocator, m: Message) !void {
-    var thread: *Thread = delta.thread orelse try delta.loadThread(a);
-    try thread.addMessage(a, m);
+pub fn addMessage(delta: *Delta, m: Message, a: Allocator, io: Io) !void {
+    var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
+    try thread.addMessage(m, a, io);
     delta.updated = thread.updated;
-    try delta.commit();
+    try delta.commit(io);
 }
 
-pub fn countComments(delta: Delta) struct { count: usize, new: bool } {
+pub fn countComments(delta: Delta, io: Io) struct { count: usize, new: bool } {
     const thread = delta.thread orelse return .{ .count = 0, .new = false };
-    const ts = std.time.timestamp() - 86400;
+    const ts = (Io.Clock.now(.real, io) catch unreachable).toSeconds() - 86400;
     var cmtnew: bool = false;
     var cmtlen: usize = 0;
     for (thread.messages.items) |m| switch (m.kind) {
@@ -161,17 +161,17 @@ pub const Iterator = struct {
     last: usize = 0,
     repo: []const u8,
 
-    pub fn init(repo: []const u8) Iterator {
+    pub fn init(repo: []const u8, io: Io) Iterator {
         return .{
             .repo = repo,
-            .last = Types.currentIndexNamed(.deltas, repo) catch 0,
+            .last = Types.currentIndexNamed(.deltas, repo, io) catch 0,
         };
     }
 
-    pub fn next(self: *Iterator, a: Allocator) ?Delta {
+    pub fn next(self: *Iterator, a: Allocator, io: Io) ?Delta {
         while (self.index <= self.last) {
             defer self.index +|= 1;
-            return open(a, self.repo, self.index) catch continue;
+            return open(self.repo, self.index, a, io) catch continue;
         }
         return null;
     }
@@ -230,12 +230,12 @@ pub fn SearchIter(T: type, I: type) type {
 
         const Self = @This();
 
-        pub fn next(self: *Self, a: Allocator) ?T {
-            const current = self.iterable.next(a) orelse return null;
+        pub fn next(self: *Self, a: Allocator, io: Io) ?T {
+            const current = self.iterable.next(a, io) orelse return null;
             if (self.evalRules(current)) {
                 return current;
             }
-            return self.next(a);
+            return self.next(a, io);
         }
 
         fn evalRules(self: Self, target: T) bool {
@@ -295,51 +295,52 @@ pub fn SearchIter(T: type, I: type) type {
 pub const AnyIterator = struct {
     dir: std.fs.Dir.Iterator,
 
-    pub fn init() AnyIterator {
+    pub fn init(io: Io) AnyIterator {
+        const dir: fs.Dir = .adaptFromNewApi(Types.iterableDir(.deltas, io) catch unreachable);
         return .{
-            .dir = (Types.iterableDir(.deltas) catch unreachable).iterate(),
+            .dir = dir.iterate(),
         };
     }
 
-    pub fn next(self: *AnyIterator, a: Allocator) ?Delta {
+    pub fn next(self: *AnyIterator, a: Allocator, io: Io) ?Delta {
         const line = (self.dir.next() catch return null) orelse return null;
-        if (line.kind != .file) return self.next(a);
-        if (!std.mem.endsWith(u8, line.name, ".delta")) return self.next(a);
+        if (line.kind != .file) return self.next(a, io);
+        if (!std.mem.endsWith(u8, line.name, ".delta")) return self.next(a, io);
         const name = line.name[0 .. line.name.len - 6];
-        const i = lastIndexOf(u8, name, ".") orelse return self.next(a);
-        const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a);
-        const current = open(a, name[0..i], num) catch return self.next(a);
-
+        const i = lastIndexOf(u8, name, ".") orelse return self.next(a, io);
+        const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a, io);
+        const current = open(name[0..i], num, a, io) catch return self.next(a, io);
         return current;
     }
 };
 
-pub fn searchAny(rules: []const SearchRule) SearchIter(Delta, AnyIterator) {
+pub fn searchAny(rules: []const SearchRule, io: Io) SearchIter(Delta, AnyIterator) {
     return .{
         .rules = rules,
-        .iterable = .init(),
+        .iterable = .init(io),
     };
 }
 
-pub fn searchRepo(repo: []const u8, rules: []const SearchRule) SearchIter(Delta, Iterator) {
+pub fn searchRepo(repo: []const u8, rules: []const SearchRule, io: Io) SearchIter(Delta, Iterator) {
     return .{
         .rules = rules,
-        .iterable = .init(repo),
+        .iterable = .init(repo, io),
     };
 }
 
 test Delta {
     const a = std.testing.allocator;
+    const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(try tempdir.dir.makeOpenPath("delta", .{ .iterate = true }));
+    try Types.init((try tempdir.dir.makeOpenPath("delta", .{ .iterate = true })).adaptToNewApi(), io);
 
-    var d = try Delta.new("repo_name", "title", "message", "author");
+    var d = try Delta.new("repo_name", "title", "message", "author", io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    d.created = std.time.timestamp() & mask;
-    d.updated = std.time.timestamp() & mask;
+    d.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    d.updated = (try Io.Clock.now(.real, io)).toSeconds() & mask;
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
@@ -372,6 +373,8 @@ test Delta {
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const fs = std.fs;
+const Io = std.Io;
 const lastIndexOf = std.mem.lastIndexOf;
 const indexOf = std.mem.indexOf;
 const eql = std.mem.eql;

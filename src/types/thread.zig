@@ -17,25 +17,25 @@ const Thread = @This();
 pub const type_prefix = "threads";
 pub const type_version = 0;
 
-pub fn new(delta: Delta) !Thread {
-    const max: usize = try Types.nextIndex(.thread);
+pub fn new(delta: Delta, io: Io) !Thread {
+    const max: usize = try Types.nextIndex(.thread, io);
     const thread = Thread{
         .index = max,
         .delta_hash = delta.hash,
-        .created = std.time.timestamp(),
-        .updated = std.time.timestamp(),
+        .created = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
+        .updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
     };
-    try thread.commit();
+    try thread.commit(io);
     return thread;
 }
 
-pub fn open(a: std.mem.Allocator, index: usize) !Thread {
-    const max = try Types.currentIndex(.thread);
+pub fn open(index: usize, a: Allocator, io: Io) !Thread {
+    const max = try Types.currentIndex(.thread, io);
     if (index > max) return error.ThreadDoesNotExist;
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{index});
-    const data = try Types.loadData(.thread, a, filename);
+    const data = try Types.loadData(.thread, filename, a, io);
     var thread = readerFn(data);
 
     if (indexOf(u8, data, "\n\n")) |start| {
@@ -44,7 +44,7 @@ pub fn open(a: std.mem.Allocator, index: usize) !Thread {
             if (next.len != 64) continue;
             var msg_hash: Types.DefaultHash = undefined;
             for (0..32) |i| msg_hash[i] = parseInt(u8, next[i * 2 .. i * 2 + 2], 16) catch 0;
-            const message = Message.open(a, msg_hash) catch |err| {
+            const message = Message.open(msg_hash, a, io) catch |err| {
                 std.debug.print("unable to load message {}\n", .{err});
                 continue;
             };
@@ -55,10 +55,10 @@ pub fn open(a: std.mem.Allocator, index: usize) !Thread {
     return thread;
 }
 
-pub fn commit(thread: Thread) !void {
+pub fn commit(thread: Thread, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{thread.index});
-    const file = try Types.commit(.thread, filename);
+    const file = try Types.commit(.thread, filename, io);
     defer file.close();
 
     var w_b: [2048]u8 = undefined;
@@ -68,20 +68,20 @@ pub fn commit(thread: Thread) !void {
 
     // Make a best effort to save/protect all data
     for (thread.messages.items) |msg| {
-        msg.commit() catch continue;
+        msg.commit(io) catch continue;
         try writer.print("{x}\n", .{&msg.hash});
     }
     try writer.flush();
 }
 
-pub fn addComment(thread: *Thread, a: Allocator, author: []const u8, message: []const u8) !void {
-    try thread.addMessage(a, try .new(.comment, thread.index, author, message));
+pub fn addComment(thread: *Thread, author: []const u8, message: []const u8, a: Allocator, io: Io) !void {
+    try thread.addMessage(try .new(.comment, thread.index, author, message, io), a, io);
 }
 
-pub fn addMessage(thread: *Thread, a: Allocator, m: Message) !void {
+pub fn addMessage(thread: *Thread, m: Message, a: Allocator, io: Io) !void {
     try thread.messages.append(a, m);
-    thread.updated = std.time.timestamp();
-    try thread.commit();
+    thread.updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    try thread.commit(io);
 }
 
 pub fn raze(self: Thread, a: std.mem.Allocator) void {
@@ -124,6 +124,7 @@ const readerFn = typeio.read;
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const ArrayList = std.ArrayList;
 const bufPrint = std.fmt.bufPrint;
 const indexOf = std.mem.indexOf;

@@ -61,23 +61,23 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_unit_tests.step);
 
     // Partner Binaries
-    const maild = b.addExecutable(.{
-        .name = "srctree-maild",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/mailer.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-        .use_llvm = use_llvm,
-        .use_lld = use_llvm,
-    });
-    b.installArtifact(maild);
+    //const maild = b.addExecutable(.{
+    //    .name = "srctree-maild",
+    //    .root_module = b.createModule(.{
+    //        .root_source_file = b.path("src/mailer.zig"),
+    //        .target = target,
+    //        .optimize = optimize,
+    //    }),
+    //    .use_llvm = use_llvm,
+    //    .use_lld = use_llvm,
+    //});
+    //b.installArtifact(maild);
 
-    const send_email = b.addRunArtifact(maild);
-    send_email.step.dependOn(b.getInstallStep());
-    const send_email_step = b.step("email", "send an email");
-    send_email_step.dependOn(&send_email.step);
-    if (b.args) |args| {
-        send_email.addArgs(args);
-    }
+    //const send_email = b.addRunArtifact(maild);
+    //send_email.step.dependOn(b.getInstallStep());
+    //const send_email_step = b.step("email", "send an email");
+    //send_email_step.dependOn(&send_email.step);
+    //if (b.args) |args| {
+    //    send_email.addArgs(args);
+    //}
 }

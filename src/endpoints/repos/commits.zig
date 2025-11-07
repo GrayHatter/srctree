@@ -39,18 +39,19 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
 }
 
 fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
+    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
     if (!Git.commitish(sha)) {
         std.debug.print("Abuse ''{s}''\n", .{sha});
         return error.Abuse;
     }
 
     // lol... I'd forgotten I'd done this. >:)
-    const current: Git.Commit = repo.commit(f.alloc, Git.SHA.initPartial(sha)) catch cmt: {
+    const current: Git.Commit = repo.commit(Git.SHA.initPartial(sha), f.alloc, f.io) catch cmt: {
         std.debug.print("unable to find commit, trying expensive fallback\n", .{});
         // TODO return 404
-        var fallback: Git.Commit = repo.headCommit(f.alloc) catch return error.Unknown;
+        var fallback: Git.Commit = repo.headCommit(f.alloc, f.io) catch return error.Unknown;
         while (!std.mem.startsWith(u8, fallback.sha.hex()[0..], sha)) {
-            fallback = fallback.toParent(f.alloc, 0, &repo) catch return f.sendDefaultErrorPage(.not_found);
+            fallback = fallback.toParent(0, &repo, f.alloc, f.io) catch return f.sendDefaultErrorPage(.not_found);
         }
         break :cmt fallback;
     };
@@ -78,7 +79,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
 
     const diffstat = patch.patchStat();
     const og_title = try allocPrint(f.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
-        Verse.abx.Html.cleanAlloc(f.alloc, current.author.name) catch unreachable,
+        allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
         diffstat.files,
         if (diffstat.files > 1) "s" else "",
         diffstat.additions,
@@ -87,32 +88,32 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const meta_head = S.MetaHeadHtml{
         .open_graph = .{
             .title = og_title,
-            .desc = Verse.abx.Html.cleanAlloc(f.alloc, current.message) catch unreachable,
+            .desc = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.message }}) catch unreachable,
         },
     };
 
     var thread: []Template.Structs.Thread = &[0]Template.Structs.Thread{};
-    if (CommitMap.open(f.alloc, repo_name_, current.sha.hex())) |map| {
+    if (CommitMap.open(repo_name_, current.sha.hex(), f.alloc, f.io)) |map| {
         switch (map.attach_to) {
             .delta => {
-                var delta = Delta.open(f.alloc, repo_name_, map.attach_target) catch return error.DataInvalid;
-                if (delta.loadThread(f.alloc)) |dthread| {
+                var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
+                if (delta.loadThread(f.alloc, f.io)) |dthread| {
                     thread = try f.alloc.alloc(Template.Structs.Thread, dthread.messages.items.len);
                     for (dthread.messages.items, thread) |msg, *pg_comment| {
                         switch (msg.kind) {
                             .comment => {
                                 pg_comment.* = .{
-                                    .author = try Verse.abx.Html.cleanAlloc(f.alloc, msg.author.?),
-                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated)}),
-                                    .message = try Verse.abx.Html.cleanAlloc(f.alloc, msg.message.?),
+                                    .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
+                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
+                                    .message = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.message.? }}),
                                     .direct_reply = null,
                                     .sub_thread = null,
                                 };
                             },
                             .diff_update => {
                                 pg_comment.* = .{
-                                    .author = try abx.Html.cleanAlloc(f.alloc, msg.author.?),
-                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated)}),
+                                    .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
+                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
                                     .message = msg.message.?,
                                     .direct_reply = null,
                                     .sub_thread = null,
@@ -195,10 +196,10 @@ pub fn viewCommit(f: *Frame) Error!void {
     const sha = rd.ref orelse return error.Unrouteable;
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
 
-    var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
+    var repo = (repos.open(rd.name, .public, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
-    repo.loadData(f.alloc) catch return error.Unknown;
-    defer repo.raze();
+    repo.loadData(f.alloc, f.io) catch return error.Unknown;
+    defer repo.raze(f.alloc, f.io);
 
     if (std.mem.endsWith(u8, sha, ".patch")) {
         return viewAsPatch(f, sha, repo);
@@ -229,17 +230,17 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.Pare
 pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.Commit {
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     const body = if (c.body.len > 3)
-        Highlight.translate(a, .markdown, c.body) catch Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable
+        Highlight.translate(a, .markdown, c.body) catch allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable
     else
-        Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
+        allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable;
     const sha = try a.dupe(u8, c.sha.hex()[0..]);
     return .{
-        .author = Verse.abx.Html.cleanAlloc(a, c.author.name) catch unreachable,
+        .author = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.author.name }}) catch unreachable,
         .parents = try commitCtxParents(a, c, repo),
         .repo = repo,
         .sha = sha,
         .sha_short = sha[0..8],
-        .title = Verse.abx.Html.cleanAlloc(a, c.title) catch unreachable,
+        .title = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.title }}) catch unreachable,
         .body = body,
     };
 }
@@ -260,17 +261,17 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
     const ws = " \t\n";
     const date = Datetime.fromEpoch(c.author.timestamp);
 
-    const email = if (!include_email) "" else try abx.Html.cleanAlloc(a, trim(u8, c.author.email, ws));
+    const email = if (!include_email) "" else try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.author.email, ws) }});
 
     return .{
         .repo = repo_name,
-        .body = if (c.body.len > 0) try abx.Html.cleanAlloc(a, trim(u8, c.body, ws)) else null,
-        .title = try abx.Html.cleanAlloc(a, trim(u8, c.title, ws)),
+        .body = if (c.body.len > 0) try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.body, ws) }}) else null,
+        .title = try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.title, ws) }}),
         .cmt_line_src = .{
             .pre = "by ",
             .link_root = "/user?user=",
             .link_target = email,
-            .name = try abx.Html.cleanAlloc(a, trim(u8, c.author.name, ws)),
+            .name = try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.author.name, ws) }}),
         },
         .day = try allocPrint(a, "{f}", .{std.fmt.alt(date, .format)}),
         .weekday = date.weekdaySlice(),
@@ -281,6 +282,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
 
 fn buildList(
     a: Allocator,
+    io: Io,
     repo: Git.Repo,
     name: []const u8,
     before: ?Git.SHA,
@@ -288,11 +290,12 @@ fn buildList(
     outsha: *Git.SHA,
     include_email: bool,
 ) ![]S.CommitList {
-    return buildListBetween(a, repo, name, null, before, count, outsha, include_email);
+    return buildListBetween(a, io, repo, name, null, before, count, outsha, include_email);
 }
 
 fn buildListBetween(
     a: Allocator,
+    io: Io,
     repo: Git.Repo,
     name: []const u8,
     left: ?Git.SHA,
@@ -302,15 +305,15 @@ fn buildListBetween(
     include_email: bool,
 ) ![]S.CommitList {
     var commits = try a.alloc(S.CommitList, count);
-    var current: Git.Commit = repo.headCommit(a) catch return error.Unknown;
+    var current: Git.Commit = repo.headCommit(a, io) catch return error.Unknown;
     if (right) |r| {
         while (!current.sha.eqlIsh(r)) {
-            current = current.toParent(a, 0, &repo) catch |err| {
+            current = current.toParent(0, &repo, a, io) catch |err| {
                 std.debug.print("unable to build commit history\n", .{});
                 return err;
             };
         }
-        current = current.toParent(a, 0, &repo) catch |err| {
+        current = current.toParent(0, &repo, a, io) catch |err| {
             std.debug.print("unable to build commit history\n", .{});
             return err;
         };
@@ -321,7 +324,7 @@ fn buildListBetween(
         found = i;
         outsha.* = current.sha;
         if (left) |l| if (current.sha.eqlIsh(l)) break;
-        current = current.toParent(a, 0, &repo) catch break;
+        current = current.toParent(0, &repo, a, io) catch break;
     }
     if (a.resize(commits, found)) {
         commits.len = found;
@@ -354,14 +357,15 @@ pub fn commitList(f: *Frame) Error!void {
     //    }
     //} else {}
 
-    var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
+    var repo = (repos.open(rd.name, .public, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
-    repo.loadData(f.alloc) catch return error.Unknown;
-    defer repo.raze();
+    repo.loadData(f.alloc, f.io) catch return error.Unknown;
+    defer repo.raze(f.alloc, f.io);
 
     var last_sha: Git.SHA = undefined;
     const cmts_list = buildList(
         f.alloc,
+        f.io,
         repo,
         rd.name,
         commitish,
@@ -382,12 +386,12 @@ pub fn commitsBefore(f: *Frame) Error!void {
     var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
     repo.loadData(f.alloc) catch return error.Unknown;
-    defer repo.raze();
+    defer repo.raze(f.alloc, f.io);
 
     const before: Git.SHA = if (f.uri.next()) |bf| Git.SHA.initPartial(bf);
     const commits_b = try f.alloc.alloc(Template.Verse, 50);
     var last_sha: Git.SHA = undefined;
-    const cmts_list = try buildList(f.alloc, repo, rd.name, before, commits_b, &last_sha);
+    const cmts_list = try buildList(f.alloc, f.io, repo, rd.name, before, commits_b, &last_sha);
     return sendCommits(f, cmts_list, rd.name, last_sha[0..]);
 }
 
@@ -412,6 +416,7 @@ fn sendCommits(f: *Frame, list: []const S.CommitList, repo_name: []const u8, sha
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const endsWith = std.mem.endsWith;

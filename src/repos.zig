@@ -88,7 +88,7 @@ pub fn exists(name: []const u8, vis: Visibility) bool {
 //
 //pub fn openAny(name: []const u8) !?Git.Repo {
 
-pub fn open(name: []const u8, vis: Visibility) !?Git.Repo {
+pub fn open(name: []const u8, vis: Visibility, io: Io) !?Git.Repo {
     if (!visibility(name).isVisible(vis)) return null;
     var root = try dirs.directory(vis);
     defer root.close();
@@ -97,7 +97,8 @@ pub fn open(name: []const u8, vis: Visibility) !?Git.Repo {
         error.NotDir => return null,
         else => return err,
     };
-    return try Git.Repo.init(dir);
+    const dir2 = dir.adaptToNewApi();
+    return try Git.Repo.init(dir2, io);
 }
 
 pub fn allNames(a: Allocator) !ArrayList([]u8) {
@@ -122,14 +123,15 @@ pub const RepoIterator = struct {
     /// only valid until the following call to next()
     current_name: ?[]const u8 = null,
 
-    pub fn next(ri: *RepoIterator) !?Git.Repo {
+    pub fn next(ri: *RepoIterator, io: Io) !?Git.Repo {
         while (try ri.itr.next()) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
             if (!visibility(file.name).isVisible(ri.vis)) continue;
             const rdir = ri.dir.openDir(file.name, .{}) catch continue;
             ri.current_name = file.name;
-            return try Git.Repo.init(rdir);
+            const rdir2 = rdir.adaptToNewApi();
+            return try Git.Repo.init(rdir2, io);
         }
         ri.current_name = null;
         return null;
@@ -150,6 +152,7 @@ pub fn containsName(name: []const u8) bool {
 }
 
 pub const Agent = struct {
+    io: Io,
     config: Config,
     thread: ?std.Thread = null,
     enabled: bool = false,
@@ -191,8 +194,9 @@ pub const Agent = struct {
         }
     };
 
-    pub fn init(cfg: Config) Agent {
+    pub fn init(cfg: Config, io: Io) Agent {
         return .{
+            .io = io,
             .config = cfg,
         };
     }
@@ -212,16 +216,20 @@ pub const Agent = struct {
         a.thread = null;
     }
 
-    fn setUpdated(dir: std.fs.Dir, update: Updated) void {
-        var buffer: [1024]u8 = undefined;
-        const text = std.fmt.bufPrint(&buffer, "{f}", .{update}) catch unreachable;
-        dir.writeFile(.{ .sub_path = "srctree_sync", .data = text }) catch {};
+    fn setUpdated(dir: Io.Dir, update: Updated, io: Io) void {
+        const file = dir.createFile(io, "srctree_sync", .{}) catch return;
+        defer file.close(io);
+        var old: fs.File = .adaptFromNewApi(file);
+        var w_b: [1024]u8 = undefined;
+        var writer = old.writer(&w_b);
+        writer.interface.print("{f}", .{update}) catch return;
+        writer.interface.flush() catch return;
     }
 
-    fn getUpdated(dir: std.fs.Dir) !Updated {
+    fn getUpdated(dir: Io.Dir, io: Io) !Updated {
         var update: Updated = .{};
         var rbuf: [1024]u8 = undefined;
-        const sync_str = dir.readFile("srctree_sync", &rbuf) catch return .{};
+        const sync_str = dir.readFile(io, "srctree_sync", &rbuf) catch return .{};
         if (indexOf(u8, sync_str, "upstream_push ")) |i| {
             if (indexOfPos(u8, sync_str, i, "\n")) |j| {
                 update.upstream_push = parseInt(i64, sync_str[i + 14 .. j], 10) catch 0;
@@ -246,9 +254,9 @@ pub const Agent = struct {
         return update;
     }
 
-    fn pullUpstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
-        var update = try getUpdated(repo.dir);
-        const rhead = try repo.HEAD(a);
+    fn pullUpstream(name: []const u8, repo: *Git.Repo, a: Allocator, io: Io) !void {
+        var update = try getUpdated(repo.dir, io);
+        const rhead = try repo.HEAD(a, io);
         const head: []const u8 = switch (rhead) {
             .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
             .tag => |t| t.name,
@@ -263,14 +271,14 @@ pub const Agent = struct {
                 error.NonAncestor => {},
                 else => log.warn("Warning upstream pull failed repo {s} {}", .{ name, err }),
             }
-            update.upstream_pull = std.time.timestamp();
-            setUpdated(repo.dir, update);
+            update.upstream_pull = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+            setUpdated(repo.dir, update, io);
         } else log.debug("repo {s} doesn't have an upstream peer", .{name});
     }
 
-    fn pushDownstream(a: Allocator, name: []const u8, repo: *Git.Repo) !void {
-        var update = try getUpdated(repo.dir);
-        const repo_update = repo.updatedAt(a) catch 0;
+    fn pushDownstream(name: []const u8, repo: *Git.Repo, a: Allocator, io: Io) !void {
+        var update = try getUpdated(repo.dir, io);
+        const repo_update = repo.updatedAt(a, io) catch 0;
 
         if (repo_update > update.downstream_push) {
             if (repo.findRemote("downstream") catch return) |_| {
@@ -279,8 +287,8 @@ pub const Agent = struct {
                     log.warn("Warning, unable to push to downstream repo {s}", .{name});
                     break :er false;
                 };
-                update.downstream_push = std.time.timestamp();
-                setUpdated(repo.dir, update);
+                update.downstream_push = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+                setUpdated(repo.dir, update, io);
                 if (!updated) log.warn("Warning downstream push failed repo {s}", .{name});
             } else log.debug("repo {s} doesn't have any downstream peers", .{name});
         } else {
@@ -311,7 +319,7 @@ pub const Agent = struct {
             alloc.free(names);
         }
 
-        sleep(1000_000_000 * 20);
+        a.io.sleep(.fromSeconds(20), .real) catch unreachable;
         running: while (a.enabled) {
             log.info("Starting sync for {} repos", .{names.len});
             for (names) |rname| {
@@ -319,31 +327,31 @@ pub const Agent = struct {
                     if (skipRepo(skips, rname)) continue;
 
                 log.debug("starting update for {s}", .{rname});
-                var repo: Git.Repo = open(rname, .public) catch {
+                var repo: Git.Repo = open(rname, .public, a.io) catch {
                     log.warn("unable to load public repo {s}", .{rname});
                     continue;
-                } orelse open(rname, .private) catch {
+                } orelse open(rname, .private, a.io) catch {
                     log.warn("unable to load private repo {s}", .{rname});
                     continue;
                 } orelse {
                     log.warn("unable to find repo {s}", .{rname});
                     continue;
                 };
-                defer repo.raze();
+                defer repo.raze(alloc, a.io);
 
-                repo.loadData(alloc) catch {
+                repo.loadData(alloc, a.io) catch {
                     log.err("Warning, unable to load data for repo {s}", .{rname});
                     continue;
                 };
 
                 if (a.config.upstream.pull) {
-                    pullUpstream(alloc, rname, &repo) catch |err| {
+                    pullUpstream(rname, &repo, alloc, a.io) catch |err| {
                         log.err("Error ({}) when trying to pull on {s}\n", .{ err, rname });
                         break :running;
                     };
                 }
                 if (a.config.downstream.push) {
-                    pushDownstream(alloc, rname, &repo) catch |err| {
+                    pushDownstream(rname, &repo, alloc, a.io) catch |err| {
                         log.err("Error ({}) when trying to push on {s}\n", .{ err, rname });
                         break :running;
                     };
@@ -353,7 +361,7 @@ pub const Agent = struct {
             var qi: usize = 60 * 60;
             while (qi > 0) {
                 qi -|= 1;
-                sleep(a.config.sleep_for / 60 / 60);
+                a.io.sleep(.fromSeconds(@intCast(a.config.sleep_for / 60 / 60)), .real) catch unreachable;
                 if (!a.enabled) break :running;
             }
         }
@@ -366,7 +374,8 @@ const log = std.log.scoped(.update_thread);
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Writer = std.Io.Writer;
-const sleep = std.Thread.sleep;
+const Io = std.Io;
+const fs = std.fs;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const indexOfPos = std.mem.indexOfPos;

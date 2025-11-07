@@ -29,16 +29,12 @@ const DECADES_2 = YEARS_2 * 10;
 const CENTURIES_2 = DECADES_2 * 10;
 const MILLENIA_2 = CENTURIES_2 * 10;
 
-pub fn unix(time: i64) Humanize {
-    return .{
-        .seconds = time - std.time.timestamp(),
-    };
+pub fn unix(time: i64, now: i64) Humanize {
+    return .{ .seconds = time - now };
 }
 
 pub fn delta(origin: i64, diff: i64) Humanize {
-    return .{
-        .seconds = diff - origin,
-    };
+    return .{ .seconds = diff - origin };
 }
 
 fn abs(in: i64) i64 {

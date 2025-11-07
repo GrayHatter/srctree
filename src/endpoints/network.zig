@@ -6,13 +6,13 @@ pub fn index(ctx: *Frame) Error!void {
     var dom: *DOM = .create(ctx.alloc);
 
     var repo_iter = Repos.allRepoIterator(.public) catch return error.Unknown;
-    while (repo_iter.next() catch return error.Unknown) |repoC| {
+    while (repo_iter.next(ctx.io) catch return error.Unknown) |repoC| {
         var repo = repoC;
-        repo.loadData(ctx.alloc) catch |err| {
+        repo.loadData(ctx.alloc, ctx.io) catch |err| {
             log.err("Error, unable to load data on repo {s} {}", .{ repo_iter.current_name.?, err });
             continue;
         };
-        defer repo.raze();
+        defer repo.raze(ctx.alloc, ctx.io);
         repo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
         if (repo.findRemote("upstream") catch continue) |remote| {

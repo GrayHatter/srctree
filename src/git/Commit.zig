@@ -87,10 +87,10 @@ pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Commit
     return commit;
 }
 
-pub fn toParent(self: Commit, a: Allocator, idx: u8, repo: *const Repo) !Commit {
+pub fn toParent(self: Commit, idx: u8, repo: *const Repo, a: Allocator, io: Io) !Commit {
     if (idx >= self.parent.len) return error.NoParent;
     if (self.parent[idx]) |parent| {
-        return switch (try repo.loadObject(a, parent)) {
+        return switch (try repo.loadObject(parent, a, io)) {
             .commit => |c| c,
             else => error.NotACommit,
         };
@@ -98,30 +98,30 @@ pub fn toParent(self: Commit, a: Allocator, idx: u8, repo: *const Repo) !Commit 
     return error.NoParent;
 }
 
-pub fn loadTree(self: Commit, a: Allocator, repo: *const Repo) !Tree {
-    return switch (try repo.loadObject(a, self.tree)) {
+pub fn loadTree(self: Commit, repo: *const Repo, a: Allocator, io: Io) !Tree {
+    return switch (try repo.loadObject(self.tree, a, io)) {
         .tree => |t| t,
         else => error.NotATree,
     };
 }
 
-pub fn mkSubTree(self: Commit, a: Allocator, subpath: ?[]const u8, repo: *const Repo) !Tree {
-    const rootpath = subpath orelse return self.loadTree(a, repo);
-    if (rootpath.len == 0) return self.loadTree(a, repo);
+pub fn mkSubTree(self: Commit, subpath: ?[]const u8, repo: *const Repo, a: Allocator, io: Io) !Tree {
+    const rootpath = subpath orelse return self.loadTree(repo, a, io);
+    if (rootpath.len == 0) return self.loadTree(repo, a, io);
 
     var itr = std.mem.splitScalar(u8, rootpath, '/');
-    var root = try self.loadTree(a, repo);
+    var root = try self.loadTree(repo, a, io);
     root.path = try a.dupe(u8, rootpath);
     iter: while (itr.next()) |path| {
         for (root.blobs) |obj| {
             if (std.mem.eql(u8, obj.name, path)) {
                 if (itr.rest().len == 0) {
                     defer root.raze();
-                    var out = try obj.toTree(a, repo);
+                    var out = try obj.toTree(repo, a, io);
                     out.path = try a.dupe(u8, rootpath);
                     return out;
                 } else {
-                    const tree = try obj.toTree(a, repo);
+                    const tree = try obj.toTree(repo, a, io);
                     defer root = tree;
                     root.raze();
                     continue :iter;
@@ -217,6 +217,7 @@ const Actor = @import("actor.zig");
 const Object = @import("Object.zig");
 
 const std = @import("std");
+const Io = std.Io;
 const log = std.log.scoped(.git_internals);
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;

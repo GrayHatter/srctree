@@ -38,20 +38,20 @@ const typeio = Types.readerWriter(Diff, .{
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 
-pub fn new(a: Allocator, delta: *Delta, author: []const u8, patch: []const u8) !Diff {
-    const idx: usize = try Types.nextIndex(.diffs);
+pub fn new(delta: *Delta, author: []const u8, patch: []const u8, a: Allocator, io: Io) !Diff {
+    const idx: usize = try Types.nextIndex(.diffs, io);
     const d = Diff{
         .index = idx,
         .state = .nos,
-        .created = std.time.timestamp(),
-        .updated = std.time.timestamp(),
+        .created = (try Io.Clock.now(.real, io)).toSeconds(),
+        .updated = (try Io.Clock.now(.real, io)).toSeconds(),
         .delta_hash = delta.hash,
         .source_uri = null,
         .author = author,
         .patch = .{ .blob = patch },
     };
 
-    try d.commit();
+    try d.commit(io);
 
     var old_attach: ?usize = null;
     switch (delta.attach) {
@@ -69,17 +69,17 @@ pub fn new(a: Allocator, delta: *Delta, author: []const u8, patch: []const u8) !
     else
         try allocPrint(a, "diff patch was created {}", .{idx});
 
-    try delta.addMessage(a, try .new(.diff_update, idx, author, msg));
+    try delta.addMessage(try .new(.diff_update, idx, author, msg, io), a, io);
     return d;
 }
 
-pub fn open(a: std.mem.Allocator, index: usize) !?Diff {
-    const max = try Types.currentIndex(.diffs);
+pub fn open(index: usize, a: Allocator, io: Io) !?Diff {
+    const max = try Types.currentIndex(.diffs, io);
     if (index > max) return null;
 
     var buf: [512]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{index});
-    const data = try Types.loadData(.diffs, a, filename);
+    const data = try Types.loadData(.diffs, filename, a, io);
     var d: Diff = readerFn(data);
 
     if (indexOf(u8, data, "\n\n")) |start| {
@@ -89,10 +89,10 @@ pub fn open(a: std.mem.Allocator, index: usize) !?Diff {
     return d;
 }
 
-pub fn commit(d: Diff) !void {
+pub fn commit(d: Diff, io: Io) !void {
     var buf: [512]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{d.index});
-    const file = try Types.commit(.diffs, filename);
+    const file = try Types.commit(.diffs, filename, io);
     defer file.close();
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(&w_b);
@@ -102,6 +102,7 @@ pub fn commit(d: Diff) !void {
 }
 
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const bufPrint = std.fmt.bufPrint;
 const allocPrint = std.fmt.allocPrint;

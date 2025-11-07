@@ -55,27 +55,28 @@ const IssueCreateReq = struct {
     desc: []const u8,
 };
 
-fn newPost(ctx: *verse.Frame) Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
+fn newPost(f: *verse.Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.request.data.post) |post| {
+    if (f.request.data.post) |post| {
         const valid = post.validate(IssueCreateReq) catch return error.DataInvalid;
         var delta = Delta.new(
             rd.name,
             valid.title,
             valid.desc,
-            if (ctx.user) |usr| usr.username.? else try allocPrint(ctx.alloc, "remote_address", .{}),
+            if (f.user) |usr| usr.username.? else try allocPrint(f.alloc, "remote_address", .{}),
+            f.io,
         ) catch unreachable;
 
         delta.attach = .issue;
-        delta.commit() catch unreachable;
+        delta.commit(f.io) catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
-        return ctx.redirect(loc, .see_other) catch unreachable;
+        return f.redirect(loc, .see_other) catch unreachable;
     }
 
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
-    return ctx.redirect(loc, .see_other) catch unreachable;
+    return f.redirect(loc, .see_other) catch unreachable;
 }
 
 const AddCommentReq = struct {
@@ -83,45 +84,46 @@ const AddCommentReq = struct {
     did: []const u8,
 };
 
-fn addComment(ctx: *verse.Frame) Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
-    const post = ctx.request.data.post orelse return error.DataMissing;
+fn addComment(f: *verse.Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+    const post = f.request.data.post orelse return error.DataMissing;
     const validate = post.validate(AddCommentReq) catch return error.DataInvalid;
 
     const did: usize = std.fmt.parseInt(usize, validate.did, 16) catch return error.DataInvalid;
 
-    var delta = Delta.open(ctx.alloc, rd.name, did) catch
+    var delta = Delta.open(rd.name, did, f.alloc, f.io) catch
         return error.Unknown;
-    const username = if (ctx.user) |usr| usr.username.? else "public";
+    const username = if (f.user) |usr| usr.username.? else "public";
 
-    delta.addComment(ctx.alloc, .{ .author = username, .message = validate.comment }) catch {};
+    delta.addComment(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
     var buf: [2048]u8 = undefined;
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, did });
-    ctx.redirect(loc, .see_other) catch unreachable;
+    f.redirect(loc, .see_other) catch unreachable;
     return;
 }
 
 const DeltaIssuePage = template.PageData("delta-issue.html");
 
-fn view(ctx: *verse.Frame) Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
-    const delta_id = ctx.uri.next().?;
+fn view(f: *verse.Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+    const delta_id = f.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
 
-    var delta = Delta.open(ctx.alloc, rd.name, idx) catch return error.Unrouteable;
+    var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch return error.Unrouteable;
 
     var root_thread: []S.Thread = &[0]S.Thread{};
-    if (delta.loadThread(ctx.alloc)) |thread| {
-        root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.items.len);
+    const now = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
+    if (delta.loadThread(f.alloc, f.io)) |thread| {
+        root_thread = try f.alloc.alloc(S.Thread, thread.messages.items.len);
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
                     c_ctx.* = .{
-                        .author = try verse.abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
-                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
-                        .message = try verse.abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
+                        .author = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = msg.author.? }}),
+                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
+                        .message = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = msg.message.? }}),
                         .direct_reply = .{
-                            .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{ idx, msg.hash[0..] }),
+                            .uri = try allocPrint(f.alloc, "{}/direct_reply/{x}", .{ idx, msg.hash[0..] }),
                         },
                         .sub_thread = null,
                     };
@@ -129,8 +131,8 @@ fn view(ctx: *verse.Frame) Error!void {
                 .diff_update => {
                     // TODO Is this unreachable?
                     c_ctx.* = .{
-                        .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
-                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
+                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
+                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
                         .message = msg.message.?,
                         .direct_reply = null,
                         .sub_thread = null,
@@ -152,14 +154,14 @@ fn view(ctx: *verse.Frame) Error!void {
         @panic("oops");
     }
 
-    const description = Highlight.Markdown.translate(ctx.alloc, delta.message) catch
-        try abx.Html.cleanAlloc(ctx.alloc, delta.message);
+    const description = Highlight.Markdown.translate(f.alloc, delta.message) catch
+        try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.message }});
 
-    const username = if (ctx.user) |usr| usr.username.? else "anon";
+    const username = if (f.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
-    if (ctx.user) |usr| {
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } };
+    if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
 
@@ -171,14 +173,14 @@ fn view(ctx: *verse.Frame) Error!void {
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
-        .title = verse.abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
+        .title = allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = delta.title }}) catch unreachable,
         .description = description,
         .delta_id = delta_id,
         .current_username = username,
-        .creator = if (delta.author) |author| try abx.Html.cleanAlloc(ctx.alloc, author) else null,
+        .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
         .status = status,
-        .created = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.created)}),
-        .updated = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.updated)}),
+        .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
+        .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .comments = .{
             .thread = root_thread,
         },
@@ -193,36 +195,36 @@ fn view(ctx: *verse.Frame) Error!void {
         page.data.description = "<span class=\"muted\">No description provided</span>";
     }
 
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const DeltaListHtml = template.PageData("delta-list.html");
 
-fn list(ctx: *verse.Frame) Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
+fn list(f: *Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
-    const uri_base = try allocPrint(ctx.alloc, "/repo/{s}/diff", .{rd.name});
-    const last = (Types.currentIndexNamed(.deltas, rd.name) catch 0) + 1;
+    const uri_base = try allocPrint(f.alloc, "/repo/{s}/diff", .{rd.name});
+    const last = (Types.currentIndexNamed(.deltas, rd.name, f.io) catch 0) + 1;
     var d_list: ArrayList(S.DeltaList) = .{};
     for (0..last) |i| {
 
         // TODO implement seen
-        var d = Delta.open(ctx.alloc, rd.name, i) catch continue;
+        var d = Delta.open(rd.name, i, f.alloc, f.io) catch continue;
         if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
-            d.raze(ctx.alloc);
+            d.raze(f.alloc);
             continue;
         }
 
-        _ = d.loadThread(ctx.alloc) catch return error.Unknown;
-        const cmtsmeta = d.countComments();
+        _ = d.loadThread(f.alloc, f.io) catch return error.Unknown;
+        const cmtsmeta = d.countComments(f.io);
 
-        try d_list.append(ctx.alloc, .{
-            .index = try allocPrint(ctx.alloc, "{x}", .{d.index}),
+        try d_list.append(f.alloc, .{
+            .index = try allocPrint(f.alloc, "{x}", .{d.index}),
             .uri_base = uri_base,
-            .title = try verse.abx.Html.cleanAlloc(ctx.alloc, d.title),
+            .title = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = d.title }}),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
-            .desc = try verse.abx.Html.cleanAlloc(ctx.alloc, d.message),
+            .desc = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = d.message }}),
             .delta_meta = null,
         });
     }
@@ -231,8 +233,8 @@ fn list(ctx: *verse.Frame) Error!void {
     const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue", .{rd.name});
 
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
-    if (ctx.user) |usr| {
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } };
+    if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
 
@@ -240,21 +242,23 @@ fn list(ctx: *verse.Frame) Error!void {
         .meta_head = meta_head,
         .body_header = body_header,
         //.search_action = uri_base,
-        .delta_list = try d_list.toOwnedSlice(ctx.alloc),
+        .delta_list = try d_list.toOwnedSlice(f.alloc),
         .search = def_search,
     });
 
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 
 const verse = @import("verse");
+const Frame = verse.Frame;
 const abx = verse.abx;
 const Router = verse.Router;
 const template = verse.template;

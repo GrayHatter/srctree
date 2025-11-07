@@ -214,9 +214,14 @@ pub fn Config(B: anytype) type {
             };
         }
 
-        pub fn fromFile(a: Allocator, file: std.fs.File) !Self {
-            const data = try file.readToEndAlloc(a, 1 <<| 18);
-            var self = try init(a, data);
+        pub fn fromFile(a: Allocator, io: std.Io, file: std.Io.File) !Self {
+            var w: Writer.Allocating = .init(a);
+            var r_b: [2048]u8 = undefined;
+            var reader = file.reader(io, &r_b);
+            _ = try reader.interface.stream(&w.writer, .limited(0x8000));
+
+            const data = try w.toOwnedSlice();
+            var self: Self = try init(a, data);
             self.ctx.owned = data;
             return self;
         }
@@ -338,3 +343,4 @@ const indexOfScalar = std.mem.indexOfScalar;
 const ScalarIter = std.mem.SplitIterator(u8, .scalar);
 
 const Allocator = std.mem.Allocator;
+const Writer = std.Io.Writer;

@@ -28,17 +28,17 @@ pub fn new(repo: []const u8, hexsha: [40]u8) !CommitMap {
     return cm;
 }
 
-pub fn open(a: Allocator, repo: []const u8, hexsha: [40]u8) !CommitMap {
+pub fn open(repo: []const u8, hexsha: [40]u8, a: Allocator, io: Io) !CommitMap {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmtmap", .{ repo, hexsha });
-    const data = try Types.loadData(.commit_map, a, filename);
+    const data = try Types.loadData(.commit_map, filename, a, io);
     return readerFn(data);
 }
 
-pub fn commit(cm: *CommitMap) !void {
+pub fn commit(cm: *CommitMap, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmtmap", .{ cm.repo, cm.hexsha });
-    const file = try Types.commit(.commit_map, filename);
+    const file = try Types.commit(.commit_map, filename, io);
     defer file.close();
     var writer = file.writer();
     try writerFn(cm, &writer);
@@ -51,5 +51,6 @@ const readerFn = typeio.read;
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const endian = builtin.cpu.arch.endian();
 const Types = @import("../types.zig");

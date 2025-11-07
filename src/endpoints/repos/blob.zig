@@ -2,14 +2,14 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
     const rd = RouteData.init(frame.uri) orelse return error.Unrouteable;
     _ = frame.uri.next();
 
-    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
-    repo.loadData(frame.alloc) catch return error.Unknown;
-    defer repo.raze();
+    var repo = (repos.open(rd.name, .public, frame.io) catch return error.Unknown) orelse return error.Unrouteable;
+    repo.loadData(frame.alloc, frame.io) catch return error.Unknown;
+    defer repo.raze(frame.alloc, frame.io);
 
     const ograph: S.OpenGraph = .{
         .title = rd.name,
         .desc = desc: {
-            var d = repo.description(frame.alloc) catch return error.Unknown;
+            var d = repo.description(frame.alloc, frame.io) catch return error.Unknown;
             if (startsWith(u8, d, "Unnamed repository; edit this file")) {
                 d = try allocPrint(
                     frame.alloc,
@@ -22,12 +22,12 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
     };
     _ = ograph;
 
-    const cmt = repo.headCommit(frame.alloc) catch return newRepo(frame);
+    const cmt = repo.headCommit(frame.alloc, frame.io) catch return newRepo(frame);
 
     if (rd.verb != null and rd.ref != null and rd.verb.? == .ref and isHash(rd.ref.?)) {
         if (rd.ref.?.len != 40) return error.InvalidURI;
         const sha: Git.SHA = .init(rd.ref.?);
-        switch (repo.loadObject(frame.alloc, sha) catch return error.InvalidURI) {
+        switch (repo.loadObject(sha, frame.alloc, frame.io) catch return error.InvalidURI) {
             .commit => |c| return treeOrBlobAtRef(frame, rd, &repo, c),
             else => return error.DataInvalid,
         }
@@ -45,7 +45,7 @@ fn isHash(slice: []const u8) bool {
 }
 
 fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) Router.Error!void {
-    var files: Git.Tree = cmt.loadTree(frame.alloc, repo) catch return error.Unknown;
+    var files: Git.Tree = cmt.loadTree(repo, frame.alloc, frame.io) catch return error.Unknown;
     const verb = rd.verb orelse return treeEndpoint(frame, rd, repo, &files);
     var path = rd.path orelse return treeEndpoint(frame, rd, repo, &files);
 
@@ -56,7 +56,7 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commi
                 const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.buffer});
                 return frame.redirect(uri, .permanent_redirect);
             }
-            files = traverseTree(frame.alloc, repo, &path, files) catch return error.Unknown;
+            files = traverseTree(repo, &path, files, frame.alloc, frame.io) catch return error.Unknown;
             return treeEndpoint(frame, rd, repo, &files);
         },
         else => {},
@@ -64,13 +64,13 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commi
     return treeEndpoint(frame, rd, repo, &files);
 }
 
-fn traverseTree(a: Allocator, repo: *const Git.Repo, uri: *Router.UriIterator, in_tree: Git.Tree) !Git.Tree {
+fn traverseTree(repo: *const Git.Repo, uri: *verse.Uri.Iterator, in_tree: Git.Tree, a: Allocator, io: Io) !Git.Tree {
     const udir = uri.next() orelse return in_tree;
     if (udir.len == 0) return in_tree;
     for (in_tree.blobs) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
-            return switch (try repo.loadObject(a, obj.sha)) {
-                .tree => |t| try traverseTree(a, repo, uri, t),
+            return switch (try repo.loadObject(obj.sha, a, io)) {
+                .tree => |t| try traverseTree(repo, uri, t, a, io),
                 else => return error.NotATree,
             };
         }
@@ -92,7 +92,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
                     if (path.next() != null) return error.InvalidURI;
                     break :search;
                 }
-                files = switch (repo.loadObject(frame.alloc, obj.sha) catch return error.Unknown) {
+                files = switch (repo.loadObject(obj.sha, frame.alloc, frame.io) catch return error.Unknown) {
                     .tree => |t| t,
                     else => return error.Unknown,
                 };
@@ -101,14 +101,14 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
         } else return error.InvalidURI;
     }
 
-    var resolve = repo.loadBlob(frame.alloc, blb.sha) catch return error.Unknown;
+    var resolve = repo.loadBlob(blb.sha, frame.alloc, frame.io) catch return error.Unknown;
     if (!resolve.isFile()) return error.Unknown;
     const formatted: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
         try Highlight.highlight(frame.alloc, lang, resolve.data.?)
     else if (excludedExt(blb.name))
         "This file type is currently unsupported"
     else
-        abx.Html.cleanAlloc(frame.alloc, resolve.data.?) catch return error.Unknown;
+        allocPrint(frame.alloc, "{f}", .{abx.Html{ .text = resolve.data.? }}) catch return error.Unknown;
 
     const wrapped = try wrapLineNumbers(frame.alloc, formatted);
 
@@ -179,6 +179,7 @@ const RouteData = repos_.RouteData;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;

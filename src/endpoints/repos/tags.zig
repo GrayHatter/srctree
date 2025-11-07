@@ -3,9 +3,9 @@ const TagPage = PageData("repo-tags.html");
 pub fn list(frame: *Frame) Router.Error!void {
     const rd = RouteData.init(frame.uri) orelse return error.Unrouteable;
 
-    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.InvalidURI;
-    repo.loadData(frame.alloc) catch return error.Unknown;
-    defer repo.raze();
+    var repo = (repos.open(rd.name, .public, frame.io) catch return error.Unknown) orelse return error.InvalidURI;
+    repo.loadData(frame.alloc, frame.io) catch return error.Unknown;
+    defer repo.raze(frame.alloc, frame.io);
 
     var tstack: []S.Tags = &.{};
     if (repo.tags) |rtags| {

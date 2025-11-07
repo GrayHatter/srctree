@@ -307,8 +307,8 @@ pub fn patchStat(p: Patch) Stat {
     };
 }
 
-fn fetch(a: Allocator, uri: []const u8) ![]u8 {
-    var client = std.http.Client{ .allocator = a };
+fn fetch(uri: []const u8, a: Allocator, io: Io) ![]u8 {
+    var client = std.http.Client{ .allocator = a, .io = io };
     //defer client.deinit();
 
     var response: std.ArrayList(u8) = .{};
@@ -333,9 +333,9 @@ fn fetch(a: Allocator, uri: []const u8) ![]u8 {
     return error.EpmtyReponse;
 }
 
-pub fn fromRemote(a: Allocator, uri: []const u8) !Patch {
+pub fn fromRemote(uri: []const u8, a: Allocator, io: Io) !Patch {
     return Patch{
-        .blob = try fetch(a, uri),
+        .blob = try fetch(uri, a, io),
     };
 }
 
@@ -375,7 +375,7 @@ test lineNumberFromHeader {
 }
 
 pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
-    const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
+    const clean = allocPrint(a, "{f}", .{abx.Html{ .text = diff }}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var litr = std.mem.splitScalar(u8, clean, '\n');
 
@@ -424,7 +424,7 @@ pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
 }
 
 pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]DiffLine {
-    const clean = abx.Html.cleanAlloc(a, diff) catch unreachable;
+    const clean = allocPrint(a, "{f}", .{abx.Html{ .text = diff }}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var lines: ArrayList(DiffLine) = .{};
     var litr = splitScalar(u8, clean, '\n');
@@ -522,6 +522,7 @@ test "parseMode" {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const Io = std.Io;
 const count = std.mem.count;
 const startsWith = std.mem.startsWith;
 const assert = std.debug.assert;

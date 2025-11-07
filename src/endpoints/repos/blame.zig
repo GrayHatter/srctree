@@ -17,14 +17,15 @@ pub fn blame(f: *Frame) Router.Error!void {
     std.debug.assert(rd.verb.? == .blame);
     const blame_file = (rd.path orelse return error.InvalidURI).rest();
 
-    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.Unrouteable;
+    var repo = (repos.open(rd.name, .public, f.io) catch return error.Unknown) orelse return error.Unrouteable;
     // TODO be more specific
     //repo.loadRemotes() catch {};
-    repo.loadData(f.alloc) catch {}; // This is a safe optional because it's only used to get upstream
-    defer repo.raze();
+    repo.loadData(f.alloc, f.io) catch {}; // This is a safe optional because it's only used to get upstream
+    defer repo.raze(f.alloc, f.io);
 
     var actions = repo.getAgent(f.alloc);
-    actions.cwd = if (!repo.bare) repo.dir.openDir("..", .{}) catch return error.Unknown else repo.dir;
+    const new: Io.Dir = if (!repo.bare) repo.dir.openDir(f.io, "..", .{}) catch return error.Unknown else repo.dir;
+    actions.cwd = .adaptFromNewApi(new);
     defer if (!repo.bare) actions.cwd.?.close();
     const ref: ?Git.Ref = if (rd.ref) |r|
         if (Git.SHA.initCheck(r)) |sha|
@@ -60,15 +61,15 @@ pub fn blame(f: *Frame) Router.Error!void {
     const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang|
         try Highlight.highlight(f.alloc, lang, source_lines.items)
     else
-        verse.abx.Html.cleanAlloc(f.alloc, source_lines.items) catch return error.Unknown;
+        allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = source_lines.items }}) catch return error.Unknown;
 
     var litr = std.mem.splitScalar(u8, formatted, '\n');
     for (lines) |*line|
         line.line = litr.next() orelse break;
 
-    const file_name = try abx.Html.cleanAlloc(f.alloc, blame_file);
+    const file_name = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blame_file }});
     const show_emails = f.user != null;
-    const wrapped_blames = try wrapLineNumbersBlame(f.alloc, lines, map, rd.name, file_name, show_emails);
+    const wrapped_blames = try wrapLineNumbersBlame(f.alloc, f.io, lines, map, rd.name, file_name, show_emails);
 
     const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
@@ -94,12 +95,14 @@ fn intSort(_: void, l: i64, r: i64) bool {
 
 fn wrapLineNumbersBlame(
     a: Allocator,
+    io: Io,
     blames: []BlameLine,
     map: BlameMap,
     repo_name: []const u8,
     path: []const u8,
     include_email: bool,
 ) ![]S.BlameLines {
+    const now: i64 = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
     const b_lines = try a.alloc(S.BlameLines, blames.len);
     const shas = try a.alloc([8]u8, blames.len);
     var prev_sha: SHA = .{ .bin = @splat(0xff) };
@@ -107,7 +110,7 @@ fn wrapLineNumbersBlame(
         const skip = src.sha.eql(prev_sha);
         if (!skip) prev_sha = src.sha;
         const bcommit = map.get(src.sha) orelse unreachable;
-        const email = if (!include_email) "" else abx.Html.cleanAlloc(a, bcommit.author.email) catch unreachable;
+        const email = if (!include_email) "" else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.email }}) catch unreachable;
         sha.* = src.sha.hex()[0..8].*;
         const parent_sha: Git.SHA = .init(bcommit.parent orelse (&[_]u8{'0'} ** 40));
         blame_line.* = .{
@@ -118,11 +121,11 @@ fn wrapLineNumbersBlame(
             .blame_skip_href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, parent_sha.hex(), path }),
             .time_style = style_blocks[bcommit.age_block],
             .author_email = .{
-                .author = if (skip) null else abx.Html.cleanAlloc(a, bcommit.author.name) catch unreachable,
+                .author = if (skip) null else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.name }}) catch unreachable,
                 .email = email,
             },
             .m_sha = if (skip) null else sha,
-            .time = if (skip) null else try Humanize.unix(bcommit.author.timestamp).printAlloc(a),
+            .time = if (skip) null else try Humanize.unix(bcommit.author.timestamp, now).printAlloc(a),
         };
     }
     return b_lines;
@@ -234,6 +237,7 @@ fn parseBlame(a: Allocator, blame_txt: []const u8) !struct { BlameMap, []BlameLi
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;

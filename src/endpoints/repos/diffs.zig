@@ -81,7 +81,7 @@ fn newPOST(f: *Frame) Error!void {
     return newGET(f);
 }
 
-fn newGET(ctx: *Frame) Error!void {
+fn newGET(f: *Frame) Error!void {
     var patch_network: ?S.PatchNetwork = null;
     var patch_uri: ?S.PatchUri = null;
     var patch_paste: ?S.PatchPaste = null;
@@ -89,12 +89,12 @@ fn newGET(ctx: *Frame) Error!void {
     var title: ?[]const u8 = null;
     var desc: ?[]const u8 = null;
 
-    const routing_data = RouteData.init(ctx.uri) orelse return error.Unrouteable;
-    var repo = (Repos.open(routing_data.name, .public) catch return error.DataInvalid) orelse return error.DataInvalid;
-    repo.loadData(ctx.alloc) catch return error.ServerFault;
-    defer repo.raze();
+    const routing_data = RouteData.init(f.uri) orelse return error.Unrouteable;
+    var repo = (Repos.open(routing_data.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    repo.loadData(f.alloc, f.io) catch return error.ServerFault;
+    defer repo.raze(f.alloc, f.io);
 
-    if (ctx.request.data.post) |post| {
+    if (f.request.data.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.DataInvalid;
         title = udata.title;
         desc = udata.desc;
@@ -103,11 +103,11 @@ fn newGET(ctx: *Frame) Error!void {
             patch_paste = .{};
         } else if (udata.from_network) |_| {
             const remotes = repo.remotes orelse unreachable;
-            const network_remotes = try ctx.alloc.alloc(S.Remotes, remotes.len);
+            const network_remotes = try f.alloc.alloc(S.Remotes, remotes.len);
             for (remotes, network_remotes) |src, *dst| {
                 dst.* = .{
                     .value = src.name,
-                    .name = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(src, .formatDiff)}),
+                    .name = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(src, .formatDiff)}),
                 };
             }
 
@@ -128,8 +128,8 @@ fn newGET(ctx: *Frame) Error!void {
         patch_curl = .{};
     }
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
-    if (ctx.user) |usr| {
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
+    if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
     var page = DiffNewHtml.init(.{
@@ -144,7 +144,7 @@ fn newGET(ctx: *Frame) Error!void {
         .patch_curl = patch_curl,
     });
 
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 fn inNetwork(str: []const u8) bool {
@@ -173,35 +173,32 @@ fn updatePatch(f: *Frame) Error!void {
     }
     const udata = post.validate(DiffUpdateReq) catch return error.DataInvalid; // TODO return custom text for curl
 
-    var delta = Delta.open(f.alloc, rd.name, idx) catch |err| switch (err) {
-        error.InputOutput => unreachable,
-        else => unreachable,
-    };
+    var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch return error.Unknown;
 
     const author: []const u8 = &.{};
-    var diff: Diff = Diff.new(f.alloc, &delta, author, udata.patch) catch |err| {
+    var diff: Diff = Diff.new(&delta, author, udata.patch, f.alloc, f.io) catch |err| {
         std.debug.print("unable to create new diff {}\n", .{err});
         unreachable;
     };
     diff.state = .curl;
-    diff.commit() catch unreachable;
+    diff.commit(f.io) catch unreachable;
 }
 
-fn createDiffCore(a: Allocator, rd: RouteData, req: DiffCreateReq, user: []const u8) !usize {
+fn createDiffCore(rd: RouteData, req: DiffCreateReq, user: []const u8, a: Allocator, io: Io) !usize {
     if (req.title.len == 0) return error.DataInvalid;
 
     if (req.patch_uri) |uri| {
         if (inNetwork(uri)) {
-            const data = try Patch.fromRemote(a, uri);
+            const data = try Patch.fromRemote(uri, a, io);
 
             std.debug.print(
                 "src {s}\ntitle {s}\ndesc {s}\naction {s}\n",
                 .{ uri, req.title, req.desc, "unimplemented" },
             );
-            var delta = Delta.new(rd.name, req.title, req.desc, user) catch return error.ServerError;
-            delta.commit() catch unreachable;
+            var delta = Delta.new(rd.name, req.title, req.desc, user, io) catch return error.ServerError;
+            delta.commit(io) catch unreachable;
 
-            const diff: Diff = Diff.new(a, &delta, user, data.blob) catch |err| {
+            const diff: Diff = Diff.new(&delta, user, data.blob, a, io) catch |err| {
                 std.debug.print("unable to create new diff {}\n", .{err});
                 unreachable;
             };
@@ -213,39 +210,39 @@ fn createDiffCore(a: Allocator, rd: RouteData, req: DiffCreateReq, user: []const
             "title {s}\ndesc {s}\naction {s}\n",
             .{ req.title, req.desc, "unimplemented" },
         );
-        var delta = Delta.new(rd.name, req.title, req.desc, user) catch return error.ServerError;
-        try delta.commit();
-        var diff: Diff = Diff.new(a, &delta, user, "") catch |err| {
+        var delta = Delta.new(rd.name, req.title, req.desc, user, io) catch return error.ServerError;
+        try delta.commit(io);
+        var diff: Diff = Diff.new(&delta, user, "", a, io) catch |err| {
             std.debug.print("unable to create new diff {}\n", .{err});
             unreachable;
         };
         diff.state = .pending_curl;
-        try diff.commit();
-        try delta.commit();
+        try diff.commit(io);
+        try delta.commit(io);
         return delta.index;
     }
     return error.Unknown;
 }
 
-fn createDiff(vrs: *Frame) Error!void {
-    const rd = RouteData.init(vrs.uri) orelse return error.Unrouteable;
-    if (vrs.request.data.post) |post| {
+fn createDiff(f: *Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+    if (f.request.data.post) |post| {
         const udata = post.validate(DiffCreateReq) catch return error.DataInvalid;
-        const username = if (vrs.user) |usr|
+        const username = if (f.user) |usr|
             usr.username.?
         else
-            try allocPrint(vrs.alloc, "REMOTE_ADDR {s}", .{vrs.request.remote_addr});
+            try allocPrint(f.alloc, "REMOTE_ADDR {s}", .{f.request.remote_addr});
 
-        const idx = createDiffCore(vrs.alloc, rd, udata, username) catch {
-            return createError(vrs, udata, .{ .remote_error = "connection failed" });
+        const idx = createDiffCore(rd, udata, username, f.alloc, f.io) catch {
+            return createError(f, udata, .{ .remote_error = "connection failed" });
         };
 
         var buf: [2048]u8 = undefined;
         const loc = try bufPrint(&buf, "/repo/{s}/diff/{x}", .{ rd.name, idx });
-        return vrs.redirect(loc, .see_other) catch unreachable;
+        return f.redirect(loc, .see_other) catch unreachable;
     }
 
-    return try new(vrs);
+    return try new(f);
 }
 
 const ErrStrs = union(enum) {
@@ -261,34 +258,34 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
             .remote_error => |str| .{ .error_string = "Unable to fetch patch from remote (" ++ str ++ ")" },
             else => .{ .error_string = "error" },
         },
-        .title = try abx.Html.cleanAlloc(ctx.alloc, udata.title),
-        .desc = try abx.Html.cleanAlloc(ctx.alloc, udata.desc),
+        .title = try std.fmt.allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = udata.title }}),
+        .desc = try std.fmt.allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = udata.desc }}),
         .patch_network = if (udata.network) |_| null else null, // TODO fixme
-        .patch_uri = if (udata.patch_uri) |uri| .{ .uri = try abx.Html.cleanAlloc(ctx.alloc, uri) } else null,
-        .patch_paste = if (udata.patch) |pst| .{ .patch_blob = try abx.Html.cleanAlloc(ctx.alloc, pst) } else null,
+        .patch_uri = if (udata.patch_uri) |uri| .{ .uri = try std.fmt.allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = uri }}) } else null,
+        .patch_paste = if (udata.patch) |pst| .{ .patch_blob = try std.fmt.allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = pst }}) } else null,
         .patch_curl = if (udata.via_curl) |_| .{} else null,
     });
 
     try ctx.sendPage(&page);
 }
 
-fn newComment(ctx: *Frame) Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
+fn newComment(f: *Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
-    if (ctx.request.data.post) |post| {
+    if (f.request.data.post) |post| {
         var valid = post.validator();
         const delta_id = try valid.require("did");
         const delta_index = isHex(delta_id.value) orelse return error.Unrouteable;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diff/{x}", .{ rd.name, delta_index });
 
         const msg = try valid.require("comment");
-        if (msg.value.len < 2) return ctx.redirect(loc, .see_other) catch unreachable;
+        if (msg.value.len < 2) return f.redirect(loc, .see_other) catch unreachable;
 
-        var delta = Delta.open(ctx.alloc, rd.name, delta_index) catch return error.Unknown;
-        const username = if (ctx.user) |usr| usr.username.? else "public";
-        delta.addComment(ctx.alloc, .{ .author = username, .message = msg.value }) catch unreachable;
+        var delta = Delta.open(rd.name, delta_index, f.alloc, f.io) catch return error.Unknown;
+        const username = if (f.user) |usr| usr.username.? else "public";
+        delta.addComment(.{ .author = username, .message = msg.value }, f.alloc, f.io) catch unreachable;
         // TODO record current revision at comment time
-        return ctx.redirect(loc, .see_other) catch unreachable;
+        return f.redirect(loc, .see_other) catch unreachable;
     }
     return error.Unknown;
 }
@@ -478,17 +475,18 @@ fn parseBlockHeader(string: []const u8) !ParsedHeader {
 }
 
 fn resolveLineRefRepo(
-    a: Allocator,
     line: []const u8,
     filename: []const u8,
     repo: *const Git.Repo,
     line_number: u32,
     line_stride: ?u32,
+    a: Allocator,
+    io: Io,
 ) !?[][]const u8 {
     var found_lines: ArrayList([]const u8) = .{};
 
-    const cmt = try repo.headCommit(a);
-    var files: Git.Tree = try cmt.loadTree(a, repo);
+    const cmt = try repo.headCommit(a, io);
+    var files: Git.Tree = try cmt.loadTree(repo, a, io);
     var itr = splitScalar(u8, filename, '/');
     const blob_sha: Git.SHA = root: while (itr.next()) |dirname| {
         for (files.blobs) |obj| {
@@ -497,7 +495,7 @@ fn resolveLineRefRepo(
                     if (itr.peek() != null) return null;
                     break :root obj.sha;
                 }
-                files = try obj.toTree(a, repo);
+                files = try obj.toTree(repo, a, io);
                 continue :root;
             }
         } else {
@@ -506,7 +504,7 @@ fn resolveLineRefRepo(
         }
     } else return null;
 
-    var file = try repo.loadBlob(a, blob_sha);
+    var file = try repo.loadBlob(blob_sha, a, io);
     var start: usize = 0;
     var end: usize = 0;
     var count: usize = line_number;
@@ -531,12 +529,12 @@ fn resolveLineRefRepo(
     else if (Highlighting.Language.guessFromFilename(filename)) |lang|
         try Highlighting.highlight(a, lang, found_line[1..])
     else
-        try abx.Html.cleanAlloc(a, found_line[1..]);
+        try allocPrint(a, "{f}", .{abx.Html{ .text = found_line[1..] }});
 
     const wrapped_line = try allocPrint(
         a,
         "<div title=\"{s}\" class=\"coderef\">{s}</div>",
-        .{ try abx.Html.cleanAlloc(a, line), formatted },
+        .{ try allocPrint(a, "{f}", .{abx.Html{ .text = line }}), formatted },
     );
     try found_lines.append(a, wrapped_line);
     return try found_lines.toOwnedSlice(a);
@@ -580,12 +578,12 @@ fn resolveLineRefDiff(
                 else if (Highlighting.Language.guessFromFilename(filename)) |lang|
                     try Highlighting.highlight(a, lang, found_line[1..])
                 else
-                    try abx.Html.cleanAlloc(a, found_line[1..]);
+                    try allocPrint(a, "{f}", .{abx.Html{ .text = found_line[1..] }});
 
                 const wrapped_line = try allocPrint(
                     a,
                     "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
-                    .{ try abx.Html.cleanAlloc(a, line), color, formatted },
+                    .{ try allocPrint(a, "{f}", .{abx.Html{ .text = line }}), color, formatted },
                 );
                 try found_lines.append(a, wrapped_line);
             }
@@ -702,7 +700,7 @@ test fileLineRef {
 }
 
 const Side = enum { del, add };
-fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *const Git.Repo) ![]u8 {
+fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) ![]u8 {
     var message_lines: ArrayList([]const u8) = .{};
     defer message_lines.clearAndFree(a);
 
@@ -725,9 +723,9 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                         }
                         if (end < line.len) try message_lines.append(
                             a,
-                            try abx.Html.cleanAlloc(a, line[end..]),
+                            try allocPrint(a, "{f}", .{abx.Html{ .text = line[end..] }}),
                         );
-                    } else if (resolveLineRefRepo(a, line, filename, repo, left, right) catch |err| switch (err) {
+                    } else if (resolveLineRefRepo(line, filename, repo, left, right, a, io) catch |err| switch (err) {
                         error.LineNotFound => null,
                         else => return err,
                     }) |lines| {
@@ -735,15 +733,15 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
                     } else {
                         try message_lines.append(a, try allocPrint(
                             a,
-                            "<span title=\"line not found in this diff\">{s}</span>",
-                            .{try abx.Html.cleanAlloc(a, line)},
+                            "<span title=\"line not found in this diff\">{f}</span>",
+                            .{abx.Html{ .text = line }},
                         ));
                     }
                 }
                 break;
             }
         } else {
-            try message_lines.append(a, try abx.Html.cleanAlloc(a, line));
+            try message_lines.append(a, try allocPrint(a, "{f}", .{abx.Html{ .text = line }}));
         }
     }
 
@@ -752,19 +750,20 @@ fn translateComment(a: Allocator, comment: []const u8, patch: Patch, repo: *cons
 
 const DiffViewPage = Template.PageData("delta-diff.html");
 
-fn view(ctx: *Frame) Error!void {
-    const rd = RouteData.init(ctx.uri) orelse return error.Unrouteable;
+fn view(f: *Frame) Error!void {
+    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
-    const delta_id = ctx.uri.next().?;
+    const delta_id = f.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
 
-    var repo = (Repos.open(rd.name, .public) catch return error.DataInvalid) orelse return error.DataInvalid;
-    repo.loadData(ctx.alloc) catch return error.ServerFault;
-    defer repo.raze();
+    var repo = (Repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    repo.loadData(f.alloc, f.io) catch return error.ServerFault;
+    defer repo.raze(f.alloc, f.io);
 
-    var delta = Delta.open(ctx.alloc, rd.name, idx) catch |err| switch (err) {
+    var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch |err| switch (err) {
         //error.InvalidTarget => return error.Unrouteable,
-        error.InputOutput => unreachable,
+        //error.InputOutput => unreachable,
         //error.Other => unreachable,
         else => unreachable,
     };
@@ -772,11 +771,11 @@ fn view(ctx: *Frame) Error!void {
     var diffM: ?Diff = null;
     switch (delta.attach) {
         .nos => {},
-        .diff => diffM = Diff.open(ctx.alloc, delta.attach_target) catch return error.Unknown,
+        .diff => diffM = Diff.open(delta.attach_target, f.alloc, f.io) catch return error.Unknown,
         .issue => {
             var buf: [100]u8 = undefined;
             const loc = try bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
-            return ctx.redirect(loc, .see_other) catch unreachable;
+            return f.redirect(loc, .see_other) catch unreachable;
         },
         else => {
             std.debug.print("can't redirect attach {s}\n", .{@tagName(delta.attach)});
@@ -792,13 +791,13 @@ fn view(ctx: *Frame) Error!void {
     //    .author = "robinli",
     //    .message = "I know, it's clearly the best I've even seen. Soon it'll even look good in Hastur!",
     //} }) |cm| {
-    //    comments.pushSlice(addComment(ctx.alloc, cm) catch unreachable);
+    //    comments.pushSlice(addComment(f.alloc, cm) catch unreachable);
     //}
 
-    const inline_html: bool = getAndSavePatchView(ctx);
+    const inline_html: bool = getAndSavePatchView(f);
 
     var patch_formatted: ?S.PatchHtml = null;
-    //const patch_filename = try std.fmt.allocPrint(ctx.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
+    //const patch_filename = try std.fmt.allocPrint(f.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
 
     var patch: ?Patch = null;
     var curl_hint: ?S.CurlHint = null;
@@ -806,16 +805,16 @@ fn view(ctx: *Frame) Error!void {
     if (diffM) |*diff| {
         if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {
             patch = .init(diff.patch.blob);
-            if (patchStruct(ctx.alloc, &patch.?, !inline_html)) |phtml| {
+            if (patchStruct(f.alloc, &patch.?, !inline_html)) |phtml| {
                 patch_formatted = phtml;
             } else |err| {
                 std.debug.print("Unable to generate patch {any}\n", .{err});
             }
-            const cmt = repo.headCommit(ctx.alloc) catch return error.ServerFault;
+            const cmt = repo.headCommit(f.alloc, f.io) catch return error.ServerFault;
             if (eql(u8, &cmt.sha.hex(), &diff.applies_hash)) {
                 applies = diff.applies;
             } else {
-                var agent = repo.getAgent(ctx.alloc);
+                var agent = repo.getAgent(f.alloc);
                 if (agent.checkPatch(diff.patch.blob)) |_| {
                     applies = true;
                     diff.applies = true;
@@ -825,20 +824,20 @@ fn view(ctx: *Frame) Error!void {
                 }
 
                 @memcpy(diff.applies_hash[0..40], cmt.sha.hex()[0..40]);
-                diff.commit() catch return error.ServerFault;
+                diff.commit(f.io) catch return error.ServerFault;
             }
         } else {
             curl_hint = .{
                 .repo_name = rd.name,
                 .diff_idx = delta_id,
-                .host = ctx.request.host orelse "127.0.0.1",
+                .host = f.request.host orelse "127.0.0.1",
             };
         }
     }
 
     var root_thread: []S.Thread = &.{};
-    if (delta.loadThread(ctx.alloc)) |thread| {
-        root_thread = try ctx.alloc.alloc(S.Thread, thread.messages.items.len);
+    if (delta.loadThread(f.alloc, f.io)) |thread| {
+        root_thread = try f.alloc.alloc(S.Thread, thread.messages.items.len);
         var cmt_diff = diffM;
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
@@ -846,20 +845,20 @@ fn view(ctx: *Frame) Error!void {
                     var comment_patch: ?Patch = patch;
                     if (cmt_diff) |cd| {
                         if (cd.index != msg.extra0) {
-                            cmt_diff = Diff.open(ctx.alloc, msg.extra0) catch cd;
+                            cmt_diff = Diff.open(msg.extra0, f.alloc, f.io) catch cd;
                             comment_patch = .init(cmt_diff.?.patch.blob);
                         }
                     }
 
-                    if (comment_patch) |*cp| if (cp.diffs == null) cp.parse(ctx.alloc) catch {};
+                    if (comment_patch) |*cp| if (cp.diffs == null) cp.parse(f.alloc) catch {};
                     c_ctx.* = .{
-                        .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
-                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
+                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
+                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
                         .message = if (comment_patch) |pt|
-                            translateComment(ctx.alloc, msg.message.?, pt, &repo) catch unreachable
+                            translateComment(msg.message.?, pt, &repo, f.alloc, f.io) catch unreachable
                         else
-                            try abx.Html.cleanAlloc(ctx.alloc, msg.message.?),
-                        .direct_reply = .{ .uri = try allocPrint(ctx.alloc, "{}/direct_reply/{x}", .{
+                            try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.message.? }}),
+                        .direct_reply = .{ .uri = try allocPrint(f.alloc, "{}/direct_reply/{x}", .{
                             idx,
                             msg.hash[0..],
                         }) },
@@ -868,8 +867,8 @@ fn view(ctx: *Frame) Error!void {
                 },
                 .diff_update => {
                     c_ctx.* = .{
-                        .author = try abx.Html.cleanAlloc(ctx.alloc, msg.author.?),
-                        .date = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(msg.updated)}),
+                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
+                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
                         .message = msg.message.?,
                         .direct_reply = null,
                         .sub_thread = null,
@@ -891,7 +890,7 @@ fn view(ctx: *Frame) Error!void {
         @panic("oops");
     }
 
-    const username = if (ctx.user) |usr| usr.username.? else "public";
+    const username = if (f.user) |usr| usr.username.? else "public";
 
     const patch_data: S.Patch = .{ .patch = patch_formatted orelse .{ .files = &.{} } };
 
@@ -900,8 +899,8 @@ fn view(ctx: *Frame) Error!void {
     else
         "<span class=open>open</span>";
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } };
-    if (ctx.user) |usr| {
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
+    if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
     var page = DiffViewPage.init(.{
@@ -909,19 +908,19 @@ fn view(ctx: *Frame) Error!void {
         .body_header = body_header,
         .patch = patch_data,
         .curl_hint = curl_hint,
-        .title = abx.Html.cleanAlloc(ctx.alloc, delta.title) catch unreachable,
-        .description = abx.Html.cleanAlloc(ctx.alloc, delta.message) catch unreachable,
+        .title = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.title }}) catch unreachable,
+        .description = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.message }}) catch unreachable,
         .status = status,
-        .created = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.created)}),
-        .updated = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(delta.updated)}),
-        .creator = if (delta.author) |author| try abx.Html.cleanAlloc(ctx.alloc, author) else null,
+        .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
+        .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
+        .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
         .comments = .{ .thread = root_thread },
         .delta_id = delta_id,
         .patch_warning = if (applies) null else .{},
         .current_username = username,
     });
 
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const SearchReq = struct {
@@ -957,28 +956,28 @@ fn list(f: *Frame) Error!void {
     }
 
     var d_list: ArrayList(S.DeltaList) = .{};
-    var itr = Delta.searchRepo(rd.name, rules.items);
+    var itr = Delta.searchRepo(rd.name, rules.items, f.io);
     const uri_base = try allocPrint(f.alloc, "/repo/{s}/diffs", .{rd.name});
-    while (itr.next(f.alloc)) |deltaC| {
+    while (itr.next(f.alloc, f.io)) |deltaC| {
         var d = deltaC;
         if (d.attach != .diff) continue;
         if (d.closed) continue;
 
-        _ = d.loadThread(f.alloc) catch unreachable;
-        const cmtsmeta = d.countComments();
+        _ = d.loadThread(f.alloc, f.io) catch unreachable;
+        const cmtsmeta = d.countComments(f.io);
         try d_list.append(f.alloc, .{
             .index = try allocPrint(f.alloc, "{x}", .{d.index}),
             .uri_base = uri_base[0 .. uri_base.len - 1],
-            .title = try abx.Html.cleanAlloc(f.alloc, d.title),
+            .title = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.title }}),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
-            .desc = try abx.Html.cleanAlloc(f.alloc, d.message),
+            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.message }}),
             .delta_meta = null,
         });
     }
 
     var default_search_buf: [0xFF]u8 = undefined;
-    const search_str = if (udata.q) |q| abx.Html.cleanAlloc(f.alloc, q) catch unreachable else try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
+    const search_str = if (udata.q) |q| allocPrint(f.alloc, "{f}", .{abx.Html{ .text = q }}) catch unreachable else try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
     if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
@@ -995,6 +994,7 @@ fn list(f: *Frame) Error!void {
 }
 
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const allocPrint = std.fmt.allocPrint;

@@ -1,6 +1,5 @@
-alloc: ?Allocator = null,
 bare: bool,
-dir: std.fs.Dir,
+dir: Dir,
 packs: []Pack,
 refs: []Ref,
 current: ?[]u8 = null,
@@ -38,17 +37,17 @@ pub const Error = error{
 
 /// on success d becomes owned by the returned Repo and will be closed on
 /// a call to raze
-pub fn init(d: std.fs.Dir) Error!Repo {
+pub fn init(d: Dir, io: Io) Error!Repo {
     var repo = initDefaults();
     repo.dir = d;
-    if (d.openFile("./HEAD", .{})) |file| {
-        file.close();
+    if (d.openFile(io, "./HEAD", .{})) |file| {
+        file.close(io);
         repo.bare = true;
     } else |_| {
-        if (d.openDir("./.git", .{})) |full| {
-            if (full.openFile("./HEAD", .{})) |file| {
-                file.close();
-                repo.dir.close();
+        if (d.openDir(io, "./.git", .{})) |full| {
+            if (full.openFile(io, "./HEAD", .{})) |file| {
+                file.close(io);
+                repo.dir.close(io);
                 repo.dir = full;
             } else |_| return error.NotAGitRepo;
         } else |_| return error.NotAGitRepo;
@@ -67,39 +66,36 @@ fn initDefaults() Repo {
 }
 
 /// Dir name must be relative (probably)
-pub fn createNew(a: Allocator, chdir: std.fs.Dir, dir_name: []const u8) !Repo {
-    var agent = Agent{
-        .alloc = a,
-        .cwd = chdir,
-    };
-
+pub fn createNew(chdir: fs.Dir, dir_name: []const u8, a: Allocator, io: Io) !Repo {
+    var agent = Agent{ .alloc = a, .cwd = chdir };
     a.free(try agent.initRepo(dir_name, .{}));
     var dir = try chdir.openDir(dir_name, .{});
     errdefer dir.close();
-    return init(dir);
+    return init(dir.adaptToNewApi(), io);
 }
 
-pub fn loadData(self: *Repo, a: Allocator) !void {
-    if (self.alloc != null) unreachable;
-    self.alloc = a;
-
-    try self.loadConfig();
-    try self.loadPacks();
-    try self.loadRefs();
-    try self.loadTags();
-    try self.loadBranches();
-    try self.loadRemotes();
-    _ = try self.HEAD(a);
+pub fn loadData(self: *Repo, a: Allocator, io: Io) !void {
+    try self.loadConfig(a, io);
+    try self.loadPacks(a, io);
+    try self.loadRefs(a, io);
+    try self.loadTags(a, io);
+    try self.loadBranches(a, io);
+    try self.loadRemotes(a);
+    _ = try self.HEAD(a, io);
 }
 
-fn loadConfig(self: *Repo) !void {
-    self.config_data = try self.dir.readFileAlloc(self.alloc.?, "config", 0xffff);
-    self.config = try .init(self.alloc.?, self.config_data.?);
+fn loadConfig(self: *Repo, a: Allocator, io: Io) !void {
+    const file = try self.dir.openFile(io, "config", .{});
+    defer file.close(io);
+    const stat = try file.stat(io);
+    self.config_data = try a.alloc(u8, stat.size);
+    var reader = file.reader(io, self.config_data.?);
+    try reader.interface.fill(stat.size);
+    self.config = try .init(a, self.config_data.?);
 }
 
-fn loadRemotes(self: *Repo) !void {
-    const a = self.alloc orelse unreachable;
-    var list: std.ArrayList(Remote) = .{};
+fn loadRemotes(self: *Repo, a: Allocator) !void {
+    var list: ArrayList(Remote) = .{};
     errdefer list.clearAndFree(a);
     const cfg = self.config orelse return;
     for (0..cfg.ctx.ns.len) |i| {
@@ -124,13 +120,13 @@ pub fn findRemote(self: Repo, name: []const u8) !?Remote {
     return null;
 }
 
-fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
+fn loadFile(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
     var fb = [_]u8{0} ** 2048;
     const grouped = try bufPrint(&fb, "./objects/{s}/{s}", .{ sha.hex()[0..2], sha.hex()[2..] });
-    const compressed: []u8 = self.dir.readFileAlloc(a, grouped, 0xffffff) catch |err| switch (err) {
+    const file = self.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
         error.FileNotFound => data: {
             const exact = try bufPrint(&fb, "./objects/{s}", .{sha.hex()[0..]});
-            break :data self.dir.readFileAlloc(a, exact, 0xffffff) catch |err2| switch (err2) {
+            break :data self.dir.openFile(io, exact, .{}) catch |err2| switch (err2) {
                 error.FileNotFound => {
                     std.debug.print("unable to find commit '{s}'\n", .{sha.hex()[0..]});
                     return error.ObjectMissing;
@@ -140,9 +136,11 @@ fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
         },
         else => return err,
     };
+    const stat = try file.stat(io);
+    const compressed: []u8 = try a.alloc(u8, stat.size);
     defer a.free(compressed);
     var reader = Reader.fixed(compressed);
-    var z_b: [zlib.max_window_len]u8 = undefined;
+    var z_b: [zlib.max_window_len * 2]u8 = undefined;
     var zl: std.compress.flate.Decompress = .init(&reader, .zlib, &z_b);
     const data = try zl.reader.allocRemaining(a, .limited(0xffffff));
     errdefer a.free(data);
@@ -163,20 +161,20 @@ fn loadFile(self: Repo, a: Allocator, sha: SHA) !Object {
     return error.InvalidObject;
 }
 
-fn loadPacked(self: Repo, a: Allocator, sha: SHA) !?Object {
+fn loadPacked(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
     for (self.packs) |pack| {
         if (pack.contains(sha)) |offset| {
-            return try pack.resolveObject(sha, a, offset, &self);
+            return try pack.resolveObject(sha, offset, &self, a, io);
         }
     }
     return null;
 }
 
-fn loadPackedPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
+fn loadPackedPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
     //std.debug.assert(sha.partial == true);
     for (self.packs) |pack| {
         if (try pack.containsPrefix(sha.bin[0..sha.len])) |offset| {
-            return try pack.resolveObject(sha, a, offset, &self);
+            return try pack.resolveObject(sha, offset, &self, a, io);
         }
     }
     return null;
@@ -187,42 +185,42 @@ fn loadPartial(self: Repo, a: Allocator, sha: SHA) !Pack.PackedObject {
     return error.ObjectMissing;
 }
 
-fn loadObjectPartial(self: Repo, a: Allocator, sha: SHA) !?Object {
+fn loadObjectPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
     //std.debug.assert(sha.partial);
-    if (try self.loadPackedPartial(a, sha)) |pack| return pack;
+    if (try self.loadPackedPartial(sha, a, io)) |pack| return pack;
     return null;
 }
 
-pub fn loadObjectOrDelta(self: Repo, a: Allocator, sha: SHA) !union(enum) {
+pub fn loadObjectOrDelta(self: Repo, sha: SHA, a: Allocator, io: Io) !union(enum) {
     pack: Pack.PackedObject,
     file: Object,
 } {
     for (self.packs) |pack| {
         if (pack.contains(sha)) |offset| {
-            return .{ .pack = try pack.loadData(a, offset, &self) };
+            return .{ .pack = try pack.loadData(offset, &self, a, io) };
         }
     }
-    return .{ .file = try self.loadFile(a, sha) };
+    return .{ .file = try self.loadFile(sha, a, io) };
 }
 
 /// TODO binary search lol
-pub fn loadObject(self: Repo, a: Allocator, sha: SHA) !Object {
-    if (sha.partial) return try self.loadObjectPartial(a, sha) orelse error.ObjectMissing;
-    return try self.loadPacked(a, sha) orelse try self.loadFile(a, sha);
+pub fn loadObject(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
+    if (sha.partial) return try self.loadObjectPartial(sha, a, io) orelse error.ObjectMissing;
+    return try self.loadPacked(sha, a, io) orelse try self.loadFile(sha, a, io);
 }
 
-pub fn loadBlob(self: Repo, a: Allocator, sha: SHA) !Blob {
-    return switch (try self.loadObject(a, sha)) {
+pub fn loadBlob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
+    return switch (try self.loadObject(sha, a, io)) {
         .blob => |b| b,
         else => error.NotABlob,
     };
 }
 
-pub fn loadPacks(self: *Repo) !void {
-    const a = self.alloc orelse unreachable;
-    var dir = try self.dir.openDir("./objects/pack", .{ .iterate = true });
-    defer dir.close();
-    var itr = dir.iterate();
+pub fn loadPacks(self: *Repo, a: Allocator, io: Io) !void {
+    var dir = try self.dir.openDir(io, "./objects/pack", .{ .iterate = true });
+    defer dir.close(io);
+    var dir2: fs.Dir = .adaptFromNewApi(dir);
+    var itr = dir2.iterate();
     var i: usize = 0;
     while (try itr.next()) |file| {
         if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
@@ -234,34 +232,35 @@ pub fn loadPacks(self: *Repo) !void {
     while (try itr.next()) |file| {
         if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
 
-        self.packs[i] = try Pack.init(dir, file.name[0 .. file.name.len - 4]);
+        self.packs[i] = try Pack.init(dir, file.name[0 .. file.name.len - 4], io);
         i += 1;
     }
 }
 
-pub fn loadRefs(self: *Repo) !void {
-    const a = self.alloc orelse unreachable;
+pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
     var list: std.ArrayList(Ref) = .{};
-    var idir = try self.dir.openDir("refs/heads", .{ .iterate = true });
-    defer idir.close();
+    var ndir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
+    defer ndir.close(io);
+    var idir: fs.Dir = .adaptFromNewApi(ndir);
     var itr = idir.iterate();
     while (try itr.next()) |file| {
         if (file.kind != .file) continue;
         var filename = [_]u8{0} ** 2048;
         var fname: []u8 = &filename;
         fname = try std.fmt.bufPrint(&filename, "./refs/heads/{s}", .{file.name});
-        var f = try self.dir.openFile(fname, .{});
-        defer f.close();
+        var f = try self.dir.openFile(io, fname, .{});
+        defer f.close(io);
         var buf: [40]u8 = undefined;
-        const read = try f.readAll(&buf);
-        std.debug.assert(read == 40);
+        var reader = f.reader(io, &buf);
+        try reader.interface.fill(40);
+        std.debug.assert(reader.interface.end == 40);
         try list.append(a, Ref{ .branch = .{
             .name = try a.dupe(u8, file.name),
             .sha = SHA.init(&buf),
         } });
     }
     var buf: [2048]u8 = undefined;
-    if (self.dir.readFile("packed-refs", &buf)) |b| {
+    if (self.dir.readFile(io, "packed-refs", &buf)) |b| {
         var p_itr = splitScalar(u8, b, '\n');
         _ = p_itr.next();
         while (p_itr.next()) |line| {
@@ -307,12 +306,14 @@ pub fn resolve(self: Repo, r: Ref) !SHA {
 
 /// TODO I don't want this to take an allocator :(
 /// Warning, has side effects!
-pub fn HEAD(self: *Repo, a: Allocator) !Ref {
-    var f = try self.dir.openFile("HEAD", .{});
-    defer f.close();
+pub fn HEAD(self: *Repo, a: Allocator, io: Io) !Ref {
+    var f = try self.dir.openFile(io, "HEAD", .{});
+    defer f.close(io);
     var buff: [0xFF]u8 = undefined;
 
-    const size = try f.read(&buff);
+    const size = (try f.stat(io)).size;
+    var reader = f.reader(io, &buff);
+    try reader.interface.fill(size);
     const head = buff[0..size];
 
     if (std.mem.eql(u8, head[0..5], "ref: ")) {
@@ -333,20 +334,18 @@ pub fn HEAD(self: *Repo, a: Allocator) !Ref {
     return self.head.?;
 }
 
-fn loadTags(self: *Repo) !void {
-    const a = self.alloc orelse return error.InvalidRepoState;
-
-    const fd = self.dir.openFile("packed-refs", .{}) catch |err| switch (err) {
+fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
+    const fd = self.dir.openFile(io, "packed-refs", .{}) catch |err| switch (err) {
         error.FileNotFound => null,
         else => {
             std.debug.print("packed-refs {any}\n", .{err});
             @panic("unimplemented error in tags packed-refs");
         },
     };
-    defer if (fd) |f| f.close();
+    defer if (fd) |f| f.close(io);
 
     const pk_refs: ?[]const u8 = if (fd) |f|
-        system.mmap(f.handle, try f.getEndPos(), .{}) catch null
+        system.mmap(f.handle, (try f.stat(io)).size, .{}) catch null
     else
         null;
 
@@ -363,15 +362,16 @@ fn loadTags(self: *Repo) !void {
                 const name = line[i + 10 ..];
 
                 try tags.append(a, try .fromObject(
-                    try self.loadObject(a, .init(line[0..40])),
+                    try self.loadObject(.init(line[0..40]), a, io),
                     try a.dupe(u8, name),
                 ));
             }
         }
     }
 
-    var tagdir = try self.dir.openDir("refs/tags", .{ .iterate = true });
-    defer tagdir.close();
+    var newdir = try self.dir.openDir(io, "refs/tags", .{ .iterate = true });
+    defer newdir.close(io);
+    var tagdir: fs.Dir = .adaptFromNewApi(newdir);
     var itr = tagdir.iterate();
 
     while (try itr.next()) |next| {
@@ -380,7 +380,7 @@ fn loadTags(self: *Repo) !void {
         const fname = try bufPrint(&fnbuf, "refs/tags/{s}", .{next.name});
 
         var conbuf: [44]u8 = undefined;
-        const contents = self.dir.readFile(fname, &conbuf) catch |err| {
+        const contents = self.dir.readFile(io, fname, &conbuf) catch |err| {
             std.debug.print("unexpected tag format for {s}\n", .{fname});
             return err;
         };
@@ -389,26 +389,25 @@ fn loadTags(self: *Repo) !void {
             return error.InvalidTagFound;
         }
         try tags.append(a, try .fromObject(
-            try self.loadObject(a, .init(contents[0..40])),
+            try self.loadObject(.init(contents[0..40]), a, io),
             try a.dupe(u8, next.name),
         ));
     }
     if (tags.items.len > 0) self.tags = try tags.toOwnedSlice(a);
 }
 
-fn loadBranches(self: *Repo) !void {
-    const a = self.alloc orelse unreachable;
-
-    var branchdir = try self.dir.openDir("refs/heads", .{ .iterate = true });
-    defer branchdir.close();
+fn loadBranches(self: *Repo, a: Allocator, io: Io) !void {
+    var newdir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
+    defer newdir.close(io);
     var list: ArrayList(Branch) = .{};
+    var branchdir: fs.Dir = .adaptFromNewApi(newdir);
     var itr = branchdir.iterate();
     while (try itr.next()) |file| {
         if (file.kind != .file) continue;
         var fnbuf: [2048]u8 = undefined;
         const fname = try bufPrint(&fnbuf, "refs/heads/{s}", .{file.name});
         var shabuf: [41]u8 = undefined;
-        _ = try self.dir.readFile(fname, &shabuf);
+        _ = try self.dir.readFile(io, fname, &shabuf);
         try list.append(a, .{
             .name = try a.dupe(u8, file.name),
             .sha = SHA.init(shabuf[0..40]),
@@ -437,11 +436,11 @@ pub fn resolvePartial(repo: *const Repo, sha: SHA) !?SHA {
     return null;
 }
 
-pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
+pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
     if (sha.partial) {
         const full_sha = try self.resolvePartial(sha) orelse sha; //unreachable;
-        return switch (try self.loadObjectPartial(a, sha) orelse
-            try self.loadObject(a, full_sha)) {
+        return switch (try self.loadObjectPartial(sha, a, io) orelse
+            try self.loadObject(full_sha, a, io)) {
             .commit => |c| {
                 var cmt = c;
                 cmt.sha = full_sha;
@@ -449,15 +448,15 @@ pub fn commit(self: *const Repo, a: Allocator, sha: SHA) !Commit {
             },
             else => error.NotACommit,
         };
-    } else return switch (try self.loadObject(a, sha)) {
+    } else return switch (try self.loadObject(sha, a, io)) {
         .commit => |c| c,
         else => error.NotACommit,
     };
 }
 
-pub fn headCommit(self: *const Repo, a: Allocator) !Commit {
+pub fn headCommit(self: *const Repo, a: Allocator, io: Io) !Commit {
     const resolv: SHA = try self.headSha();
-    return try self.commit(a, resolv);
+    return try self.commit(resolv, a, io);
 }
 
 pub fn headSha(self: *const Repo) !SHA {
@@ -469,69 +468,72 @@ pub fn headSha(self: *const Repo) !SHA {
     };
 }
 
-pub fn blob(self: Repo, a: Allocator, sha: SHA) !Blob {
-    return try self.loadBlob(a, sha);
+pub fn blob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
+    return try self.loadBlob(sha, a, io);
 }
 
-pub fn description(self: Repo, a: Allocator) ![]u8 {
-    if (self.dir.openFile("description", .{})) |*file| {
-        defer file.close();
-        return try file.readToEndAlloc(a, 0xFFFF);
+pub fn description(self: Repo, a: Allocator, io: Io) ![]u8 {
+    if (self.dir.openFile(io, "description", .{})) |*file| {
+        defer file.close(io);
+        const stat = try file.stat(io);
+        const data = try a.alloc(u8, stat.size);
+        std.debug.assert(stat.size == 0xFFFF);
+        var reader = file.reader(io, data);
+        try reader.interface.fill(stat.size);
+        return data;
     } else |_| {}
     return error.NoDescription;
 }
 
-pub fn raze(self: *Repo) void {
-    self.dir.close();
-    if (self.alloc) |a| {
-        if (self.config) |cfg| {
-            cfg.raze(a);
-        }
-        if (self.config_data) |cd| {
-            a.free(cd);
-        }
+pub fn raze(self: *Repo, a: Allocator, io: Io) void {
+    self.dir.close(io);
+    if (self.config) |cfg| {
+        cfg.raze(a);
+    }
+    if (self.config_data) |cd| {
+        a.free(cd);
+    }
 
-        for (self.packs) |pack| {
-            pack.raze();
-        }
-        a.free(self.packs);
-        for (self.refs) |r| switch (r) {
-            .branch => |b| {
-                a.free(b.name);
-            },
-            else => unreachable,
-        };
-        a.free(self.refs);
+    for (self.packs) |pack| {
+        pack.raze();
+    }
+    a.free(self.packs);
+    for (self.refs) |r| switch (r) {
+        .branch => |b| {
+            a.free(b.name);
+        },
+        else => unreachable,
+    };
+    a.free(self.refs);
 
-        if (self.current) |c| a.free(c);
-        if (self.head) |h| switch (h) {
-            .branch => |b| a.free(b.name),
-            else => {}, //a.free(h);
-        };
-        if (self.branches) |branches| {
-            for (branches) |branch| branch.raze(a);
-            a.free(branches);
-        }
-        if (self.remotes) |remotes| {
-            for (remotes) |remote| remote.raze(a);
-            a.free(remotes);
-        }
+    if (self.current) |c| a.free(c);
+    if (self.head) |h| switch (h) {
+        .branch => |b| a.free(b.name),
+        else => {}, //a.free(h);
+    };
+    if (self.branches) |branches| {
+        for (branches) |branch| branch.raze(a);
+        a.free(branches);
+    }
+    if (self.remotes) |remotes| {
+        for (remotes) |remote| remote.raze(a);
+        a.free(remotes);
+    }
 
-        if (self.tags) |tags| {
-            for (tags) |tag| tag.raze(a);
-            a.free(tags);
-        }
+    if (self.tags) |tags| {
+        for (tags) |tag| tag.raze(a);
+        a.free(tags);
     }
 }
 
 // functions that might move or be removed...
 
-pub fn updatedAt(self: *const Repo, a: Allocator) !i64 {
+pub fn updatedAt(self: *const Repo, a: Allocator, io: Io) !i64 {
     var oldest: i64 = 0;
     for (self.refs) |r| {
         switch (r) {
             .branch => |br| {
-                const cmt = try br.toCommit(a, self);
+                const cmt = try br.toCommit(self, a, io);
                 defer cmt.raze();
                 if (cmt.committer.timestamp > oldest) oldest = cmt.committer.timestamp;
             },
@@ -546,23 +548,24 @@ pub fn getAgent(self: *const Repo, a: Allocator) Agent {
     return .{
         .alloc = a,
         .repo = self,
-        .cwd = self.dir,
+        .cwd = .adaptFromNewApi(self.dir),
     };
 }
 
 test "hopefully a delta" {
     const a = std.testing.allocator;
+    const io = std.testing.io;
     var cwd = std.fs.cwd();
     const dir = try cwd.openDir("repos/hastur", .{});
-    var repo = try Repo.init(dir);
-    try repo.loadData(a);
-    defer repo.raze();
+    var repo = try Repo.init(dir.adaptToNewApi(), io);
+    try repo.loadData(a, io);
+    defer repo.raze(a, io);
 
-    var head = try repo.headCommit(a);
+    var head = try repo.headCommit(a, io);
     defer head.raze();
     if (false) std.debug.print("{}\n", .{head});
 
-    const obj = try repo.loadPacked(a, head.tree) orelse return error.UnableToLoadObject;
+    const obj = try repo.loadPacked(head.tree, a, io) orelse return error.UnableToLoadObject;
     switch (obj) {
         .tree => |tree| tree.raze(),
         else => return error.NotATree,
@@ -588,7 +591,10 @@ const system = @import("../system.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const Reader = std.Io.Reader;
+const Io = std.Io;
+const fs = std.fs;
+const Reader = Io.Reader;
+const Dir = Io.Dir;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;

@@ -25,8 +25,8 @@ pub const File = struct {
         };
     }
 
-    pub fn open(file: *File, a: Allocator, name: [64]u8) !void {
-        const data = try Types.loadData(.gist_files, a, name ++ ".gist-file");
+    pub fn open(file: *File, name: [64]u8, a: Allocator, io: Io) !void {
+        const data = try Types.loadData(.gist_files, name ++ ".gist-file", a, io);
 
         file.* = File.readerFn(data);
         if (indexOf(u8, data, file.name)) |idx| {
@@ -34,9 +34,9 @@ pub const File = struct {
         }
     }
 
-    pub fn commit(file: File) ![64]u8 {
+    pub fn commit(file: File, io: Io) ![64]u8 {
         const name = file.filename();
-        const data_file = try Types.commit(.gist_files, &name);
+        const data_file = try Types.commit(.gist_files, &name, io);
         defer data_file.close();
         var w_b: [2048]u8 = undefined;
         var data_writer = data_file.writer(&w_b);
@@ -65,11 +65,11 @@ const RW = Types.readerWriter(Gist, .{});
 const writerFn = RW.write;
 const readerFn = RW.read;
 
-pub fn new(owner: []const u8, files: []const File) ![64]u8 {
+pub fn new(owner: []const u8, files: []const File, io: Io) ![64]u8 {
     var gist = Gist{
         .owner = owner,
-        .created = std.time.timestamp(),
-        .updated = std.time.timestamp(),
+        .created = (try Io.Clock.now(.real, io)).toSeconds(),
+        .updated = (try Io.Clock.now(.real, io)).toSeconds(),
         .file_count = files.len,
         .files = files,
     };
@@ -77,12 +77,12 @@ pub fn new(owner: []const u8, files: []const File) ![64]u8 {
     var buf: [64]u8 = undefined;
     const hash = gist.genHash();
     const filename = try bufPrint(&buf, "{x}", .{hash});
-    try gist.commit();
+    try gist.commit(io);
     return filename[0..64].*;
 }
 
-pub fn open(a: Allocator, hash: [64]u8) !Gist {
-    const data = try Types.loadData(.gist, a, hash ++ ".gist");
+pub fn open(hash: [64]u8, a: Allocator, io: Io) !Gist {
+    const data = try Types.loadData(.gist, hash ++ ".gist", a, io);
     var gist = readerFn(data);
 
     if (indexOf(u8, data, "\n\n")) |start| {
@@ -95,25 +95,25 @@ pub fn open(a: Allocator, hash: [64]u8) !Gist {
         for (gist_files) |*file| {
             if (next == null) return error.InvalidGist;
             std.debug.assert(next.?.len == 64);
-            try file.open(a, next.?[0..64].*);
+            try file.open(next.?[0..64].*, a, io);
             next = itr.next();
         }
     }
     return gist;
 }
 
-pub fn commit(gist: *Gist) !void {
+pub fn commit(gist: *Gist, io: Io) !void {
     var buf: [69]u8 = undefined;
     const hash = gist.genHash();
     const filename = try bufPrint(&buf, "{x}.gist", .{hash});
-    const file = try Types.commit(.gist, filename);
+    const file = try Types.commit(.gist, filename, io);
     defer file.close();
     var w_b: [2048]u8 = undefined;
     var writer = file.writer(&w_b);
     try writerFn(gist, &writer.interface);
 
     for (gist.files) |gistfile| {
-        const f_name = try gistfile.commit();
+        const f_name = try gistfile.commit(io);
         try writer.interface.print("{s}\n", .{f_name[0..64]});
     }
     try writer.interface.print("\n", .{});
@@ -135,14 +135,15 @@ pub fn genHash(gist: *Gist) *const Types.DefaultHash {
 
 test {
     const a = std.testing.allocator;
+    const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
+    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true })).adaptToNewApi(), io);
     const mask: i64 = ~@as(i64, 0x7ffffff);
 
     var gist: Gist = .{
-        .created = std.time.timestamp() & mask,
-        .updated = std.time.timestamp() & mask,
+        .created = (try Io.Clock.now(.real, io)).toSeconds() & mask,
+        .updated = (try Io.Clock.now(.real, io)).toSeconds() & mask,
         .owner = "user",
         .file_count = 3,
         .files = &[_]File{
@@ -168,7 +169,7 @@ test {
 
     for (gist.files) |gistfile| {
         const name = gistfile.filename();
-        const data_file = try Types.commit(.gist_files, &name);
+        const data_file = try Types.commit(.gist_files, &name, io);
         defer data_file.close();
         var w_b: [2048]u8 = undefined;
         var data_writer = data_file.writer(&w_b);
@@ -193,11 +194,11 @@ test {
     ;
     try std.testing.expectEqualStrings(v0_text, writer.written());
 
-    try gist.commit();
+    try gist.commit(io);
 
     var buf: [69]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.gist", .{&gist.hash});
-    const from_file = try Types.loadData(.gist, a, filename);
+    const from_file = try Types.loadData(.gist, filename, a, io);
     defer a.free(from_file);
 
     try std.testing.expectEqualStrings(v0_text, from_file);
@@ -206,6 +207,7 @@ test {
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const indexOf = std.mem.indexOf;
 const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();

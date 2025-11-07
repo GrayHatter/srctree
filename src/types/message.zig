@@ -29,26 +29,26 @@ const typeio = Types.readerWriter(Message, .{
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 
-pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8) !Message {
+pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8, io: Io) !Message {
     var m = Message{
         .hash = @splat(0),
         .state = 0,
         .kind = kind,
         .target = tid,
-        .created = std.time.timestamp(),
-        .updated = std.time.timestamp(),
+        .created = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
+        .updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
         .author = author,
         .message = message,
     };
     _ = m.genHash();
-    try m.commit();
+    try m.commit(io);
     return m;
 }
 
-pub fn commit(msg: Message) !void {
+pub fn commit(msg: Message, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.message", .{&msg.hash});
-    const file = try Types.commit(.message, filename);
+    const file = try Types.commit(.message, filename, io);
     defer file.close();
 
     std.debug.assert(!std.mem.eql(u8, msg.hash[0..], &[_]u8{0} ** 32));
@@ -57,10 +57,10 @@ pub fn commit(msg: Message) !void {
     try writerFn(&msg, &fd_writer.interface);
 }
 
-pub fn open(a: Allocator, hash: DefaultHash) !Message {
+pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.message", .{&hash});
-    const file = try Types.loadData(.message, a, filename);
+    const file = try Types.loadData(.message, filename, a, io);
     return readerFn(file);
 }
 
@@ -88,6 +88,7 @@ pub fn genHash(msg: *Message) *const DefaultHash {
 
 test "comment" {
     const a = std.testing.allocator;
+    const io = std.testing.io;
     var c = Message{
         .target = 0,
         .state = 0,
@@ -109,7 +110,7 @@ test "comment" {
 
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
+    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true })).adaptToNewApi(), io);
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{hash});
@@ -119,13 +120,13 @@ test "comment" {
     );
 
     {
-        var file = try Types.commit(.message, filename);
+        var file = try Types.commit(.message, filename, io);
         defer file.close();
         var w_b: [2048]u8 = undefined;
         var writer = file.writer(&w_b);
         try writerFn(&c, &writer.interface);
     }
-    const data = try Types.loadData(.message, a, filename);
+    const data = try Types.loadData(.message, filename, a, io);
     defer a.free(data);
 
     const expected =
@@ -149,16 +150,17 @@ test "comment" {
 
 test Message {
     const a = std.testing.allocator;
+    const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true }));
+    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true })).adaptToNewApi(), io);
 
-    var c = try Message.new(.comment, 0, "author", "message");
+    var c = try Message.new(.comment, 0, "author", "message", io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    c.created = std.time.timestamp() & mask;
-    c.updated = std.time.timestamp() & mask;
+    c.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    c.updated = (try Io.Clock.now(.real, io)).toSeconds() & mask;
     // required to overwrite the timestamp
     c.hash = @splat(0);
     _ = c.genHash();
@@ -188,6 +190,7 @@ test Message {
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const endian = builtin.cpu.arch.endian();
 const Sha256 = std.crypto.hash.sha2.Sha256;
 const allocPrint = std.fmt.allocPrint;

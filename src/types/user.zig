@@ -19,20 +19,20 @@ const typeio = Types.readerWriter(User, .{ .not_before = 0, .not_after = 0 });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 
-pub fn findMTLSFingerprint(a: Allocator, fp: []const u8) !User {
+pub fn findMTLSFingerprint(fp: []const u8, a: Allocator, io: Io) !User {
     if (fp.len != 40) return error.InvalidFingerprint;
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{s}.user", .{fp});
-    const file = try Types.loadData(.users, a, filename);
+    const file = try Types.loadData(.users, filename, a, io);
     return readerFn(file);
 }
 
-pub fn open(a: Allocator, username: []const u8) !User {
+pub fn open(username: []const u8, a: Allocator, io: Io) !User {
     for (username) |c| if (!std.ascii.isLower(c)) return error.InvalidUsername;
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.user", .{username});
-    const data = try Types.loadData(.users, a, filename);
+    const data = try Types.loadData(.users, filename, a, io);
     return readerFn(data);
 }
 
@@ -100,6 +100,7 @@ test "reader/writer" {
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const endian = builtin.cpu.arch.endian();
 const bufPrint = std.fmt.bufPrint;
 

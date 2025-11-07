@@ -128,7 +128,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
         error.Unrouteable => {
             std.debug.print("Unrouteable", .{});
             if (@errorReturnTrace()) |trace| {
-                std.debug.dumpStackTrace(trace.*);
+                std.debug.dumpStackTrace(trace);
             }
         },
         error.NotImplemented, error.Unknown => {
@@ -168,6 +168,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
 
 test {
     const a = std.testing.allocator;
+    const io = std.testing.io;
     const cache = @import("cache.zig");
     const ca = cache.init(a);
     defer ca.raze();
@@ -176,8 +177,8 @@ test {
 
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(try tempdir.dir.makeOpenPath("datadir", .{}));
-    defer Types.raze();
+    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{})).adaptToNewApi(), io);
+    defer Types.raze(io);
 
     try endpoints.smokeTest(a, .{
         .recurse = true,

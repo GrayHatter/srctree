@@ -67,22 +67,22 @@ pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Tree {
     return tree;
 }
 
-pub fn changedSet(self: Tree, a: Allocator, repo: *const Repo) ![]ChangeSet {
-    return self.changedSetFrom(a, repo, try repo.headSha());
+pub fn changedSet(self: Tree, repo: *const Repo, a: Allocator, io: Io) ![]ChangeSet {
+    return self.changedSetFrom(repo, try repo.headSha(), a, io);
 }
 
-pub fn changedSetFrom(self: Tree, a: Allocator, repo: *const Repo, start_commit: SHA) ![]ChangeSet {
+pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Allocator, io: Io) ![]ChangeSet {
     const search_list: []?Blob = try a.alloc(?Blob, self.blobs.len);
     for (search_list, self.blobs) |*dst, src| {
         dst.* = src;
     }
     defer a.free(search_list);
 
-    var par = switch (try repo.loadObject(a, start_commit)) {
+    var par = switch (try repo.loadObject(start_commit, a, io)) {
         .commit => |c| c,
         else => unreachable,
     };
-    var ptree = try par.mkSubTree(a, self.path, repo);
+    var ptree = try par.mkSubTree(self.path, repo, a, io);
 
     var changed = try a.alloc(ChangeSet, self.blobs.len);
     var old = par;
@@ -91,7 +91,7 @@ pub fn changedSetFrom(self: Tree, a: Allocator, repo: *const Repo, start_commit:
     while (found < search_list.len) {
         old = par;
         oldtree = ptree;
-        par = par.toParent(a, 0, repo) catch |err| switch (err) {
+        par = par.toParent(0, repo, a, io) catch |err| switch (err) {
             error.NoParent, error.IncompleteObject => {
                 for (search_list, 0..) |search_ish, i| {
                     if (search_ish) |search| {
@@ -105,7 +105,7 @@ pub fn changedSetFrom(self: Tree, a: Allocator, repo: *const Repo, start_commit:
             },
             else => |e| return e,
         };
-        ptree = par.mkSubTree(a, self.path, repo) catch |err| switch (err) {
+        ptree = par.mkSubTree(self.path, repo, a, io) catch |err| switch (err) {
             error.PathNotFound, error.IncompleteObject => {
                 for (search_list, 0..) |search_ish, i| {
                     if (search_ish) |search| {
@@ -143,7 +143,7 @@ pub fn raze(self: Tree) void {
     self.alloc.free(self.blobs);
 }
 
-pub fn format(self: Tree, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
+pub fn format(self: Tree, out: *Io.Writer) !void {
     var f: usize = 0;
     var d: usize = 0;
     for (self.blobs) |obj| {
@@ -159,6 +159,7 @@ pub fn format(self: Tree, comptime _: []const u8, _: std.fmt.FormatOptions, out:
 
 test "tree decom" {
     var a = std.testing.allocator;
+    const io = std.testing.io;
 
     var cwd = std.fs.cwd();
     var file = cwd.openFile(
@@ -175,7 +176,7 @@ test "tree decom" {
     };
 
     var r_b: [2048]u8 = undefined;
-    var reader = file.reader(&r_b);
+    var reader = file.reader(io, &r_b);
     var z_b: [2048]u8 = undefined;
     var d = zstd.Decompress.init(&reader.interface, &z_b, .{});
     try d.reader.fillMore();
@@ -210,23 +211,24 @@ test "tree child" {
 
 test "mk sub tree" {
     const a = std.testing.allocator;
+    const io = std.testing.io;
 
     const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd);
-    defer repo.raze();
+    var repo = try Repo.init(cwd.adaptToNewApi(), io);
+    defer repo.raze(a, io);
 
-    try repo.loadData(a);
+    try repo.loadData(a, io);
 
-    const cmtt = try repo.headCommit(a);
+    const cmtt = try repo.headCommit(a, io);
     defer cmtt.raze();
 
-    var tree = try cmtt.loadTree(a, &repo);
+    var tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze();
 
     var blob: Blob = blb: for (tree.blobs) |obj| {
         if (std.mem.eql(u8, obj.name, "src")) break :blb obj;
     } else return error.ExpectedBlobMissing;
-    var subtree = try blob.toTree(a, &repo);
+    var subtree = try blob.toTree(&repo, a, io);
     if (false) std.debug.print("{any}\n", .{subtree});
     for (subtree.blobs) |obj| {
         if (false) std.debug.print("{any}\n", .{obj});
@@ -237,40 +239,41 @@ test "mk sub tree" {
 
 test "commit mk sub tree" {
     var a = std.testing.allocator;
+    const io = std.testing.io;
 
-    const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd);
-    defer repo.raze();
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
+    defer repo.raze(a, io);
 
-    try repo.loadData(a);
+    try repo.loadData(a, io);
 
-    const cmtt = try repo.headCommit(a);
+    const cmtt = try repo.headCommit(a, io);
     defer cmtt.raze();
 
-    var tree = try cmtt.loadTree(a, &repo);
+    var tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze();
 
     var blob: Blob = blb: for (tree.blobs) |obj| {
         if (std.mem.eql(u8, obj.name, "src")) break :blb obj;
     } else return error.ExpectedBlobMissing;
-    var subtree = try blob.toTree(a, &repo);
+    var subtree = try blob.toTree(&repo, a, io);
     if (false) std.debug.print("{any}\n", .{subtree});
     for (subtree.blobs) |obj| {
         if (false) std.debug.print("{any}\n", .{obj});
     }
     defer subtree.raze();
 
-    const csubtree = try cmtt.mkSubTree(a, "src", &repo);
+    const csubtree = try cmtt.mkSubTree("src", &repo, a, io);
     if (false) std.debug.print("{any}\n", .{csubtree});
     csubtree.raze();
 
-    const csubtree2 = try cmtt.mkSubTree(a, "src/endpoints", &repo);
+    const csubtree2 = try cmtt.mkSubTree("src/endpoints", &repo, a, io);
     if (false) std.debug.print("{any}\n", .{csubtree2});
     if (false) for (csubtree2.objects) |obj|
         std.debug.print("{any}\n", .{obj});
     defer csubtree2.raze();
 
-    const changed = try csubtree2.changedSet(a, &repo);
+    const changed = try csubtree2.changedSet(&repo, a, io);
     for (csubtree2.blobs, changed) |o, c| {
         if (false) std.debug.print("{s} {s}\n", .{ o.name, c.sha });
         c.raze(a);
@@ -286,6 +289,7 @@ const ChangeSet = @import("changeset.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const hexLower = std.fmt.fmtSliceHexLower;
 const bufPrint = std.fmt.bufPrint;
 const zstd = std.compress.zstd;

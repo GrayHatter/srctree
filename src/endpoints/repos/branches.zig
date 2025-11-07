@@ -3,13 +3,13 @@ const BranchPage = PageData("branches.html");
 pub fn list(frame: *Frame) Router.Error!void {
     const rd = RouteData.init(frame.uri) orelse return error.Unrouteable;
 
-    var repo = (repos.open(rd.name, .public) catch return error.Unknown) orelse return error.InvalidURI;
-    repo.loadData(frame.alloc) catch return error.Unknown;
-    defer repo.raze();
+    var repo = (repos.open(rd.name, .public, frame.io) catch return error.Unknown) orelse return error.InvalidURI;
+    repo.loadData(frame.alloc, frame.io) catch return error.Unknown;
+    defer repo.raze(frame.alloc, frame.io);
 
     const repo_branches = repo.branches orelse return error.InvalidURI;
     // leaks a lot
-    std.sort.heap(Git.Branch, repo_branches, SortCtx{ .a = frame.alloc, .repo = &repo }, sort);
+    std.sort.heap(Git.Branch, repo_branches, SortCtx.init(&repo, frame.alloc, frame.io), sort);
 
     const branches: []S.RepoBranches = try frame.alloc.alloc(S.RepoBranches, repo_branches.len);
     for (repo_branches, branches) |branch, *html| {
@@ -40,13 +40,18 @@ pub fn list(frame: *Frame) Router.Error!void {
 }
 
 const SortCtx = struct {
-    a: std.mem.Allocator,
     repo: *const Git.Repo,
+    a: Allocator,
+    io: Io,
+
+    pub fn init(r: *const Git.Repo, a: Allocator, io: Io) SortCtx {
+        return .{ .repo = r, .a = a, .io = io };
+    }
 };
 
 pub fn sort(ctx: SortCtx, l: Git.Branch, r: Git.Branch) bool {
-    const lc: Git.Commit = l.toCommit(ctx.a, ctx.repo) catch return false;
-    const rc: Git.Commit = r.toCommit(ctx.a, ctx.repo) catch return false;
+    const lc: Git.Commit = l.toCommit(ctx.repo, ctx.a, ctx.io) catch return false;
+    const rc: Git.Commit = r.toCommit(ctx.repo, ctx.a, ctx.io) catch return false;
     const ltime = lc.committer.timestamp;
     const rtime = rc.committer.timestamp;
     if (ltime == rtime) return (l.name.len < r.name.len);
@@ -57,6 +62,8 @@ const repos = @import("../../repos.zig");
 const RouteData = @import("../repos.zig").RouteData;
 
 const std = @import("std");
+const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const verse = @import("verse");
 const Frame = verse.Frame;

@@ -5,7 +5,6 @@ pub const Diff = @import("types/diff.zig");
 pub const Gist = @import("types/gist.zig");
 pub const Issue = @import("types/issue.zig");
 pub const Network = @import("types/network.zig");
-pub const Read = @import("types/read.zig");
 pub const Tags = @import("types/tags.zig");
 pub const Thread = @import("types/thread.zig");
 pub const User = @import("types/user.zig");
@@ -15,7 +14,7 @@ pub const DefaultHash = [sha256.digest_length]u8;
 pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
 pub const Sha1Hex = [40]u8;
 
-pub const Storage = std.fs.Dir;
+pub const Storage = Io.Dir;
 
 pub fn VarString(comptime size: usize) type {
     return struct {
@@ -46,7 +45,7 @@ pub fn VarString(comptime size: usize) type {
 
 var storage_dir: Storage = undefined;
 
-pub fn init(dir: Storage) !void {
+pub fn init(dir: Storage, io: Io) !void {
     storage_dir = dir;
     inline for (.{
         Message,
@@ -56,119 +55,117 @@ pub fn init(dir: Storage) !void {
         Gist,
         Issue,
         Network,
-        Read,
         Thread,
         User,
     }) |inc| {
         if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
-            try inc.initType(try dir.makeOpenPath(inc.TYPE_PREFIX, .{ .iterate = true }));
+            try inc.initType(try dir.makeOpenPath(io, inc.TYPE_PREFIX, .{ .iterate = true }));
         }
     }
 }
 
-pub fn raze() void {
-    storage_dir.close();
+pub fn raze(io: Io) void {
+    storage_dir.close(io);
 }
 
-pub fn iterableDir(comptime type_name: @TypeOf(.enum_literal)) !std.fs.Dir {
-    return try storage_dir.makeOpenPath(@tagName(type_name), .{ .iterate = true });
+pub fn iterableDir(comptime type_name: @TypeOf(.enum_literal), io: Io) !Io.Dir {
+    return try storage_dir.makeOpenPath(io, @tagName(type_name), .{ .iterate = true });
 }
 
-pub fn loadData(comptime type_name: @TypeOf(.enum_literal), a: Allocator, name: []const u8) ![]u8 {
-    var type_dir = try storage_dir.makeOpenPath(@tagName(type_name), .{});
-    defer type_dir.close();
-    return try type_dir.readFileAlloc(a, name, 0x8ffff);
+pub fn loadData(comptime type_name: @TypeOf(.enum_literal), name: []const u8, a: Allocator, io: Io) ![]u8 {
+    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+    defer type_dir.close(io);
+    const file = try type_dir.openFile(io, name, .{});
+    defer file.close(io);
+    const stat = try file.stat(io);
+    const buf = try a.alloc(u8, stat.size);
+    errdefer a.free(buf);
+    var reader = file.reader(io, buf);
+    try reader.interface.fill(stat.size);
+    return buf;
 }
 
-pub fn commit(comptime type_name: @TypeOf(.enum_literal), name: []const u8) !std.fs.File {
-    var type_dir = try storage_dir.makeOpenPath(@tagName(type_name), .{});
-    defer type_dir.close();
-    return try type_dir.createFile(name, .{});
+pub fn commit(comptime type_name: @TypeOf(.enum_literal), name: []const u8, io: Io) !fs.File {
+    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+    defer type_dir.close(io);
+    const new = try type_dir.createFile(io, name, .{});
+    return .adaptFromNewApi(new);
 }
 
-pub fn currentIndex(comptime type_name: @TypeOf(.enum_literal)) !usize {
+pub fn currentIndex(comptime type_name: @TypeOf(.enum_literal), io: Io) !usize {
     const name = "_" ++ @tagName(type_name) ++ ".index";
-    var index_file = storage_dir.openFile(name, .{}) catch |err| switch (err) {
+    var index_file = storage_dir.openFile(io, name, .{}) catch |err| switch (err) {
         error.FileNotFound => {
-            var new_file = try storage_dir.createFile(name, .{});
-            defer new_file.close();
-            var fd_writer = new_file.writer(&.{});
-            const writer = &fd_writer.interface;
-            try writer.writeInt(usize, 0, .big);
-            try writer.flush();
+            var new_file = try storage_dir.createFile(io, name, .{});
+            defer new_file.close(io);
+            try incrementIndex(new_file, 0, io);
             return 0;
         },
         else => return err,
     };
-    defer index_file.close();
+    defer index_file.close(io);
     var r_b: [10]u8 = undefined;
-    var fd_reader = index_file.reader(&r_b);
+    var fd_reader = index_file.reader(io, &r_b);
     const reader = &fd_reader.interface;
     const idx = reader.takeInt(usize, .big) catch 0;
     return idx;
 }
 
-pub fn nextIndex(comptime type_name: @TypeOf(.enum_literal)) !usize {
+fn incrementIndex(fd: Io.File, idx: usize, _: Io) !void {
+    var new: fs.File = .adaptFromNewApi(fd);
+    var writer = new.writer(&.{});
+    try writer.interface.writeInt(usize, idx, .big);
+    try writer.interface.flush();
+}
+
+pub fn nextIndex(comptime type_name: @TypeOf(.enum_literal), io: Io) !usize {
     const name = "_" ++ @tagName(type_name) ++ ".index";
-    var index_file = try storage_dir.createFile(name, .{ .read = true, .truncate = false });
-    defer index_file.close();
+    var index_file = try storage_dir.createFile(io, name, .{ .read = true, .truncate = false });
+    defer index_file.close(io);
     var r_b: [10]u8 = undefined;
-    var fd_reader = index_file.reader(&r_b);
-    const reader = &fd_reader.interface;
-    var idx = reader.takeInt(usize, .big) catch 0;
+    var reader = index_file.reader(io, &r_b);
+    var idx = reader.interface.takeInt(usize, .big) catch 0;
     idx += 1;
-    try index_file.seekTo(0);
-    var fd_writer = index_file.writer(&.{});
-    const writer = &fd_writer.interface;
-    try writer.writeInt(usize, idx, .big);
-    try writer.flush();
+    try incrementIndex(index_file, idx, io);
     return idx;
 }
 
-pub fn currentIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []const u8) !usize {
+pub fn currentIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []const u8, io: Io) !usize {
     var buffer: [2048]u8 = undefined;
     const name = try std.fmt.bufPrint(&buffer, "_{s}.{s}.index", .{
         extra_name,
         @tagName(type_name),
     });
-    var index_file = storage_dir.openFile(name, .{}) catch |err| switch (err) {
+    var index_file = storage_dir.openFile(io, name, .{}) catch |err| switch (err) {
         error.FileNotFound => {
-            var new_file = try storage_dir.createFile(name, .{});
-            defer new_file.close();
-            var fd_writer = new_file.writer(&.{});
-            const writer = &fd_writer.interface;
-            try writer.writeInt(usize, 0, .big);
-            try writer.flush();
+            var new_file = try storage_dir.createFile(io, name, .{});
+            defer new_file.close(io);
+            try incrementIndex(new_file, 0, io);
             return 0;
         },
         else => return err,
     };
-    defer index_file.close();
+    defer index_file.close(io);
     var r_b: [10]u8 = undefined;
-    var fd_reader = index_file.reader(&r_b);
+    var fd_reader = index_file.reader(io, &r_b);
     var reader = &fd_reader.interface;
     const idx = reader.takeInt(usize, .big) catch 0;
     return idx;
 }
 
-pub fn nextIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []const u8) !usize {
+pub fn nextIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []const u8, io: Io) !usize {
     var buffer: [2048]u8 = undefined;
     const name = try std.fmt.bufPrint(&buffer, "_{s}.{s}.index", .{
         extra_name,
         @tagName(type_name),
     });
-    var index_file = try storage_dir.createFile(name, .{ .read = true, .truncate = false });
-    defer index_file.close();
+    var index_file = try storage_dir.createFile(io, name, .{ .read = true, .truncate = false });
+    defer index_file.close(io);
     var r_b: [10]u8 = undefined;
-    var fd_reader = index_file.reader(&r_b);
-    const reader = &fd_reader.interface;
-    var idx = reader.takeInt(usize, .big) catch 0;
+    var reader = index_file.reader(io, &r_b);
+    var idx = reader.interface.takeInt(usize, .big) catch 0;
     idx += 1;
-    try index_file.seekTo(0);
-    var fd_writer = index_file.writer(&.{});
-    const writer = &fd_writer.interface;
-    try writer.writeInt(usize, idx, .big);
-    try writer.flush();
+    try incrementIndex(index_file, idx, io);
     return idx;
 }
 
@@ -302,6 +299,8 @@ pub fn readerWriter(T: type, default: T) type {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Writer = std.Io.Writer;
+const Io = std.Io;
+const fs = std.fs;
 const parseInt = std.fmt.parseInt;
 const sha256 = std.crypto.hash.sha2.Sha256;
 // TODO buildtime const/flag

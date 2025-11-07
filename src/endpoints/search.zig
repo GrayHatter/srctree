@@ -25,7 +25,7 @@ pub fn index(ctx: *Frame) Error!void {
 
 const DeltaListPage = Template.PageData("delta-list.html");
 
-fn custom(ctx: *Frame, search_str: []const u8) Error!void {
+fn custom(f: *Frame, search_str: []const u8) Error!void {
     var rules: ArrayList(Delta.SearchRule) = .{};
 
     var itr = splitScalar(u8, search_str, ' ');
@@ -33,7 +33,7 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         var line = r_line;
         line = std.mem.trim(u8, line, " ");
         if (line.len == 0) continue;
-        try rules.append(ctx.alloc, .parse(line));
+        try rules.append(f.alloc, .parse(line));
     }
 
     for (rules.items) |rule| {
@@ -42,21 +42,21 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
     }
 
     var d_list: ArrayList(S.DeltaList) = .{};
-    var search_results = Delta.searchAny(rules.items);
-    while (search_results.next(ctx.alloc)) |deltaC| {
+    var search_results = Delta.searchAny(rules.items, f.io);
+    while (search_results.next(f.alloc, f.io)) |deltaC| {
         if (deltaC.title.len == 0) continue;
         var delt: Delta = deltaC;
-        _ = delt.loadThread(ctx.alloc) catch return error.Unknown;
-        const cmtsmeta = delt.countComments();
-        const desc = if (delt.message.len == 0) "&nbsp;" else try abx.Html.cleanAlloc(ctx.alloc, delt.message);
-        try d_list.append(ctx.alloc, .{
-            .index = try allocPrint(ctx.alloc, "{x}", .{delt.index}),
+        _ = delt.loadThread(f.alloc, f.io) catch return error.Unknown;
+        const cmtsmeta = delt.countComments(f.io);
+        const desc = if (delt.message.len == 0) "&nbsp;" else try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delt.message }});
+        try d_list.append(f.alloc, .{
+            .index = try allocPrint(f.alloc, "{x}", .{delt.index}),
             .uri_base = try allocPrint(
-                ctx.alloc,
+                f.alloc,
                 "/repo/{s}/{s}",
                 .{ delt.repo, if (delt.attach == .issue) "issue" else "diff" },
             ),
-            .title = try abx.Html.cleanAlloc(ctx.alloc, delt.title),
+            .title = try std.fmt.allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delt.title }}),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
             .desc = desc,
@@ -70,10 +70,10 @@ fn custom(ctx: *Frame, search_str: []const u8) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &btns } },
         .delta_list = d_list.items,
-        .search = abx.Html.cleanAlloc(ctx.alloc, search_str) catch unreachable,
+        .search = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = search_str }}) catch unreachable,
     });
 
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 const std = @import("std");

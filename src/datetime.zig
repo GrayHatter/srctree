@@ -124,12 +124,12 @@ pub fn tzAdjusted(dt: DateTime) i64 {
     return dt.timestamp + tz.seconds;
 }
 
-pub fn now() DateTime {
-    return fromEpoch(std.time.timestamp());
+pub fn now(io: std.Io) DateTime {
+    return fromEpoch((std.Io.Clock.now(.real, io) catch unreachable).toSeconds());
 }
 
-pub fn today() DateTime {
-    var self = now();
+pub fn today(io: std.Io) DateTime {
+    var self = now(io);
     return self.timeTruncate();
 }
 
@@ -297,15 +297,15 @@ pub fn format(self: DateTime, w: *Writer) !void {
 }
 
 test "now" {
-    const timestamp = std.time.timestamp();
+    const timestamp = try std.Io.Clock.now(.real, std.testing.io);
     // If this breaks, I know... I KNOW, non-deterministic tests... and I'm sorry!
-    const this = now();
-    try std.testing.expectEqual(timestamp, this.timestamp);
+    const this = now(std.testing.io);
+    try std.testing.expectEqual(timestamp.toSeconds(), this.timestamp);
 }
 
 test "today" {
-    const this = now();
-    const today_ = today();
+    const this = now(std.testing.io);
+    const today_ = today(std.testing.io);
     try std.testing.expectEqual(this.year, today_.year);
     try std.testing.expectEqual(this.month, today_.month);
     try std.testing.expectEqual(this.day, today_.day);

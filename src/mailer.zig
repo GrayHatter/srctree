@@ -1,8 +1,3 @@
-const std = @import("std");
-const Allocator = std.mem.Allocator;
-const eql = std.mem.eql;
-const startsWith = std.mem.startsWith;
-
 fn usage(arg0: []const u8) !void {
     std.debug.print(
         \\{s} <send|receive> [mail-sender] [mail-dest]
@@ -16,11 +11,12 @@ pub const Server = struct {
     host: []const u8,
     port: u16,
 
-    stream: ?std.net.Stream = null,
+    stream: ?std.Io.net.Stream = null,
 
-    pub fn connect(srv: *Server, a: Allocator) !void {
+    pub fn connect(srv: *Server, io: Io) !void {
         std.debug.assert(srv.stream == null);
-        srv.stream = try std.net.tcpConnectToHost(a, srv.host, srv.port);
+        const ip: std.Io.net.IpAddress = .resolve(io, srv.host, srv.port);
+        srv.stream = ip.connect(io, .{});
     }
 
     fn sendBody(srv: *Server, msg: Message) !void {
@@ -183,3 +179,12 @@ pub fn main() !void {
         std.process.exit(0);
     }
 }
+
+const std = @import("std");
+const Io = std.Io;
+const Reader = Io.Reader;
+const Writer = Io.Writer;
+const Allocator = std.mem.Allocator;
+const eql = std.mem.eql;
+const startsWith = std.mem.startsWith;
+const Stream = std.Io.net.Stream;
