@@ -28,7 +28,7 @@ pub const verse_routes = [_]Match{
             ,
         },
         .{ .name = "AcademicBotRTU", .allow = false },
-        .{ .name = "CCBot", .allow = true, .extra = "Disallow: /repo/*/commit/*\n" },
+        .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
     }, .{ .extra_rules = "Disallow: /*?*\nDisallow: /repo/*/blame/*\n" }),
     GET("debug", debug),
     ROUTE("user", commitFlex),
@@ -63,6 +63,7 @@ fn debug(_: *Frame) Router.Error!void {
 }
 
 fn userAgentResolution(fr: *Frame) ?BuildFn {
+    const botdetect: verse.Request.UserAgent.BotDetection = .init(fr.request);
     if (fr.request.user_agent) |*ua| {
         if (fr.user == null) {
             switch (ua.agent) {
@@ -77,12 +78,16 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 },
                 .browser => {
                     const real_ua = ua.validate(fr.request);
-                    if (real_ua.agent == .bot and
+                    std.debug.print("Claims to be a browser\n", .{});
+
+                    if (botdetect.score >= 1 or (real_ua.agent == .bot and
                         real_ua.agent.bot.name == .malicious and
-                        ua.agent.browser.version != 128)
+                        ua.agent.browser.version != 128))
                     {
                         if (eql(u8, fr.request.uri, "/robots.txt")) return null;
                         std.debug.print("Dropping malicious traffic\n", .{});
+                        fr.dumpDebugData(.{});
+                        ua.botDetectionDump(fr.request);
                         return Router.defaultResponse(.not_found);
                     }
                 },
