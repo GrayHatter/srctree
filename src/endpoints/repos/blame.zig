@@ -71,7 +71,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     const show_emails = f.user != null;
     const wrapped_blames = try wrapLineNumbersBlame(f.alloc, f.io, lines, map, rd.name, file_name, show_emails);
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 

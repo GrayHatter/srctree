@@ -263,7 +263,7 @@ pub const Agent = struct {
             else => "main",
         };
 
-        if (try repo.findRemote("upstream")) |_| {
+        if (repo.findRemote("upstream")) |_| {
             var gitagent = repo.getAgent(a);
             if (gitagent.pullUpstream(head)) {
                 log.debug("Update Successful on repo {s}", .{name});
@@ -281,7 +281,7 @@ pub const Agent = struct {
         const repo_update = repo.updatedAt(a, io) catch 0;
 
         if (repo_update > update.downstream_push) {
-            if (repo.findRemote("downstream") catch return) |_| {
+            if (repo.findRemote("downstream")) |_| {
                 var gitagent = repo.getAgent(a);
                 const updated = gitagent.pushDownstream() catch er: {
                     log.warn("Warning, unable to push to downstream repo {s}", .{name});

@@ -15,7 +15,7 @@ pub fn index(ctx: *Frame) Error!void {
         defer repo.raze(ctx.alloc, ctx.io);
         repo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
-        if (repo.findRemote("upstream") catch continue) |remote| {
+        if (repo.findRemote("upstream")) |remote| {
             if (remote.url) |_| {
                 dom = dom.open(html.h3(null, &html.Attr.class("upstream")));
                 dom.push(html.text("Upstream: "));

@@ -144,7 +144,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
 
     const inline_html: bool = getAndSavePatchView(f);
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 

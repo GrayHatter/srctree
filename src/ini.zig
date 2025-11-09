@@ -86,6 +86,8 @@ pub const Namespace = struct {
     }
 };
 
+pub const Any = Config(void);
+
 pub fn Config(B: anytype) type {
     return struct {
         config: Base,

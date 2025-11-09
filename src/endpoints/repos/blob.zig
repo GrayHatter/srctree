@@ -112,7 +112,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
 
     const wrapped = try wrapLineNumbers(frame.alloc, formatted);
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 

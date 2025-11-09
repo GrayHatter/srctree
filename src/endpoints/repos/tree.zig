@@ -112,7 +112,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     else
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 

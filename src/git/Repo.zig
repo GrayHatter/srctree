@@ -8,12 +8,19 @@ head: ?Ref = null,
 tags: ?[]Tag = null,
 branches: ?[]Branch = null,
 remotes: ?[]Remote = null,
-config: ?Ini.Config(void) = null,
+config: ?Ini.Any = null,
 config_data: ?[]u8 = null,
 
 repo_name: ?[]const u8 = null,
 
 const Repo = @This();
+
+pub const default: Repo = .{
+    .bare = false,
+    .dir = undefined,
+    .packs = &[0]Pack{},
+    .refs = &[0]Ref{},
+};
 
 pub const Error = error{
     ReadError,
@@ -38,7 +45,7 @@ pub const Error = error{
 /// on success d becomes owned by the returned Repo and will be closed on
 /// a call to raze
 pub fn init(d: Dir, io: Io) Error!Repo {
-    var repo = initDefaults();
+    var repo: Repo = .default;
     repo.dir = d;
     if (d.openFile(io, "./HEAD", .{})) |file| {
         file.close(io);
@@ -56,15 +63,6 @@ pub fn init(d: Dir, io: Io) Error!Repo {
     return repo;
 }
 
-fn initDefaults() Repo {
-    return Repo{
-        .bare = false,
-        .dir = undefined,
-        .packs = &[0]Pack{},
-        .refs = &[0]Ref{},
-    };
-}
-
 /// Dir name must be relative (probably)
 pub fn createNew(chdir: fs.Dir, dir_name: []const u8, a: Allocator, io: Io) !Repo {
     var agent = Agent{ .alloc = a, .cwd = chdir };
@@ -80,7 +78,7 @@ pub fn loadData(self: *Repo, a: Allocator, io: Io) !void {
     try self.loadRefs(a, io);
     try self.loadTags(a, io);
     try self.loadBranches(a, io);
-    try self.loadRemotes(a);
+    self.remotes = try loadRemotes(self.config.?, a);
     _ = try self.HEAD(a, io);
 }
 
@@ -94,10 +92,9 @@ fn loadConfig(self: *Repo, a: Allocator, io: Io) !void {
     self.config = try .init(a, self.config_data.?);
 }
 
-fn loadRemotes(self: *Repo, a: Allocator) !void {
+fn loadRemotes(cfg: Ini.Any, a: Allocator) ![]Remote {
     var list: ArrayList(Remote) = .{};
     errdefer list.clearAndFree(a);
-    const cfg = self.config orelse return;
     for (0..cfg.ctx.ns.len) |i| {
         const ns = cfg.ctx.filter("remote", i) orelse break;
         try list.append(a, .{
@@ -107,12 +104,11 @@ fn loadRemotes(self: *Repo, a: Allocator) !void {
         });
     }
 
-    self.remotes = try list.toOwnedSlice(a);
+    return try list.toOwnedSlice(a);
 }
 
-pub fn findRemote(self: Repo, name: []const u8) !?Remote {
-    const remotes = self.remotes orelse unreachable;
-    for (remotes) |remote| {
+pub fn findRemote(self: Repo, name: []const u8) ?Remote {
+    for (self.remotes orelse unreachable) |remote| {
         if (eql(u8, remote.name, name)) {
             return remote;
         }
@@ -139,9 +135,9 @@ fn loadFile(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
     const stat = try file.stat(io);
     const compressed: []u8 = try a.alloc(u8, stat.size);
     defer a.free(compressed);
-    var reader = Reader.fixed(compressed);
+    var reader = file.reader(io, compressed);
     var z_b: [zlib.max_window_len * 2]u8 = undefined;
-    var zl: std.compress.flate.Decompress = .init(&reader, .zlib, &z_b);
+    var zl: std.compress.flate.Decompress = .init(&reader.interface, .zlib, &z_b);
     const data = try zl.reader.allocRemaining(a, .limited(0xffffff));
     errdefer a.free(data);
     if (indexOf(u8, data, "\x00")) |i| {

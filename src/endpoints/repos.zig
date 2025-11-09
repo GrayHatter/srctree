@@ -265,7 +265,7 @@ fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.RepoList
     }
 
     var upstream: ?[]const u8 = null;
-    if (try repo.findRemote("upstream")) |remote| {
+    if (repo.findRemote("upstream")) |remote| {
         upstream = try allocPrint(a, "{f}", .{std.fmt.alt(remote, .formatLink)});
     }
     var updated: []const u8 = "new repo";

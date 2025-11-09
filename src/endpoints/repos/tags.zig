@@ -17,7 +17,7 @@ pub fn list(frame: *Frame) Router.Error!void {
         }
     }
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream") catch null) |up| .{
+    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
