@@ -203,7 +203,7 @@ const DeltaListHtml = template.PageData("delta-list.html");
 fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
-    const uri_base = try allocPrint(f.alloc, "/repo/{s}/diff", .{rd.name});
+    const uri_base = try allocPrint(f.alloc, "/repo/{s}/issue", .{rd.name});
     const last = (Types.currentIndexNamed(.deltas, rd.name, f.io) catch 0) + 1;
     var d_list: ArrayList(S.DeltaList) = .{};
     for (0..last) |i| {
