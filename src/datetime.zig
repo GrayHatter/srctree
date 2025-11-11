@@ -296,6 +296,10 @@ pub fn format(self: DateTime, w: *Writer) !void {
     }
 }
 
+pub fn fromActor(actor: Actor) !DateTime {
+    return .fromEpochTzStr(actor.timestamp, actor.tzstr);
+}
+
 test "now" {
     const timestamp = try std.Io.Clock.now(.real, std.testing.io);
     // If this breaks, I know... I KNOW, non-deterministic tests... and I'm sorry!
@@ -375,3 +379,4 @@ test "datetime" {
 const std = @import("std");
 const Writer = std.Io.Writer;
 const eql = std.mem.eql;
+const Actor = @import("git/actor.zig");
