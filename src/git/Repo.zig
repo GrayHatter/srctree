@@ -132,6 +132,7 @@ fn loadFile(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
         },
         else => return err,
     };
+    defer file.close(io);
     const stat = try file.stat(io);
     const compressed: []u8 = try a.alloc(u8, stat.size);
     defer a.free(compressed);
@@ -472,8 +473,8 @@ pub fn description(self: Repo, a: Allocator, io: Io) ![]u8 {
     if (self.dir.openFile(io, "description", .{})) |*file| {
         defer file.close(io);
         const stat = try file.stat(io);
+        std.debug.assert(stat.size < 0xFFFF);
         const data = try a.alloc(u8, stat.size);
-        std.debug.assert(stat.size == 0xFFFF);
         var reader = file.reader(io, data);
         try reader.interface.fill(stat.size);
         return data;
