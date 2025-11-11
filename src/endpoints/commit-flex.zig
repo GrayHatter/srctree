@@ -11,7 +11,7 @@ const HeatMapArray = [HEATMAPSIZE]u16;
 const Journal = struct {
     alloc: Allocator,
     email: []const u8,
-    tz_offset: ?i17,
+    today: i64,
     repos: ArrayList(JRepo),
     heatmap_until: i64,
     scribe_until: i64,
@@ -29,17 +29,17 @@ const Journal = struct {
         next_ts: i64 = 0,
     };
 
-    pub fn init(email: []const u8, until: i64, tz: ?i17, a: Allocator, io: Io) !*Journal {
+    pub fn init(email: []const u8, today: i64, until: i64, a: Allocator) !*Journal {
         const j = try a.create(Journal);
 
         const scribe_size = 90;
         j.* = .{
             .alloc = a,
             .email = try a.dupe(u8, email),
-            .tz_offset = tz,
+            .today = today,
             .repos = .{},
             .heatmap_until = until,
-            .scribe_until = (DateTime.fromEpoch(DateTime.now(io).timestamp - DAY * scribe_size)).timestamp,
+            .scribe_until = (DateTime.fromEpoch(today - DAY * scribe_size)).timestamp,
             .hits = @splat(0),
             .total_count = 0,
             .streak = 0,
@@ -89,15 +89,21 @@ const Journal = struct {
 
         while (true) {
             if (lseen.contains(commit.sha.bin[0..])) break;
-            const commit_time: i64 = (try DateTime.fromEpochTzStr(commit.author.timestamp, commit.author.tzstr)).tzAdjusted();
+            const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
             if (commit_time < until) break;
             if (std.mem.eql(u8, j.email, commit.author.email)) {
                 const ws = " \t\n";
                 try j.scribe.append(j.alloc, .{
-                    .name = try allocPrint(j.alloc, "{f}", .{abx.Html{ .text = trim(u8, commit.author.name, ws) }}),
-                    .title = try allocPrint(j.alloc, "{f}", .{abx.Html{ .text = trim(u8, commit.title, ws) }}),
+                    .name = try allocPrint(j.alloc, "{f}", .{abx.Html{
+                        .text = trim(u8, commit.author.name, ws),
+                    }}),
+                    .title = try allocPrint(j.alloc, "{f}", .{abx.Html{
+                        .text = trim(u8, commit.title, ws),
+                    }}),
                     .body = if (commit.body.len > 0)
-                        try allocPrint(j.alloc, "{f}", .{abx.Html{ .text = trim(u8, commit.body, ws) }})
+                        try allocPrint(j.alloc, "{f}", .{abx.Html{
+                            .text = trim(u8, commit.body, ws),
+                        }})
                     else
                         null,
                     .date = DateTime.fromEpoch(commit_time),
@@ -155,7 +161,14 @@ const Journal = struct {
         return;
     }
 
-    fn buildHeatMap(j: *Journal, jrepo: *JRepo, hits: *HeatMapArray, root_cmt: Git.Commit, until: i64, io: Io) !void {
+    fn buildHeatMap(
+        j: *Journal,
+        jrepo: *JRepo,
+        hits: *HeatMapArray,
+        root_cmt: Git.Commit,
+        until: i64,
+        io: Io,
+    ) !void {
         var commit = root_cmt;
         while (true) {
             if (until > @max(commit.author.timestamp, commit.committer.timestamp)) {
@@ -166,7 +179,7 @@ const Journal = struct {
             jrepo.bufset.insert(commit.sha.bin[0..]) catch unreachable;
 
             if (eql(u8, j.email, commit.author.email)) {
-                const commit_time: i64 = (try DateTime.fromEpochTzStr(commit.author.timestamp, commit.author.tzstr)).tzAdjusted();
+                const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
 
                 const commit_offset: isize = commit_time - until;
                 const day_off: usize = @abs(@divFloor(commit_offset, DAY));
@@ -190,7 +203,7 @@ const Journal = struct {
     }
 
     fn buildBestStreak(j: *Journal, io: Io) !usize {
-        const now = DateTime.today(io).timestamp;
+        const now = j.today;
         j.streak_last = now - DAY * 2;
 
         for (j.repos.items) |*repo| {
@@ -240,8 +253,8 @@ const Journal = struct {
 
         while (true) {
             counter.* += 1;
-            const author_time = try DateTime.fromEpochTzStr(current.author.timestamp, current.author.tzstr);
-            const committer_time = try DateTime.fromEpochTzStr(current.committer.timestamp, current.committer.tzstr);
+            const author_time: DateTime = try .fromActor(current.author);
+            const committer_time: DateTime = try .fromActor(current.committer);
             if (author_time.tzAdjusted() <= before and author_time.tzAdjusted() >= after) {
                 if (eql(u8, email, current.author.email))
                     return current;
@@ -279,16 +292,18 @@ const Journal = struct {
         var search_count: usize = 0;
         var i: usize = 0;
         for (try jrepo.commits.toOwnedSlice(j.alloc)) |current| {
-            var commit_time: i64 = (try DateTime.fromEpochTzStr(current.committer.timestamp, current.committer.tzstr)).tzAdjusted();
+            var commit_time: i64 = (try DateTime.fromActor(current.committer)).tzAdjusted();
             if (commit_time < before - DAY) {
                 i += 1;
                 continue;
             }
+            const repo = &jrepo.repo;
+            const commits = &jrepo.commits;
 
-            if (traverse(j.email, &jrepo.repo, current, &jrepo.commits, before, &search_count, j.alloc, io)) |result| {
+            if (traverse(j.email, repo, current, commits, before, &search_count, j.alloc, io)) |result| {
                 if (result) |commit| {
                     try jrepo.commits.append(j.alloc, commit);
-                    commit_time = (try DateTime.fromEpochTzStr(current.author.timestamp, current.author.tzstr)).tzAdjusted();
+                    commit_time = (try DateTime.fromActor(current.author)).tzAdjusted();
                     j.streak_last = commit_time;
                     return true;
                 } else {
@@ -422,7 +437,12 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     }
 
     var repo_count: usize = 0;
-    const journal: *Journal = try .init(email, start_date.timestamp, tz_offset, ctx.alloc, ctx.io);
+    const journal: *Journal = try .init(
+        email,
+        nowish.timeTruncate().timestamp,
+        start_date.timestamp,
+        ctx.alloc,
+    );
 
     var all_repos = repos.allRepoIterator(.public) catch return error.Unknown;
     while (all_repos.next(ctx.io) catch return error.Unknown) |input| {
