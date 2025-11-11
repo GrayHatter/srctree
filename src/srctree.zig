@@ -80,9 +80,9 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     const real_ua = ua.validate(fr.request);
                     std.debug.print("Claims to be a browser\n", .{});
 
-                    if (botdetect.score >= 1 or (real_ua.agent == .bot and
-                        real_ua.agent.bot.name == .malicious and
-                        ua.agent.browser.version != 128))
+                    if ((botdetect.score >= 1 or (real_ua.agent == .bot and
+                        real_ua.agent.bot.name == .malicious)) and
+                        ua.agent.browser.version != 128)
                     {
                         if (eql(u8, fr.request.uri, "/robots.txt")) return null;
                         std.debug.print("Dropping malicious traffic\n", .{});
