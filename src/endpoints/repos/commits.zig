@@ -307,7 +307,7 @@ fn buildListBetween(
     var commits = try a.alloc(S.CommitList, count);
     var current: Git.Commit = repo.headCommit(a, io) catch return error.Unknown;
     if (right) |r| {
-        while (!current.sha.eqlIsh(r)) {
+        while (!current.sha.startsWith(r)) {
             current = current.toParent(0, &repo, a, io) catch |err| {
                 std.debug.print("unable to build commit history\n", .{});
                 return err;
@@ -323,7 +323,7 @@ fn buildListBetween(
         c.* = try commitVerse(a, current, name, include_email);
         found = i;
         outsha.* = current.sha;
-        if (left) |l| if (current.sha.eqlIsh(l)) break;
+        if (left) |l| if (current.sha.startsWith(l)) break;
         current = current.toParent(0, &repo, a, io) catch break;
     }
     if (a.resize(commits, found)) {

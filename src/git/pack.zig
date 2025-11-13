@@ -59,6 +59,17 @@ pub fn init(dir: Io.Dir, name: []const u8, io: Io) !Pack {
     return pack;
 }
 
+pub fn initAllFromDir(dir: Io.Dir, a: Allocator, io: Io) ![]Pack {
+    var dir2: fs.Dir = .adaptFromNewApi(dir);
+    var itr = dir2.iterate();
+    var packs: ArrayList(Pack) = try .initCapacity(a, 4);
+    while (try itr.next()) |file| {
+        if (!endsWith(u8, file.name, ".idx")) continue;
+        try packs.append(a, try .init(dir, file.name[0 .. file.name.len - 4], io));
+    }
+    return try packs.toOwnedSlice(a);
+}
+
 fn prepare(self: *Pack) !void {
     try self.prepareIdx();
     try self.preparePack();
@@ -385,4 +396,5 @@ const Reader = std.Io.Reader;
 const Writer = std.Io.Writer;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
+const endsWith = std.mem.endsWith;
 const startsWith = std.mem.startsWith;

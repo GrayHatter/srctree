@@ -168,7 +168,6 @@ fn loadPacked(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
 }
 
 fn loadPackedPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
-    //std.debug.assert(sha.partial == true);
     for (self.packs) |pack| {
         if (try pack.containsPrefix(sha.bin[0..sha.len])) |offset| {
             return try pack.resolveObject(sha, offset, &self, a, io);
@@ -183,7 +182,6 @@ fn loadPartial(self: Repo, a: Allocator, sha: SHA) !Pack.PackedObject {
 }
 
 fn loadObjectPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
-    //std.debug.assert(sha.partial);
     if (try self.loadPackedPartial(sha, a, io)) |pack| return pack;
     return null;
 }
@@ -202,7 +200,7 @@ pub fn loadObjectOrDelta(self: Repo, sha: SHA, a: Allocator, io: Io) !union(enum
 
 /// TODO binary search lol
 pub fn loadObject(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
-    if (sha.partial) return try self.loadObjectPartial(sha, a, io) orelse error.ObjectMissing;
+    if (sha.len < 20) return try self.loadObjectPartial(sha, a, io) orelse error.ObjectMissing;
     return try self.loadPacked(sha, a, io) orelse try self.loadFile(sha, a, io);
 }
 
@@ -216,22 +214,7 @@ pub fn loadBlob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
 pub fn loadPacks(self: *Repo, a: Allocator, io: Io) !void {
     var dir = try self.dir.openDir(io, "./objects/pack", .{ .iterate = true });
     defer dir.close(io);
-    var dir2: fs.Dir = .adaptFromNewApi(dir);
-    var itr = dir2.iterate();
-    var i: usize = 0;
-    while (try itr.next()) |file| {
-        if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
-        i += 1;
-    }
-    self.packs = try a.alloc(Pack, i);
-    itr.reset();
-    i = 0;
-    while (try itr.next()) |file| {
-        if (!std.mem.eql(u8, file.name[file.name.len - 4 ..], ".idx")) continue;
-
-        self.packs[i] = try Pack.init(dir, file.name[0 .. file.name.len - 4], io);
-        i += 1;
-    }
+    self.packs = try Pack.initAllFromDir(dir, a, io);
 }
 
 pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
@@ -414,7 +397,7 @@ fn loadBranches(self: *Repo, a: Allocator, io: Io) !void {
 }
 
 pub fn resolvePartial(repo: *const Repo, sha: SHA) !?SHA {
-    if (!sha.partial) return sha;
+    if (sha.len == 20) return sha;
     if (sha.len < 3) return error.TooShort; // not supported
 
     var ambiguous: bool = false;
@@ -434,7 +417,7 @@ pub fn resolvePartial(repo: *const Repo, sha: SHA) !?SHA {
 }
 
 pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
-    if (sha.partial) {
+    if (sha.len < 20) {
         const full_sha = try self.resolvePartial(sha) orelse sha; //unreachable;
         return switch (try self.loadObjectPartial(sha, a, io) orelse
             try self.loadObject(full_sha, a, io)) {
@@ -595,6 +578,7 @@ const Dir = Io.Dir;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
+const endsWith = std.mem.endsWith;
 const indexOf = std.mem.indexOf;
 const zlib = std.compress.flate;
 const bufPrint = std.fmt.bufPrint;

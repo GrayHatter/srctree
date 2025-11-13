@@ -1,6 +1,5 @@
 bin: Bin,
-len: usize = 20,
-partial: bool = false,
+len: u5 = 20,
 
 const SHA = @This();
 
@@ -21,8 +20,7 @@ pub fn initPartial(sha: []const u8) SHA {
     for (buf[0..sha.len], sha[0..]) |*dst, src| dst.* = src;
     return .{
         .bin = toBin(buf),
-        .partial = true,
-        .len = sha.len / 2,
+        .len = @intCast(sha.len / 2),
     };
 }
 
@@ -76,14 +74,12 @@ fn ascii(str: []const u8) bool {
 }
 
 pub fn eql(self: SHA, peer: SHA) bool {
-    if (self.partial == true) @panic("not implemented");
-    if (self.partial != peer.partial) return false;
-    return mem.eql(u8, self.bin[0..20], peer.bin[0..20]);
+    if (self.len != peer.len) return false;
+    return mem.eql(u8, self.bin[0..self.len], peer.bin[0..self.len]);
 }
 
-pub fn eqlIsh(self: SHA, peer: SHA) bool {
-    if (self.partial == true) @panic("not implemented");
-    if (peer.partial != true) return self.eql(peer);
+pub fn startsWith(self: SHA, peer: SHA) bool {
+    if (self.len < peer.len) return false;
     return mem.eql(u8, self.bin[0..peer.len], peer.bin[0..peer.len]);
 }
 
