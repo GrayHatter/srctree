@@ -3,6 +3,7 @@ pub const Markdown = @import("syntax/markdown.zig");
 pub const Language = enum {
     c,
     cpp,
+    css,
     h,
     html,
     ini,
@@ -18,6 +19,7 @@ pub const Language = enum {
         return switch (l) {
             .c => "c",
             .cpp, .h => "cpp",
+            .css => "css",
             .html => "html",
             .ini => "ini",
             .kotlin => "kotlin",
@@ -40,6 +42,8 @@ pub const Language = enum {
             return .c;
         } else if (endsWith(u8, name, ".h") or endsWith(u8, name, ".cpp")) {
             return .cpp;
+        } else if (endsWith(u8, name, ".css")) {
+            return .css;
         } else if (endsWith(u8, name, ".html")) {
             return .html;
         } else if (endsWith(u8, name, ".kotlin") or endsWith(u8, name, ".kt")) {
@@ -81,6 +85,7 @@ pub fn translate(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     return switch (lang) {
         .c,
         .cpp,
+        .css,
         .h,
         .html,
         .ini,
@@ -106,6 +111,7 @@ pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     return switch (lang) {
         .c,
         .cpp,
+        .css,
         .h,
         .html,
         .ini,
