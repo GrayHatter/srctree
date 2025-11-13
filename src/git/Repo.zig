@@ -176,11 +176,6 @@ fn loadPackedPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
     return null;
 }
 
-fn loadPartial(self: Repo, a: Allocator, sha: SHA) !Pack.PackedObject {
-    if (try self.loadPackedPartial(a, sha)) |pack| return pack;
-    return error.ObjectMissing;
-}
-
 fn loadObjectPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
     if (try self.loadPackedPartial(sha, a, io)) |pack| return pack;
     return null;
