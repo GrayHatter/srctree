@@ -110,10 +110,6 @@ pub fn fanOutCount(self: Pack, i: u8) u32 {
     return self.fanOut(i) - self.fanOut(i - 1);
 }
 
-pub fn contains(self: Pack, sha: SHA) ?u32 {
-    return self.containsPrefix(sha.bin[0..]) catch unreachable;
-}
-
 fn orderSha(lhs: []const u8, rhs: []const u8) std.math.Order {
     for (lhs, rhs) |l, r| {
         if (l > r) return .gt;
@@ -122,12 +118,13 @@ fn orderSha(lhs: []const u8, rhs: []const u8) std.math.Order {
     return .eq;
 }
 
-pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
-    std.debug.assert(par_sha.len <= 20);
-    const count: usize = self.fanOutCount(par_sha[0]);
+pub fn contains(self: Pack, sha: SHA) !?u32 {
+    std.debug.assert(sha.len <= 20);
+    const shabin = sha.bin[0..sha.len];
+    const count: usize = self.fanOutCount(shabin[0]);
     if (count == 0) return null;
 
-    const start: usize = if (par_sha[0] > 0) self.fanOut(par_sha[0] - 1) else 0;
+    const start: usize = if (shabin[0] > 0) self.fanOut(shabin[0] - 1) else 0;
 
     const objnames_ptr: [*][20]u8 = @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]);
     const objnames = objnames_ptr[0..count];
@@ -140,7 +137,7 @@ pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
     while (left < right) {
         const mid = left + (right - left) / 2;
 
-        switch (orderSha(par_sha, objnames[mid][0..par_sha.len])) {
+        switch (orderSha(shabin, objnames[mid][0..sha.len])) {
             .eq => {
                 found = mid;
                 break;
@@ -151,10 +148,10 @@ pub fn containsPrefix(self: Pack, par_sha: []const u8) !?u32 {
     }
 
     if (found) |f| {
-        if (objnames.len > f + 1 and eql(u8, par_sha, objnames[f + 1][0..par_sha.len])) {
+        if (objnames.len > f + 1 and eql(u8, shabin, objnames[f + 1][0..sha.len])) {
             return error.AmbiguousRef;
         }
-        if (f > 1 and eql(u8, par_sha, objnames[f - 1][0..par_sha.len])) {
+        if (f > 1 and eql(u8, shabin, objnames[f - 1][0..sha.len])) {
             return error.AmbiguousRef;
         }
         return @byteSwap(self.offsets[f + start]);

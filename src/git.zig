@@ -210,21 +210,17 @@ test "pack contains" {
 
     const sha = SHA.init("7d4786ded56e1ee6cfe72c7986218e234961d03c");
 
-    var found: bool = false;
     for (repo.packs) |pack| {
-        found = pack.contains(sha) != null;
-        if (found) break;
-    }
-    try std.testing.expect(found);
+        if (try pack.contains(sha)) |_| break;
+    } else try std.testing.expect(false); // full sha
 
-    found = false;
+    const half_sha: SHA = .initPartial("7d4786ded56e1ee6cfe7");
     for (repo.packs) |pack| {
-        found = try pack.containsPrefix(sha.bin[0..10]) != null;
-        if (found) break;
-    }
-    try std.testing.expect(found);
+        if (try pack.contains(half_sha)) |_|
+            break;
+    } else try std.testing.expect(false); // half sha
 
-    const err = repo.packs[0].containsPrefix(sha.bin[0..1]);
+    const err = repo.packs[0].contains(SHA.initPartial("7d"));
     try std.testing.expectError(error.AmbiguousRef, err);
 
     //var long_obj = try repo.findObj(a, lol);

@@ -158,26 +158,12 @@ fn loadFile(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
     return error.InvalidObject;
 }
 
-fn loadPacked(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
+fn loadFromPacks(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
     for (self.packs) |pack| {
-        if (pack.contains(sha)) |offset| {
-            return try pack.resolveObject(sha, offset, &self, a, io);
-        }
+        const offset = try pack.contains(sha) orelse continue;
+        const fullsha = if (sha.len < 20) try pack.expandPrefix(sha) orelse unreachable else sha;
+        return try pack.resolveObject(fullsha, offset, &self, a, io);
     }
-    return null;
-}
-
-fn loadPackedPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
-    for (self.packs) |pack| {
-        if (try pack.containsPrefix(sha.bin[0..sha.len])) |offset| {
-            return try pack.resolveObject(sha, offset, &self, a, io);
-        }
-    }
-    return null;
-}
-
-fn loadObjectPartial(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
-    if (try self.loadPackedPartial(sha, a, io)) |pack| return pack;
     return null;
 }
 
@@ -186,17 +172,15 @@ pub fn loadObjectOrDelta(self: Repo, sha: SHA, a: Allocator, io: Io) !union(enum
     file: Object,
 } {
     for (self.packs) |pack| {
-        if (pack.contains(sha)) |offset| {
+        if (try pack.contains(sha)) |offset| {
             return .{ .pack = try pack.loadData(offset, &self, a, io) };
         }
     }
     return .{ .file = try self.loadFile(sha, a, io) };
 }
 
-/// TODO binary search lol
 pub fn loadObject(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
-    if (sha.len < 20) return try self.loadObjectPartial(sha, a, io) orelse error.ObjectMissing;
-    return try self.loadPacked(sha, a, io) orelse try self.loadFile(sha, a, io);
+    return try self.loadFromPacks(sha, a, io) orelse try self.loadFile(sha, a, io);
 }
 
 pub fn loadBlob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
@@ -414,8 +398,7 @@ pub fn resolvePartial(repo: *const Repo, sha: SHA) !?SHA {
 pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
     if (sha.len < 20) {
         const full_sha = try self.resolvePartial(sha) orelse sha; //unreachable;
-        return switch (try self.loadObjectPartial(sha, a, io) orelse
-            try self.loadObject(full_sha, a, io)) {
+        return switch (try self.loadObject(full_sha, a, io)) {
             .commit => |c| {
                 var cmt = c;
                 cmt.sha = full_sha;
@@ -540,7 +523,7 @@ test "hopefully a delta" {
     defer head.raze();
     if (false) std.debug.print("{}\n", .{head});
 
-    const obj = try repo.loadPacked(head.tree, a, io) orelse return error.UnableToLoadObject;
+    const obj = try repo.loadFromPacks(head.tree, a, io) orelse return error.UnableToLoadObject;
     switch (obj) {
         .tree => |tree| tree.raze(),
         else => return error.NotATree,

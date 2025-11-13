@@ -16,6 +16,7 @@ pub fn init(sha: []const u8) SHA {
 
 /// TODO return error, and validate it's actually hex
 pub fn initPartial(sha: []const u8) SHA {
+    std.debug.assert(sha.len & 1 == 0);
     var buf: Hex = @splat('f');
     for (buf[0..sha.len], sha[0..]) |*dst, src| dst.* = src;
     return .{
