@@ -22,7 +22,8 @@ pub fn index(f: *Frame) Error!void {
 fn default(f: *Frame) Error!void {
     try f.requireValidUser();
 
-    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
+    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+        &.{ .nav = .{ .nav_buttons = &.{} } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -51,7 +52,10 @@ fn settingsPost(vrs: *Frame) Router.Error!void {
 
 pub fn settings(f: *Frame) Router.Error!void {
     try f.requireValidUser();
-    const blocks: []S.AdminView.ConfigBlocks = try f.alloc.alloc(S.AdminView.ConfigBlocks, global_config.ctx.ns.len);
+    const blocks: []S.AdminView.ConfigBlocks = try f.alloc.alloc(
+        S.AdminView.ConfigBlocks,
+        global_config.ctx.ns.len,
+    );
     for (global_config.ctx.ns, blocks) |ns, *block| {
         block.* = .{
             .config_name = ns.name,
@@ -59,7 +63,8 @@ pub fn settings(f: *Frame) Router.Error!void {
             .count = mem.count(u8, ns.block, "\n") + 2,
         };
     }
-    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
+    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+        &.{ .nav = .{ .nav_buttons = &.{} } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -73,7 +78,8 @@ pub fn settings(f: *Frame) Router.Error!void {
 fn remotes(f: *Frame) Error!void {
     try f.requireValidUser();
 
-    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
+    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+        &.{ .nav = .{ .nav_buttons = &.{} } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -130,7 +136,8 @@ const Repo = struct {
     fn create(f: *Frame) Error!void {
         try f.requireValidUser();
 
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+            &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -144,7 +151,8 @@ const Repo = struct {
 
     fn delete(f: *Frame) Error!void {
         try f.requireValidUser();
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+            &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -161,7 +169,8 @@ const Repo = struct {
     fn clonePost(f: *Frame) Error!void {
         try f.requireValidUser();
 
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+            &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -198,7 +207,8 @@ const Repo = struct {
 
     fn clone(f: *Frame) Error!void {
         try f.requireValidUser();
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse &.{ .nav = .{ .nav_buttons = &.{} } };
+        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+            &.{ .nav = .{ .nav_buttons = &.{} } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
