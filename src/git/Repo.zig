@@ -204,14 +204,13 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
     var itr = idir.iterate();
     while (try itr.next()) |file| {
         if (file.kind != .file) continue;
-        var filename = [_]u8{0} ** 2048;
-        var fname: []u8 = &filename;
-        fname = try std.fmt.bufPrint(&filename, "./refs/heads/{s}", .{file.name});
+        var f_b: [2048]u8 = @splat(0);
+        const fname: []u8 = try bufPrint(&f_b, "./refs/heads/{s}", .{file.name});
         var f = try self.dir.openFile(io, fname, .{});
         defer f.close(io);
         var buf: [40]u8 = undefined;
         var reader = f.reader(io, &buf);
-        try reader.interface.fill(40);
+        reader.interface.fill(40) catch continue;
         std.debug.assert(reader.interface.end == 40);
         try list.append(a, Ref{ .branch = .{
             .name = try a.dupe(u8, file.name),

@@ -293,17 +293,12 @@ fn loadRefDelta(_: Pack, reader: *Reader, _: usize, repo: *const Repo, a: Alloca
     defer a.free(basefree);
 
     var z_b: [zlib.max_window_len]u8 = undefined;
-    var zl: std.compress.flate.Decompress = .init(reader, .zlib, &z_b);
-    const inst = zl.reader.allocRemaining(a, .limited(0xffffff)) catch return error.PackCorrupt;
-    defer a.free(inst);
-    var inst_reader = Reader.fixed(inst);
+    var zl: Decompress = .init(reader, .zlib, &z_b);
     // We don't actually need these when zlib works :)
-    _ = try readVarInt(&inst_reader);
-    _ = try readVarInt(&inst_reader);
+    _ = try readVarInt(&zl.reader);
+    _ = try readVarInt(&zl.reader);
     var buffer: Writer.Allocating = .init(a);
-    while (true) {
-        _ = deltaInst(&inst_reader, &buffer.writer, basedata) catch break;
-    }
+    while (true) _ = deltaInst(&zl.reader, &buffer.writer, basedata) catch break;
     return .{
         .header = .{ .size = 0, .kind = basetype },
         .data = try buffer.toOwnedSlice(),
@@ -315,24 +310,17 @@ fn loadDelta(self: Pack, reader: *Reader, offset: usize, repo: *const Repo, a: A
     const srclen = try readVarInt(reader);
 
     var z_b: [zlib.max_window_len]u8 = undefined;
-    var zl: std.compress.flate.Decompress = .init(reader, .zlib, &z_b);
-    const inst = zl.reader.allocRemaining(a, .limited(0xffffff)) catch return error.PackCorrupt;
-    defer a.free(inst);
-    var inst_reader = std.Io.Reader.fixed(inst);
+    var zl: Decompress = .init(reader, .zlib, &z_b);
     // We don't actually need these when zlib works :)
-    _ = try readVarInt(&inst_reader);
-    _ = try readVarInt(&inst_reader);
+    _ = try readVarInt(&zl.reader);
+    _ = try readVarInt(&zl.reader);
 
     const baseobj_offset = offset - srclen;
     const baseobj = try self.loadData(baseobj_offset, repo, a, io);
     defer a.free(baseobj.data);
 
     var buffer: Writer.Allocating = .init(a);
-    while (true) {
-        _ = deltaInst(&inst_reader, &buffer.writer, baseobj.data) catch {
-            break;
-        };
-    }
+    while (true) _ = deltaInst(&zl.reader, &buffer.writer, baseobj.data) catch break;
     return .{
         .header = baseobj.header,
         .data = try buffer.toOwnedSlice(),
@@ -395,3 +383,4 @@ const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const endsWith = std.mem.endsWith;
 const startsWith = std.mem.startsWith;
+const Decompress = std.compress.flate.Decompress;
