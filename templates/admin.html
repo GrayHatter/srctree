@@ -9,16 +9,16 @@
       <div class="admin-actions">
       <ul>
         <Directive type="enum" name="ActiveAdmin" text="active" />
-        <li class="<ActiveAdmin enum="settings" />"><a href="/admin/settings" />Settings</a></li>
+        <li class="<ActiveAdmin enum="default" /><ActiveAdmin enum="settings" />"><a href="/admin/settings" />Settings</a></li>
         <li class="<ActiveAdmin enum="remotes" />"><a href="/admin/remotes" />Remotes</a></li>
         <li class="<ActiveAdmin enum="repo_create" />"><a href="/admin/repo/create" />Create Repo</a></li>
         <li class="<ActiveAdmin enum="repo_clone" />"><a href="/admin/repo/clone" />Clone Repo</a></li>
         <li class="<ActiveAdmin enum="repo_delete" />"><a href="/admin/repo/delete" />Delete Repo</a></li>
       </ul>
-      </div><div class="admin-content <ActiveAdmin enum="default" />">
-      </div><div class="admin-content <ActiveAdmin enum="settings" />">
+      </div>
+      <Switch AdminView><Case Default><div class="admin-content active">
+      </div></Case><Case Settings><div class="admin-content active">
       <form action="/admin/settings" method="POST">
-        <With AdminSettings>
         <div id="config-blocks">
           <For ConfigBlocks>
             <div class="block">
@@ -31,35 +31,29 @@
         </div>
         <button type="submit" name="new_block">Add New Block</button>
         <button type="submit" name="save">Save</button>
-        </With>
         <button name="new repo">Settings</button>
       </form>
-      </div><div class="admin-content <ActiveAdmin enum="remotes" />">
+      </div></Case><Case AdminRemotes><div class="admin-content active">
       <form action="/admin/remotes" method="POST">
-        <With AdminRemotes></With>
         <button name="remotes">Remotes</button>
       </form>
-      </div><div class="admin-content <ActiveAdmin enum="repo_create" />">
+      </div></Case><Case RepoNew><div class="admin-content active">
       <form action="/admin/repo/create" method="POST">
-        <With AdminRepoCreate></With>
         <input name="repo_name" value="" placeholder="new-repo-name">
         <button name="create repo">Create Repo</button>
       </form>
-      </div><div class="admin-content <ActiveAdmin enum="repo_clone" />">
+      </div></Case><Case RepoClone><div class="admin-content active">
       <form action="/admin/repo/clone" method="POST">
-        <With AdminRepoClone>
           <With PostError><ErrStr /></With>
             Repo URI: <input name="repo_uri" placeholder="https://srctree.gr.ht/repo/repo_name">
-        </With>
         <button name="new repo">Clone Repo</button>
       </form>
-      </div><div class="admin-content <ActiveAdmin enum="repo_delete" />">
+      </div></Case><Case RepoDelete><div class="admin-content active">
       <form action="/admin/repo/delete" method="POST">
-        <With AdminRepoDelete></With>
         TODO list repos
         <button name="new repo">Delete Repo</button>
       </form>
-      </div>
+      </div></Case></Switch>
     </content>
   </body>
 </html>

@@ -27,11 +27,7 @@ fn default(f: *Frame) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
         .active_admin = .default,
-        .admin_settings = null,
-        .admin_remotes = null,
-        .admin_repo_create = null,
-        .admin_repo_delete = null,
-        .admin_repo_clone = null,
+        .admin_view = .{ .default = .{} },
     });
     try f.sendPage(&page);
 }
@@ -55,7 +51,7 @@ fn settingsPost(vrs: *Frame) Router.Error!void {
 
 pub fn settings(f: *Frame) Router.Error!void {
     try f.requireValidUser();
-    var blocks: []S.ConfigBlocks = try f.alloc.alloc(S.ConfigBlocks, global_config.ctx.ns.len);
+    const blocks: []S.AdminView.ConfigBlocks = try f.alloc.alloc(S.AdminView.ConfigBlocks, global_config.ctx.ns.len);
     for (global_config.ctx.ns, blocks) |ns, *block| {
         block.* = .{
             .config_name = ns.name,
@@ -68,11 +64,7 @@ pub fn settings(f: *Frame) Router.Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
         .active_admin = .settings,
-        .admin_settings = .{ .config_blocks = blocks[0..] },
-        .admin_remotes = null,
-        .admin_repo_create = null,
-        .admin_repo_delete = null,
-        .admin_repo_clone = null,
+        .admin_view = .{ .settings = .{ .config_blocks = blocks } },
     });
 
     try f.sendPage(&page);
@@ -86,11 +78,7 @@ fn remotes(f: *Frame) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
         .active_admin = .remotes,
-        .admin_settings = null,
-        .admin_remotes = null,
-        .admin_repo_create = null,
-        .admin_repo_delete = null,
-        .admin_repo_clone = null,
+        .admin_view = .{ .admin_remotes = .{} },
     });
     try f.sendPage(&page);
 }
@@ -135,9 +123,6 @@ const Repo = struct {
 
         if (std.fs.cwd().openDir(dir_name, .{})) |_| return error.Unknown else |_| {}
 
-        //const new_repo = git.Repo.createNew(f.alloc, std.fs.cwd(), dir_name) catch return error.Unknown;
-        //std.debug.print("creating {any}\n", .{new_repo});
-
         const redirect_uri = try std.fmt.bufPrint(&buf, "/repo/{s}", .{repo_req.repo_name});
         return f.redirect(redirect_uri, .see_other) catch unreachable;
     }
@@ -150,11 +135,7 @@ const Repo = struct {
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
             .active_admin = .repo_create,
-            .admin_settings = null,
-            .admin_remotes = null,
-            .admin_repo_create = .{},
-            .admin_repo_delete = null,
-            .admin_repo_clone = null,
+            .admin_view = .{ .repo_new = .{} },
         });
         try f.sendPage(&page);
     }
@@ -168,11 +149,7 @@ const Repo = struct {
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
             .active_admin = .repo_delete,
-            .admin_settings = null,
-            .admin_remotes = null,
-            .admin_repo_create = null,
-            .admin_repo_delete = .{},
-            .admin_repo_clone = null,
+            .admin_view = .{ .repo_delete = .{} },
         });
         try f.sendPage(&page);
     }
@@ -189,11 +166,7 @@ const Repo = struct {
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
             .active_admin = .repo_clone,
-            .admin_settings = null,
-            .admin_remotes = null,
-            .admin_repo_create = null,
-            .admin_repo_delete = null,
-            .admin_repo_clone = null,
+            .admin_view = .{ .repo_clone = .{ .post_error = null } },
         });
 
         var post = f.request.data.post orelse return error.DataMissing;
@@ -205,14 +178,14 @@ const Repo = struct {
         std.debug.print("repo uri {s}\n", .{new_repo_name});
         // TODO sanitize requested repo name
         const dir = std.fs.cwd().openDir("repos", .{}) catch |err| {
-            page.data.admin_repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
+            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
             return try f.sendPage(&page);
         };
 
         var agent = git.Agent{ .alloc = f.alloc, .cwd = dir };
         std.debug.print("fork bare {s}\n", .{
             agent.forkRemote(clone_req.repo_uri, new_repo_name) catch |err| {
-                page.data.admin_repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
+                page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
                 return try f.sendPage(&page);
             },
         });
@@ -230,11 +203,7 @@ const Repo = struct {
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
             .active_admin = .repo_clone,
-            .admin_settings = null,
-            .admin_remotes = null,
-            .admin_repo_create = null,
-            .admin_repo_delete = null,
-            .admin_repo_clone = .{ .post_error = null },
+            .admin_view = .{ .repo_clone = .{ .post_error = null } },
         });
         try f.sendPage(&page);
     }
