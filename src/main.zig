@@ -194,6 +194,7 @@ pub fn main() !void {
         }
         std.posix.exit(1);
     };
+    agent.enabled = false;
 }
 
 const std = @import("std");

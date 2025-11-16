@@ -306,7 +306,11 @@ pub const Agent = struct {
     }
 
     pub fn updateThread(a: *Agent) void {
-        log.debug("Spawning update thread", .{});
+        const posix = std.posix;
+        var sigset: posix.sigset_t = posix.sigemptyset();
+        posix.sigaddset(&sigset, .INT);
+        posix.sigprocmask(posix.SIG.BLOCK, &sigset, null);
+        log.info("Spawning update thread", .{});
         // TODO past me is evil for doing this (replace with sane alloc source)
         const alloc = std.heap.page_allocator;
         var n_array = allNames(alloc) catch unreachable;
