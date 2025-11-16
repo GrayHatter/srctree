@@ -1,5 +1,6 @@
 bin: Bin,
-len: u5 = 20,
+// u5 is the real max, but this prevents uint overflow at size u5
+len: u6 = 20,
 
 const SHA = @This();
 
