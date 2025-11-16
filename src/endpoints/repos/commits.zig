@@ -46,7 +46,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     }
 
     // lol... I'd forgotten I'd done this. >:)
-    const current: Git.Commit = repo.commit(Git.SHA.initPartial(sha), f.alloc, f.io) catch cmt: {
+    const current: Git.Commit = repo.commit(.initPartial(sha), f.alloc, f.io) catch cmt: {
         std.debug.print("unable to find commit, trying expensive fallback\n", .{});
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(f.alloc, f.io) catch return error.Unknown;

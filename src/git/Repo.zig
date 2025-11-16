@@ -116,22 +116,48 @@ pub fn findRemote(self: Repo, name: []const u8) ?Remote {
     return null;
 }
 
-fn loadFile(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
+test {
     var fb = [_]u8{0} ** 2048;
-    const grouped = try bufPrint(&fb, "./objects/{s}/{s}", .{ sha.hex()[0..2], sha.hex()[2..] });
-    const file = self.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
-        error.FileNotFound => data: {
-            const exact = try bufPrint(&fb, "./objects/{s}", .{sha.hex()[0..]});
-            break :data self.dir.openFile(io, exact, .{}) catch |err2| switch (err2) {
-                error.FileNotFound => {
-                    std.debug.print("unable to find commit '{s}'\n", .{sha.hex()[0..]});
-                    return error.ObjectMissing;
-                },
-                else => return err2,
-            };
-        },
-        else => return err,
-    };
+    const objdir = try bufPrint(&fb, "./objects/{x}", .{([1]u8{0})[0..1]});
+    try std.testing.expectEqualStrings("./objects/00", objdir);
+}
+
+fn findFile(r: Repo, sha: SHA, io: Io) !Io.File {
+    if (sha.len == 20) {
+        var fb = [_]u8{0} ** 2048;
+        const grouped = try bufPrint(&fb, "./objects/{s}/{s}", .{ sha.hex()[0..2], sha.hex()[2..] });
+        const file = r.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
+            error.FileNotFound => {
+                const exact = try bufPrint(&fb, "./objects/{s}", .{sha.hex()[0..]});
+                return r.dir.openFile(io, exact, .{}) catch |err2| switch (err2) {
+                    error.FileNotFound => {
+                        log.warn("unable to find commit '{s}'", .{sha.hex()[0..]});
+                        return error.ObjectMissing;
+                    },
+                    else => return err2,
+                };
+            },
+            else => return err,
+        };
+        return file;
+    } else if (sha.len >= 6) {
+        var fb = [_]u8{0} ** 2048;
+        const objdir = try bufPrint(&fb, "./objects/{x}", .{sha.bin[0..1]});
+        const dir = try r.dir.openDir(io, objdir, .{ .iterate = true });
+        defer dir.close(io);
+        const old: std.fs.Dir = .adaptFromNewApi(dir);
+        var itr = old.iterate();
+        while (itr.next() catch null) |file| {
+            if (startsWith(u8, file.name, sha.hex()[2 .. (sha.len - 1) * 2])) {
+                return try dir.openFile(io, file.name, .{});
+            }
+        }
+        return error.FileNotFound;
+    } else return error.InvalidSha;
+}
+
+fn loadFile(r: Repo, sha: SHA, a: Allocator, io: Io) !Object {
+    var file = try r.findFile(sha, io);
     defer file.close(io);
     const stat = try file.stat(io);
     const compressed: []u8 = try a.alloc(u8, stat.size);
@@ -552,6 +578,7 @@ const Io = std.Io;
 const fs = std.fs;
 const Reader = Io.Reader;
 const Dir = Io.Dir;
+const log = std.log.scoped(.git_repo);
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
