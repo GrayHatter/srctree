@@ -73,10 +73,10 @@ const Journal = struct {
     pub fn build(j: *Journal, io: Io) !void {
         for (j.repos.items) |*repo| {
             j.buildScribe(repo, io) catch |err| {
-                log.err("unable to build the commit list for repo {s} [error {}]", .{ repo.name, err });
+                log.warn("unable to build the commit list for repo {s} [error {}]", .{ repo.name, err });
             };
             j.cachedHeatMap(repo, io) catch |err| {
-                log.err("unable to build journal for repo {s} [error {}]", .{ repo.name, err });
+                log.warn("unable to build journal for repo {s} [error {}]", .{ repo.name, err });
             };
         }
         _ = try j.buildBestStreak(io);
@@ -129,9 +129,7 @@ const Journal = struct {
 
         // TODO return empty hits here
         const commit = jrepo.repo.headCommit(j.alloc, io) catch |err| {
-            std.debug.print("Error building commit list on repo {s} because {}\n", .{
-                jrepo.name, err,
-            });
+            log.warn("Error building commit list on repo {s} because {}", .{ jrepo.name, err });
             return;
         };
 
@@ -208,21 +206,21 @@ const Journal = struct {
 
         for (j.repos.items) |*repo| {
             try repo.commits.append(j.alloc, repo.repo.headCommit(j.alloc, io) catch |err| {
-                std.debug.print("Error building streak list for repo {s} because {}\n", .{
-                    repo.name, err,
-                });
+                log.warn("Error building streak list for repo {s} because {}", .{ repo.name, err });
+                repo.commits.clearAndFree(j.alloc);
                 continue;
             });
             repo.next_ts = repo.commits.items[0].author.timestamp;
         }
 
-        var before_ts: i64 = now - DAY;
+        var before_ts: i64 = now;
         while (j.streak_last != null) {
             before_ts = before_ts - DAY;
+            log.debug("searching for day {} {}", .{ now - before_ts, @divFloor(now - before_ts, DAY) });
             for (j.repos.items) |*repo| {
+                log.debug("searching repo {s}: {} {} {} {} ", .{ repo.name, repo.next_ts < before_ts - DAY, repo.next_ts, before_ts, repo.commits.items.len });
                 if (repo.commits.items.len == 0) continue;
-                if (repo.next_ts < before_ts - DAY)
-                    continue;
+                if (repo.next_ts < before_ts - DAY) continue;
 
                 if (j.buildBestStreakRepo(repo, before_ts, io) catch |err| {
                     log.err("unable to build the streak list for repo {s} [error {}]", .{ repo.name, err });
@@ -234,6 +232,7 @@ const Journal = struct {
                 }
             } else j.streak_last = null;
         }
+        log.debug("streak done {}", .{j.streak});
         return j.streak;
     }
 
@@ -288,24 +287,23 @@ const Journal = struct {
 
     fn buildBestStreakRepo(j: *Journal, jrepo: *JRepo, before: i64, io: Io) !bool {
         if (jrepo.commits.items.len == 0) return false;
-
         var search_count: usize = 0;
-        var i: usize = 0;
-        for (try jrepo.commits.toOwnedSlice(j.alloc)) |current| {
-            var commit_time: i64 = (try DateTime.fromActor(current.committer)).tzAdjusted();
-            if (commit_time < before - DAY) {
-                i += 1;
+        const slice = try jrepo.commits.toOwnedSlice(j.alloc);
+        for (slice) |current| {
+            const current_ts = (try DateTime.fromActor(current.author)).tzAdjusted();
+
+            if (j.streak_last.? < before or current_ts < before - DAY) {
+                try jrepo.commits.append(j.alloc, current);
                 continue;
             }
+
             const repo = &jrepo.repo;
             const commits = &jrepo.commits;
-
             if (traverse(j.email, repo, current, commits, before, &search_count, j.alloc, io)) |result| {
                 if (result) |commit| {
                     try jrepo.commits.append(j.alloc, commit);
-                    commit_time = (try DateTime.fromActor(current.author)).tzAdjusted();
-                    j.streak_last = commit_time;
-                    return true;
+                    j.streak_last = (try DateTime.fromActor(commit.author)).tzAdjusted();
+                    continue;
                 } else {
                     for (jrepo.commits.items) |cmt| {
                         const day_depth = @divFloor(cmt.author.timestamp - before, DAY);
@@ -318,7 +316,7 @@ const Journal = struct {
                 }
             } else |err| return err;
         }
-        return false;
+        return j.streak_last.? <= before;
     }
 };
 
@@ -460,7 +458,6 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var tcount: u16 = 0;
     for (journal.hits) |h| tcount +|= h;
 
-    var printed_month: usize = (@as(usize, @intFromEnum(start_date.month)) + 10) % 12;
     var day_idx: usize = 0;
     var streak: usize = 0;
     var committed_today: bool = false;
@@ -469,14 +466,13 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     var date = start_date;
     for (flex_weeks) |*flex_week| {
-        flex_week.month = "&nbsp;";
-        if ((printed_month % 12) != @intFromEnum(start_date.month) - 1) {
-            const next_week = DateTime.fromEpoch(start_date.timestamp + WEEK);
-            printed_month += 1;
-            if ((printed_month % 12) != @intFromEnum(next_week.month) - 1) {} else {
-                flex_week.month = DateTime.Names.Month[printed_month % 12 + 1][0..3];
-            }
-        }
+        const this_week = date;
+        const last_week: DateTime = .fromEpoch(date.timestamp - WEEK);
+        flex_week.month = if (last_week.month != this_week.month or
+            date.timestamp == start_date.timestamp)
+            this_week.monthSlice()[0..3]
+        else
+            "&nbsp;";
 
         for (&flex_week.days) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);
@@ -518,7 +514,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         0 => "One Day? Or Day One!",
         1 => "Day One!",
         else => try std.fmt.allocPrint(ctx.alloc, "{} Days{s}", .{
-            @max(streak, journal.streak),
+            @max(streak, journal.streak + @as(usize, if (committed_today) 1 else 0)),
             if (!committed_today) "?" else "",
         }),
     };
@@ -600,7 +596,7 @@ const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;
-const log = std.log;
+const log = std.log.scoped(.commit_flex);
 
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");

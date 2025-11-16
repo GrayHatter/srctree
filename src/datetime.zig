@@ -193,7 +193,7 @@ pub fn currentMonth() []const u8 {
 }
 
 pub fn monthSlice(self: DateTime) []const u8 {
-    return Names.Month[self.month];
+    return Names.Month[@intFromEnum(self.month)];
 }
 
 pub fn weekdaySlice(self: DateTime) []const u8 {
