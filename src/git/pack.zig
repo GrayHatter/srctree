@@ -276,12 +276,12 @@ fn deltaInst(reader: *Reader, writer: *Writer, base: []const u8) !usize {
     }
 }
 
-fn loadRefDelta(_: Pack, reader: *Reader, _: usize, repo: *const Repo, a: Allocator, io: Io) !PackedObject {
+fn loadRefDelta(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
     var buf: [20]u8 = (try reader.takeArray(20)).*;
     const sha = SHA.init(buf[0..]);
 
     const basefree: []u8, const basedata: []const u8, const basetype: PackedObjectTypes =
-        switch (repo.loadObjectOrDelta(sha, a, io) catch return error.BlobMissing) {
+        switch (objs.loadObjectOrDelta(sha, a, io) catch return error.ObjectMissing) {
             .pack => |pk| .{ pk.data, pk.data, pk.header.kind },
             .file => |fdata| switch (fdata) {
                 .blob => |b| .{ b.memory.?, b.data.?, .blob },
@@ -305,7 +305,7 @@ fn loadRefDelta(_: Pack, reader: *Reader, _: usize, repo: *const Repo, a: Alloca
     };
 }
 
-fn loadDelta(self: Pack, reader: *Reader, offset: usize, repo: *const Repo, a: Allocator, io: Io) Error!PackedObject {
+fn loadDelta(self: Pack, reader: *Reader, offset: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
     // fd pos is offset + 2-ish because of the header read
     const srclen = try readVarInt(reader);
 
@@ -316,7 +316,7 @@ fn loadDelta(self: Pack, reader: *Reader, offset: usize, repo: *const Repo, a: A
     _ = try readVarInt(&zl.reader);
 
     const baseobj_offset = offset - srclen;
-    const baseobj = try self.loadData(baseobj_offset, repo, a, io);
+    const baseobj = try self.loadData(baseobj_offset, objs, a, io);
     defer a.free(baseobj.data);
 
     var buffer: Writer.Allocating = .init(a);
@@ -327,7 +327,7 @@ fn loadDelta(self: Pack, reader: *Reader, offset: usize, repo: *const Repo, a: A
     };
 }
 
-pub fn loadData(self: Pack, offset: usize, repo: *const Repo, a: Allocator, io: Io) Error!PackedObject {
+pub fn loadData(self: Pack, offset: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
     var reader = std.Io.Reader.fixed(self.pack[offset..]);
     const h = parseObjHeader(&reader);
 
@@ -335,8 +335,8 @@ pub fn loadData(self: Pack, offset: usize, repo: *const Repo, a: Allocator, io: 
         .header = h,
         .data = switch (h.kind) {
             .commit, .tree, .blob, .tag => loadBlob(&reader, a, io) catch return error.PackCorrupt,
-            .ofs_delta => return try self.loadDelta(&reader, offset, repo, a, io),
-            .ref_delta => return try self.loadRefDelta(&reader, offset, repo, a, io),
+            .ofs_delta => return try self.loadDelta(&reader, offset, objs, a, io),
+            .ref_delta => return try self.loadRefDelta(&reader, offset, objs, a, io),
             .invalid => {
                 std.debug.print("obj type ({}) not implemened\n", .{h.kind});
                 @panic("not implemented");
@@ -345,8 +345,8 @@ pub fn loadData(self: Pack, offset: usize, repo: *const Repo, a: Allocator, io: 
     };
 }
 
-pub fn resolveObject(self: Pack, sha: SHA, offset: usize, repo: *const Repo, a: Allocator, io: Io) !Object.Object {
-    const resolved = try self.loadData(offset, repo, a, io);
+pub fn resolveObject(self: Pack, sha: SHA, offset: usize, objs: *const Objects, a: Allocator, io: Io) !Objects.Any {
+    const resolved = try self.loadData(offset, objs, a, io);
     errdefer a.free(resolved.data);
 
     return switch (resolved.header.kind) {
@@ -363,10 +363,16 @@ pub fn raze(self: Pack) void {
     munmap(@alignCast(self.idx));
 }
 
-const Error = Repo.Error || Reader.Error;
-const Repo = @import("Repo.zig");
+pub const Error = Reader.Error || error{
+    OutOfMemory,
+    PackCorrupt,
+    PackRef,
+    AmbiguousRef,
+    ObjectMissing,
+};
+
 const SHA = @import("SHA.zig");
-const Object = @import("Object.zig");
+const Objects = @import("Objects.zig");
 
 const system = @import("../system.zig");
 

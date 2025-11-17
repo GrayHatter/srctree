@@ -167,4 +167,4 @@ const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const SHA = @import("SHA.zig");
 const Actor = @import("actor.zig");
-const Object = @import("Object.zig").Object;
+const Object = @import("Objects.zig").Any;

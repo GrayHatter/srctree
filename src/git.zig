@@ -4,7 +4,8 @@ pub const Blob = @import("git/blob.zig");
 pub const Branch = @import("git/Branch.zig");
 pub const ChangeSet = @import("git/changeset.zig");
 pub const Commit = @import("git/Commit.zig");
-pub const Object = @import("git/Object.zig").Object;
+pub const Objects = @import("git/Objects.zig");
+pub const Object = Objects.Any;
 pub const Pack = @import("git/pack.zig");
 pub const Remote = @import("git/remote.zig");
 pub const Repo = @import("git/Repo.zig");
@@ -171,34 +172,6 @@ test "toParent" {
     try std.testing.expect(count >= 31); // LOL SORRY!
 }
 
-test "read pack" {
-    const a = std.testing.allocator;
-    const io = std.testing.io;
-    var cwd = std.fs.cwd();
-    const dir = try cwd.openDir("repos/hastur", .{});
-    var repo = try Repo.init(dir.adaptToNewApi(), io);
-    defer repo.raze(a, io);
-
-    try repo.loadData(a, io);
-    var lol: []u8 = "";
-
-    for (repo.packs, 0..) |pack, pi| {
-        for (0..@byteSwap(pack.idx_header.fanout[255])) |oi| {
-            const hexy = pack.objnames[oi * 20 .. oi * 20 + 20];
-            if (hexy[0] != 0xd2) continue;
-            if (false) std.debug.print("{} {} -> {x}\n", .{ pi, oi, hexy });
-            if (hexy[1] == 0xb4 and hexy[2] == 0xd1) {
-                if (false) std.debug.print("{s} -> {}\n", .{ pack.name, pack.offsets[oi] });
-                lol = hexy;
-            }
-        }
-    }
-    const obj = try repo.loadObject(SHA.init(lol), a, io);
-    defer a.free(obj.commit.memory.?);
-    try std.testing.expect(obj == .commit);
-    if (false) std.debug.print("{}\n", .{obj});
-}
-
 test "pack contains" {
     const a = std.testing.allocator;
     const io = std.testing.io;
@@ -210,17 +183,17 @@ test "pack contains" {
 
     const sha = SHA.init("7d4786ded56e1ee6cfe72c7986218e234961d03c");
 
-    for (repo.packs) |pack| {
+    for (repo.objects.packs) |pack| {
         if (try pack.contains(sha)) |_| break;
     } else try std.testing.expect(false); // full sha
 
     const half_sha: SHA = .initPartial("7d4786ded56e1ee6cfe7");
-    for (repo.packs) |pack| {
+    for (repo.objects.packs) |pack| {
         if (try pack.contains(half_sha)) |_|
             break;
     } else try std.testing.expect(false); // half sha
 
-    const err = repo.packs[0].contains(SHA.initPartial("7d"));
+    const err = repo.objects.packs[0].contains(SHA.initPartial("7d"));
     try std.testing.expectError(error.AmbiguousRef, err);
 
     //var long_obj = try repo.findObj(a, lol);

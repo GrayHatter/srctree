@@ -90,7 +90,7 @@ pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Commit
 pub fn toParent(self: Commit, idx: u8, repo: *const Repo, a: Allocator, io: Io) !Commit {
     if (idx >= self.parent.len) return error.NoParent;
     if (self.parent[idx]) |parent| {
-        return switch (try repo.loadObject(parent, a, io)) {
+        return switch (try repo.objects.load(parent, a, io)) {
             .commit => |c| c,
             else => error.NotACommit,
         };
@@ -99,7 +99,7 @@ pub fn toParent(self: Commit, idx: u8, repo: *const Repo, a: Allocator, io: Io) 
 }
 
 pub fn loadTree(self: Commit, repo: *const Repo, a: Allocator, io: Io) !Tree {
-    return switch (try repo.loadObject(self.tree, a, io)) {
+    return switch (try repo.objects.load(self.tree, a, io)) {
         .tree => |t| t,
         else => error.NotATree,
     };
@@ -214,7 +214,7 @@ const SHA = @import("SHA.zig");
 const Repo = @import("Repo.zig");
 const Tree = @import("tree.zig");
 const Actor = @import("actor.zig");
-const Object = @import("Object.zig");
+const Objects = @import("Objects.zig");
 
 const std = @import("std");
 const Io = std.Io;
@@ -224,7 +224,6 @@ const indexOf = std.mem.indexOf;
 const startsWith = std.mem.startsWith;
 const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
-const AnyReader = std.io.AnyReader;
 
 // TODO not currently implemented
 pub const GPGSig = struct {};

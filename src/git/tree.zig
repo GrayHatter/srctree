@@ -78,7 +78,7 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
     }
     defer a.free(search_list);
 
-    var par = switch (try repo.loadObject(start_commit, a, io)) {
+    var par = switch (try repo.objects.load(start_commit, a, io)) {
         .commit => |c| c,
         else => unreachable,
     };

@@ -34,7 +34,7 @@ pub fn toObject(self: Blob, a: Allocator, repo: Repo) !Object {
 
 pub fn toTree(self: Blob, repo: *const Repo, a: Allocator, io: Io) !Tree {
     if (self.isFile()) return error.NotATree;
-    return switch (try repo.loadObject(self.sha, a, io)) {
+    return switch (try repo.objects.load(self.sha, a, io)) {
         .tree => |t| t,
         else => error.NotATree,
     };

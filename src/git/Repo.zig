@@ -1,6 +1,6 @@
 bare: bool,
 dir: Dir,
-packs: []Pack,
+objects: Objects,
 refs: []Ref,
 current: ?[]u8 = null,
 head: ?Ref = null,
@@ -18,7 +18,7 @@ const Repo = @This();
 pub const default: Repo = .{
     .bare = false,
     .dir = undefined,
-    .packs = &[0]Pack{},
+    .objects = undefined,
     .refs = &[0]Ref{},
 };
 
@@ -28,8 +28,6 @@ pub const Error = error{
     RefMissing,
     CommitMissing,
     InvalidCommit,
-    BlobMissing,
-    TreeMissing,
     InvalidTree,
     ObjectMissing,
     IncompleteObject,
@@ -37,9 +35,6 @@ pub const Error = error{
     NoSpaceLeft,
     NotImplemented,
     EndOfStream,
-    PackCorrupt,
-    PackRef,
-    AmbiguousRef,
 };
 
 /// on success d becomes owned by the returned Repo and will be closed on
@@ -59,6 +54,7 @@ pub fn init(d: Dir, io: Io) Error!Repo {
             } else |_| return error.NotAGitRepo;
         } else |_| return error.NotAGitRepo;
     }
+    repo.objects = Objects.init(repo.dir, io) catch return error.NotAGitRepo;
 
     return repo;
 }
@@ -74,7 +70,7 @@ pub fn createNew(chdir: fs.Dir, dir_name: []const u8, a: Allocator, io: Io) !Rep
 
 pub fn loadData(self: *Repo, a: Allocator, io: Io) !void {
     try self.loadConfig(a, io);
-    try self.loadPacks(a, io);
+    try self.objects.initPacks(a, io);
     try self.loadRefs(a, io);
     try self.loadTags(a, io);
     try self.loadBranches(a, io);
@@ -116,110 +112,11 @@ pub fn findRemote(self: Repo, name: []const u8) ?Remote {
     return null;
 }
 
-test {
-    var fb = [_]u8{0} ** 2048;
-    const objdir = try bufPrint(&fb, "./objects/{x}", .{([1]u8{0})[0..1]});
-    try std.testing.expectEqualStrings("./objects/00", objdir);
-}
-
-fn findFile(r: Repo, sha: SHA, io: Io) !Io.File {
-    if (sha.len == 20) {
-        var fb = [_]u8{0} ** 2048;
-        const grouped = try bufPrint(&fb, "./objects/{s}/{s}", .{ sha.hex()[0..2], sha.hex()[2..] });
-        const file = r.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
-            error.FileNotFound => {
-                const exact = try bufPrint(&fb, "./objects/{s}", .{sha.hex()[0..]});
-                return r.dir.openFile(io, exact, .{}) catch |err2| switch (err2) {
-                    error.FileNotFound => {
-                        log.warn("unable to find commit '{s}'", .{sha.hex()[0..]});
-                        return error.ObjectMissing;
-                    },
-                    else => return err2,
-                };
-            },
-            else => return err,
-        };
-        return file;
-    } else if (sha.len >= 6) {
-        var fb = [_]u8{0} ** 2048;
-        const objdir = try bufPrint(&fb, "./objects/{x}", .{sha.bin[0..1]});
-        const dir = try r.dir.openDir(io, objdir, .{ .iterate = true });
-        defer dir.close(io);
-        const old: std.fs.Dir = .adaptFromNewApi(dir);
-        var itr = old.iterate();
-        while (itr.next() catch null) |file| {
-            if (startsWith(u8, file.name, sha.hex()[2 .. (sha.len - 1) * 2])) {
-                return try dir.openFile(io, file.name, .{});
-            }
-        }
-        return error.FileNotFound;
-    } else return error.InvalidSha;
-}
-
-fn loadFile(r: Repo, sha: SHA, a: Allocator, io: Io) !Object {
-    var file = try r.findFile(sha, io);
-    defer file.close(io);
-    const stat = try file.stat(io);
-    const compressed: []u8 = try a.alloc(u8, stat.size);
-    defer a.free(compressed);
-    var reader = file.reader(io, compressed);
-    var z_b: [zlib.max_window_len * 2]u8 = undefined;
-    var zl: std.compress.flate.Decompress = .init(&reader.interface, .zlib, &z_b);
-    const data = try zl.reader.allocRemaining(a, .limited(0xffffff));
-    errdefer a.free(data);
-    if (indexOf(u8, data, "\x00")) |i| {
-        const header = data[0..i];
-        _ = header;
-        const body = data[i + 1 ..];
-        if (startsWith(u8, data, "blob ")) {
-            return .{ .blob = .initOwned(sha, @splat(0xff), body, body, data) };
-        } else if (startsWith(u8, data, "tree ")) {
-            return .{ .tree = try .initOwned(sha, a, body, data) };
-        } else if (startsWith(u8, data, "commit ")) {
-            return .{ .commit = try .initOwned(sha, a, body, data) };
-        } else if (startsWith(u8, data, "tag ")) {
-            return .{ .tag = try .initOwned(sha, body) };
-        }
-    }
-    return error.InvalidObject;
-}
-
-fn loadFromPacks(self: Repo, sha: SHA, a: Allocator, io: Io) !?Object {
-    for (self.packs) |pack| {
-        const offset = try pack.contains(sha) orelse continue;
-        const fullsha = if (sha.len < 20) try pack.expandPrefix(sha) orelse unreachable else sha;
-        return try pack.resolveObject(fullsha, offset, &self, a, io);
-    }
-    return null;
-}
-
-pub fn loadObjectOrDelta(self: Repo, sha: SHA, a: Allocator, io: Io) !union(enum) {
-    pack: Pack.PackedObject,
-    file: Object,
-} {
-    for (self.packs) |pack| {
-        if (try pack.contains(sha)) |offset| {
-            return .{ .pack = try pack.loadData(offset, &self, a, io) };
-        }
-    }
-    return .{ .file = try self.loadFile(sha, a, io) };
-}
-
-pub fn loadObject(self: Repo, sha: SHA, a: Allocator, io: Io) !Object {
-    return try self.loadFromPacks(sha, a, io) orelse try self.loadFile(sha, a, io);
-}
-
-pub fn loadBlob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
-    return switch (try self.loadObject(sha, a, io)) {
+pub fn loadBlob(repo: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
+    return switch (try repo.objects.load(sha, a, io)) {
         .blob => |b| b,
         else => error.NotABlob,
     };
-}
-
-pub fn loadPacks(self: *Repo, a: Allocator, io: Io) !void {
-    var dir = try self.dir.openDir(io, "./objects/pack", .{ .iterate = true });
-    defer dir.close(io);
-    self.packs = try Pack.initAllFromDir(dir, a, io);
 }
 
 pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
@@ -346,7 +243,7 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
                 const name = line[i + 10 ..];
 
                 try tags.append(a, try .fromObject(
-                    try self.loadObject(.init(line[0..40]), a, io),
+                    try self.objects.load(.init(line[0..40]), a, io),
                     try a.dupe(u8, name),
                 ));
             }
@@ -373,7 +270,7 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
             return error.InvalidTagFound;
         }
         try tags.append(a, try .fromObject(
-            try self.loadObject(.init(contents[0..40]), a, io),
+            try self.objects.load(.init(contents[0..40]), a, io),
             try a.dupe(u8, next.name),
         ));
     }
@@ -400,30 +297,10 @@ fn loadBranches(self: *Repo, a: Allocator, io: Io) !void {
     self.branches = try list.toOwnedSlice(a);
 }
 
-pub fn resolvePartial(repo: *const Repo, sha: SHA) !?SHA {
-    if (sha.len == 20) return sha;
-    if (sha.len < 3) return error.TooShort; // not supported
-
-    var ambiguous: bool = false;
-    for (repo.packs) |pack| {
-        if (pack.expandPrefix(sha) catch |err| switch (err) {
-            error.AmbiguousRef => {
-                ambiguous = true;
-                continue;
-            },
-            else => return err,
-        }) |s| {
-            return s;
-        }
-    }
-    if (ambiguous) return error.AmbiguousRef;
-    return null;
-}
-
 pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
     if (sha.len < 20) {
-        const full_sha = try self.resolvePartial(sha) orelse sha; //unreachable;
-        return switch (try self.loadObject(full_sha, a, io)) {
+        const full_sha = try self.objects.resolveSha(sha) orelse sha; //unreachable;
+        return switch (try self.objects.load(full_sha, a, io)) {
             .commit => |c| {
                 var cmt = c;
                 cmt.sha = full_sha;
@@ -431,7 +308,7 @@ pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
             },
             else => error.NotACommit,
         };
-    } else return switch (try self.loadObject(sha, a, io)) {
+    } else return switch (try self.objects.load(sha, a, io)) {
         .commit => |c| c,
         else => error.NotACommit,
     };
@@ -477,10 +354,8 @@ pub fn raze(self: *Repo, a: Allocator, io: Io) void {
         a.free(cd);
     }
 
-    for (self.packs) |pack| {
-        pack.raze();
-    }
-    a.free(self.packs);
+    self.objects.raze(a, io);
+
     for (self.refs) |r| switch (r) {
         .branch => |b| {
             a.free(b.name);
@@ -535,33 +410,16 @@ pub fn getAgent(self: *const Repo, a: Allocator) Agent {
     };
 }
 
-test "hopefully a delta" {
-    const a = std.testing.allocator;
-    const io = std.testing.io;
-    var cwd = std.fs.cwd();
-    const dir = try cwd.openDir("repos/hastur", .{});
-    var repo = try Repo.init(dir.adaptToNewApi(), io);
-    try repo.loadData(a, io);
-    defer repo.raze(a, io);
-
-    var head = try repo.headCommit(a, io);
-    defer head.raze();
-    if (false) std.debug.print("{}\n", .{head});
-
-    const obj = try repo.loadFromPacks(head.tree, a, io) orelse return error.UnableToLoadObject;
-    switch (obj) {
-        .tree => |tree| tree.raze(),
-        else => return error.NotATree,
-    }
-    if (false) std.debug.print("{}\n", .{obj.tree});
+test Repo {
+    _ = &Objects;
 }
 
 const Agent = @import("agent.zig");
 const Blob = @import("blob.zig");
 const Branch = @import("Branch.zig");
 const Commit = @import("Commit.zig");
-const Object = @import("Object.zig").Object;
-const Pack = @import("pack.zig");
+const Objects = @import("Objects.zig");
+const Object = Objects.Any;
 const Ref = @import("ref.zig").Ref;
 const Remote = @import("remote.zig");
 const SHA = @import("SHA.zig");

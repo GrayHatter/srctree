@@ -3,7 +3,7 @@ const TreePage = PageData("tree.html");
 pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     const now: i64 = (Io.Clock.now(.real, ctx.io) catch unreachable).toSeconds();
     const c = if (rd.ref) |ref|
-        switch (repo.loadObject(.init(ref), ctx.alloc, ctx.io) catch return error.InvalidURI) {
+        switch (repo.objects.load(.init(ref), ctx.alloc, ctx.io) catch return error.InvalidURI) {
             .commit => |cm| cm,
             else => return error.DataInvalid,
         }

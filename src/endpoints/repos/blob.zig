@@ -27,7 +27,7 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
     if (rd.verb != null and rd.ref != null and rd.verb.? == .ref and isHash(rd.ref.?)) {
         if (rd.ref.?.len != 40) return error.InvalidURI;
         const sha: Git.SHA = .init(rd.ref.?);
-        switch (repo.loadObject(sha, frame.alloc, frame.io) catch return error.InvalidURI) {
+        switch (repo.objects.load(sha, frame.alloc, frame.io) catch return error.InvalidURI) {
             .commit => |c| return treeOrBlobAtRef(frame, rd, &repo, c),
             else => return error.DataInvalid,
         }
@@ -69,7 +69,7 @@ fn traverseTree(repo: *const Git.Repo, uri: *verse.Uri.Iterator, in_tree: Git.Tr
     if (udir.len == 0) return in_tree;
     for (in_tree.blobs) |obj| {
         if (std.mem.eql(u8, udir, obj.name)) {
-            return switch (try repo.loadObject(obj.sha, a, io)) {
+            return switch (try repo.objects.load(obj.sha, a, io)) {
                 .tree => |t| try traverseTree(repo, uri, t, a, io),
                 else => return error.NotATree,
             };
@@ -92,7 +92,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
                     if (path.next() != null) return error.InvalidURI;
                     break :search;
                 }
-                files = switch (repo.loadObject(obj.sha, frame.alloc, frame.io) catch return error.Unknown) {
+                files = switch (repo.objects.load(obj.sha, frame.alloc, frame.io) catch return error.Unknown) {
                     .tree => |t| t,
                     else => return error.Unknown,
                 };
