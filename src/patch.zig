@@ -103,7 +103,7 @@ pub const Diff = struct {
             while (true) {
                 if (startsWith(u8, current, "index ")) {
                     // TODO parse index correctly
-                    const nl = indexOf(u8, src, "\n") orelse return error.InvalidHeader;
+                    const nl = indexOf(u8, current, "\n") orelse return error.InvalidHeader;
                     index = current[0..nl];
                 } else {
                     const nl = indexOf(u8, current, "\n") orelse break;
@@ -182,13 +182,21 @@ pub const Diff = struct {
         i = 0;
         //while (i < d.len and d[i] != '\n') i += 1;
         //if (i == d.len) return null;
-        const header = try Header.parse(d[0..]);
+        const header: Header = try .parse(d[0..]);
+        self.header = header;
         d = d[header.blob.len..];
+
+        if (header.change == .deletion) {
+            return &.{};
+        }
 
         if (header.index != null) {
             // TODO redact and user headers
             // Left Filename
-            if (d.len < 6 or !eql(u8, d[0..4], "--- ")) return error.UnableToParsePatchHeader;
+            if (d.len < 6 or !eql(u8, d[0..4], "--- ")) {
+                std.debug.print("{s}\n", .{self.blob});
+                return error.UnableToParsePatchHeader;
+            }
             d = d[4..];
 
             i = 0;
@@ -219,7 +227,6 @@ pub const Diff = struct {
             if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
             _ = indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid;
         }
-        self.header = header;
         return d;
     }
 

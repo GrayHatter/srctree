@@ -299,7 +299,7 @@ fn loadBranches(self: *Repo, a: Allocator, io: Io) !void {
 
 pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
     if (sha.len < 20) {
-        const full_sha = try self.objects.resolveSha(sha) orelse sha; //unreachable;
+        const full_sha = try self.objects.resolveSha(sha, io) orelse sha; //unreachable;
         return switch (try self.objects.load(full_sha, a, io)) {
             .commit => |c| {
                 var cmt = c;

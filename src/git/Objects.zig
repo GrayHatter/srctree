@@ -22,6 +22,22 @@ pub fn raze(objs: Objects, a: Allocator, io: Io) void {
     a.free(objs.packs);
 }
 
+fn findFileSha(objs: Objects, sha: *SHA, io: Io) !Io.File {
+    // TODO error on ambiguous ref
+    var fb = [_]u8{0} ** 2048;
+    const objdir = try bufPrint(&fb, "./{x}", .{sha.bin[0..1]});
+    const dir = try objs.dir.openDir(io, objdir, .{ .iterate = true });
+    defer dir.close(io);
+    const old: std.fs.Dir = .adaptFromNewApi(dir);
+    var itr = old.iterate();
+    while (itr.next() catch null) |file| {
+        if (startsWith(u8, file.name, sha.hex()[2 .. (sha.len - 1) * 2])) {
+            return try dir.openFile(io, file.name, .{});
+        }
+    }
+    return error.FileNotFound;
+}
+
 fn findFile(objs: Objects, sha: SHA, io: Io) !Io.File {
     if (sha.len == 20) {
         var fb = [_]u8{0} ** 2048;
@@ -41,18 +57,8 @@ fn findFile(objs: Objects, sha: SHA, io: Io) !Io.File {
         };
         return file;
     } else if (sha.len >= 6) {
-        var fb = [_]u8{0} ** 2048;
-        const objdir = try bufPrint(&fb, "./{x}", .{sha.bin[0..1]});
-        const dir = try objs.dir.openDir(io, objdir, .{ .iterate = true });
-        defer dir.close(io);
-        const old: std.fs.Dir = .adaptFromNewApi(dir);
-        var itr = old.iterate();
-        while (itr.next() catch null) |file| {
-            if (startsWith(u8, file.name, sha.hex()[2 .. (sha.len - 1) * 2])) {
-                return try dir.openFile(io, file.name, .{});
-            }
-        }
-        return error.FileNotFound;
+        var new_sha = sha;
+        return try objs.findFileSha(&new_sha, io);
     } else return error.InvalidSha;
 }
 
@@ -108,23 +114,26 @@ pub fn load(objs: Objects, sha: SHA, a: Allocator, io: Io) !Any {
     return try objs.loadFromPacks(sha, a, io) orelse try objs.loadFile(sha, a, io);
 }
 
-pub fn resolveSha(repo: *const Objects, sha: SHA) !?SHA {
+pub fn resolveSha(objs: Objects, sha: SHA, io: Io) !?SHA {
     if (sha.len == 20) return sha;
     if (sha.len < 3) return error.TooShort; // not supported
 
-    var ambiguous: bool = false;
-    for (repo.packs) |pack| {
+    for (objs.packs) |pack| {
         if (pack.expandPrefix(sha) catch |err| switch (err) {
-            error.AmbiguousRef => {
-                ambiguous = true;
-                continue;
-            },
+            error.AmbiguousRef => return error.AmbiguousRef,
             else => return err,
         }) |s| {
             return s;
         }
     }
-    if (ambiguous) return error.AmbiguousRef;
+    var nsha = sha;
+
+    var file = objs.findFileSha(&nsha, io) catch |err| switch (err) {
+        error.FileNotFound => return null,
+        else => return err,
+    };
+    file.close(io);
+
     return null;
 }
 

@@ -322,7 +322,10 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
             .{ dstat.additions, dstat.deletions, dstat.total },
         );
         //<div class="<DClass />"><ln num="<Num type="usize" />" id="LL<Num type="usize" />" href="#LL<Num type="usize" />"><Line /></ln></div>
-        const name = if (diff.filename) |name| try allocPrint(a, "{s}", .{name}) else "File Was Deleted";
+        const name = if (diff.filename) |name| try allocPrint(a, "{s}", .{name}) else switch (diff.header.change) {
+            .deletion => "File Was Deleted",
+            else => "File Was Added",
+        };
         file.* = .{
             .diff_stat = stat,
             .filename = name,
