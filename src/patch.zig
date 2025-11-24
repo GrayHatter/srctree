@@ -43,7 +43,7 @@ pub const Diff = struct {
         total: isize,
     };
 
-    const Mode = [4]u8;
+    const Mode = [6]u4;
 
     /// I haven't seen enough patches to know this is correct, but ideally
     /// (assumably) for non merge commits a single change type should be
@@ -70,13 +70,13 @@ pub const Diff = struct {
             dst: []const u8,
         };
 
-        fn parseMode(str: []const u8) !Mode {
-            if (str.len < 6 or str[0] != '1' or str[1] != '0' or str[2] != '0') {
+        fn parseMode(str: [6]u8) !Mode {
+            if (str[0] != '1') {
                 std.debug.print("invalid mode string found {s}\n", .{str});
                 return error.InvalidMode;
             }
-            var mode: Mode = .{ 0, 0, 0, 0 };
-            for (str[3..6], mode[1..4]) |s, *m| switch (s) {
+            var mode: Mode = @splat(0);
+            for (str, &mode) |s, *m| switch (s) {
                 '0' => m.* = 0,
                 '1' => m.* = 1,
                 '2' => m.* = 2,
@@ -115,9 +115,9 @@ pub const Diff = struct {
                     } else if (startsWith(u8, current, "new mode ")) {
                         change = .{ .mode = undefined };
                     } else if (startsWith(u8, current, "deleted file mode ")) {
-                        change = .{ .deletion = try parseMode(current["deleted file mode ".len..]) };
+                        change = .{ .deletion = try parseMode(current["deleted file mode ".len..][0..6].*) };
                     } else if (startsWith(u8, current, "new file mode ")) {
-                        change = .{ .newfile = try parseMode(current["new file mode ".len..]) };
+                        change = .{ .newfile = try parseMode(current["new file mode ".len..][0..6].*) };
                     } else if (startsWith(u8, current, "copy from ")) {
                         change = .{ .copy = .{
                             .src = current["copy from ".len..nl],
@@ -140,6 +140,8 @@ pub const Diff = struct {
                         } };
                     } else if (startsWith(u8, current, "dissimilarity index ")) {
                         change = .{ .dissimilarity = current };
+                    } else if (startsWith(u8, current, "Binary files ")) {
+                        change = .{ .binary = {} };
                     } else {
                         // TODO search for '\n[^+- ]' and return change body
                         // size to caller
@@ -186,8 +188,9 @@ pub const Diff = struct {
         self.header = header;
         d = d[header.blob.len..];
 
-        if (header.change == .deletion) {
-            return &.{};
+        switch (header.change) {
+            .deletion, .binary => return &.{},
+            else => {},
         }
 
         if (header.index != null) {
@@ -240,7 +243,10 @@ pub const Diff = struct {
                 .total = @intCast(count(u8, blob, "\n+") -| count(u8, blob, "\n-")),
             },
         };
-        d.changes = try d.parse();
+        d.changes = d.parse() catch {
+            log.err("{s}", .{blob});
+            unreachable;
+        };
         return d;
     }
 
@@ -367,11 +373,21 @@ pub const Split = struct {
 
 fn lineNumberFromHeader(str: []const u8) !struct { u32, u32 } {
     std.debug.assert(std.mem.startsWith(u8, str, "@@ -"));
-    var idx = indexOfScalarPos(u8, str, 4, ',') orelse return error.InvalidHeader;
-    const left: u32 = try std.fmt.parseInt(u32, str[4..idx], 10);
+    var idx: usize = 4;
+    const left: u32 = if (indexOfScalarPos(u8, str, idx, ',')) |end|
+        try std.fmt.parseInt(u32, str[idx..end], 10)
+    else if (indexOfScalarPos(u8, str, idx, ' ')) |end|
+        try std.fmt.parseInt(u32, str[idx..end], 10)
+    else
+        return error.InvalidHeader;
+
     idx = indexOfScalarPos(u8, str, idx, '+') orelse return error.InvalidHeader;
-    const end = indexOfScalarPos(u8, str, idx, ',') orelse return error.InvalidHeader;
-    const right: u32 = try std.fmt.parseInt(u32, str[idx + 1 .. end], 10);
+    const right: u32 = if (indexOfScalarPos(u8, str, idx, ',')) |end|
+        try std.fmt.parseInt(u32, str[idx..end], 10)
+    else if (indexOfScalarPos(u8, str, idx, ' ')) |end|
+        try std.fmt.parseInt(u32, str[idx..end], 10)
+    else
+        return error.InvalidHeader;
     return .{ left, right };
 }
 
@@ -379,6 +395,9 @@ test lineNumberFromHeader {
     const l, const r = try lineNumberFromHeader("@@ -11,6 +11,8 @@ pub const verse_routes = [_]Match{");
     try std.testing.expectEqual(@as(u32, 11), l);
     try std.testing.expectEqual(@as(u32, 11), r);
+    const ll, const rr = try lineNumberFromHeader("@@ -1 +1 @@");
+    try std.testing.expectEqual(@as(u32, 1), ll);
+    try std.testing.expectEqual(@as(u32, 1), rr);
 }
 
 pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
@@ -442,7 +461,10 @@ pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]DiffLine {
         const text: []const u8 = if (line.len > 0) if (line[0] != '@') line[1..] else line else "&nbsp;";
         if (line.len > 0) switch (line[0]) {
             '@' => {
-                linenum_l, linenum_r = try lineNumberFromHeader(line);
+                linenum_l, linenum_r = lineNumberFromHeader(line) catch {
+                    log.err("{s}", .{diff});
+                    unreachable;
+                };
                 try lines.append(a, .{ .hdr = text });
             },
             '-' => {
@@ -523,7 +545,7 @@ test "diffsSlice" {
 }
 
 test "parseMode" {
-    try std.testing.expectEqual([4]u8{ 0, 4, 4, 4 }, Diff.Header.parseMode("100444"));
+    try std.testing.expectEqual([6]u4{ 1, 0, 0, 4, 4, 4 }, Diff.Header.parseMode("100444".*));
 }
 
 const std = @import("std");
@@ -539,6 +561,7 @@ const indexOfPos = std.mem.indexOfPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
+const log = std.log.scoped(.git_patch);
 
 const CURL = @import("curl.zig");
 const verse = @import("verse");
