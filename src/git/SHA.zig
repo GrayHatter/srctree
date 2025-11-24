@@ -4,6 +4,8 @@ len: u6 = 20,
 
 const SHA = @This();
 
+pub const empty: SHA = .{ .bin = @splat(0), .len = 20 };
+
 pub const Bin = [20]u8;
 pub const Hex = [40]u8;
 

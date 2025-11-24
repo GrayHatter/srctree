@@ -281,55 +281,47 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
 }
 
 fn buildList(
-    a: Allocator,
-    io: Io,
-    repo: Git.Repo,
+    list: *ArrayList(S.CommitList),
+    repo: *const Git.Repo,
     name: []const u8,
     before: ?Git.SHA,
-    count: usize,
-    outsha: *Git.SHA,
     include_email: bool,
-) ![]S.CommitList {
-    return buildListBetween(a, io, repo, name, null, before, count, outsha, include_email);
+    a: Allocator,
+    io: Io,
+) !?Git.SHA {
+    return buildListBetween(list, repo, name, null, before, include_email, a, io);
 }
 
 fn buildListBetween(
-    a: Allocator,
-    io: Io,
-    repo: Git.Repo,
+    list: *ArrayList(S.CommitList),
+    repo: *const Git.Repo,
     name: []const u8,
     left: ?Git.SHA,
     right: ?Git.SHA,
-    count: usize,
-    outsha: *Git.SHA,
     include_email: bool,
-) ![]S.CommitList {
-    var commits = try a.alloc(S.CommitList, count);
+    a: Allocator,
+    io: Io,
+) !?Git.SHA {
     var current: Git.Commit = repo.headCommit(a, io) catch return error.Unknown;
-    if (right) |r| {
-        while (!current.sha.startsWith(r)) {
-            current = current.toParent(0, &repo, a, io) catch |err| {
-                std.debug.print("unable to build commit history\n", .{});
-                return err;
-            };
-        }
-        current = current.toParent(0, &repo, a, io) catch |err| {
-            std.debug.print("unable to build commit history\n", .{});
+    if (right) |r| while (!current.sha.startsWith(r)) {
+        current = current.toParent(0, repo, a, io) catch |err| {
+            std.debug.print("unable to build commit history {}\n", .{err});
             return err;
         };
+    };
+
+    while (!current.sha.startsWith(left orelse .empty)) {
+        list.appendBounded(try commitVerse(a, current, name, include_email)) catch return current.sha;
+        current = current.toParent(0, repo, a, io) catch |err| switch (err) {
+            else => {
+                std.debug.print("unable to build commit history {}\n", .{err});
+                return err;
+            },
+            error.NoParent => return null,
+        };
     }
-    var found: usize = 0;
-    for (commits, 1..) |*c, i| {
-        c.* = try commitVerse(a, current, name, include_email);
-        found = i;
-        outsha.* = current.sha;
-        if (left) |l| if (current.sha.startsWith(l)) break;
-        current = current.toParent(0, &repo, a, io) catch break;
-    }
-    if (a.resize(commits, found)) {
-        commits.len = found;
-    } else unreachable; // lol, good luck!
-    return commits;
+
+    return current.parent[0] orelse return current.sha;
 }
 
 pub fn commitList(f: *Frame) Error!void {
@@ -362,20 +354,12 @@ pub fn commitList(f: *Frame) Error!void {
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
-    var last_sha: Git.SHA = undefined;
-    const cmts_list = buildList(
-        f.alloc,
-        f.io,
-        repo,
-        rd.name,
-        commitish,
-        50,
-        &last_sha,
-        f.user != null,
-    ) catch
+    var l_b: [50]S.CommitList = undefined;
+    var list: ArrayList(S.CommitList) = .initBuffer(&l_b);
+    const last_sha: ?Git.SHA = buildList(&list, &repo, rd.name, commitish, f.user != null, f.alloc, f.io) catch
         return error.Unknown;
 
-    return sendCommits(f, cmts_list, rd.name, last_sha.hex()[0..8]);
+    return sendCommits(f, list.items, rd.name, last_sha);
 }
 
 pub fn commitsBefore(f: *Frame) Error!void {
@@ -390,31 +374,32 @@ pub fn commitsBefore(f: *Frame) Error!void {
 
     const before: Git.SHA = if (f.uri.next()) |bf| Git.SHA.initPartial(bf);
     const commits_b = try f.alloc.alloc(Template.Verse, 50);
-    var last_sha: Git.SHA = undefined;
-    const cmts_list = try buildList(f.alloc, f.io, repo, rd.name, before, commits_b, &last_sha);
-    return sendCommits(f, cmts_list, rd.name, last_sha[0..]);
+
+    var l_b: [50]S.CommitList = undefined;
+    var list: ArrayList(S.CommitList) = .initBuffer(&l_b);
+    const last_sha = try buildList(&list, &repo, rd.name, before, commits_b, f.alloc, f.io);
+    return sendCommits(f, list.items, rd.name, last_sha);
 }
 
-fn sendCommits(f: *Frame, list: []const S.CommitList, repo_name: []const u8, sha: []const u8) Error!void {
+fn sendCommits(f: *Frame, list: []const S.CommitList, repo_name: []const u8, sha: ?Git.SHA) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
-
+    const last_sha: ?[]const u8 = if (sha) |s| s.hex()[0..8] else null;
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .nav_buttons = &try Repos.navButtons(f),
-        } },
+        .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
 
         .commit_list = list,
-        .after_commits = .{
+        .after_commits = if (last_sha) |s| .{
             .repo_name = repo_name,
-            .sha = sha,
-        },
+            .sha = s,
+        } else null,
     });
 
     try f.sendPage(&page);
 }
 
 const std = @import("std");
+const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
