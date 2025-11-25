@@ -136,7 +136,7 @@ pub const Diff = struct {
     /// (assumably) for non merge commits a single change type should be
     /// exhaustive? TODO find counter example and create test.
     pub const Header = struct {
-        blob: []const u8,
+        //blob: []const u8,
         index: ?[]const u8,
         change: Change,
 
@@ -147,9 +147,49 @@ pub const Diff = struct {
             deletion: Mode,
             copy: SrcDst,
             rename: SrcDst,
-            mode: SrcDst,
+            mode: Mode,
             similarity: []const u8,
             dissimilarity: []const u8,
+
+            pub fn parseLine(line: []const u8) !Change {
+                if (startsWith(u8, line, "similarity index")) {
+                    // TODO parse similarity correctly
+                    return .{ .similarity = line };
+                } else if (startsWith(u8, line, "old mode ")) {
+                    return .{ .mode = try .fromStr(line["old mode ".len..][0..6].*) };
+                } else if (startsWith(u8, line, "new mode ")) {
+                    return .{ .mode = try .fromStr(line["new mode ".len..][0..6].*) };
+                } else if (startsWith(u8, line, "deleted file mode ")) {
+                    return .{ .deletion = try .fromStr(line["deleted file mode ".len..][0..6].*) };
+                } else if (startsWith(u8, line, "new file mode ")) {
+                    return .{ .newfile = try .fromStr(line["new file mode ".len..][0..6].*) };
+                } else if (startsWith(u8, line, "copy from ")) {
+                    return .{ .copy = .{
+                        .src = line["copy from ".len..],
+                        .dst = undefined,
+                    } };
+                } else if (startsWith(u8, line, "copy to ")) {
+                    return .{ .copy = .{
+                        .src = line["copy to ".len..],
+                        .dst = line["copy to ".len..],
+                    } };
+                } else if (startsWith(u8, line, "rename from ")) {
+                    return .{ .rename = .{
+                        .src = line["rename from ".len..],
+                        .dst = undefined,
+                    } };
+                } else if (startsWith(u8, line, "rename to ")) {
+                    return .{ .rename = .{
+                        .src = undefined,
+                        .dst = line["rename to ".len..],
+                    } };
+                } else if (startsWith(u8, line, "dissimilarity index ")) {
+                    return .{ .dissimilarity = line };
+                } else if (startsWith(u8, line, "Binary files ")) {
+                    return .{ .binary = {} };
+                }
+                return error.UnsupportedHeader;
+            }
         };
 
         const SrcDst = struct {
@@ -157,74 +197,40 @@ pub const Diff = struct {
             dst: []const u8,
         };
 
-        fn parse(src: []const u8) !Header {
-            var pos: usize = 0;
-            var current = src[0..];
-            var blob: []const u8 = src[0..];
+        fn parse(r: *Reader) !Header {
             var change: Change = .{ .none = {} };
             var index: ?[]const u8 = null;
-            while (true) {
+            while (r.takeDelimiterInclusive('\n')) |current| {
                 if (startsWith(u8, current, "index ")) {
                     // TODO parse index correctly
-                    const nl = indexOf(u8, current, "\n") orelse return error.InvalidHeader;
-                    index = current[0..nl];
+                    index = current;
                 } else {
-                    const nl = indexOf(u8, current, "\n") orelse break;
-                    if (startsWith(u8, current, "similarity index")) {
-                        // TODO parse similarity correctly
-                        change = .{ .similarity = current };
-                    } else if (startsWith(u8, current, "old mode ")) {
-                        change = .{ .mode = undefined };
-                    } else if (startsWith(u8, current, "new mode ")) {
-                        change = .{ .mode = undefined };
-                    } else if (startsWith(u8, current, "deleted file mode ")) {
-                        change = .{ .deletion = try .fromStr(current["deleted file mode ".len..][0..6].*) };
-                    } else if (startsWith(u8, current, "new file mode ")) {
-                        change = .{ .newfile = try .fromStr(current["new file mode ".len..][0..6].*) };
-                    } else if (startsWith(u8, current, "copy from ")) {
-                        change = .{ .copy = .{
-                            .src = current["copy from ".len..nl],
-                            .dst = undefined,
-                        } };
-                    } else if (startsWith(u8, current, "copy to ")) {
-                        change = .{ .copy = .{
-                            .src = change.copy.src,
-                            .dst = current["copy to ".len..nl],
-                        } };
-                    } else if (startsWith(u8, current, "rename from ")) {
-                        change = .{ .rename = .{
-                            .src = current["rename from ".len..nl],
-                            .dst = undefined,
-                        } };
-                    } else if (startsWith(u8, current, "rename to ")) {
-                        change = .{ .rename = .{
-                            .src = change.rename.src,
-                            .dst = current["rename to ".len..nl],
-                        } };
-                    } else if (startsWith(u8, current, "dissimilarity index ")) {
-                        change = .{ .dissimilarity = current };
-                    } else if (startsWith(u8, current, "Binary files ")) {
-                        change = .{ .binary = {} };
-                    } else {
-                        // TODO search for '\n[^+- ]' and return change body
-                        // size to caller
-                        if (startsWith(u8, current, "--- ") or
-                            startsWith(u8, current, "+++ ") or
-                            startsWith(u8, current, "@@"))
-                        {
-                            break;
-                        } else if (current.len > 1) {
-                            std.debug.print("ERROR: unsupported header {s}\n", .{current});
-                        }
-                    }
+                    change = Change.parseLine(current) catch |err| switch (err) {
+                        error.UnsupportedHeader => {
+
+                            // TODO search for '\n[^+- ]' and return change body
+                            // size to caller
+                            if (startsWith(u8, current, "--- ") or
+                                startsWith(u8, current, "+++ ") or
+                                startsWith(u8, current, "@@"))
+                            {
+                                r.seek -|= current.len;
+                                break;
+                            } else {
+                                log.err("ERROR: unexpected header {s}", .{current});
+                                continue;
+                            }
+                        },
+                        else => {
+                            log.err("ERROR: unsupported header {s}", .{current});
+                            return err;
+                        },
+                    };
                 }
-                pos = std.mem.indexOfPos(u8, src, pos + 1, "\n") orelse break;
-                blob = src[0 .. pos + 1];
-                current = src[pos + 1 ..];
-            }
+            } else |_| {}
             if (index == null and change == .none) return error.IncompleteHeader;
             return .{
-                .blob = blob,
+                //.blob = blob,
                 .index = index,
                 .change = change,
             };
@@ -238,19 +244,12 @@ pub const Diff = struct {
     /// I'm so sorry for these crimes... in my defense, I got distracted
     /// while refactoring :<
     pub fn parse(self: *Diff) !?[]const u8 {
-        var d = self.blob;
-        assert(startsWith(u8, d, "diff --git a/"));
-        var i: usize = 0;
-        while (d[i] != '\n' and i < d.len) i += 1;
-        d = d[i + 1 ..];
+        assert(startsWith(u8, self.blob, "diff --git a/"));
 
-        i = 0;
-        //while (i < d.len and d[i] != '\n') i += 1;
-        //if (i == d.len) return null;
-        const header: Header = try .parse(d[0..]);
+        var reader: Reader = .fixed(self.blob);
+        _ = try reader.takeDelimiterInclusive('\n');
+        const header: Header = try .parse(&reader);
         self.header = header;
-        d = d[header.blob.len..];
-
         switch (header.change) {
             .deletion, .binary => return &.{},
             else => {},
@@ -259,41 +258,32 @@ pub const Diff = struct {
         if (header.index != null) {
             // TODO redact and user headers
             // Left Filename
-            if (d.len < 6 or !eql(u8, d[0..4], "--- ")) {
-                std.debug.print("{s}\n", .{self.blob});
+            self.filename = try reader.takeDelimiterInclusive('\n');
+            if (!startsWith(u8, self.filename.?, "--- ")) return error.UnableToParsePatchHeader;
+            self.filename = self.filename.?[4..];
+            self.filename = if (eql(u8, self.filename.?, "/dev/null\n"))
+                null
+            else
+                self.filename.?[2 .. self.filename.?.len - 1];
+
+            if (self.filename == null) {
+                self.filename = try reader.takeDelimiterInclusive('\n');
+                if (!startsWith(u8, self.filename.?, "+++ ")) return error.UnableToParsePatchHeader;
+                self.filename = self.filename.?[4..];
+                self.filename = if (eql(u8, self.filename.?, "/dev/null\n"))
+                    null
+                else
+                    self.filename.?[2 .. self.filename.?.len - 1];
+            } else if (!startsWith(u8, try reader.takeDelimiterInclusive('\n'), "+++ "))
                 return error.UnableToParsePatchHeader;
-            }
-            d = d[4..];
-
-            i = 0;
-            while (d[i] != '\n' and i < d.len) i += 1;
-            self.filename = d[2..i];
-
-            if (d.len < 4 or !eql(u8, d[0..2], "a/")) {
-                if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                self.filename = null;
-            }
-            d = d[i + 1 ..];
-
-            // Right Filename
-            if (d.len < 6 or !eql(u8, d[0..4], "+++ ")) return error.UnableToParsePatchHeader;
-            d = d[4..];
-
-            i = 0;
-            while (d[i] != '\n' and i < d.len) i += 1;
-            const right_name = d[2..i];
-
-            if (d.len < 4 or !eql(u8, d[0..2], "b/")) {
-                if (d.len < 10 or !eql(u8, d[0..10], "/dev/null\n")) return error.UnableToParsePatchHeader;
-                self.filename = right_name;
-            }
-            d = d[i + 1 ..];
 
             // Block headers
-            if (d.len < 20 or !eql(u8, d[0..4], "@@ -")) return error.BlockHeaderMissing;
-            _ = indexOf(u8, d[4..], " @@") orelse return error.BlockHeaderInvalid;
+            if (reader.peekDelimiterInclusive('\n')) |block| {
+                if (!startsWith(u8, block, "@@ -") or indexOf(u8, block, " @@") == null)
+                    return error.BlockHeaderMissing;
+            } else |_| return error.UnableToParsePatchHeader;
         }
-        return d;
+        return reader.buffered();
     }
 
     pub fn init(blob: []const u8) !Diff {
@@ -371,8 +361,8 @@ pub const Stat = struct {
 };
 
 pub fn patchStat(p: Patch) Stat {
-    const a = count(u8, p.blob, "\n+");
-    const d = count(u8, p.blob, "\n-");
+    const a = count(u8, p.blob, "\n+") - count(u8, p.blob, "\n+++ a/");
+    const d = count(u8, p.blob, "\n-") - count(u8, p.blob, "\n--- b/");
     const files = count(u8, p.blob, "\ndiff --git a/") +
         @as(usize, if (startsWith(u8, p.blob, "diff --git a/")) 1 else 0);
     return .{
@@ -395,11 +385,11 @@ fn fetch(uri: []const u8, a: Allocator, io: Io) ![]u8 {
         //.max_append_size = 0xffffff,
     });
     if (request) |req| {
-        std.debug.print("request code {}\n", .{req.status});
-        std.debug.print("request body {s}\n", .{response.items});
+        log.err("request code {}\n", .{req.status});
+        log.err("request body {s}\n", .{response.items});
         return try response.toOwnedSlice(a);
     } else |err| {
-        std.debug.print("stdlib request failed with error {}\n", .{err});
+        log.err("stdlib request failed with error {}\n", .{err});
     }
 
     const curl = try CURL.curlRequest(a, uri);
@@ -435,16 +425,16 @@ pub const Split = struct {
 };
 
 fn lineNumberFromHeader(str: []const u8) !struct { u32, u32 } {
-    std.debug.assert(std.mem.startsWith(u8, str, "@@ -"));
+    assert(startsWith(u8, str, "@@ -"));
     var idx: usize = 4;
     const left: u32 = if (indexOfAnyPos(u8, str, idx, " ,")) |end|
-        try std.fmt.parseInt(u32, str[idx..end], 10)
+        try parseInt(u32, str[idx..end], 10)
     else
         return error.InvalidHeader;
 
     idx = indexOfScalarPos(u8, str, idx, '+') orelse return error.InvalidHeader;
     const right: u32 = if (indexOfAnyPos(u8, str, idx, " ,")) |end|
-        try std.fmt.parseInt(u32, str[idx..end], 10)
+        try parseInt(u32, str[idx..end], 10)
     else
         return error.InvalidHeader;
     return .{ left, right };
@@ -610,8 +600,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const Io = std.Io;
+const Reader = Io.Reader;
 const count = std.mem.count;
 const startsWith = std.mem.startsWith;
+const endsWith = std.mem.endsWith;
 const assert = std.debug.assert;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
@@ -620,11 +612,9 @@ const indexOfScalarPos = std.mem.indexOfScalarPos;
 const indexOfAnyPos = std.mem.indexOfAnyPos;
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
+const parseInt = std.fmt.parseInt;
 const log = std.log.scoped(.git_patch);
 
 const CURL = @import("curl.zig");
 const verse = @import("verse");
 const abx = verse.abx;
-const Response = verse.Response;
-const HTML = verse.template.html;
-const DOM = verse.template.html.DOM;
