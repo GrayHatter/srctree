@@ -374,17 +374,13 @@ pub const Split = struct {
 fn lineNumberFromHeader(str: []const u8) !struct { u32, u32 } {
     std.debug.assert(std.mem.startsWith(u8, str, "@@ -"));
     var idx: usize = 4;
-    const left: u32 = if (indexOfScalarPos(u8, str, idx, ',')) |end|
-        try std.fmt.parseInt(u32, str[idx..end], 10)
-    else if (indexOfScalarPos(u8, str, idx, ' ')) |end|
+    const left: u32 = if (indexOfAnyPos(u8, str, idx, " ,")) |end|
         try std.fmt.parseInt(u32, str[idx..end], 10)
     else
         return error.InvalidHeader;
 
     idx = indexOfScalarPos(u8, str, idx, '+') orelse return error.InvalidHeader;
-    const right: u32 = if (indexOfScalarPos(u8, str, idx, ',')) |end|
-        try std.fmt.parseInt(u32, str[idx..end], 10)
-    else if (indexOfScalarPos(u8, str, idx, ' ')) |end|
+    const right: u32 = if (indexOfAnyPos(u8, str, idx, " ,")) |end|
         try std.fmt.parseInt(u32, str[idx..end], 10)
     else
         return error.InvalidHeader;
@@ -395,9 +391,12 @@ test lineNumberFromHeader {
     const l, const r = try lineNumberFromHeader("@@ -11,6 +11,8 @@ pub const verse_routes = [_]Match{");
     try std.testing.expectEqual(@as(u32, 11), l);
     try std.testing.expectEqual(@as(u32, 11), r);
-    const ll, const rr = try lineNumberFromHeader("@@ -1 +1 @@");
-    try std.testing.expectEqual(@as(u32, 1), ll);
-    try std.testing.expectEqual(@as(u32, 1), rr);
+    const l1, const r1 = try lineNumberFromHeader("@@ -1 +1 @@");
+    try std.testing.expectEqual(@as(u32, 1), l1);
+    try std.testing.expectEqual(@as(u32, 1), r1);
+    const l2, const r2 = try lineNumberFromHeader("@@ -1 +1,3 @@");
+    try std.testing.expectEqual(@as(u32, 1), l2);
+    try std.testing.expectEqual(@as(u32, 1), r2);
 }
 
 pub fn diffLineHtmlSplit(a: Allocator, diff: []const u8) !Split {
@@ -559,6 +558,7 @@ const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const indexOfPos = std.mem.indexOfPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
+const indexOfAnyPos = std.mem.indexOfAnyPos;
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
 const log = std.log.scoped(.git_patch);
