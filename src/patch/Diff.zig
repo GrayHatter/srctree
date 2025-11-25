@@ -247,10 +247,6 @@ pub const Header = struct {
     }
 };
 
-fn parseFilename(_: []const u8) ?[]const u8 {
-    return null;
-}
-
 /// I'm so sorry for these crimes... in my defense, I got distracted
 /// while refactoring :<
 pub fn parse(diff: *Diff) !?[]const u8 {
