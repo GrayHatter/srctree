@@ -3,30 +3,39 @@ diffs: ?[]Diff = null,
 
 const Patch = @This();
 
-pub const FSPerm = packed struct(u8) {
-    read: bool,
-    write: bool,
-    execute: bool,
-    sticky: bool,
-    padding: u4,
+pub const FSPerm = packed struct(u3) {
+    execute: bool = false,
+    write: bool = false,
+    read: bool = false,
 
-    pub const default: FSPerm = .{
-        .read = false,
-        .write = false,
-        .execute = false,
-        .stick = false,
-        .padding = 0,
-    };
+    pub fn fromAscii(chr: u8) !FSPerm {
+        return switch (chr) {
+            '0' => .{ .read = false, .write = false, .execute = false },
+            '1' => .{ .read = false, .write = false, .execute = true },
+            '2' => .{ .read = false, .write = true, .execute = false },
+            '3' => .{ .read = false, .write = true, .execute = true },
+            '4' => .{ .read = true, .write = false, .execute = false },
+            '5' => .{ .read = true, .write = false, .execute = true },
+            '6' => .{ .read = true, .write = true, .execute = false },
+            '7' => .{ .read = true, .write = true, .execute = true },
+            else => error.InvalidMode,
+        };
+    }
+
+    pub const none: FSPerm = .{ .read = false, .write = false, .execute = false };
+    pub const r: FSPerm = .{ .read = true, .write = false, .execute = false };
+    pub const rw: FSPerm = .{ .read = true, .write = true, .execute = false };
+    pub const rwx: FSPerm = .{ .read = true, .write = true, .execute = true };
+    pub const default: FSPerm = .{ .read = true, .write = false, .execute = false };
 };
 
 test FSPerm {
     var target: FSPerm = undefined;
-    const modify: *u8 = @ptrCast(&target);
+    const modify: *u3 = @ptrCast(&target);
     modify.* = 7;
     try std.testing.expectEqual(true, target.read);
     try std.testing.expectEqual(true, target.write);
     try std.testing.expectEqual(true, target.execute);
-    try std.testing.expectEqual(false, target.sticky);
 }
 
 pub const Diff = struct {
@@ -43,7 +52,85 @@ pub const Diff = struct {
         total: isize,
     };
 
-    const Mode = [6]u4;
+    const FileType = enum(u4) {
+        fifo = 0o1,
+        character_device = 0o2,
+        directory = 0o4,
+        block_device = 0o6,
+        regular_file = 0o10,
+        symbolic_link = 0o12,
+        socket = 0o14,
+        // git specific
+        submodule = 0o16,
+
+        pub fn fromAscii(chr: [2]u8) !FileType {
+            return switch (try std.fmt.parseInt(u16, &chr, 8)) {
+                0o4 => .directory,
+                0o10 => .regular_file,
+                0o16 => .submodule,
+                else => |int| {
+                    log.err("file type parse error {}", .{int});
+                    return error.InvalidMode;
+                },
+            };
+        }
+    };
+
+    pub const Mode = packed struct(u16) {
+        other: FSPerm,
+        group: FSPerm,
+        owner: FSPerm,
+        stick: FSPerm = .{},
+        file_type: FileType,
+
+        pub fn fromStr(str: [6]u8) !Mode {
+            return .{
+                .other = try .fromAscii(str[5]),
+                .group = try .fromAscii(str[4]),
+                .owner = try .fromAscii(str[3]),
+                .stick = try .fromAscii(str[2]),
+                .file_type = try .fromAscii(str[0..2].*),
+            };
+        }
+
+        test fromStr {
+            {
+                const m: Mode = try .fromStr("100444".*);
+                try std.testing.expectEqual(
+                    Mode{ .other = .r, .group = .r, .owner = .r, .file_type = .regular_file },
+                    m,
+                );
+            }
+            {
+                const m: Mode = try .fromStr("100644".*);
+                try std.testing.expectEqual(
+                    Mode{ .other = .r, .group = .r, .owner = .rw, .file_type = .regular_file },
+                    m,
+                );
+            }
+            {
+                const m: Mode = try .fromStr("040444".*);
+                try std.testing.expectEqual(
+                    Mode{ .other = .r, .group = .r, .owner = .r, .file_type = .directory },
+                    m,
+                );
+            }
+            {
+                const m: Mode = try .fromStr("100777".*);
+                try std.testing.expectEqual(
+                    Mode{ .other = .rwx, .group = .rwx, .owner = .rwx, .file_type = .regular_file },
+                    m,
+                );
+            }
+            {
+                const m: Mode = try .fromStr("160000".*);
+                try std.testing.expectEqual(
+                    Mode{ .other = .none, .group = .none, .owner = .none, .file_type = .submodule },
+                    m,
+                );
+            }
+        }
+    };
 
     /// I haven't seen enough patches to know this is correct, but ideally
     /// (assumably) for non merge commits a single change type should be
@@ -70,30 +157,6 @@ pub const Diff = struct {
             dst: []const u8,
         };
 
-        fn parseMode(str: [6]u8) !Mode {
-            if (str[0] != '1') {
-                std.debug.print("invalid mode string found {s}\n", .{str});
-                return error.InvalidMode;
-            }
-            var mode: Mode = @splat(0);
-            for (str, &mode) |s, *m| switch (s) {
-                '0' => m.* = 0,
-                '1' => m.* = 1,
-                '2' => m.* = 2,
-                '3' => m.* = 3,
-                '4' => m.* = 4,
-                '5' => m.* = 5,
-                '6' => m.* = 6,
-                '7' => m.* = 7,
-                else => {
-                    std.debug.print("invalid mode string found {s}\n", .{str});
-                    return error.InvalidMode;
-                },
-            };
-
-            return mode;
-        }
-
         fn parse(src: []const u8) !Header {
             var pos: usize = 0;
             var current = src[0..];
@@ -115,9 +178,9 @@ pub const Diff = struct {
                     } else if (startsWith(u8, current, "new mode ")) {
                         change = .{ .mode = undefined };
                     } else if (startsWith(u8, current, "deleted file mode ")) {
-                        change = .{ .deletion = try parseMode(current["deleted file mode ".len..][0..6].*) };
+                        change = .{ .deletion = try .fromStr(current["deleted file mode ".len..][0..6].*) };
                     } else if (startsWith(u8, current, "new file mode ")) {
-                        change = .{ .newfile = try parseMode(current["new file mode ".len..][0..6].*) };
+                        change = .{ .newfile = try .fromStr(current["new file mode ".len..][0..6].*) };
                     } else if (startsWith(u8, current, "copy from ")) {
                         change = .{ .copy = .{
                             .src = current["copy from ".len..nl],
@@ -541,10 +604,6 @@ test "diffsSlice" {
     try std.testing.expect(diffs.len == 2);
     const h = diffs[1];
     try std.testing.expectEqualStrings(h.filename.?, "build.zig");
-}
-
-test "parseMode" {
-    try std.testing.expectEqual([6]u4{ 1, 0, 0, 4, 4, 4 }, Diff.Header.parseMode("100444".*));
 }
 
 const std = @import("std");
