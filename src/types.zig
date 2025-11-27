@@ -72,7 +72,7 @@ pub fn iterableDir(comptime type_name: @TypeOf(.enum_literal), io: Io) !Io.Dir {
     return try storage_dir.makeOpenPath(io, @tagName(type_name), .{ .iterate = true });
 }
 
-pub fn loadData(comptime type_name: @TypeOf(.enum_literal), name: []const u8, a: Allocator, io: Io) ![]u8 {
+pub fn loadDataAlloc(comptime type_name: @TypeOf(.enum_literal), name: []const u8, a: Allocator, io: Io) ![]u8 {
     var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
     defer type_dir.close(io);
     const file = try type_dir.openFile(io, name, .{});
@@ -83,6 +83,19 @@ pub fn loadData(comptime type_name: @TypeOf(.enum_literal), name: []const u8, a:
     var reader = file.reader(io, buf);
     try reader.interface.fill(stat.size);
     return buf;
+}
+
+pub fn loadDataReader(comptime type_name: @TypeOf(.enum_literal), name: []const u8, a: Allocator, io: Io) !Reader {
+    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+    defer type_dir.close(io);
+    const file = try type_dir.openFile(io, name, .{});
+    defer file.close(io);
+    const stat = try file.stat(io);
+    const buf = try a.alloc(u8, stat.size);
+    errdefer a.free(buf);
+    var reader = file.reader(io, buf);
+    try reader.interface.fill(stat.size);
+    return reader;
 }
 
 pub fn commit(comptime type_name: @TypeOf(.enum_literal), name: []const u8, io: Io) !fs.File {
@@ -170,35 +183,26 @@ pub fn nextIndexNamed(comptime type_name: @TypeOf(.enum_literal), extra_name: []
 }
 
 pub fn split(line: []u8) ?struct { []u8, []u8 } {
-    const idx = std.mem.indexOf(u8, line, ": ") orelse return null;
-    return .{ line[0..idx], line[idx + 2 ..] };
+    const idx = indexOf(u8, line, ": ") orelse return null;
+    std.debug.assert(line[line.len - 1] == '\n');
+    return .{ line[0..idx], line[idx + 2 .. line.len - 1] };
 }
 
-pub fn readerWriter(T: type, default: T) type {
+pub fn readerWriter(BaseType: type, default: BaseType) type {
     return struct {
-        pub fn read(data: []u8) T {
-            if (data.len == 0) return default;
-            const header_end = std.mem.indexOf(u8, data, "\n\n") orelse data.len;
-            const header = data[0..header_end];
-            var line_itr = std.mem.splitScalar(u8, header, '\n');
-            var output: T = default;
-            var line: []u8 = @constCast(line_itr.first());
-            var reset = false;
+        pub fn read(r: *Io.Reader) BaseType {
+            return readStruct(BaseType, default, "", r);
+        }
 
-            inline for (@typeInfo(T).@"struct".fields) |field| {
-                reset = false;
-                while (!std.mem.startsWith(u8, line, field.name)) {
-                    line = @constCast(line_itr.next()) orelse orel: {
-                        if (reset) break;
-                        reset = true;
-                        line_itr.reset();
-                        break :orel @constCast(line_itr.first());
-                    };
-                    reset = true;
-                }
-                if (line_itr.index != 0) {
-                    const name, const value: []u8 = split(line) orelse .{ &.{}, &.{} };
-                    if (std.mem.eql(u8, name, field.name)) switch (field.type) {
+        fn readStruct(T: type, sub_default: T, comptime prefix: []const u8, r: *Io.Reader) T {
+            var output: T = sub_default;
+            while (r.takeDelimiterInclusive('\n')) |line| {
+                if (line.len == 1 and line[0] == '\n') return output;
+
+                inline for (@typeInfo(T).@"struct".fields) |field| {
+                    const name, const value: []u8 = split(line) orelse break;
+                    const field_name = if (prefix.len > 0) prefix ++ "." ++ field.name else field.name;
+                    if (eql(u8, name, field_name)) switch (field.type) {
                         DefaultHash => {
                             if (value.len == 64) {
                                 var hex: []const u8 = value;
@@ -222,7 +226,7 @@ pub fn readerWriter(T: type, default: T) type {
                         usize => @field(output, field.name) = parseInt(usize, value, 10) catch @field(output, field.name),
                         i64 => @field(output, field.name) = parseInt(i64, value, 10) catch @field(output, field.name),
                         i32 => @field(output, field.name) = parseInt(i32, value, 10) catch @field(output, field.name),
-                        bool => @field(output, field.name) = std.mem.eql(u8, value, "true"),
+                        bool => @field(output, field.name) = eql(u8, value, "true"),
                         VarString(128) => @field(output, field.name) = VarString(128).init(value),
                         VarString(256) => @field(output, field.name) = VarString(256).init(value),
                         else => switch (@typeInfo(field.type)) {
@@ -232,22 +236,37 @@ pub fn readerWriter(T: type, default: T) type {
                                     @field(output, field.name) = enumV;
                                 }
                             },
-                            else => {
-                                if (comptime type_debugging) std.debug.print("skipped type {s} on {s}\n", .{ @typeName(field.type), @typeName(T) });
-                            },
+                            else => if (comptime type_debugging)
+                                log.err("skipped type {s} on {s}", .{ @typeName(field.type), @typeName(T) }),
                         },
+                    } else if (startsWith(u8, name, field.name)) switch (@typeInfo(field.type)) {
+                        .@"struct" => {
+                            const save = r.seek;
+                            @field(output, field.name) = readStruct(field.type, @field(output, field.name), field.name, r);
+                            r.seek = save;
+                        },
+                        else => {},
                     };
                 }
-            }
+            } else |_| log.err("incomplete read", .{});
+
             return output;
         }
 
-        pub fn write(t: *const T, w: *Writer) error{WriteFailed}!void {
-            if (@hasDecl(T, "type_prefix") and @hasDecl(T, "type_version")) {
-                try w.print("# {s}/{d}\n", .{ T.type_prefix, T.type_version });
+        pub fn write(t: *const BaseType, w: *Writer) error{WriteFailed}!void {
+            if (@hasDecl(BaseType, "type_prefix") and @hasDecl(BaseType, "type_version")) {
+                try w.print("# {s}/{d}\n", .{ BaseType.type_prefix, BaseType.type_version });
             }
 
+            try writeStruct(BaseType, t, "", w);
+            try w.writeAll("\n");
+            try w.flush();
+        }
+
+        fn writeStruct(T: type, t: *const T, comptime name: []const u8, w: *Writer) error{WriteFailed}!void {
             inline for (@typeInfo(T).@"struct".fields) |field| {
+                if (name.len > 0) try w.writeAll(name ++ ".");
+
                 switch (field.type) {
                     []u8,
                     []const u8,
@@ -262,7 +281,7 @@ pub fn readerWriter(T: type, default: T) type {
                         };
                         if (value) |v| {
                             try w.print("{s}: ", .{field.name});
-                            var itr = std.mem.splitScalar(u8, v, '\n');
+                            var itr = splitScalar(u8, v, '\n');
                             while (itr.next()) |line| {
                                 try w.writeAll(line);
                                 if (itr.peek()) |_| try w.writeAll("\x1a");
@@ -284,24 +303,32 @@ pub fn readerWriter(T: type, default: T) type {
                             if (!enumT.is_exhaustive) @compileError("non-exaustive enums are not supported");
                             try w.print("{s}: {s}\n", .{ field.name, @tagName(@field(t, field.name)) });
                         },
-                        else => {
-                            if (comptime type_debugging) std.debug.print("skipped type {s} on {s}\n", .{ @typeName(field.type), @typeName(T) });
+                        .@"struct" => |_| {
+                            const prefix = if (name.len > 0) name ++ "." ++ field.name else field.name;
+                            try writeStruct(field.type, &@field(t, field.name), prefix, w);
                         },
+                        else => if (comptime type_debugging)
+                            log.err("skipped type {s} on {s}", .{ @typeName(field.type), @typeName(T) }),
                     },
                 }
             }
-            try w.writeAll("\n");
-            try w.flush();
         }
     };
 }
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const Writer = std.Io.Writer;
 const Io = std.Io;
+const Writer = Io.Writer;
+const Reader = Io.File.Reader;
 const fs = std.fs;
+const log = std.log.scoped(.srctree_type);
 const parseInt = std.fmt.parseInt;
+const indexOf = std.mem.indexOf;
+const splitScalar = std.mem.splitScalar;
+const eql = std.mem.eql;
+const startsWith = std.mem.startsWith;
+
 const sha256 = std.crypto.hash.sha2.Sha256;
 // TODO buildtime const/flag
 const type_debugging = false;

@@ -45,8 +45,8 @@ pub fn open(a: std.mem.Allocator, index: usize) !?Issue {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{index});
-    const file = try Types.loadData(.issue, a, filename);
-    return readerFn(file);
+    var reader = try Types.loadDataReader(.issue, a, filename);
+    return readerFn(&reader.interface);
 }
 
 pub fn commit(issue: Issue) !void {
@@ -108,12 +108,14 @@ test "reader/writer" {
     try std.testing.expectEqualStrings(expected, writer.written());
 
     {
-        const read_this = readerFn(writer.written());
+        var reader: std.Io.Reader = .fixed(writer.written());
+        const read_this = readerFn(&reader);
         try std.testing.expectEqualDeep(this, read_this);
     }
 
     {
-        const from_expected_this = readerFn(expected_var);
+        var reader: std.Io.Reader = .fixed(expected_var);
+        const from_expected_this = readerFn(&reader);
         try std.testing.expectEqualDeep(this, from_expected_this);
     }
 }

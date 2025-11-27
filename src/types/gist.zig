@@ -26,11 +26,11 @@ pub const File = struct {
     }
 
     pub fn open(file: *File, name: [64]u8, a: Allocator, io: Io) !void {
-        const data = try Types.loadData(.gist_files, name ++ ".gist-file", a, io);
+        var reader = try Types.loadDataReader(.gist_files, name ++ ".gist-file", a, io);
 
-        file.* = File.readerFn(data);
-        if (indexOf(u8, data, file.name)) |idx| {
-            file.blob = data[idx + file.name.len + 6 ..];
+        file.* = File.readerFn(&reader.interface);
+        if (indexOf(u8, reader.interface.buffer, file.name)) |idx| {
+            file.blob = reader.interface.buffer[idx + file.name.len + 6 ..];
         }
     }
 
@@ -82,15 +82,15 @@ pub fn new(owner: []const u8, files: []const File, io: Io) ![64]u8 {
 }
 
 pub fn open(hash: [64]u8, a: Allocator, io: Io) !Gist {
-    const data = try Types.loadData(.gist, hash ++ ".gist", a, io);
-    var gist = readerFn(data);
+    var reader = try Types.loadDataReader(.gist, hash ++ ".gist", a, io);
+    var gist = readerFn(&reader.interface);
 
-    if (indexOf(u8, data, "\n\n")) |start| {
-        std.debug.assert(std.mem.count(u8, data[start + 2 ..], "\n") == gist.file_count + 1);
+    if (indexOf(u8, reader.interface.buffer, "\n\n")) |start| {
+        std.debug.assert(std.mem.count(u8, reader.interface.buffer[start + 2 ..], "\n") == gist.file_count + 1);
         const gist_files = try a.alloc(File, gist.file_count);
         gist.files = gist_files;
 
-        var itr = std.mem.splitScalar(u8, data[start + 2 ..], '\n');
+        var itr = std.mem.splitScalar(u8, reader.interface.buffer[start + 2 ..], '\n');
         var next = itr.next();
         for (gist_files) |*file| {
             if (next == null) return error.InvalidGist;
@@ -198,10 +198,11 @@ test {
 
     var buf: [69]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.gist", .{&gist.hash});
-    const from_file = try Types.loadData(.gist, filename, a, io);
-    defer a.free(from_file);
+    var reader = try Types.loadDataReader(.gist, filename, a, io);
+    defer a.free(reader.interface.buffer);
 
-    try std.testing.expectEqualStrings(v0_text, from_file);
+    try std.testing.expectEqualStrings(v0_text, reader.interface.buffer);
+    //try std.testing.expectEqualDeep(gist, readerFn(&reader.interface));
 }
 
 const std = @import("std");

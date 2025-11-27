@@ -60,8 +60,8 @@ pub fn commit(msg: Message, io: Io) !void {
 pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.message", .{&hash});
-    const file = try Types.loadData(.message, filename, a, io);
-    return readerFn(file);
+    var reader = try Types.loadDataReader(.message, filename, a, io);
+    return readerFn(&reader.interface);
 }
 
 pub fn genHash(msg: *Message) *const DefaultHash {
@@ -126,8 +126,8 @@ test "comment" {
         var writer = file.writer(&w_b);
         try writerFn(&c, &writer.interface);
     }
-    const data = try Types.loadData(.message, filename, a, io);
-    defer a.free(data);
+    var reader = try Types.loadDataReader(.message, filename, a, io);
+    defer a.free(reader.interface.buffer);
 
     const expected =
         \\# messages/0
@@ -145,7 +145,7 @@ test "comment" {
         \\
     ;
 
-    try std.testing.expectEqualStrings(expected, data);
+    try std.testing.expectEqualStrings(expected, reader.interface.buffer);
 }
 
 test Message {

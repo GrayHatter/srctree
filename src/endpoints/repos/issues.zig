@@ -165,7 +165,7 @@ fn view(f: *verse.Frame) Error!void {
         body_header.nav.nav_auth = usr.username.?;
     }
 
-    const status: []const u8 = if (delta.closed)
+    const status: []const u8 = if (delta.state.closed)
         "<span class=closed>closed</span>"
     else
         "<span class=open>open</span>";

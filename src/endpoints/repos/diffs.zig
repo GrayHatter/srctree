@@ -897,7 +897,7 @@ fn view(f: *Frame) Error!void {
 
     const patch_data: S.Patch = .{ .patch = patch_formatted orelse .{ .files = &.{} } };
 
-    const status: []const u8 = if (delta.closed)
+    const status: []const u8 = if (delta.state.closed)
         "<span class=closed>closed</span>"
     else
         "<span class=open>open</span>";
@@ -964,7 +964,7 @@ fn list(f: *Frame) Error!void {
     while (itr.next(f.alloc, f.io)) |deltaC| {
         var d = deltaC;
         if (d.attach != .diff) continue;
-        if (d.closed) continue;
+        if (d.state.closed) continue;
 
         _ = d.loadThread(f.alloc, f.io) catch unreachable;
         const cmtsmeta = d.countComments(f.io);

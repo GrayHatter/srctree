@@ -31,8 +31,8 @@ pub fn new(repo: []const u8, hexsha: [40]u8) !CommitMap {
 pub fn open(repo: []const u8, hexsha: [40]u8, a: Allocator, io: Io) !CommitMap {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmtmap", .{ repo, hexsha });
-    const data = try Types.loadData(.commit_map, filename, a, io);
-    return readerFn(data);
+    var reader = try Types.loadDataReader(.commit_map, filename, a, io);
+    return readerFn(&reader.interface);
 }
 
 pub fn commit(cm: *CommitMap, io: Io) !void {

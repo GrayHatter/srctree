@@ -23,8 +23,8 @@ pub fn findMTLSFingerprint(fp: []const u8, a: Allocator, io: Io) !User {
     if (fp.len != 40) return error.InvalidFingerprint;
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{s}.user", .{fp});
-    const file = try Types.loadData(.users, filename, a, io);
-    return readerFn(file);
+    var reader = try Types.loadDataReader(.users, filename, a, io);
+    return readerFn(&reader.interface);
 }
 
 pub fn open(username: []const u8, a: Allocator, io: Io) !User {
@@ -32,8 +32,8 @@ pub fn open(username: []const u8, a: Allocator, io: Io) !User {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.user", .{username});
-    const data = try Types.loadData(.users, filename, a, io);
-    return readerFn(data);
+    var reader = try Types.loadDataReader(.users, filename, a, io);
+    return readerFn(&reader.interface);
 }
 
 pub fn new() !User {
@@ -81,7 +81,8 @@ test "reader/writer" {
     try std.testing.expectEqualStrings(expected, writer.written());
 
     {
-        var read_this = readerFn(writer.written());
+        var reader: Io.Reader = .fixed(writer.written());
+        var read_this = readerFn(&reader);
         try std.testing.expectEqualStrings(this.username.slice(), read_this.username.slice());
         // lol sorry about this
         read_this.username = this.username;
@@ -89,7 +90,8 @@ test "reader/writer" {
     }
 
     {
-        var from_expected_this = readerFn(expected_var);
+        var reader: Io.Reader = .fixed(expected_var);
+        var from_expected_this = readerFn(&reader);
         try std.testing.expectEqualStrings(this.username.slice(), from_expected_this.username.slice());
         // lol sorry about this
         from_expected_this.username = this.username;

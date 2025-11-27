@@ -9,12 +9,7 @@ author: ?[]const u8 = null,
 thread_id: usize = 0,
 tags_id: usize = 0,
 
-// state flags TODO wrap in struct?
-closed: bool = false,
-locked: bool = false,
-embargoed: bool = false,
-padding: u61 = 0,
-
+state: State = .default,
 // TODO fix when unions are supported
 attach: Attach = .nos,
 attach_target: usize = 0,
@@ -26,6 +21,18 @@ pub const Delta = @This();
 
 pub const type_prefix = "deltas";
 pub const type_version = 0;
+
+pub const State = struct {
+    closed: bool = false,
+    locked: bool = false,
+    embargoed: bool = false,
+
+    pub const default: State = .{
+        .closed = false,
+        .locked = false,
+        .embargoed = false,
+    };
+};
 
 pub const Attach = enum(u8) {
     nos = 0,
@@ -78,8 +85,8 @@ pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
-    const file = try Types.loadData(.deltas, filename, a, io);
-    return readerFn(file);
+    var reader = try Types.loadDataReader(.deltas, filename, a, io);
+    return readerFn(&reader.interface);
 }
 
 pub fn commit(delta: Delta, io: Io) !void {
@@ -341,6 +348,7 @@ test Delta {
     const mask: i64 = ~@as(i64, 0x7ffffff);
     d.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
     d.updated = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    d.state.locked = true;
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
@@ -357,9 +365,9 @@ test Delta {
         \\author: author
         \\thread_id: 1
         \\tags_id: 0
-        \\closed: false
-        \\locked: false
-        \\embargoed: false
+        \\state.closed: false
+        \\state.locked: true
+        \\state.embargoed: false
         \\attach: nos
         \\attach_target: 0
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000
@@ -368,6 +376,10 @@ test Delta {
     ;
 
     try std.testing.expectEqualStrings(v1_text, writer.written());
+
+    var r: Io.Reader = .fixed(writer.written());
+    const read = readerFn(&r);
+    try std.testing.expectEqualDeep(d, read);
 }
 
 const std = @import("std");
@@ -380,7 +392,6 @@ const indexOf = std.mem.indexOf;
 const eql = std.mem.eql;
 const parseInt = std.fmt.parseInt;
 const endian = builtin.cpu.arch.endian();
-const AnyReader = std.io.AnyReader;
 
 const Types = @import("../types.zig");
 const Thread = Types.Thread;
