@@ -281,11 +281,10 @@ pub const Translate = struct {
                 },
                 '\r' => {},
                 else => {
-                    if (abx.Html.clean(src[idx])) |clean| {
-                        try dst.appendSlice(a, clean);
-                    } else {
-                        try dst.append(a, src[idx]);
-                    }
+                    var w_b: [10]u8 = undefined;
+                    var w: Writer = .fixed(&w_b);
+                    abx.Html.clean(src[idx], &w) catch unreachable;
+                    try dst.appendSlice(a, w.buffered());
                 },
             }
         }
@@ -432,6 +431,7 @@ const abx = @import("verse").abx;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const Writer = std.Io.Writer;
 const eql = std.mem.eql;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
 const indexOfPos = std.mem.indexOfPos;
