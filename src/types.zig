@@ -85,7 +85,7 @@ pub fn loadDataAlloc(comptime type_name: @TypeOf(.enum_literal), name: []const u
     return buf;
 }
 
-pub fn loadDataReader(comptime type_name: @TypeOf(.enum_literal), name: []const u8, a: Allocator, io: Io) !Reader {
+pub fn loadDataReader(comptime type_name: @TypeOf(.enum_literal), name: []const u8, a: Allocator, io: Io) !Io.Reader {
     var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
     defer type_dir.close(io);
     const file = try type_dir.openFile(io, name, .{});
@@ -95,7 +95,7 @@ pub fn loadDataReader(comptime type_name: @TypeOf(.enum_literal), name: []const 
     errdefer a.free(buf);
     var reader = file.reader(io, buf);
     try reader.interface.fill(stat.size);
-    return reader;
+    return .fixed(reader.interface.buffer);
 }
 
 pub fn commit(comptime type_name: @TypeOf(.enum_literal), name: []const u8, io: Io) !fs.File {

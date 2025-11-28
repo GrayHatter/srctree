@@ -32,7 +32,7 @@ pub fn open(repo: []const u8, hexsha: [40]u8, a: Allocator, io: Io) !CommitMap {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.cmtmap", .{ repo, hexsha });
     var reader = try Types.loadDataReader(.commit_map, filename, a, io);
-    return readerFn(&reader.interface);
+    return readerFn(&reader);
 }
 
 pub fn commit(cm: *CommitMap, io: Io) !void {

@@ -80,11 +80,11 @@ pub fn open(index: usize, a: Allocator, io: Io) !?Diff {
     var buf: [512]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{index});
     var reader = try Types.loadDataReader(.diffs, filename, a, io);
-    var d: Diff = readerFn(&reader.interface);
+    var d: Diff = readerFn(&reader);
 
     // TODO reader.buffered();
-    if (indexOf(u8, reader.interface.buffer, "\n\n")) |start| {
-        d.patch.blob = reader.interface.buffer[start..];
+    if (indexOf(u8, reader.buffer, "\n\n")) |start| {
+        d.patch.blob = reader.buffer[start..];
     } else d.patch.blob = &.{};
 
     return d;

@@ -86,7 +86,7 @@ pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
     var reader = try Types.loadDataReader(.deltas, filename, a, io);
-    return readerFn(&reader.interface);
+    return readerFn(&reader);
 }
 
 pub fn commit(delta: Delta, io: Io) !void {

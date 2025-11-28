@@ -36,10 +36,10 @@ pub fn open(index: usize, a: Allocator, io: Io) !Thread {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{index});
     var reader = try Types.loadDataReader(.thread, filename, a, io);
-    var thread = readerFn(&reader.interface);
+    var thread = readerFn(&reader);
 
-    if (indexOf(u8, reader.interface.buffer, "\n\n")) |start| {
-        var itr = std.mem.splitScalar(u8, reader.interface.buffer[start + 2 ..], '\n');
+    if (indexOf(u8, reader.buffer, "\n\n")) |start| {
+        var itr = std.mem.splitScalar(u8, reader.buffer[start + 2 ..], '\n');
         while (itr.next()) |next| {
             if (next.len != 64) continue;
             var msg_hash: Types.DefaultHash = undefined;

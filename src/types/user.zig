@@ -24,7 +24,7 @@ pub fn findMTLSFingerprint(fp: []const u8, a: Allocator, io: Io) !User {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{s}.user", .{fp});
     var reader = try Types.loadDataReader(.users, filename, a, io);
-    return readerFn(&reader.interface);
+    return readerFn(&reader);
 }
 
 pub fn open(username: []const u8, a: Allocator, io: Io) !User {
@@ -33,7 +33,7 @@ pub fn open(username: []const u8, a: Allocator, io: Io) !User {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.user", .{username});
     var reader = try Types.loadDataReader(.users, filename, a, io);
-    return readerFn(&reader.interface);
+    return readerFn(&reader);
 }
 
 pub fn new() !User {

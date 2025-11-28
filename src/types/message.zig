@@ -61,7 +61,7 @@ pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.message", .{&hash});
     var reader = try Types.loadDataReader(.message, filename, a, io);
-    return readerFn(&reader.interface);
+    return readerFn(&reader);
 }
 
 pub fn genHash(msg: *Message) *const DefaultHash {
@@ -127,7 +127,7 @@ test "comment" {
         try writerFn(&c, &writer.interface);
     }
     var reader = try Types.loadDataReader(.message, filename, a, io);
-    defer a.free(reader.interface.buffer);
+    defer a.free(reader.buffer);
 
     const expected =
         \\# messages/0
@@ -145,7 +145,7 @@ test "comment" {
         \\
     ;
 
-    try std.testing.expectEqualStrings(expected, reader.interface.buffer);
+    try std.testing.expectEqualStrings(expected, reader.buffer);
 }
 
 test Message {

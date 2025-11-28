@@ -46,7 +46,7 @@ pub fn open(a: std.mem.Allocator, index: usize) !?Issue {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.issue", .{index});
     var reader = try Types.loadDataReader(.issue, a, filename);
-    return readerFn(&reader.interface);
+    return readerFn(&reader);
 }
 
 pub fn commit(issue: Issue) !void {
