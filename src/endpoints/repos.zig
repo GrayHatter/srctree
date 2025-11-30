@@ -293,7 +293,7 @@ fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.RepoList
         .name = name,
         .uri = try allocPrint(a, "/repo/{s}", .{name}),
         .desc = desc,
-        .upstream = upstream,
+        .upstream_blk = if (upstream) |u| .{ .link = u } else null,
         .updated = updated,
         .tag = tag,
     };
