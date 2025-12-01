@@ -227,20 +227,14 @@ repos {
 				display: inline-block;
 				width: 70%;
 				height: 100%;
-				a {
-					display: block;
-					width 100%;
-				}
-
+				a { display: block; }
 			}
 			a.tag {
 				float: right;
 				margin: 0.4rem 8px 0 0;
 				white-space: nowrap;
 				font-size: 70%;
-
 			}
-
 		}
 	}
 }
@@ -271,10 +265,8 @@ repo {
 				flex-grow:1;
 			}
 		}
-
 	}
 
-	name { }
 	desc {
 		display: block;
 		border: 1px gray solid;
@@ -342,7 +334,6 @@ readme {
 		display: flex;
 		justify-content: center;
 	}
-
 	span.tree > a::before { content: "📁"; padding-right: 8px;}
 	span.file > a::before { content: "📄"; padding-right: 8px;}
 }
@@ -390,7 +381,6 @@ actionable {
 			font-size: 1rem;
 		}
 		desc { display: block; }
-
 	}
 }
 
@@ -447,7 +437,6 @@ textarea.paste {
 
 delta {
 	margin: 1em 0;
-
 	main {
 		width: auto;
 		margin: 1em 1%;
@@ -468,9 +457,7 @@ delta {
 		}
 		div { padding: 8px; }
 	}
-
 	diff { flex-grow: 10; }
-
 	extra {
 		display: flex;
 		justify-content: space-between;
@@ -499,7 +486,6 @@ delta {
 	color: black;
 	border-radius: 100%;
 	padding: 1.1px 3.3px;
-
 }
 
 patchrequest {
@@ -535,7 +521,6 @@ diff {
 	text-align: left;
 	display: block;
 	margin-bottom: 1em;
-
 	filename {
 		background: #333;
 		border-radius: 3px 3px 0 0;
@@ -718,7 +703,6 @@ blob, gist, patch {
 			padding: 4px 12px;
 		}
 	}
-
 	.codeblock {
 		padding: 0.5em 0.5em 0 0;
 		border: 1px gray solid;
@@ -726,7 +710,6 @@ blob, gist, patch {
 		border-top: 0px;
 		code { white-space: pre; }
 	}
-
 	changes {
 		font-family: "Ubuntu Mono", monospace, sans-serif;
 		font-size: 0.8em;
@@ -780,13 +763,12 @@ blob, gist, patch {
 		height: 25px;
 		padding: 4px 0 4px 12px;
 	}
-
 	.del { background: #633 }
 	.add { background: #353 }
 	.nul {
 		background: #2228;
 		height: 1em;
-		margin 0 2px;
+		margin: 0 2px;
 	}
 }
 
