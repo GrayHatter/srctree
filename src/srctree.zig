@@ -15,6 +15,7 @@ pub const verse_routes = [_]Match{
         .{ .name = "Amazonbot", .allow = false }, // aggressive, selfish
         .{ .name = "AhrefsBot", .allow = false }, // selfish
         .{ .name = "dotbot", .allow = false }, // selfish
+        .{ .name = "PerplexityBot", .allow = false },
         // Disallowed for being too aggressive, and substituting it's own crawl delay
         .{ .name = "MJ12bot", .allow = false, .extra = "Crawl-Delay: 90\n" },
         .{
