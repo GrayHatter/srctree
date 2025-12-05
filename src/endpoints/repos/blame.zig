@@ -112,13 +112,16 @@ fn wrapLineNumbersBlame(
         const bcommit = map.get(src.sha) orelse unreachable;
         const email = if (!include_email) "" else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.email }}) catch unreachable;
         sha.* = src.sha.hex()[0..8].*;
-        const parent_sha: Git.SHA = .init(bcommit.parent orelse (&[_]u8{'0'} ** 40));
+        const parent_sha: ?Git.SHA = if (bcommit.parent) |bp| .init(bp) else null;
         blame_line.* = .{
             .num = i + 1,
             .line = src.line,
             .repo_name = repo_name,
             .sha = sha,
-            .blame_skip_href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, parent_sha.hex(), path }),
+            .blame_parent = if (parent_sha) |psha|
+                .{ .href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, psha.hex(), path }) }
+            else
+                null,
             .time_style = style_blocks[bcommit.age_block],
             .author_email = .{
                 .author = if (skip) null else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.name }}) catch unreachable,
