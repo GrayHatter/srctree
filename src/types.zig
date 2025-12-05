@@ -248,7 +248,10 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         else => {},
                     };
                 }
-            } else |_| log.err("incomplete read", .{});
+            } else |err| switch (err) {
+                error.EndOfStream => {},
+                else => log.err("incomplete read on {s} {}", .{ @typeName(T), err }),
+            }
 
             return output;
         }

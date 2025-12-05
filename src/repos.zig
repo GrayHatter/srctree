@@ -323,7 +323,7 @@ pub const Agent = struct {
             alloc.free(names);
         }
 
-        a.io.sleep(.fromSeconds(20), .real) catch unreachable;
+        a.io.sleep(.fromSeconds(20), .real) catch return;
         running: while (a.enabled) {
             log.info("Starting sync for {} repos", .{names.len});
             for (names) |rname| {
@@ -365,7 +365,8 @@ pub const Agent = struct {
             var qi: usize = 60 * 60;
             while (qi > 0) {
                 qi -|= 1;
-                a.io.sleep(.fromSeconds(@intCast(a.config.sleep_for / 60 / 60)), .real) catch unreachable;
+                a.io.sleep(.fromSeconds(@intCast(a.config.sleep_for / 60 / 60)), .real) catch
+                    return;
                 if (!a.enabled) break :running;
             }
         }
