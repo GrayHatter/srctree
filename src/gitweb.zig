@@ -7,12 +7,12 @@ pub const endpoints = [_]Router.Match{
     Router.ANY("git-upload-pack", gitUploadPack),
 };
 
-pub fn router(ctx: *Verse.Frame) Router.RoutingError!Router.BuildFn {
+pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
     std.debug.print("gitweb router {s}\n{any}, {any} \n", .{ ctx.ctx.uri.peek().?, ctx.ctx.uri, ctx.request.method });
     return Router.router(ctx, &endpoints);
 }
 
-fn gitUploadPack(ctx: *Verse.Frame) Error!void {
+fn gitUploadPack(ctx: *Frame) Error!void {
     ctx.uri.reset();
     _ = ctx.uri.first();
     const name = ctx.uri.next() orelse return error.Unknown;
@@ -27,17 +27,22 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
 
     var map = std.process.EnvMap.init(ctx.alloc);
     defer map.deinit();
+    try map.put("PATH_TRANSLATED", path_tr);
     var gz_encoding = false;
     //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
     if (ctx.request.method == .GET) {
-        try map.put("PATH_TRANSLATED", path_tr);
-        try map.put("QUERY_STRING", "service=git-upload-pack");
         try map.put("REQUEST_METHOD", "GET");
     } else {
-        try map.put("PATH_TRANSLATED", path_tr);
-        try map.put("QUERY_STRING", "");
         try map.put("REQUEST_METHOD", "POST");
     }
+    const qstr = ctx.request.data.query.rawquery;
+    if (eql(u8, qstr, "service=git-upload-pack")) {
+        try map.put("QUERY_STRING", "service=git-upload-pack");
+    } else {
+        log.warn("query string '{s}'", .{qstr});
+        try map.put("QUERY_STRING", "");
+    }
+
     try map.put("REMOTE_USER", "");
     try map.put("REMOTE_ADDR", ctx.request.remote_addr);
     try map.put("CONTENT_TYPE", "application/x-git-upload-pack-request");
@@ -47,7 +52,7 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
     switch (ctx.downstream.gateway) {
         .zwsgi => |z| {
             for (z.vars.items) |vars| {
-                std.debug.print("each {s} {s} \n", .{ vars.key, vars.val });
+                log.info("each {s} {s}", .{ vars.key, vars.val });
                 if (eql(u8, vars.key, "HTTP_CONTENT_ENCODING")) {
                     if (eql(u8, vars.val, "gzip")) {
                         gz_encoding = true;
@@ -70,11 +75,11 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
 
     ctx.status = .ok;
 
-    child.spawn() catch unreachable;
+    child.spawn() catch log.err("unable to spawn git http", .{});
 
     const err_mask = POLL.ERR | POLL.NVAL | POLL.HUP;
     var poll_fd = [_]std.posix.pollfd{
-        .{ .fd = child.stdout.?.handle, .events = POLL.IN, .revents = undefined },
+        .{ .fd = child.stdout.?.handle, .events = POLL.IN, .revents = 0 },
     };
 
     const post_data: ?[]const u8 = if (ctx.request.data.post) |pd| pd.rawpost else null;
@@ -83,42 +88,60 @@ fn gitUploadPack(ctx: *Verse.Frame) Error!void {
         var writer = child.stdin.?.writer(&w_b);
         defer child.stdin = null;
         defer child.stdin.?.close();
-        defer writer.interface.flush() catch unreachable;
+        defer writer.interface.flush() catch log.err("flush to git failed", .{});
 
         if (gz_encoding) {
             var post_reader: Reader = .fixed(pd);
             var gz_b: [std.compress.flate.max_window_len]u8 = undefined;
             var gzip: std.compress.flate.Decompress = .init(&post_reader, .gzip, &gz_b);
-            _ = gzip.reader.streamRemaining(&writer.interface) catch unreachable;
+            _ = gzip.reader.streamRemaining(&writer.interface) catch |err| {
+                log.err("gz stream error {}", .{err});
+            };
         } else {
-            writer.interface.writeAll(pd) catch unreachable;
+            writer.interface.writeAll(pd) catch @panic("child writer");
         }
     }
 
     var buf = try ctx.alloc.alloc(u8, 0xffffff);
     var headers_required = true;
+    const debug_git = false;
     while (true) {
         const events_len = std.posix.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
         if (events_len == 0) continue;
         if (poll_fd[0].revents & POLL.IN != 0) {
-            const amt = std.posix.read(poll_fd[0].fd, buf) catch unreachable;
+            const amt = std.posix.read(poll_fd[0].fd, buf) catch @panic("posix read");
             if (amt == 0) break;
             if (headers_required) {
-                _ = ctx.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch unreachable;
+                ctx.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch log.err("unable to start headers", .{});
                 headers_required = false;
+                ctx.downstream.writer.flush() catch log.err("Unable to flush headers", .{});
+            }
+            if (debug_git) {
+                std.debug.print("git data\n", .{});
+                std.debug.print("{s}\n", .{buf[0..amt]});
             }
             ctx.downstream.writer.writeAll(buf[0..amt]) catch unreachable;
         } else if (poll_fd[0].revents & err_mask != 0) {
             break;
         }
     }
+    ctx.downstream.writer.flush() catch log.err("final flush failed", .{});
 
     if (child.stderr) |stderr| {
         var stderr_buf = try ctx.alloc.alloc(u8, 0xffffff);
         const stderr_read = std.posix.read(stderr.handle, stderr_buf) catch unreachable;
         std.debug.print("stderr\n{s}\n", .{stderr_buf[0..stderr_read]});
     }
-    _ = child.wait() catch unreachable;
+    if (child.wait()) |chld| {
+        if (chld.Exited != 0) {
+            log.err("child exit failed {}", .{chld});
+        } else {
+            log.info("child {}", .{chld});
+        }
+    } else |err| {
+        log.err("Error waiting for child {}", .{err});
+        return error.ServerFault;
+    }
 }
 
 const std = @import("std");
@@ -126,10 +149,12 @@ const Allocator = std.mem.Allocator;
 const Reader = std.Io.Reader;
 const POLL = std.posix.POLL;
 const eql = std.mem.eql;
+const log = std.log.scoped(.gitweb);
 
-const Verse = @import("verse");
-const Request = Verse.Request;
-const Router = Verse.Router;
+const verse = @import("verse");
+const Frame = verse.Frame;
+const Request = verse.Request;
+const Router = verse.Router;
 const Error = Router.Error;
 
 const git = @import("git.zig");
