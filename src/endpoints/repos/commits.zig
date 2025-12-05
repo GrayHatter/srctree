@@ -92,13 +92,13 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         },
     };
 
-    var thread: []Template.Structs.Thread = &[0]Template.Structs.Thread{};
+    var thread: []Template.Structs.CommentThreadHtml.Thread = &[0]Template.Structs.CommentThreadHtml.Thread{};
     if (CommitMap.open(repo_name_, current.sha.hex(), f.alloc, f.io)) |map| {
         switch (map.attach_to) {
             .delta => {
                 var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
                 if (delta.loadThread(f.alloc, f.io)) |dthread| {
-                    thread = try f.alloc.alloc(Template.Structs.Thread, dthread.messages.items.len);
+                    thread = try f.alloc.alloc(Template.Structs.CommentThreadHtml.Thread, dthread.messages.items.len);
                     for (dthread.messages.items, thread) |msg, *pg_comment| {
                         switch (msg.kind) {
                             .comment => {
@@ -144,7 +144,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
 
     const inline_html: bool = getAndSavePatchView(f);
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.TreeBlobHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
@@ -208,12 +208,12 @@ pub fn viewCommit(f: *Frame) Error!void {
     }
 }
 
-pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.Parents {
+pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.CommitHtml.Commit.Parents {
     var plen: usize = 0;
     for (c.parent) |cp| {
         if (cp != null) plen += 1;
     }
-    const parents = try a.alloc(Template.Structs.Parents, plen);
+    const parents = try a.alloc(S.CommitHtml.Commit.Parents, plen);
     errdefer a.free(parents);
     for (parents, c.parent[0..plen]) |*par, par_cmt| {
         // TODO leaks on err
@@ -227,7 +227,7 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.Pare
     return parents;
 }
 
-pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.Commit {
+pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.CommitHtml.Commit {
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     const body = if (c.body.len > 3)
         Highlight.translate(a, .markdown, c.body) catch allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable
@@ -245,7 +245,7 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.Commit {
     };
 }
 
-fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email: bool) !S.CommitList {
+fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email: bool) !S.CommitListHtml.CommitList {
     var parcount: usize = 0;
     for (c.parent) |p| {
         if (p != null) parcount += 1;
@@ -281,7 +281,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
 }
 
 fn buildList(
-    list: *ArrayList(S.CommitList),
+    list: *ArrayList(S.CommitListHtml.CommitList),
     repo: *const Git.Repo,
     name: []const u8,
     before: ?Git.SHA,
@@ -293,7 +293,7 @@ fn buildList(
 }
 
 fn buildListBetween(
-    list: *ArrayList(S.CommitList),
+    list: *ArrayList(S.CommitListHtml.CommitList),
     repo: *const Git.Repo,
     name: []const u8,
     left: ?Git.SHA,
@@ -354,8 +354,8 @@ pub fn commitList(f: *Frame) Error!void {
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
-    var l_b: [50]S.CommitList = undefined;
-    var list: ArrayList(S.CommitList) = .initBuffer(&l_b);
+    var l_b: [50]S.CommitListHtml.CommitList = undefined;
+    var list: ArrayList(S.CommitListHtml.CommitList) = .initBuffer(&l_b);
     const last_sha: ?Git.SHA = buildList(&list, &repo, rd.name, commitish, f.user != null, f.alloc, f.io) catch
         return error.Unknown;
 
@@ -375,13 +375,13 @@ pub fn commitsBefore(f: *Frame) Error!void {
     const before: Git.SHA = if (f.uri.next()) |bf| Git.SHA.initPartial(bf);
     const commits_b = try f.alloc.alloc(Template.Verse, 50);
 
-    var l_b: [50]S.CommitList = undefined;
-    var list: ArrayList(S.CommitList) = .initBuffer(&l_b);
+    var l_b: [50]S.CommitListHtml.CommitList = undefined;
+    var list: ArrayList(S.CommitListHtml.CommitList) = .initBuffer(&l_b);
     const last_sha = try buildList(&list, &repo, rd.name, before, commits_b, f.alloc, f.io);
     return sendCommits(f, list.items, rd.name, last_sha);
 }
 
-fn sendCommits(f: *Frame, list: []const S.CommitList, repo_name: []const u8, sha: ?Git.SHA) Error!void {
+fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Git.SHA) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     const last_sha: ?[]const u8 = if (sha) |s| s.hex()[0..8] else null;
     var page = CommitsListPage.init(.{

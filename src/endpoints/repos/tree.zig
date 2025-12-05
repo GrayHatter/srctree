@@ -23,14 +23,14 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     else
         try allocPrint(ctx.alloc, "/repo/{s}", .{rd.name});
 
-    const dot_dot: ?S.DotDot = if (path) |p| .{
+    const dot_dot: ?S.TreeHtml.DotDot = if (path) |p| .{
         // TODO fix
         .href = try allocPrint(ctx.alloc, "{s}/tree/{s}", .{ prefix, p }),
     } else null;
 
-    var list_trees: std.ArrayListUnmanaged(S.CommitFilelistTrees) = .{};
-    var list_files: std.ArrayListUnmanaged(S.CommitFilelistFiles) = .{};
-    var list_hidden: std.ArrayListUnmanaged(S.CommitFilelistHiddenFiles) = .{};
+    var list_trees: std.ArrayListUnmanaged(S.TreeHtml.CommitFilelistTrees) = .{};
+    var list_files: std.ArrayListUnmanaged(S.TreeHtml.CommitFilelistFiles) = .{};
+    var list_hidden: std.ArrayListUnmanaged(S.TreeHtml.CommitFilelistHidden.CommitFilelistHiddenFiles) = .{};
 
     if (path) |p| try files.pushPath(ctx.alloc, p);
     if (files.changedSetFrom(repo, c.sha, ctx.alloc, ctx.io)) |changed| {
@@ -112,7 +112,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     else
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.TreeBlobHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 

@@ -331,7 +331,7 @@ const Scribe = struct {
         date: DateTime,
         sha: Git.SHA,
 
-        pub fn toTemplate(self: Commit, a: Allocator) !S.JournalRows {
+        pub fn toTemplate(self: Commit, a: Allocator) !S.UserCommitsHtml.Months.JournalRows {
             const shahex = try a.dupe(u8, self.sha.hex()[0..]);
 
             const continuation = "...";
@@ -462,7 +462,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var streak: usize = 0;
     var committed_today: bool = false;
     const weeks = HEATMAPSIZE / 7;
-    const flex_weeks: []S.FlexWeeks = try ctx.alloc.alloc(S.FlexWeeks, weeks);
+    const flex_weeks: []S.UserCommitsHtml.FlexWeeks = try ctx.alloc.alloc(S.UserCommitsHtml.FlexWeeks, weeks);
 
     var date = start_date;
     for (flex_weeks) |*flex_week| {
@@ -521,13 +521,13 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     std.sort.pdq(Scribe.Commit, journal.scribe.items, {}, Scribe.sorted);
 
-    var scribe_blocks = try std.ArrayListUnmanaged(Template.Structs.Months).initCapacity(ctx.alloc, 6);
+    var scribe_blocks = try std.ArrayListUnmanaged(S.UserCommitsHtml.Months).initCapacity(ctx.alloc, 6);
 
     const DefaultBlocks = struct {
-        todays: std.ArrayListUnmanaged(S.JournalRows) = .{},
-        yesterdays: std.ArrayListUnmanaged(S.JournalRows) = .{},
-        last_weeks: std.ArrayListUnmanaged(S.JournalRows) = .{},
-        last_months: std.ArrayListUnmanaged(S.JournalRows) = .{},
+        todays: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
+        yesterdays: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
+        last_weeks: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
+        last_months: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
     };
 
     {

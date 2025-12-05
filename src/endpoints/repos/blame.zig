@@ -71,7 +71,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     const show_emails = f.user != null;
     const wrapped_blames = try wrapLineNumbersBlame(f.alloc, f.io, lines, map, rd.name, file_name, show_emails);
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.BlameHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
@@ -101,9 +101,9 @@ fn wrapLineNumbersBlame(
     repo_name: []const u8,
     path: []const u8,
     include_email: bool,
-) ![]S.BlameLines {
+) ![]S.BlameHtml.BlameLines {
     const now: i64 = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
-    const b_lines = try a.alloc(S.BlameLines, blames.len);
+    const b_lines = try a.alloc(S.BlameHtml.BlameLines, blames.len);
     const shas = try a.alloc([8]u8, blames.len);
     var prev_sha: SHA = .{ .bin = @splat(0xff) };
     for (blames, b_lines, shas, 0..) |src, *blame_line, *sha, i| {

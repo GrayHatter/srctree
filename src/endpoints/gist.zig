@@ -47,7 +47,7 @@ fn gistPost(frame: *Frame) Error!void {
     const username = if (frame.user) |usr| usr.username.? else "public";
 
     if (udata.new_file != null) {
-        const files = try frame.alloc.alloc(S.GistFiles, udata.file_name.len + 1);
+        const files = try frame.alloc.alloc(S.GistNewHtml.GistFiles, udata.file_name.len + 1);
         for (files[0 .. files.len - 1], udata.file_name, udata.file_blob) |*file, name, blob| {
             file.* = .{
                 .name = try verse.abx.Html.cleanAlloc(frame.alloc, name),
@@ -74,11 +74,11 @@ fn gistPost(frame: *Frame) Error!void {
 }
 
 fn new(ctx: *Frame) Error!void {
-    const files = [1]S.GistFiles{.{ .file_name = &.{}, .numbered_lines = &.{} }};
+    const files = [1]S.GistNewHtml.GistFiles{.{ .name = &.{} }};
     return edit(ctx, &files);
 }
 
-fn edit(vrs: *Frame, files: []const S.GistFiles) Error!void {
+fn edit(vrs: *Frame, files: []const S.GistNewHtml.GistFiles) Error!void {
     var page = GistNewPage.init(.{
         .meta_head = .{
             .open_graph = .{ .title = "Create A New Gist" },
@@ -90,10 +90,10 @@ fn edit(vrs: *Frame, files: []const S.GistFiles) Error!void {
     return vrs.sendPage(&page);
 }
 
-fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.NumberedLines {
+fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.GistHtml.GistFiles.NumberedLines {
     var litr = std.mem.splitScalar(u8, text, '\n');
     const count = std.mem.count(u8, text, "\n");
-    const lines = try a.alloc(S.NumberedLines, count + 1);
+    const lines = try a.alloc(S.GistHtml.GistFiles.NumberedLines, count + 1);
     var i: usize = 0;
     while (litr.next()) |line| {
         lines[i] = .{
@@ -105,8 +105,8 @@ fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.NumberedLines {
     return lines;
 }
 
-fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistFiles {
-    const out = try a.alloc(S.GistFiles, files.len);
+fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistHtml.GistFiles {
+    const out = try a.alloc(S.GistHtml.GistFiles, files.len);
 
     var w: Writer.Allocating = try .initCapacity(a, 20);
     defer w.deinit();

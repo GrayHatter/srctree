@@ -7,9 +7,9 @@ pub fn list(frame: *Frame) Router.Error!void {
     repo.loadData(frame.alloc, frame.io) catch return error.Unknown;
     defer repo.raze(frame.alloc, frame.io);
 
-    var tstack: []S.Tags = &.{};
+    var tstack: []S.RepoTagsHtml.Tags = &.{};
     if (repo.tags) |rtags| {
-        tstack = try frame.alloc.alloc(S.Tags, rtags.len);
+        tstack = try frame.alloc.alloc(S.RepoTagsHtml.Tags, rtags.len);
         std.sort.heap(Git.Tag, rtags, {}, sort);
 
         for (rtags, tstack) |tag, *html_| {
@@ -17,7 +17,7 @@ pub fn list(frame: *Frame) Router.Error!void {
         }
     }
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.RepoTagsHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 

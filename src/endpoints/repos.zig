@@ -257,7 +257,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.RepoList {
+fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
     const now = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
     var desc: ?[]const u8 = try repo.description(a, io);
     if (std.mem.startsWith(u8, desc.?, "Unnamed repository; edit this file")) {
@@ -279,7 +279,7 @@ fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.RepoList
         );
     } else |_| {}
 
-    var tag: ?S.Tag = null;
+    var tag: ?S.ReposHtml.RepoList.Tag = null;
 
     if (repo.tags) |rtags| {
         tag = .{
@@ -338,7 +338,7 @@ fn list(f: *Frame) Router.Error!void {
         ;
     }
 
-    const repos_compiled = try f.alloc.alloc(S.RepoList, current_repos.items.len);
+    const repos_compiled = try f.alloc.alloc(S.ReposHtml.RepoList, current_repos.items.len);
     for (current_repos.items, repos_compiled) |*repo, *compiled| {
         defer repo.raze(f.alloc, f.io);
         compiled.* = repoBlock(repo.repo_name orelse "unknown", repo.*, f.alloc, f.io) catch {

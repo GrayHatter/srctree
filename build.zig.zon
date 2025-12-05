@@ -1,7 +1,7 @@
 .{
     .name = .srctree,
     .version = "0.0.0",
-    .minimum_zig_version = "0.16.0-dev.1334+06d08daba",
+    .minimum_zig_version = "0.16.0-dev.1484+d0ba6642b",
     .fingerprint = 0x4eee355ffa6e50b7,
     .dependencies = .{
         .verse = .{
@@ -9,8 +9,8 @@
             // The above URL is the real upstream source but Zig's TLS
             // implementation is currently broken so an alt is provided
 
-            .url = "git+https://github.com/GrayHatter/verse.git#162cce62500a75e2f2a4cbcf693565987eaddf73",
-            .hash = "verse-0.0.3-B0Iw65y1BQDlk1bzWYIHeVf7ji-yyGxyne0LR86ubPHl",
+            .url = "git+https://github.com/GrayHatter/verse.git#6276a6cef9ba410f4a2db8f626479961217df1b6",
+            .hash = "verse-0.0.3-B0Iw68PABQC1mVkJYKXS86334TmVxmMrCGo_W-TJXum0",
             //.path = "../verse",
         },
     },

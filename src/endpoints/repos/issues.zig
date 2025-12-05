@@ -111,10 +111,10 @@ fn view(f: *verse.Frame) Error!void {
 
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch return error.Unrouteable;
 
-    var root_thread: []S.Thread = &[0]S.Thread{};
+    var root_thread: []S.CommentThreadHtml.Thread = &[0]S.CommentThreadHtml.Thread{};
     const now = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
     if (delta.loadThread(f.alloc, f.io)) |thread| {
-        root_thread = try f.alloc.alloc(S.Thread, thread.messages.items.len);
+        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Thread, thread.messages.items.len);
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
@@ -205,7 +205,7 @@ fn list(f: *Frame) Error!void {
 
     const uri_base = try allocPrint(f.alloc, "/repo/{s}/issue", .{rd.name});
     const last = (Types.currentIndexNamed(.deltas, rd.name, f.io) catch 0) + 1;
-    var d_list: ArrayList(S.DeltaList) = .{};
+    var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
     for (0..last) |i| {
 
         // TODO implement seen

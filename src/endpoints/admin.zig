@@ -52,8 +52,8 @@ fn settingsPost(vrs: *Frame) Router.Error!void {
 
 pub fn settings(f: *Frame) Router.Error!void {
     try f.requireValidUser();
-    const blocks: []S.AdminView.ConfigBlocks = try f.alloc.alloc(
-        S.AdminView.ConfigBlocks,
+    const blocks: []S.AdminView.Settings.ConfigBlocks = try f.alloc.alloc(
+        S.AdminView.Settings.ConfigBlocks,
         global_config.ctx.ns.len,
     );
     for (global_config.ctx.ns, blocks) |ns, *block| {

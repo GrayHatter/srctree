@@ -112,7 +112,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
 
     const wrapped = try wrapLineNumbers(frame.alloc, formatted);
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.TreeBlobHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
@@ -151,10 +151,10 @@ fn excludedExt(name: []const u8) bool {
     return false;
 }
 
-fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.NumberedLines {
+fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.BlobHtml.NumberedLines {
     var litr = splitScalar(u8, text, '\n');
     const count = std.mem.count(u8, text, "\n");
-    const lines = try a.alloc(S.NumberedLines, count + 1);
+    const lines = try a.alloc(S.BlobHtml.NumberedLines, count + 1);
     var i: usize = 0;
     while (litr.next()) |line| {
         lines[i] = .{

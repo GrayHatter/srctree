@@ -41,7 +41,7 @@ fn custom(f: *Frame, search_str: []const u8) Error!void {
             std.debug.print("rule = {s} : {s}\n", .{ rule.subject, rule.match });
     }
 
-    var d_list: ArrayList(S.DeltaList) = .{};
+    var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
     var search_results = Delta.searchAny(rules.items, f.io);
     while (search_results.next(f.alloc, f.io)) |deltaC| {
         if (deltaC.title.len == 0) continue;

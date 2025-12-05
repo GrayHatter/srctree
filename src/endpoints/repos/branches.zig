@@ -11,7 +11,7 @@ pub fn list(frame: *Frame) Router.Error!void {
     // leaks a lot
     std.sort.heap(Git.Branch, repo_branches, SortCtx.init(&repo, frame.alloc, frame.io), sort);
 
-    const branches: []S.RepoBranches = try frame.alloc.alloc(S.RepoBranches, repo_branches.len);
+    const branches: []S.BranchesHtml.RepoBranches = try frame.alloc.alloc(S.BranchesHtml.RepoBranches, repo_branches.len);
     for (repo_branches, branches) |branch, *html| {
         html.* = .{
             .name = branch.name,
@@ -19,7 +19,7 @@ pub fn list(frame: *Frame) Router.Error!void {
         };
     }
 
-    const upstream: ?S.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.BranchesHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 

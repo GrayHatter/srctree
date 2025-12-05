@@ -82,10 +82,10 @@ fn newPOST(f: *Frame) Error!void {
 }
 
 fn newGET(f: *Frame) Error!void {
-    var patch_network: ?S.PatchNetwork = null;
-    var patch_uri: ?S.PatchUri = null;
-    var patch_paste: ?S.PatchPaste = null;
-    var patch_curl: ?S.PatchCurl = null;
+    var patch_network: ?S.DiffNewHtml.PatchNetwork = null;
+    var patch_uri: ?S.DiffNewHtml.PatchUri = null;
+    var patch_paste: ?S.DiffNewHtml.PatchPaste = null;
+    var patch_curl: ?S.DiffNewHtml.PatchCurl = null;
     var title: ?[]const u8 = null;
     var desc: ?[]const u8 = null;
 
@@ -103,7 +103,7 @@ fn newGET(f: *Frame) Error!void {
             patch_paste = .{};
         } else if (udata.from_network) |_| {
             const remotes = repo.remotes orelse unreachable;
-            const network_remotes = try f.alloc.alloc(S.Remotes, remotes.len);
+            const network_remotes = try f.alloc.alloc(S.DiffNewHtml.PatchNetwork.Remotes, remotes.len);
             for (remotes, network_remotes) |src, *dst| {
                 dst.* = .{
                     .value = src.name,
@@ -297,7 +297,7 @@ pub fn directReply(ctx: *Frame) Error!void {
     return error.Unknown;
 }
 
-pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs.PatchHtml {
+pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !S.PatchHtml {
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("err: {any}\n", .{err});
@@ -310,7 +310,7 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !Template.Structs
     };
 
     const diffs = patch.diffs orelse unreachable;
-    const files = try a.alloc(Template.Structs.Files, diffs.len);
+    const files = try a.alloc(S.PatchHtml.Files, diffs.len);
     errdefer a.free(files);
     for (diffs, files) |diff, *file| {
         const body = diff.changes orelse continue;
@@ -803,7 +803,7 @@ fn view(f: *Frame) Error!void {
     //const patch_filename = try std.fmt.allocPrint(f.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
 
     var patch: ?Patch = null;
-    var curl_hint: ?S.CurlHint = null;
+    var curl_hint: ?S.DeltaDiffHtml.CurlHint = null;
     var applies: bool = false;
     if (diffM) |*diff| {
         if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {
@@ -838,9 +838,9 @@ fn view(f: *Frame) Error!void {
         }
     }
 
-    var root_thread: []S.Thread = &.{};
+    var root_thread: []S.CommentThreadHtml.Thread = &.{};
     if (delta.loadThread(f.alloc, f.io)) |thread| {
-        root_thread = try f.alloc.alloc(S.Thread, thread.messages.items.len);
+        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Thread, thread.messages.items.len);
         var cmt_diff = diffM;
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
@@ -895,7 +895,7 @@ fn view(f: *Frame) Error!void {
 
     const username = if (f.user) |usr| usr.username.? else "public";
 
-    const patch_data: S.Patch = .{ .patch = patch_formatted orelse .{ .files = &.{} } };
+    const patch_data: S.DeltaDiffHtml.Patch = .{ .patch = patch_formatted orelse .{ .files = &.{} } };
 
     const status: []const u8 = if (delta.state.closed)
         "<span class=closed>closed</span>"
@@ -958,7 +958,7 @@ fn list(f: *Frame) Error!void {
         }
     }
 
-    var d_list: ArrayList(S.DeltaList) = .{};
+    var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
     const uri_base = try allocPrint(f.alloc, "/repo/{s}/diffs", .{rd.name});
     while (itr.next(f.alloc, f.io)) |deltaC| {
