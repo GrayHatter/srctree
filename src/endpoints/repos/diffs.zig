@@ -622,8 +622,8 @@ fn lineNumberStride(target: []const u8) !struct { u32, ?u32 } {
                 }
             }
 
-            const search = try parseInt(u32, target[1..search_end], 10);
-            return .{ search, stride };
+            const line_search = try parseInt(u32, target[1..search_end], 10);
+            return .{ line_search, stride };
         },
         else => return error.InvalidSpecifier,
     }
@@ -947,16 +947,7 @@ fn list(f: *Frame) Error!void {
         }
     }
 
-    var rules: ArrayList(Delta.SearchRule) = .{};
-    {
-        var itr = splitScalar(u8, udata.q orelse "", ' ');
-        while (itr.next()) |r_line| {
-            var line = r_line;
-            line = std.mem.trim(u8, line, " ");
-            if (line.len == 0) continue;
-            try rules.append(f.alloc, .parse(line));
-        }
-    }
+    const rules = try search.genRules(udata.q orelse "", f.alloc);
 
     var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
@@ -1015,6 +1006,8 @@ const splitScalar = std.mem.splitScalar;
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.RouteData;
 const getAndSavePatchView = RepoEndpoint.getAndSavePatchView;
+
+const search = @import("../search.zig");
 
 const verse = @import("verse");
 const abx = verse.abx;

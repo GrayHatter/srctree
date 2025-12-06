@@ -14,11 +14,13 @@ messages: ArrayList(Message) = .{},
 
 const Thread = @This();
 
-pub const type_prefix = "threads";
+pub const type_prefix = .thread;
 pub const type_version = 0;
 
+const Index = Types.Index(type_prefix);
+
 pub fn new(delta: Delta, io: Io) !Thread {
-    const max: usize = try Types.nextIndex(.thread, io);
+    const max: usize = try Index.next(io);
     const thread = Thread{
         .index = max,
         .delta_hash = delta.hash,
@@ -30,7 +32,7 @@ pub fn new(delta: Delta, io: Io) !Thread {
 }
 
 pub fn open(index: usize, a: Allocator, io: Io) !Thread {
-    const max = try Types.currentIndex(.thread, io);
+    const max = try Index.current(io);
     if (index > max) return error.ThreadDoesNotExist;
 
     var buf: [2048]u8 = undefined;

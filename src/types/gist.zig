@@ -7,11 +7,11 @@ files: []const File = &.{},
 
 const Gist = @This();
 
-pub const type_prefix = "gist";
+pub const type_prefix = .gist;
 pub const type_version: usize = 0;
 
 pub const File = struct {
-    pub const type_prefix = "gist-file";
+    pub const type_prefix = .gist_file;
     pub const type_version = 0;
     name: []const u8,
     blob: []const u8,

@@ -10,7 +10,7 @@ comment_data: ?[]const u8 = null,
 
 const Issue = @This();
 
-pub const type_prefix = "issues";
+pub const type_prefix = .issues;
 pub const type_version: usize = 0;
 
 const ISSUE_VERSION: usize = 0;
@@ -23,9 +23,10 @@ pub const Status = enum(u1) {
 const typeio = Types.readerWriter(Issue, .{ .index = 0, .repo = &.{}, .title = &.{}, .desc = &.{} });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
+const Index = Types.Index(type_prefix);
 
 pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Issue {
-    const max: usize = try Types.nextIndex(.issue);
+    const max: usize = try Index.next();
     const d = Issue{
         .index = max + 1,
         .state = 0,
@@ -40,7 +41,7 @@ pub fn new(repo: []const u8, title: []const u8, desc: []const u8) !Issue {
 }
 
 pub fn open(a: std.mem.Allocator, index: usize) !?Issue {
-    const max = try Types.currentIndex(.issue);
+    const max = try Index.current();
     if (index > max) return error.IssueDoesNotExist;
 
     var buf: [2048]u8 = undefined;

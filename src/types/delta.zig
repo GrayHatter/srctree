@@ -13,13 +13,14 @@ state: State = .default,
 // TODO fix when unions are supported
 attach: Attach = .nos,
 attach_target: usize = 0,
+attach_remote: []const u8 = &.{},
 
 hash: [32]u8 = @splat(0),
 thread: ?*Thread = null,
 
 pub const Delta = @This();
 
-pub const type_prefix = "deltas";
+pub const type_prefix = .deltas;
 pub const type_version = 0;
 
 pub const State = struct {
@@ -40,16 +41,7 @@ pub const Attach = enum(u8) {
     issue = 2,
     commit = 3,
     line = 4,
-
-    pub fn fromInt(int: u8) Attach {
-        return switch (int) {
-            1 => .diff,
-            2 => .issue,
-            3 => .commit,
-            4 => .line,
-            else => .nos,
-        };
-    }
+    remote = 5,
 };
 
 const typeio = Types.readerWriter(Delta, .{
@@ -60,9 +52,10 @@ const typeio = Types.readerWriter(Delta, .{
 });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
+const Index = Types.Index(type_prefix);
 
 pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8, io: Io) !Delta {
-    const max: usize = try Types.nextIndexNamed(.deltas, repo, io);
+    const max: usize = try Index.nextExtra(repo, io);
     var d = Delta{
         .index = max,
         .created = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
@@ -80,7 +73,7 @@ pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const
 }
 
 pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
-    const max = try Types.currentIndexNamed(.deltas, repo, io);
+    const max = try Index.currentExtra(repo, io);
     if (index > max) return error.DeltaDoesNotExist;
 
     var buf: [2048]u8 = undefined;
@@ -171,7 +164,7 @@ pub const Iterator = struct {
     pub fn init(repo: []const u8, io: Io) Iterator {
         return .{
             .repo = repo,
-            .last = Types.currentIndexNamed(.deltas, repo, io) catch 0,
+            .last = Index.currentExtra(repo, io) catch 0,
         };
     }
 
@@ -201,7 +194,6 @@ pub const SearchRule = union(SearchSpecifier) {
     pub const String = struct {
         match: []const u8,
         inverse: bool = false,
-        around: bool = false,
     };
 
     pub fn parse(str: []const u8) SearchRule {
@@ -224,6 +216,15 @@ pub const SearchRule = union(SearchSpecifier) {
         } else {
             const string: String = .{ .match = s, .inverse = inverse };
             return .{ .search = string };
+        }
+    }
+
+    pub fn format(rule: SearchRule, w: *Writer) !void {
+        switch (rule) {
+            .search => |s| try w.print("{s}{s}", .{ if (s.inverse) "!" else "", s.match }),
+            .target => |t| try w.print("{s}{s}:{s}", .{ if (t.string.inverse) "!" else "", t.tag, t.string.match }),
+            .is => |i| try w.print("{s}is:{s}", .{ if (i.inverse) "!" else "", i.match }),
+            .repo => |r| try w.print("{s}repo:{s}", .{ if (r.inverse) "!" else "", r.match }),
         }
     }
 };
@@ -370,6 +371,7 @@ test Delta {
         \\state.embargoed: false
         \\attach: nos
         \\attach_target: 0
+        \\attach_remote: 
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000
         \\
         \\
@@ -387,6 +389,7 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const fs = std.fs;
 const Io = std.Io;
+const Writer = Io.Writer;
 const lastIndexOf = std.mem.lastIndexOf;
 const indexOf = std.mem.indexOf;
 const eql = std.mem.eql;

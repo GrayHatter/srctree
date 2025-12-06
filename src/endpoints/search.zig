@@ -25,20 +25,24 @@ pub fn index(ctx: *Frame) Error!void {
 
 const DeltaListPage = Template.PageData("delta-list.html");
 
-fn custom(f: *Frame, search_str: []const u8) Error!void {
+pub fn genRules(search_str: []const u8, a: Allocator) !ArrayList(Delta.SearchRule) {
     var rules: ArrayList(Delta.SearchRule) = .{};
-
-    var itr = splitScalar(u8, search_str, ' ');
-    while (itr.next()) |r_line| {
-        var line = r_line;
-        line = std.mem.trim(u8, line, " ");
-        if (line.len == 0) continue;
-        try rules.append(f.alloc, .parse(line));
+    {
+        var itr = splitScalar(u8, search_str, ' ');
+        while (itr.next()) |r_line| {
+            var line = r_line;
+            line = std.mem.trim(u8, line, " ");
+            if (line.len == 0) continue;
+            try rules.append(a, .parse(line));
+        }
     }
+    return rules;
+}
 
+fn custom(f: *Frame, search_str: []const u8) Error!void {
+    const rules = try genRules(search_str, f.alloc);
     for (rules.items) |rule| {
-        if (false)
-            std.debug.print("rule = {s} : {s}\n", .{ rule.subject, rule.match });
+        log.warn("rule = {f}", .{rule});
     }
 
     var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
@@ -79,6 +83,7 @@ fn custom(f: *Frame, search_str: []const u8) Error!void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const log = std.log.scoped(.search);
 const splitScalar = std.mem.splitScalar;
 const allocPrint = std.fmt.allocPrint;
 

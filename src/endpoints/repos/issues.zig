@@ -204,27 +204,26 @@ fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
     const uri_base = try allocPrint(f.alloc, "/repo/{s}/issue", .{rd.name});
-    const last = (Types.currentIndexNamed(.deltas, rd.name, f.io) catch 0) + 1;
+
+    var rules = try search.genRules("", f.alloc);
     var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
-    for (0..last) |i| {
+    var itr = Delta.searchRepo(rd.name, rules.items, f.io);
+    while (itr.next(f.alloc, f.io)) |deltaC| {
+        var d = deltaC;
+        if (d.attach != .issue) continue;
+        if (d.state.closed) continue;
 
-        // TODO implement seen
-        var d = Delta.open(rd.name, i, f.alloc, f.io) catch continue;
-        if (!std.mem.eql(u8, d.repo, rd.name) or d.attach != .issue) {
-            d.raze(f.alloc);
-            continue;
-        }
-
-        _ = d.loadThread(f.alloc, f.io) catch return error.Unknown;
+        _ = d.loadThread(f.alloc, f.io) catch return error.ServerFault;
         const cmtsmeta = d.countComments(f.io);
 
+        // TODO implement seen
         try d_list.append(f.alloc, .{
             .index = try allocPrint(f.alloc, "{x}", .{d.index}),
-            .uri_base = uri_base,
-            .title = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = d.title }}),
+            .uri_base = uri_base[0 .. uri_base.len - 1],
+            .title = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.title }}),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
-            .desc = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = d.message }}),
+            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.message }}),
             .delta_meta = null,
         });
     }
@@ -270,6 +269,8 @@ const S = template.Structs;
 
 const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
+
+const search = @import("../search.zig");
 
 const Types = @import("../../types.zig");
 const Delta = Types.Delta;

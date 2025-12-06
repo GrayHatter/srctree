@@ -12,7 +12,7 @@ pub const Type = enum {
     remote,
 };
 
-pub const type_prefix = "users";
+pub const type_prefix = .users;
 pub const type_version: usize = 1;
 
 const typeio = Types.readerWriter(User, .{ .not_before = 0, .not_after = 0 });

@@ -13,7 +13,7 @@ patch: struct {
 
 const Diff = @This();
 
-pub const type_prefix = "diffs";
+pub const type_prefix = .diffs;
 pub const type_version: usize = 1;
 
 // TODO reimplement as packed struct once supported by Types.readerWriter
@@ -34,12 +34,12 @@ const typeio = Types.readerWriter(Diff, .{
     .delta_hash = undefined,
     .patch = .{ .blob = undefined },
 });
-
 const writerFn = typeio.write;
 const readerFn = typeio.read;
+const Index = Types.Index(type_prefix);
 
 pub fn new(delta: *Delta, author: []const u8, patch: []const u8, a: Allocator, io: Io) !Diff {
-    const idx: usize = try Types.nextIndex(.diffs, io);
+    const idx: usize = try Index.next(io);
     const d = Diff{
         .index = idx,
         .state = .nos,
@@ -57,6 +57,7 @@ pub fn new(delta: *Delta, author: []const u8, patch: []const u8, a: Allocator, i
     switch (delta.attach) {
         .nos => old_attach = null,
         .diff => old_attach = delta.attach_target,
+        .remote => old_attach = null,
         .issue, .commit, .line => unreachable, // not implemented
     }
 
@@ -74,7 +75,7 @@ pub fn new(delta: *Delta, author: []const u8, patch: []const u8, a: Allocator, i
 }
 
 pub fn open(index: usize, a: Allocator, io: Io) !?Diff {
-    const max = try Types.currentIndex(.diffs, io);
+    const max = try Index.current(io);
     if (index > max) return null;
 
     var buf: [512]u8 = undefined;

@@ -17,7 +17,7 @@ pub const Kind = enum(u16) {
     diff_update,
 };
 
-pub const type_prefix = "messages";
+pub const type_prefix = .messages;
 pub const type_version = 0;
 
 const typeio = Types.readerWriter(Message, .{
