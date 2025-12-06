@@ -290,13 +290,15 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                             else => comptime unreachable,
                         };
                         if (value) |v| {
-                            try w.print("{s}: ", .{field.name});
-                            var itr = splitScalar(u8, v, '\n');
-                            while (itr.next()) |line| {
-                                try w.writeAll(line);
-                                if (itr.peek()) |_| try w.writeAll("\x1a");
+                            if (v.len > 0) {
+                                try w.print("{s}: ", .{field.name});
+                                var itr = splitScalar(u8, v, '\n');
+                                while (itr.next()) |line| {
+                                    try w.writeAll(line);
+                                    if (itr.peek()) |_| try w.writeAll("\x1a");
+                                }
+                                try w.writeAll("\n");
                             }
-                            try w.writeAll("\n");
                         }
                     },
 

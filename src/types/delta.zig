@@ -371,7 +371,6 @@ test Delta {
         \\state.embargoed: false
         \\attach: nos
         \\attach_target: 0
-        \\attach_remote: 
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000
         \\
         \\
