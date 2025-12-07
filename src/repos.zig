@@ -134,6 +134,7 @@ pub const RepoIterator = struct {
             return try Git.Repo.init(rdir2, io);
         }
         ri.current_name = null;
+        ri.dir.close();
         return null;
     }
 };
