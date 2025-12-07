@@ -60,6 +60,15 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 
+    const deploy = b.step("deploy", "insall exes & static files");
+    deploy.dependOn(&exe.step);
+    const static_files = b.addInstallDirectory(.{
+        .source_dir = b.path("static/"),
+        .install_dir = .prefix,
+        .install_subdir = "static",
+    });
+    deploy.dependOn(&static_files.step);
+
     // Partner Binaries
     //const maild = b.addExecutable(.{
     //    .name = "srctree-maild",
