@@ -124,17 +124,11 @@ const writerFn = typeio.write;
 const readerFn = typeio.read;
 
 const std = @import("std");
-const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const ArrayList = std.ArrayList;
-const bufPrint = std.fmt.bufPrint;
 const indexOf = std.mem.indexOf;
-const endian = builtin.cpu.arch.endian();
-const sha256 = std.crypto.hash.sha2.Sha256;
 const parseInt = std.fmt.parseInt;
-
+const Types = @import("../types.zig");
 const Message = @import("message.zig");
 const Delta = @import("delta.zig");
-
-const Types = @import("../types.zig");
