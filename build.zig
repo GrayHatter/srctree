@@ -14,7 +14,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .@"template-path" = b.path("templates"),
-        .@"bot-detection" = true,
+        .ua_validation = true,
     });
 
     // Set up verse

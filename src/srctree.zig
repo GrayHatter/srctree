@@ -2,7 +2,7 @@ const root = @This();
 
 pub const verse_name = .root;
 pub const verse_routes = [_]Match{
-    verse.robotsTxt(&.{
+    verse.Robots.robotsTxt(&.{
         .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
         .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
         .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
@@ -64,7 +64,7 @@ fn debug(_: *Frame) Router.Error!void {
 }
 
 fn userAgentResolution(fr: *Frame) ?BuildFn {
-    const botdetect: verse.Request.UserAgent.BotDetection = .init(fr.request);
+    const botdetect: verse.Robots = .init(fr.request);
     if (fr.request.user_agent) |*ua| {
         if (fr.user == null) {
             switch (ua.agent) {
@@ -88,14 +88,14 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         if (eql(u8, fr.request.uri, "/robots.txt")) return null;
                         std.debug.print("Dropping malicious traffic\n", .{});
                         fr.dumpDebugData(.{});
-                        ua.botDetectionDump(fr.request);
+                        ua.dumpValidation(fr.request);
                         return Router.defaultResponse(.not_found);
                     }
                 },
                 .script, .unknown => {},
             }
             fr.dumpDebugData(.{});
-            ua.botDetectionDump(fr.request);
+            ua.dumpValidation(fr.request);
         }
         return null;
     } else {
