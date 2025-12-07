@@ -165,11 +165,7 @@ pub fn ref(self: Repo, str: []const u8) !SHA {
         switch (r) {
             .sha => |s| return s,
             .tag => @panic("not implemented"),
-            .branch => |b| {
-                if (std.mem.eql(u8, b.name, str)) {
-                    return b.sha;
-                }
-            },
+            .branch => |b| if (eql(u8, b.name, str)) return b.sha,
             .missing => return error.EmptyRef,
         }
     }
@@ -179,9 +175,7 @@ pub fn ref(self: Repo, str: []const u8) !SHA {
 pub fn resolve(self: Repo, r: Ref) !SHA {
     switch (r) {
         .tag => unreachable,
-        .branch => |b| {
-            return try self.ref(b.name);
-        },
+        .branch => |b| return try self.ref(b.name),
     }
 }
 

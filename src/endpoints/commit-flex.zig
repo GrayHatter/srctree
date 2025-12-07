@@ -9,7 +9,6 @@ const YEAR = DAY * 365;
 const HeatMapArray = [HEATMAPSIZE]u16;
 
 const Journal = struct {
-    alloc: Allocator,
     email: []const u8,
     today: i64,
     repos: ArrayList(JRepo),
@@ -34,7 +33,6 @@ const Journal = struct {
 
         const scribe_size = 90;
         j.* = .{
-            .alloc = a,
             .email = try a.dupe(u8, email),
             .today = today,
             .repos = .{},
@@ -50,58 +48,58 @@ const Journal = struct {
         return j;
     }
 
-    pub fn raze(j: *Journal, io: Io) void {
-        j.alloc.free(j.email);
-        for (j.repos.items) |repo| {
-            repo.repo.raze(j.alloc, io);
-            j.alloc.free(repo.name);
+    pub fn raze(j: *Journal, a: Allocator, io: Io) void {
+        a.free(j.email);
+        for (j.repos.items) |*repo| {
+            repo.repo.raze(a, io);
+            a.free(repo.name);
         }
-        j.repos.deinit(j.alloc);
-        j.scribe.deinit(j.alloc);
-        j.alloc.destroy(j);
+        j.repos.deinit(a);
+        j.scribe.deinit(a);
+        a.destroy(j);
     }
 
-    pub fn addRepo(j: *Journal, name: []const u8, repo: Git.Repo) !void {
-        try j.repos.append(j.alloc, .{
-            .name = try j.alloc.dupe(u8, name),
+    pub fn addRepo(j: *Journal, name: []const u8, repo: Git.Repo, a: Allocator) !void {
+        try j.repos.append(a, .{
+            .name = try a.dupe(u8, name),
             .repo = repo,
-            .bufset = .init(j.alloc),
+            .bufset = .init(a),
             .commits = .{},
         });
     }
 
-    pub fn build(j: *Journal, io: Io) !void {
+    pub fn build(j: *Journal, a: Allocator, io: Io) !void {
         for (j.repos.items) |*repo| {
-            j.buildScribe(repo, io) catch |err| {
+            j.buildScribe(repo, a, io) catch |err| {
                 log.warn("unable to build the commit list for repo {s} [error {}]", .{ repo.name, err });
             };
-            j.cachedHeatMap(repo, io) catch |err| {
+            j.cachedHeatMap(repo, a, io) catch |err| {
                 log.warn("unable to build journal for repo {s} [error {}]", .{ repo.name, err });
             };
         }
-        _ = try j.buildBestStreak(io);
+        _ = try j.buildBestStreak(a, io);
     }
 
-    fn buildScribe(j: *Journal, jrepo: *JRepo, io: Io) !void {
-        var lseen = std.BufSet.init(j.alloc);
-        var commit = try jrepo.repo.headCommit(j.alloc, io);
+    fn buildScribe(j: *Journal, jrepo: *JRepo, a: Allocator, io: Io) !void {
+        var lseen = std.BufSet.init(a);
+        var commit = try jrepo.repo.headCommit(a, io);
         const until = j.scribe_until;
 
         while (true) {
             if (lseen.contains(commit.sha.bin[0..])) break;
             const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
             if (commit_time < until) break;
-            if (std.mem.eql(u8, j.email, commit.author.email)) {
+            if (eql(u8, j.email, commit.author.email)) {
                 const ws = " \t\n";
-                try j.scribe.append(j.alloc, .{
-                    .name = try allocPrint(j.alloc, "{f}", .{abx.Html{
+                try j.scribe.append(a, .{
+                    .name = try allocPrint(a, "{f}", .{abx.Html{
                         .text = trim(u8, commit.author.name, ws),
                     }}),
-                    .title = try allocPrint(j.alloc, "{f}", .{abx.Html{
+                    .title = try allocPrint(a, "{f}", .{abx.Html{
                         .text = trim(u8, commit.title, ws),
                     }}),
                     .body = if (commit.body.len > 0)
-                        try allocPrint(j.alloc, "{f}", .{abx.Html{
+                        try allocPrint(a, "{f}", .{abx.Html{
                             .text = trim(u8, commit.body, ws),
                         }})
                     else
@@ -112,23 +110,18 @@ const Journal = struct {
                 });
             }
 
-            commit = commit.toParent(
-                0,
-                &jrepo.repo,
-                j.alloc,
-                io,
-            ) catch |err| switch (err) {
+            commit = commit.toParent(0, &jrepo.repo, a, io) catch |err| switch (err) {
                 error.NoParent => break,
                 else => |e| return e,
             };
         }
     }
 
-    pub fn cachedHeatMap(j: *Journal, jrepo: *JRepo, io: Io) !void {
+    pub fn cachedHeatMap(j: *Journal, jrepo: *JRepo, a: Allocator, io: Io) !void {
         if (j.email.len < 5) return;
 
         // TODO return empty hits here
-        const commit = jrepo.repo.headCommit(j.alloc, io) catch |err| {
+        const commit = jrepo.repo.headCommit(a, io) catch |err| {
             log.warn("Error building commit list on repo {s} because {}", .{ jrepo.name, err });
             return;
         };
@@ -151,7 +144,7 @@ const Journal = struct {
         if (!eql(u8, heatmap.shahex[0..], commit.sha.hex()[0..])) {
             heatmap.shahex = commit.sha.hex();
             @memset(&heatmap.hits, 0);
-            try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until, io);
+            try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until, a, io);
         }
 
         for (&j.hits, heatmap.hits) |*dst, src| dst.* += src;
@@ -165,6 +158,7 @@ const Journal = struct {
         hits: *HeatMapArray,
         root_cmt: Git.Commit,
         until: i64,
+        a: Allocator,
         io: Io,
     ) !void {
         var commit = root_cmt;
@@ -189,25 +183,25 @@ const Journal = struct {
 
             for (commit.parent[1..], 1..) |parent_sha, pidx| {
                 if (parent_sha) |_| {
-                    const parent = try commit.toParent(@truncate(pidx), &jrepo.repo, j.alloc, io);
-                    try j.buildHeatMap(jrepo, hits, parent, until, io);
+                    const parent = try commit.toParent(@truncate(pidx), &jrepo.repo, a, io);
+                    try j.buildHeatMap(jrepo, hits, parent, until, a, io);
                 }
             }
-            commit = commit.toParent(0, &jrepo.repo, j.alloc, io) catch |err| switch (err) {
+            commit = commit.toParent(0, &jrepo.repo, a, io) catch |err| switch (err) {
                 error.NoParent => break,
                 else => |e| return e,
             };
         }
     }
 
-    fn buildBestStreak(j: *Journal, io: Io) !usize {
+    fn buildBestStreak(j: *Journal, a: Allocator, io: Io) !usize {
         const now = j.today;
         j.streak_last = now - DAY * 2;
 
         for (j.repos.items) |*repo| {
-            try repo.commits.append(j.alloc, repo.repo.headCommit(j.alloc, io) catch |err| {
+            try repo.commits.append(a, repo.repo.headCommit(a, io) catch |err| {
                 log.warn("Error building streak list for repo {s} because {}", .{ repo.name, err });
-                repo.commits.clearAndFree(j.alloc);
+                repo.commits.clearAndFree(a);
                 continue;
             });
             repo.next_ts = repo.commits.items[0].author.timestamp;
@@ -222,9 +216,9 @@ const Journal = struct {
                 if (repo.commits.items.len == 0) continue;
                 if (repo.next_ts < before_ts - DAY) continue;
 
-                if (j.buildBestStreakRepo(repo, before_ts, io) catch |err| {
+                if (j.buildBestStreakRepo(repo, before_ts, a, io) catch |err| {
                     log.err("unable to build the streak list for repo {s} [error {}]", .{ repo.name, err });
-                    repo.commits.clearAndFree(j.alloc);
+                    repo.commits.clearAndFree(a);
                     continue;
                 }) {
                     j.streak += 1;
@@ -285,30 +279,30 @@ const Journal = struct {
         return null;
     }
 
-    fn buildBestStreakRepo(j: *Journal, jrepo: *JRepo, before: i64, io: Io) !bool {
+    fn buildBestStreakRepo(j: *Journal, jrepo: *JRepo, before: i64, a: Allocator, io: Io) !bool {
         if (jrepo.commits.items.len == 0) return false;
         var search_count: usize = 0;
-        const slice = try jrepo.commits.toOwnedSlice(j.alloc);
+        const slice = try jrepo.commits.toOwnedSlice(a);
         for (slice) |current| {
             const current_ts = (try DateTime.fromActor(current.author)).tzAdjusted();
 
             if (j.streak_last.? < before or current_ts < before - DAY) {
-                try jrepo.commits.append(j.alloc, current);
+                try jrepo.commits.append(a, current);
                 continue;
             }
 
             const repo = &jrepo.repo;
             const commits = &jrepo.commits;
-            if (traverse(j.email, repo, current, commits, before, &search_count, j.alloc, io)) |result| {
+            if (traverse(j.email, repo, current, commits, before, &search_count, a, io)) |result| {
                 if (result) |commit| {
-                    try jrepo.commits.append(j.alloc, commit);
+                    try jrepo.commits.append(a, commit);
                     j.streak_last = (try DateTime.fromActor(commit.author)).tzAdjusted();
                     continue;
                 } else {
                     for (jrepo.commits.items) |cmt| {
                         const day_depth = @divFloor(cmt.author.timestamp - before, DAY);
                         if (search_count > 5000 or day_depth > 100 and !eql(u8, j.email, cmt.author.email)) {
-                            jrepo.commits.clearAndFree(j.alloc);
+                            jrepo.commits.clearAndFree(a);
                             return false;
                         }
                     }
@@ -441,6 +435,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         start_date.timestamp,
         ctx.alloc,
     );
+    defer journal.raze(ctx.alloc, ctx.io);
 
     var all_repos = repos.allRepoIterator(.public) catch return error.Unknown;
     while (all_repos.next(ctx.io) catch return error.Unknown) |input| {
@@ -450,11 +445,11 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             continue;
         };
         errdefer repo.raze(ctx.alloc, ctx.io);
-        try journal.addRepo(all_repos.current_name.?, repo);
+        try journal.addRepo(all_repos.current_name.?, repo, ctx.alloc);
         repo_count +|= 1;
     }
 
-    try journal.build(ctx.io);
+    try journal.build(ctx.alloc, ctx.io);
     var tcount: u16 = 0;
     for (journal.hits) |h| tcount +|= h;
 
