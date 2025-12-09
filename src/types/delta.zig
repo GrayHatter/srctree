@@ -23,17 +23,7 @@ pub const Delta = @This();
 pub const type_prefix = .deltas;
 pub const type_version = 0;
 
-pub const State = struct {
-    closed: bool = false,
-    locked: bool = false,
-    embargoed: bool = false,
-
-    pub const default: State = .{
-        .closed = false,
-        .locked = false,
-        .embargoed = false,
-    };
-};
+pub const State = @import("common.zig").State;
 
 pub const Attach = enum(u8) {
     nos = 0,
