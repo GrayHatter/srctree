@@ -93,6 +93,13 @@ pub const Mode = packed struct(u16) {
     stick: FSPerm = .{},
     file_type: FileType,
 
+    pub const default: Mode = .{
+        .file_type = .regular_file,
+        .owner = .rw,
+        .group = .r,
+        .other = .r,
+    };
+
     pub fn fromStr(str: [6]u8) !Mode {
         return .{
             .other = try .fromAscii(str[5]),
@@ -210,7 +217,7 @@ pub const Header = struct {
     fn parse(r: *Reader) !Header {
         var change: Change = .{ .none = {} };
         var index: ?[]const u8 = null;
-        while (r.takeDelimiterInclusive('\n')) |current| {
+        while (try r.takeDelimiter('\n')) |current| {
             if (startsWith(u8, current, "index ")) {
                 // TODO parse index correctly
                 index = current;
@@ -224,7 +231,7 @@ pub const Header = struct {
                             startsWith(u8, current, "+++ ") or
                             startsWith(u8, current, "@@"))
                         {
-                            r.seek -|= current.len;
+                            r.seek -|= current.len + 1;
                             break;
                         } else {
                             log.err("ERROR: unexpected header {s}", .{current});
@@ -237,7 +244,7 @@ pub const Header = struct {
                     },
                 };
             }
-        } else |_| {}
+        }
         if (index == null and change == .none) return error.IncompleteHeader;
         return .{
             //.blob = blob,
@@ -261,33 +268,41 @@ pub fn parse(diff: *Diff) !?[]const u8 {
         else => {},
     }
 
-    if (header.index != null) {
+    if (header.index != null and header.change != .newfile) {
         // TODO redact and user headers
         // Left Filename
-        diff.filename = try reader.takeDelimiterInclusive('\n');
+        diff.filename = try reader.takeDelimiter('\n') orelse
+            return error.UnableToParsePatchHeader;
         if (!startsWith(u8, diff.filename.?, "--- ")) return error.UnableToParsePatchHeader;
         diff.filename = diff.filename.?[4..];
-        diff.filename = if (eql(u8, diff.filename.?, "/dev/null\n"))
+        diff.filename = if (eql(u8, diff.filename.?, "/dev/null"))
             null
         else
-            diff.filename.?[2 .. diff.filename.?.len - 1];
+            diff.filename.?[2..diff.filename.?.len];
 
         if (diff.filename == null) {
-            diff.filename = try reader.takeDelimiterInclusive('\n');
+            diff.filename = try reader.takeDelimiter('\n') orelse
+                return error.UnableToParsePatchHeader;
             if (!startsWith(u8, diff.filename.?, "+++ ")) return error.UnableToParsePatchHeader;
             diff.filename = diff.filename.?[4..];
-            diff.filename = if (eql(u8, diff.filename.?, "/dev/null\n"))
+            diff.filename = if (eql(u8, diff.filename.?, "/dev/null"))
                 null
             else
-                diff.filename.?[2 .. diff.filename.?.len - 1];
-        } else if (!startsWith(u8, try reader.takeDelimiterInclusive('\n'), "+++ "))
+                diff.filename.?[2..diff.filename.?.len];
+        } else if (!startsWith(u8, try reader.takeDelimiter('\n') orelse
+            return error.UnableToParsePatchHeader, "+++ "))
             return error.UnableToParsePatchHeader;
 
         // Block headers
         if (reader.peekDelimiterInclusive('\n')) |block| {
             if (!startsWith(u8, block, "@@ -") or indexOf(u8, block, " @@") == null)
                 return error.BlockHeaderMissing;
-        } else |_| return error.UnableToParsePatchHeader;
+        } else |err| switch (err) {
+            error.EndOfStream => return reader.buffered(),
+            error.ReadFailed => return error.ReadFailed,
+            error.StreamTooLong => return error.StreamTooLong,
+            // return error.UnableToParsePatchHeader;
+        }
     }
     return reader.buffered();
 }
@@ -324,6 +339,30 @@ pub fn blocksAlloc(diff: *Diff, a: Allocator) ![]const []const u8 {
     diff.blocks.?[i] = diff.changes.?[pos..];
 
     return diff.blocks.?;
+}
+
+test init {
+    const blob =
+        \\diff --git a/contrib/init.d-benevolence b/contrib/init.d-benevolence
+        \\new file mode 100644
+        \\index 0000000..e69de29
+        \\
+    ;
+    const diff = try init(blob);
+
+    try std.testing.expectEqualDeep(Diff{
+        .blob = blob,
+        .header = .{
+            .index = "index 0000000..e69de29",
+            .change = .{ .newfile = .default },
+        },
+        .stat = .{
+            .additions = 0,
+            .deletions = 0,
+            .total = 0,
+        },
+        .changes = "",
+    }, diff);
 }
 
 const std = @import("std");
