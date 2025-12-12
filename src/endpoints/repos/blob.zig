@@ -116,8 +116,20 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
+    const safe_name = try allocPrint(frame.alloc, "{f}", .{abx.Html{ .text = blb.name }});
+    const meta_title = try allocPrint(frame.alloc, "{s} - {s} -- srctree", .{ safe_name, rd.name });
+    const ext: ?[]const u8 = if (std.mem.findLast(u8, safe_name, ".")) |lst| safe_name[lst + 1 ..] else null;
+    const meta_desc = try allocPrint(frame.alloc, "{} lines {s}{s}", .{
+        wrapped.len,
+        if (ext) |_| " of " else "",
+        if (ext) |e| e else "",
+    });
+
     var page = BlobPage.init(.{
-        .meta_head = .{ .open_graph = .{} },
+        .meta_head = .{
+            .title = meta_title,
+            .open_graph = .{ .title = safe_name, .desc = meta_desc },
+        },
         .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
         .tree_blob_header = .{
             .blame = .{
