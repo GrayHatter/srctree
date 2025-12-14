@@ -63,12 +63,12 @@ pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const
 }
 
 pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
-    const max = try Index.currentExtra(repo, io);
+    const max = Index.currentExtra(repo, io) catch return error.FSFault;
     if (index > max) return error.DeltaDoesNotExist;
 
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
-    var reader = try Types.loadDataReader(.deltas, filename, a, io);
+    const filename = try bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
+    var reader = Types.loadDataReader(.deltas, filename, a, io) catch return error.FSFault;
     return readerFn(&reader);
 }
 
@@ -383,6 +383,7 @@ const lastIndexOf = std.mem.lastIndexOf;
 const indexOf = std.mem.indexOf;
 const eql = std.mem.eql;
 const parseInt = std.fmt.parseInt;
+const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();
 
 const Types = @import("../types.zig");

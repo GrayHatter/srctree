@@ -765,10 +765,9 @@ fn view(f: *Frame) Error!void {
     defer repo.raze(f.alloc, f.io);
 
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch |err| switch (err) {
-        //error.InvalidTarget => return error.Unrouteable,
-        //error.InputOutput => unreachable,
-        //error.Other => unreachable,
-        else => unreachable,
+        error.FSFault => return error.ServerFault,
+        error.NoSpaceLeft => return error.Unknown,
+        error.DeltaDoesNotExist => return error.InvalidURI,
     };
 
     var diffM: ?Diff = null;
