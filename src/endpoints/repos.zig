@@ -289,8 +289,17 @@ fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.ReposHtm
         };
     }
 
+    var name_style: ?[]const u8 = "color: #999";
+    if (repo.config) |cfg| {
+        if (cfg.ctx.get("srctree")) |srctree| {
+            if (srctree.getBool("pinned") orelse false) {
+                name_style = null;
+            }
+        }
+    }
     return .{
         .name = name,
+        .name_style = name_style,
         .uri = try allocPrint(a, "/repo/{s}", .{name}),
         .desc = desc,
         .upstream_blk = if (upstream) |u| .{ .link = u } else null,
