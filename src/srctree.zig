@@ -70,6 +70,12 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
             switch (ua.agent) {
                 .bot => |bot| switch (bot.name) {
                     .googlebot => return null,
+                    .unknown => {
+                        if (eql(u8, fr.request.uri, "/robots.txt")) return null;
+                        if (std.mem.indexOf(u8, fr.request.user_agent.?.string, "SearchBot/1.0") == null) return null;
+                        std.debug.print("Dropping malicious traffic\n", .{});
+                        return Router.defaultResponse(.not_found);
+                    },
                     .gptbot => {
                         if (eql(u8, fr.request.uri, "/robots.txt")) return null;
                         std.debug.print("Dropping malicious traffic\n", .{});
