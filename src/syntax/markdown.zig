@@ -264,7 +264,7 @@ pub const Translate = struct {
             switch (src[idx]) {
                 '\\' => {
                     idx += 1;
-                    if (idx >= src.len) {
+                    if (idx < src.len) {
                         try dst.append(a, src[idx]);
                     }
                 },
