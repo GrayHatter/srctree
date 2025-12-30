@@ -516,13 +516,13 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
 
     std.sort.pdq(Scribe.Commit, journal.scribe.items, {}, Scribe.sorted);
 
-    var scribe_blocks = try std.ArrayListUnmanaged(S.UserCommitsHtml.Months).initCapacity(ctx.alloc, 6);
+    var scribe_blocks = try ArrayList(S.UserCommitsHtml.Months).initCapacity(ctx.alloc, 6);
 
     const DefaultBlocks = struct {
-        todays: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
-        yesterdays: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
-        last_weeks: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
-        last_months: std.ArrayListUnmanaged(S.UserCommitsHtml.Months.JournalRows) = .{},
+        todays: ArrayList(JournalRows) = .{},
+        yesterdays: ArrayList(JournalRows) = .{},
+        last_weeks: ArrayList(JournalRows) = .{},
+        last_months: ArrayList(JournalRows) = .{},
     };
 
     {
@@ -605,6 +605,7 @@ const Template = Verse.template;
 const DOM = Verse.template.html.DOM;
 const HTML = Verse.template.html;
 const S = Template.Structs;
+const JournalRows = S.UserCommitsHtml.Months.JournalRows;
 
 const Route = Verse.Router;
 const Error = Route.Error;
