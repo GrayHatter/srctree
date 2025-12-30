@@ -110,7 +110,16 @@ fn builder(fr: *Frame, call: BuildFn) void {
         return resol(fr) catch {};
     }
 
-    const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
+    var inbox_count: usize = 0;
+    if (genRules("is:open", fr.alloc)) |rules| {
+        var search_results = Delta.searchAny(rules.items, fr.io);
+        while (search_results.next(fr.alloc, fr.io)) |dlt| {
+            inbox_count +|= 1;
+            dlt.raze(fr.alloc);
+        }
+    } else |_| {}
+
+    const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = inbox_count, .url = "/inbox" }};
     var bh: S.BodyHeaderHtml = (fr.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
         .nav_auth = "Error",
         .nav_buttons = &btns,
@@ -201,6 +210,9 @@ const std = @import("std");
 const eql = std.mem.eql;
 const verse = @import("verse");
 const Frame = verse.Frame;
+
+const Delta = @import("types.zig").Delta;
+const genRules = @import("endpoints/search.zig").genRules;
 
 const Router = verse.Router;
 const template = verse.template;

@@ -219,7 +219,7 @@ fn list(f: *Frame) Error!void {
         // TODO implement seen
         try d_list.append(f.alloc, .{
             .index = try allocPrint(f.alloc, "{x}", .{d.index}),
-            .uri_base = uri_base[0 .. uri_base.len - 1],
+            .uri_base = uri_base[0..uri_base.len],
             .title = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.title }}),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,

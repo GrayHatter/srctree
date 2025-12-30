@@ -154,7 +154,7 @@ pub fn Index(type_name: @EnumLiteral()) type {
             try mutex.lock(io);
             defer mutex.unlock(io);
             var buffer: [2048]u8 = undefined;
-            const ename = try bufPrint(&buffer, "_{s}.{s}.index", .{ extra_name, name[1..] });
+            const ename = try bufPrint(&buffer, "_{s}.{s}", .{ extra_name, name[1..] });
             var index_file = storage_dir.openFile(io, ename, .{}) catch |err| switch (err) {
                 error.FileNotFound => {
                     var new_file = try storage_dir.createFile(io, ename, .{});
@@ -176,7 +176,7 @@ pub fn Index(type_name: @EnumLiteral()) type {
             try mutex.lock(io);
             defer mutex.unlock(io);
             var buffer: [2048]u8 = undefined;
-            const ename = try bufPrint(&buffer, "_{s}.{s}.index", .{ extra_name, name[1..] });
+            const ename = try bufPrint(&buffer, "_{s}.{s}", .{ extra_name, name[1..] });
             var index_file = try storage_dir.createFile(io, ename, .{ .read = true, .truncate = false });
             defer index_file.close(io);
             var r_b: [10]u8 = undefined;

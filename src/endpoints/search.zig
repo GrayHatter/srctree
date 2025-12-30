@@ -14,7 +14,7 @@ const SearchReq = struct {
 };
 
 fn inbox(ctx: *Frame) Error!void {
-    return custom(ctx, "owner:me");
+    return custom(ctx, "owner:me is:open");
 }
 
 pub fn index(ctx: *Frame) Error!void {
@@ -68,11 +68,9 @@ fn custom(f: *Frame, search_str: []const u8) Error!void {
         });
     }
 
-    const btns = [1]Template.Structs.NavButtons{.{ .name = "inbox", .extra = 0, .url = "/inbox" }};
-
     var page = DeltaListPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &btns } },
+        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .delta_list = d_list.items,
         .search = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = search_str }}) catch unreachable,
     });

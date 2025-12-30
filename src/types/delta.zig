@@ -219,16 +219,16 @@ pub const SearchRule = union(SearchSpecifier) {
     }
 };
 
-pub fn SearchIter(T: type, I: type) type {
+pub fn SearchIter(Type: type, Itr: type) type {
     return struct {
         rules: []const SearchRule,
 
         // TODO better ABI
-        iterable: I,
+        iterable: Itr,
 
         const Self = @This();
 
-        pub fn next(self: *Self, a: Allocator, io: Io) ?T {
+        pub fn next(self: *Self, a: Allocator, io: Io) ?Type {
             const current = self.iterable.next(a, io) orelse return null;
             if (self.evalRules(current)) {
                 return current;
@@ -236,7 +236,7 @@ pub fn SearchIter(T: type, I: type) type {
             return self.next(a, io);
         }
 
-        fn evalRules(self: Self, target: T) bool {
+        fn evalRules(self: Self, target: Type) bool {
             for (self.rules) |rule| {
                 if (!self.eval(rule, target)) return false;
             } else return true;
@@ -244,8 +244,8 @@ pub fn SearchIter(T: type, I: type) type {
 
         /// TODO: I think this function might overrun for some inputs
         /// TODO: add support for int types
-        fn eval(_: Self, rule: SearchRule, target: T) bool {
-            if (comptime std.meta.hasMethod(T, "searchEval")) {
+        fn eval(_: Self, rule: SearchRule, target: Type) bool {
+            if (comptime std.meta.hasMethod(Type, "searchEval")) {
                 return target.searchEval(rule);
             }
 
@@ -262,7 +262,7 @@ pub fn SearchIter(T: type, I: type) type {
                 },
                 .repo => |repo| return eql(u8, repo.match, target.repo),
                 .target => |trgt| {
-                    inline for (comptime std.meta.fieldNames(T)) |name| {
+                    inline for (comptime std.meta.fieldNames(Type)) |name| {
                         if (eql(u8, trgt.tag, name)) {
                             if (@TypeOf(@field(target, name)) == []const u8) {
                                 if (indexOf(u8, @field(target, name), trgt.string.match)) |_| {
@@ -274,7 +274,7 @@ pub fn SearchIter(T: type, I: type) type {
                     return false;
                 },
                 .search => |any| {
-                    inline for (comptime std.meta.fieldNames(T)) |name| {
+                    inline for (comptime std.meta.fieldNames(Type)) |name| {
                         if (@TypeOf(@field(target, name)) == []const u8) {
                             if (indexOf(u8, @field(target, name), any.match)) |_| {
                                 return true;
@@ -303,8 +303,7 @@ pub const AnyIterator = struct {
     pub fn next(self: *AnyIterator, a: Allocator, io: Io) ?Delta {
         const line = (self.dir.next() catch return null) orelse return null;
         if (line.kind != .file) return self.next(a, io);
-        if (!std.mem.endsWith(u8, line.name, ".delta")) return self.next(a, io);
-        const name = line.name[0 .. line.name.len - 6];
+        const name = cutSuffix(u8, line.name, ".delta") orelse return self.next(a, io);
         const i = lastIndexOf(u8, name, ".") orelse return self.next(a, io);
         const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a, io);
         const current = open(name[0..i], num, a, io) catch return self.next(a, io);
@@ -381,6 +380,8 @@ const Io = std.Io;
 const Writer = Io.Writer;
 const lastIndexOf = std.mem.lastIndexOf;
 const indexOf = std.mem.indexOf;
+const endsWith = std.mem.endsWith;
+const cutSuffix = std.mem.cutSuffix;
 const eql = std.mem.eql;
 const parseInt = std.fmt.parseInt;
 const bufPrint = std.fmt.bufPrint;
