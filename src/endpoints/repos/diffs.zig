@@ -269,21 +269,24 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
     try ctx.sendPage(&page);
 }
 
+const NewCmtReq = struct {
+    did: []const u8,
+    comment: []const u8,
+};
+
 fn newComment(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (f.request.data.post) |post| {
-        var valid = post.validator();
-        const delta_id = try valid.require("did");
-        const delta_index = isHex(delta_id.value) orelse return error.Unrouteable;
+        var valid = post.validate(NewCmtReq) catch return error.DataInvalid;
+        const delta_index = isHex(valid.did) orelse return error.Unrouteable;
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diff/{x}", .{ rd.name, delta_index });
 
-        const msg = try valid.require("comment");
-        if (msg.value.len < 2) return f.redirect(loc, .see_other) catch unreachable;
+        if (valid.comment.len < 2) return f.redirect(loc, .see_other) catch unreachable;
 
         var delta = Delta.open(rd.name, delta_index, f.alloc, f.io) catch return error.Unknown;
         const username = if (f.user) |usr| usr.username.? else "public";
-        delta.addComment(.{ .author = username, .message = msg.value }, f.alloc, f.io) catch unreachable;
+        delta.addComment(.{ .author = username, .message = valid.comment }, f.alloc, f.io) catch unreachable;
         // TODO record current revision at comment time
         return f.redirect(loc, .see_other) catch unreachable;
     }
@@ -940,8 +943,8 @@ fn list(f: *Frame) Error!void {
             indexOf(u8, q, try bufPrint(&b, "repo:{s}", .{rd.name})) == null)
         {
             var buf: [0x2FF]u8 = undefined;
-            for (f.request.data.query.rawquery) |c| if (!std.ascii.isAscii(c)) return error.Abuse;
-            const loc = bufPrint(&buf, "/search?{s}", .{f.request.data.query.rawquery}) catch &buf;
+            for (f.request.data.query.bytes) |c| if (!std.ascii.isAscii(c)) return error.Abuse;
+            const loc = bufPrint(&buf, "/search?{s}", .{f.request.data.query.bytes}) catch &buf;
             return f.redirect(loc, .see_other) catch unreachable;
         }
     }

@@ -175,7 +175,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
             std.debug.print("Abuse {} because {}\n", .{ fr.request, err });
             fr.dumpDebugData(.{});
             if (fr.request.data.post) |post_data| {
-                std.debug.print("post data => '''{s}'''\n", .{post_data.rawpost});
+                std.debug.print("post data => '''{s}'''\n", .{post_data.bytes});
             }
             return fr.sendDefaultErrorPage(.bad_request);
         },

@@ -9,8 +9,8 @@
             // The above URL is the real upstream source but Zig's TLS
             // implementation is currently broken so an alt is provided
 
-            .url = "git+https://github.com/GrayHatter/verse.git#8547b8cbd71e083f767042e6ec27f1e261f013f0",
-            .hash = "verse-0.0.3-B0Iw66fBBQD2Lr3AZ5OceKhLKyVMQp_9N1SGPS_3c-Tr",
+            .url = "git+https://github.com/GrayHatter/verse.git#13fc9d4154f59411256f400f4cd8e8578b917c7a",
+            .hash = "verse-0.0.3-B0Iw68DCBQAX5PChXFEtBrSfgePHky6MiS0v6yHagM7U",
             //.path = "../verse",
         },
     },

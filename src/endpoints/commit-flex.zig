@@ -400,15 +400,18 @@ pub fn razeCache(a: Allocator) void {
 
 const UserCommitsPage = Template.PageData("user_commits.html");
 
+const CommitFlexReq = struct {
+    user: ?[]const u8,
+};
+
 pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var nowish = DateTime.now(ctx.io);
     var email: []const u8 = "";
     var tz_offset: ?i17 = null;
-    var query = ctx.request.data.query.validator();
-    const user = query.optionalItem("user");
+    var reqd = ctx.request.data.query.validate(CommitFlexReq) catch CommitFlexReq{ .user = null };
 
-    if (user) |u| {
-        email = u.value;
+    if (reqd.user) |u| {
+        email = u;
     } else {
         if (global_config.owner) |owner| {
             if (owner.email) |c_email| {

@@ -35,7 +35,7 @@ fn gitUploadPack(ctx: *Frame) Error!void {
     } else {
         try map.put("REQUEST_METHOD", "POST");
     }
-    const qstr = ctx.request.data.query.rawquery;
+    const qstr = ctx.request.data.query.bytes;
     if (eql(u8, qstr, "service=git-upload-pack")) {
         try map.put("QUERY_STRING", "service=git-upload-pack");
     } else {
@@ -82,7 +82,7 @@ fn gitUploadPack(ctx: *Frame) Error!void {
         .{ .fd = child.stdout.?.handle, .events = POLL.IN, .revents = 0 },
     };
 
-    const post_data: ?[]const u8 = if (ctx.request.data.post) |pd| pd.rawpost else null;
+    const post_data: ?[]const u8 = if (ctx.request.data.post) |pd| pd.bytes else null;
     if (post_data) |pd| {
         var w_b: [6400]u8 = undefined; // This is what I saw while debugging
         var writer = child.stdin.?.writer(&w_b);
