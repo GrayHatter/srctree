@@ -123,6 +123,11 @@ content {
 	}
 }
 
+buttons {
+	display: flex;
+	justify-content: space-between;
+}
+
 button {
 	font-size: 108%;
 	font-weight: 600;
