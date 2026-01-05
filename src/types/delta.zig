@@ -148,19 +148,18 @@ pub fn raze(_: Delta, _: std.mem.Allocator) void {
 
 pub const Iterator = struct {
     index: usize = 0,
-    last: usize = 0,
     repo: []const u8,
 
     pub fn init(repo: []const u8, io: Io) Iterator {
         return .{
             .repo = repo,
-            .last = Index.currentExtra(repo, io) catch 0,
+            .index = Index.currentExtra(repo, io) catch 0,
         };
     }
 
     pub fn next(self: *Iterator, a: Allocator, io: Io) ?Delta {
-        while (self.index <= self.last) {
-            defer self.index +|= 1;
+        while (self.index > 0) {
+            defer self.index -|= 1;
             return open(self.repo, self.index, a, io) catch continue;
         }
         return null;
