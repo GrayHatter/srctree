@@ -319,26 +319,40 @@ fn list(f: *Frame) Error!void {
     try f.sendPage(&page);
 }
 
-pub const SupportedRemotes = union(enum) {
-    codeberg: Forgejo,
+pub const RemoteForge = enum {
+    codeberg,
+    github,
 
-    unsupported: void,
+    pub fn fromHost(host: []const u8) ?RemoteForge {
+        if (eql(u8, host, "codeberg.org")) {
+            return .codeberg;
+        }
+        if (eql(u8, host, "github.com")) {
+            return .github;
+        }
+        return null;
+    }
+};
+
+pub const SupportedRemotes = union(RemoteForge) {
+    codeberg: Forgejo,
+    github: Github,
 
     pub fn fromHost(uri: std.Uri) !SupportedRemotes {
         const host = uri.host orelse return error.NoHost;
-        if (std.mem.eql(u8, host.percent_encoded, "codeberg.org")) {
-            return .{ .codeberg = .{} };
-        }
-        return .unsupported;
+        return switch (RemoteForge.fromHost(host.percent_encoded) orelse return error.Unsupported) {
+            .codeberg => .{ .codeberg = .{} },
+            .github => .{ .github = .{} },
+        };
     }
 
     pub const Forgejo = struct {
         pub const IssueJson = struct {
             id: usize,
             number: usize,
-            user: User,
             title: []const u8,
             body: []const u8,
+            user: User,
             labels: []const Label,
             state: []const u8,
             comments: usize,
@@ -381,7 +395,10 @@ pub const SupportedRemotes = union(enum) {
 
             var client: std.http.Client = .{ .allocator = a, .io = io };
             const page = try client.fetch(.{ .location = .{ .uri = api }, .response_writer = &w.writer });
-            if (page.status != .ok) return error.RequestFailed;
+            if (page.status != .ok) {
+                log.err("Unable to clone from remote repo:  {} [{f}]", .{ page.status, uri.fmt(.all) });
+                return error.RequestFailed;
+            }
 
             const page_text = w.written();
             std.debug.print("page \n\n\n{s}\n\n", .{page_text});
@@ -397,6 +414,77 @@ pub const SupportedRemotes = union(enum) {
             };
         }
     };
+
+    pub const Github = struct {
+        pub const IssueJson = struct {
+            id: usize,
+            number: usize,
+            title: []const u8,
+            body: []const u8,
+            user: User,
+            labels: []const Label,
+            state: []const u8,
+            comments: usize,
+            created_at: ?[]const u8,
+            updated_at: ?[]const u8,
+            closed_at: ?[]const u8,
+
+            pub const Label = struct {
+                id: usize,
+                name: []const u8,
+            };
+
+            pub const User = struct {
+                login: []const u8,
+            };
+
+            pub const Milestone = struct {
+                id: usize,
+                title: []const u8,
+                description: []const u8,
+                state: []const u8,
+                created_at: []const u8,
+                updated_at: []const u8,
+            };
+        };
+
+        fn buildUri(uri: std.Uri, buffer: []u8) !std.Uri {
+            const Str = struct {
+                const host: []const u8 = "api.github.com";
+            };
+            var api = uri;
+            const api_path = try bufPrint(buffer, "/repos{s}", .{api.path.percent_encoded});
+            api.host = .{ .percent_encoded = Str.host };
+            api.path = .{ .percent_encoded = api_path };
+            return api;
+        }
+
+        pub fn getIssue(uri: std.Uri, a: Allocator, io: Io) !RemoteData {
+            var path_buffer: [2048]u8 = undefined;
+            const api = try buildUri(uri, &path_buffer);
+            var w: Io.Writer.Allocating = .init(a);
+
+            var client: std.http.Client = .{ .allocator = a, .io = io };
+            const page = try client.fetch(.{ .location = .{ .uri = api }, .response_writer = &w.writer });
+            if (page.status != .ok) {
+                log.err("Unable to clone from remote repo:  {} [{f}]", .{ page.status, uri.fmt(.all) });
+                return error.RequestFailed;
+            }
+
+            const page_text = w.written();
+            std.debug.print("page \n\n\n{s}\n\n", .{page_text});
+            const json: IssueJson = (try std.json.parseFromSlice(IssueJson, a, page_text, .{
+                .ignore_unknown_fields = true,
+            })).value;
+
+            return .{
+                .title = json.title,
+                .description = json.body,
+                .author = json.user.login,
+                .comments = &.{}, // TODO query comments too! /api/v1/group/repo/issues/id/comments
+            };
+        }
+    };
 };
 
 fn fromRemoteUri(f: *Frame, repo_name: []const u8, uri_str: []const u8) !void {
@@ -405,7 +493,7 @@ fn fromRemoteUri(f: *Frame, repo_name: []const u8, uri_str: []const u8) !void {
 
     const data: RemoteData = switch (remote) {
         .codeberg => |cb| try @TypeOf(cb).getIssue(uri, f.alloc, f.io),
-        else => return error.Unsupported,
+        .github => |gh| try @TypeOf(gh).getIssue(uri, f.alloc, f.io),
     };
 
     var delta = Delta.new(repo_name, data.title, data.description, if (f.user) |usr|
@@ -431,6 +519,7 @@ const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const findPos = std.mem.findPos;
 const find = std.mem.find;
+const log = std.log.scoped(.verse_issue);
 
 const verse = @import("verse");
 const Frame = verse.Frame;
