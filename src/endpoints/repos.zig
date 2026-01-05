@@ -110,7 +110,7 @@ pub fn navButtons(f: *Frame) ![2]S.NavButtons {
     if (!rd.exists()) return error.InvalidURI;
     var i_count: usize = 0;
     var d_count: usize = 0;
-    var itr: Delta.Iterator = .init(rd.name, f.io);
+    var itr: Delta.RepoIterator = .init(rd.name, f.io);
     while (itr.next(f.alloc, f.io)) |dlt| {
         switch (dlt.attach) {
             .diff => d_count += 1,

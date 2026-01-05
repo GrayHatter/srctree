@@ -36,7 +36,7 @@ pub fn router(ctx: *verse.Frame) Router.RoutingError!Router.BuildFn {
     return Router.defaultRouter(ctx, &routes);
 }
 
-const IssueNewPage = template.PageData("issue-new.html");
+const IssueNewPage = T.PageData("issue-new.html");
 
 fn new(ctx: *verse.Frame) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
@@ -165,7 +165,7 @@ fn addComment(f: *verse.Frame) Error!void {
     return;
 }
 
-const DeltaIssuePage = template.PageData("delta-issue.html");
+const DeltaIssuePage = T.PageData("delta-issue.html");
 
 fn view(f: *verse.Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
@@ -261,62 +261,17 @@ fn view(f: *verse.Frame) Error!void {
     try f.sendPage(&page);
 }
 
-const DeltaListHtml = template.PageData("delta-list.html");
-
 fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
     const uri_base = try allocPrint(f.alloc, "/repo/{s}/issue", .{rd.name});
-
-    var rules = try search.genRules("", f.alloc);
-    var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
+    var rules = try search.genRules("is:issue", f.alloc);
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
-    while (itr.next(f.alloc, f.io)) |deltaC| {
-        var d = deltaC;
-        if (d.attach != .issue) continue;
-        if (d.state.closed) continue;
-
-        _ = d.loadThread(f.alloc, f.io) catch return error.ServerFault;
-        const cmtsmeta = d.countComments(f.io);
-
-        const msg = d.message[0..@min(
-            d.message.len,
-            findPos(u8, d.message, 256, " ") orelse d.message.len,
-            find(u8, d.message, "```") orelse d.message.len,
-        )];
-
-        // TODO implement seen
-        try d_list.append(f.alloc, .{
-            .index = try allocPrint(f.alloc, "{x}", .{d.index}),
-            .uri_base = uri_base[0..uri_base.len],
-            .title = try allocPrint(f.alloc, "{f}", .{
-                abx.Html{ .text = if (d.title.len == 0) "[No Title]" else d.title },
-            }),
-            .comment_new = if (cmtsmeta.new) " new" else "",
-            .comment_count = cmtsmeta.count,
-            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg }}),
-            .delta_meta = null,
-        });
-    }
 
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue", .{rd.name});
 
-    const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } };
-    if (f.user) |usr| {
-        body_header.nav.nav_auth = usr.username.?;
-    }
-
-    var page = DeltaListHtml.init(.{
-        .meta_head = meta_head,
-        .body_header = body_header,
-        //.search_action = uri_base,
-        .delta_list = try d_list.toOwnedSlice(f.alloc),
-        .search = def_search,
-    });
-
-    try f.sendPage(&page);
+    return delta_shared.list(f, &itr, uri_base, def_search);
 }
 
 pub const RemoteForge = enum {
@@ -525,17 +480,18 @@ const verse = @import("verse");
 const Frame = verse.Frame;
 const abx = verse.abx;
 const Router = verse.Router;
-const template = verse.template;
+const T = verse.template;
 const Error = Router.Error;
 const ROUTE = Router.ROUTE;
 const POST = Router.POST;
 const GET = Router.GET;
-const S = template.Structs;
+const S = T.Structs;
 
 const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
 
 const search = @import("../search.zig");
+const delta_shared = @import("../delta.zig");
 
 const Types = @import("../../types.zig");
 const Delta = Types.Delta;

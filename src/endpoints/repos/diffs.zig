@@ -932,7 +932,6 @@ const SearchReq = struct {
     q: ?[]const u8,
 };
 
-const DeltaListPage = Template.PageData("delta-list.html");
 fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
@@ -949,55 +948,20 @@ fn list(f: *Frame) Error!void {
         }
     }
 
-    const rules = try search.genRules(udata.q orelse "", f.alloc);
+    const rules = try search.genRules(udata.q orelse "is:diff", f.alloc);
 
-    var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
     const uri_base = try allocPrint(f.alloc, "/repo/{s}/diffs", .{rd.name});
-    while (itr.next(f.alloc, f.io)) |deltaC| {
-        var d = deltaC;
-        if (d.attach != .diff) continue;
-        if (d.state.closed) continue;
-
-        const msg = d.message[0..@min(
-            d.message.len,
-            findPos(u8, d.message, 256, " ") orelse d.message.len,
-            find(u8, d.message, "```") orelse d.message.len,
-        )];
-        _ = d.loadThread(f.alloc, f.io) catch unreachable;
-        const cmtsmeta = d.countComments(f.io);
-        try d_list.append(f.alloc, .{
-            .index = try allocPrint(f.alloc, "{x}", .{d.index}),
-            .uri_base = uri_base[0 .. uri_base.len - 1],
-            .title = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.title }}),
-            .comment_new = if (cmtsmeta.new) " new" else "",
-            .comment_count = cmtsmeta.count,
-            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg }}),
-            .delta_meta = null,
-        });
-    }
 
     var default_search_buf: [0xFF]u8 = undefined;
     const search_str = if (udata.q) |q| allocPrint(f.alloc, "{f}", .{abx.Html{ .text = q }}) catch unreachable else try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
-    if (f.user) |usr| {
-        body_header.nav.nav_auth = usr.username.?;
-    }
-    var page = DeltaListPage.init(.{
-        .meta_head = .{ .open_graph = .{} },
-        .body_header = body_header,
-        .search_action = uri_base,
-        .delta_list = d_list.items,
-        .search = search_str,
-    });
-
-    return try f.sendPage(&page);
+    return delta_shared.list(f, &itr, uri_base, search_str);
 }
 
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
-const ArrayList = std.ArrayListUnmanaged;
+const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
@@ -1016,6 +980,7 @@ const RouteData = RepoEndpoint.RouteData;
 const getAndSavePatchView = RepoEndpoint.getAndSavePatchView;
 
 const search = @import("../search.zig");
+const delta_shared = @import("../delta.zig");
 
 const verse = @import("verse");
 const abx = verse.abx;

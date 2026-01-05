@@ -125,7 +125,9 @@ pub fn addMessage(delta: *Delta, m: Message, a: Allocator, io: Io) !void {
     try delta.commit(io);
 }
 
-pub fn countComments(delta: Delta, io: Io) struct { count: usize, new: bool } {
+pub const CommentsMeta = struct { count: usize, new: bool };
+
+pub fn countComments(delta: Delta, io: Io) CommentsMeta {
     const thread = delta.thread orelse return .{ .count = 0, .new = false };
     const ts = (Io.Clock.now(.real, io) catch unreachable).toSeconds() - 86400;
     var cmtnew: bool = false;
@@ -147,163 +149,16 @@ pub fn raze(_: Delta, _: std.mem.Allocator) void {
 }
 
 pub const Iterator = struct {
-    index: usize = 0,
-    repo: []const u8,
-
-    pub fn init(repo: []const u8, io: Io) Iterator {
-        return .{
-            .repo = repo,
-            .index = Index.currentExtra(repo, io) catch 0,
-        };
-    }
-
-    pub fn next(self: *Iterator, a: Allocator, io: Io) ?Delta {
-        while (self.index > 0) {
-            defer self.index -|= 1;
-            return open(self.repo, self.index, a, io) catch continue;
-        }
-        return null;
-    }
-};
-
-pub const SearchSpecifier = enum {
-    search,
-    target,
-    is,
-    repo,
-};
-
-/// By assumption, a subject of len 0 will search across anything
-pub const SearchRule = union(SearchSpecifier) {
-    search: String,
-    target: struct { tag: []const u8, string: String },
-    is: String,
-    repo: String,
-
-    pub const String = struct {
-        match: []const u8,
-        inverse: bool = false,
-    };
-
-    pub fn parse(str: []const u8) SearchRule {
-        var s = str;
-        std.debug.assert(s.len > 2);
-        const inverse = str[0] == '-';
-        if (inverse) s = s[1..];
-
-        if (indexOf(u8, s, ":")) |i| {
-            const string: String = .{ .match = s[i + 1 ..], .inverse = inverse };
-
-            const pre: []const u8 = s[0..i];
-            if (eql(u8, pre, "is")) {
-                return .{ .is = string };
-            } else if (eql(u8, pre, "repo")) {
-                return .{ .repo = string };
-            } else {
-                return .{ .target = .{ .tag = pre, .string = string } };
-            }
-        } else {
-            const string: String = .{ .match = s, .inverse = inverse };
-            return .{ .search = string };
-        }
-    }
-
-    pub fn format(rule: SearchRule, w: *Writer) !void {
-        switch (rule) {
-            .search => |s| try w.print("{s}{s}", .{ if (s.inverse) "!" else "", s.match }),
-            .target => |t| try w.print("{s}{s}:{s}", .{ if (t.string.inverse) "!" else "", t.tag, t.string.match }),
-            .is => |i| try w.print("{s}is:{s}", .{ if (i.inverse) "!" else "", i.match }),
-            .repo => |r| try w.print("{s}repo:{s}", .{ if (r.inverse) "!" else "", r.match }),
-        }
-    }
-};
-
-pub fn SearchIter(Type: type, Itr: type) type {
-    return struct {
-        rules: []const SearchRule,
-
-        // TODO better ABI
-        iterable: Itr,
-
-        const Self = @This();
-
-        pub fn next(self: *Self, a: Allocator, io: Io) ?Type {
-            const current = self.iterable.next(a, io) orelse return null;
-            if (self.evalRules(current)) {
-                return current;
-            }
-            return self.next(a, io);
-        }
-
-        fn evalRules(self: Self, target: Type) bool {
-            for (self.rules) |rule| {
-                if (!self.eval(rule, target)) return false;
-            } else return true;
-        }
-
-        /// TODO: I think this function might overrun for some inputs
-        /// TODO: add support for int types
-        fn eval(_: Self, rule: SearchRule, target: Type) bool {
-            if (comptime std.meta.hasMethod(Type, "searchEval")) {
-                return target.searchEval(rule);
-            }
-
-            switch (rule) {
-                .is => |is| {
-                    if (eql(u8, is.match, "diff")) {
-                        if (target.attach == .diff) return true;
-                    } else if (eql(u8, is.match, "issue")) {
-                        if (target.attach == .issue) return true;
-                    } else if (eql(u8, is.match, "open")) {
-                        return !target.state.closed;
-                    } else if (eql(u8, is.match, "closed")) {
-                        return target.state.closed;
-                    } else {
-                        if (target.attach == .nos) return true;
-                    }
-                    return false;
-                },
-                .repo => |repo| return eql(u8, repo.match, target.repo),
-                .target => |trgt| {
-                    inline for (comptime std.meta.fieldNames(Type)) |name| {
-                        if (eql(u8, trgt.tag, name)) {
-                            if (@TypeOf(@field(target, name)) == []const u8) {
-                                if (indexOf(u8, @field(target, name), trgt.string.match)) |_| {
-                                    return true;
-                                }
-                            }
-                        }
-                    }
-                    return false;
-                },
-                .search => |any| {
-                    inline for (comptime std.meta.fieldNames(Type)) |name| {
-                        if (@TypeOf(@field(target, name)) == []const u8) {
-                            if (indexOf(u8, @field(target, name), any.match)) |_| {
-                                return true;
-                            }
-                        }
-                    }
-                    return false;
-                },
-            }
-        }
-
-        pub fn raze(_: Self) void {}
-    };
-}
-
-pub const AnyIterator = struct {
     dir: std.fs.Dir.Iterator,
 
-    pub fn init(io: Io) AnyIterator {
+    pub fn init(io: Io) Iterator {
         const dir: fs.Dir = .adaptFromNewApi(Types.iterableDir(.deltas, io) catch unreachable);
         return .{
             .dir = dir.iterate(),
         };
     }
 
-    pub fn next(self: *AnyIterator, a: Allocator, io: Io) ?Delta {
+    pub fn next(self: *Iterator, a: Allocator, io: Io) ?Delta {
         const line = (self.dir.next() catch return null) orelse return null;
         if (line.kind != .file) return self.next(a, io);
         const name = cutSuffix(u8, line.name, ".delta") orelse return self.next(a, io);
@@ -314,20 +169,22 @@ pub const AnyIterator = struct {
     }
 };
 
-pub fn searchAny(rules: []const SearchRule, io: Io) SearchIter(Delta, AnyIterator) {
+pub const RepoIterator = search.RepoIterator(Index, Delta);
+pub const RepoSearchIterator = search.Iterator(search.RepoIterator(Index, Delta), Delta);
+
+pub fn searchAny(rules: []const search.Rule, io: Io) search.Iterator(Iterator, Delta) {
     return .{
         .rules = rules,
         .iterable = .init(io),
     };
 }
 
-pub fn searchRepo(repo: []const u8, rules: []const SearchRule, io: Io) SearchIter(Delta, Iterator) {
+pub fn searchRepo(repo: []const u8, rules: []const search.Rule, io: Io) RepoSearchIterator {
     return .{
         .rules = rules,
         .iterable = .init(repo, io),
     };
 }
-
 test Delta {
     const a = std.testing.allocator;
     const io = std.testing.io;
@@ -393,3 +250,4 @@ const endian = builtin.cpu.arch.endian();
 const Types = @import("../types.zig");
 const Thread = Types.Thread;
 const Message = Types.Message;
+const search = @import("search.zig");

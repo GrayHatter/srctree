@@ -1,3 +1,6 @@
+pub const common = @import("types/common.zig");
+pub const search = @import("types/search.zig");
+
 pub const Message = @import("types/message.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");

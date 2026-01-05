@@ -25,8 +25,8 @@ pub fn index(ctx: *Frame) Error!void {
 
 const DeltaListPage = Template.PageData("delta-list.html");
 
-pub fn genRules(search_str: []const u8, a: Allocator) !ArrayList(Delta.SearchRule) {
-    var rules: ArrayList(Delta.SearchRule) = .{};
+pub fn genRules(search_str: []const u8, a: Allocator) !ArrayList(search.Rule) {
+    var rules: ArrayList(search.Rule) = .{};
     {
         var itr = splitScalar(u8, search_str, ' ');
         while (itr.next()) |r_line| {
@@ -52,20 +52,11 @@ fn custom(f: *Frame, search_str: []const u8) Error!void {
         var delt: Delta = deltaC;
         _ = delt.loadThread(f.alloc, f.io) catch return error.Unknown;
         const cmtsmeta = delt.countComments(f.io);
-        const desc = if (delt.message.len == 0) "&nbsp;" else try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delt.message }});
-        try d_list.append(f.alloc, .{
-            .index = try allocPrint(f.alloc, "{x}", .{delt.index}),
-            .uri_base = try allocPrint(
-                f.alloc,
-                "/repo/{s}/{s}",
-                .{ delt.repo, if (delt.attach == .issue) "issue" else "diff" },
-            ),
-            .title = try std.fmt.allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delt.title }}),
-            .comment_new = if (cmtsmeta.new) " new" else "",
-            .comment_count = cmtsmeta.count,
-            .desc = desc,
-            .delta_meta = .{ .repo = delt.repo, .flavor = if (delt.attach == .issue) "issue" else "diff" },
-        });
+        try d_list.append(f.alloc, try delta_shared.deltaList(delt, try allocPrint(
+            f.alloc,
+            "/repo/{s}/{s}",
+            .{ delt.repo, if (delt.attach == .issue) "issue" else "diff" },
+        ), cmtsmeta, .{ .repo = delt.repo, .flavor = if (delt.attach == .issue) "issue" else "diff" }, f.alloc));
     }
 
     var page = DeltaListPage.init(.{
@@ -95,3 +86,5 @@ const ROUTE = Routes.ROUTE;
 const S = Template.Structs;
 
 const Delta = @import("../types.zig").Delta;
+const search = @import("../types/search.zig");
+const delta_shared = @import("delta.zig");
