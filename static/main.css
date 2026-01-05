@@ -150,7 +150,7 @@ lines {
 
 .codeblock {
 	background: #333;
-
+	white-space-collapse: break-spaces;
 }
 
 code {
