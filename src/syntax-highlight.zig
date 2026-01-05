@@ -1,6 +1,7 @@
 pub const Markdown = @import("syntax/markdown.zig");
 
 pub const Language = enum {
+    bash,
     c,
     cpp,
     css,
@@ -12,11 +13,14 @@ pub const Language = enum {
     markdown,
     nginx,
     python,
+    sh,
+    txt,
     vim,
     zig,
 
     pub fn toString(l: Language) ![]const u8 {
         return switch (l) {
+            .bash, .sh => "sh",
             .c => "c",
             .cpp, .h => "cpp",
             .css => "css",
@@ -27,6 +31,7 @@ pub const Language = enum {
             .markdown => "markdown",
             .nginx => "nginx",
             .python => "python",
+            .txt => "txt",
             .vim => @tagName(l),
             .zig => "zig",
             //else => error.LanguageNotSupported,
@@ -38,7 +43,9 @@ pub const Language = enum {
     }
 
     pub fn guessFromFilename(name: []const u8) ?Language {
-        if (endsWith(u8, name, ".c")) {
+        if (endsWith(u8, name, ".bash") or endsWith(u8, name, ".sh")) {
+            return .sh;
+        } else if (endsWith(u8, name, ".c")) {
             return .c;
         } else if (endsWith(u8, name, ".h") or endsWith(u8, name, ".cpp")) {
             return .cpp;
@@ -83,6 +90,7 @@ pub const Language = enum {
 
 pub fn translate(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     return switch (lang) {
+        .bash,
         .c,
         .cpp,
         .css,
@@ -93,6 +101,8 @@ pub fn translate(a: Allocator, lang: Language, text: []const u8) ![]u8 {
         .lua,
         .nginx,
         .python,
+        .sh,
+        .txt,
         .vim,
         .zig,
         => return error.NotSupported,
@@ -109,6 +119,7 @@ pub fn translateInternal(a: Allocator, lang: Language, text: []const u8) ![]u8 {
 
 pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     return switch (lang) {
+        .bash,
         .c,
         .cpp,
         .css,
@@ -120,6 +131,8 @@ pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
         .markdown,
         .nginx,
         .python,
+        .sh,
+        .txt,
         .vim,
         .zig,
         => highlightPygmentize(a, lang, text),

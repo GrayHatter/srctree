@@ -53,7 +53,7 @@ pub const Translate = struct {
         var indent = idx;
 
         sw: switch (src[idx]) {
-            '\n' => {
+            '\r', '\n' => {
                 indent = 0;
                 idx += 1;
                 if (idx < src.len) continue :sw src[idx];
@@ -155,7 +155,8 @@ pub const Translate = struct {
 
     fn paragraph(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) error{OutOfMemory}!usize {
         try dst.appendSlice(a, "<p>");
-        const until = indexOfPos(u8, src, 0, "\n\n") orelse indexOfPos(u8, src, 0, "\r\n\r\n") orelse src.len;
+        const until = indexOfPos(u8, src, 0, "\n\n") orelse
+            indexOfPos(u8, src, 0, "\r\n\r\n") orelse src.len;
         try leaf(a, src[0..until], dst, indent);
         try dst.appendSlice(a, "</p>\n");
         if (until < src.len and src[until] == '\r') {
@@ -211,6 +212,7 @@ pub const Translate = struct {
                         }
                     },
                     else => {
+                        std.debug.print("leeaf line {s}\n", .{src[idx..i]});
                         try line(a, src[idx..i], dst);
                         idx = i + 1;
                     },
