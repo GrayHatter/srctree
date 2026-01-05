@@ -6,6 +6,8 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content>
+      <Switch Flavor>
+        <Case Default>
         <form class="pretty" action="new" method="POST">
           <context>Open New Issue</context>
           <input name="title" placeholder="Issue Title" />
@@ -15,11 +17,27 @@
               <button name="remote" style="color: #bbb">Reference Remote Issue</button>
             </div>
             <div>
-              <button name="submit">Submit</button>
               <button name="preview">Preview</button>
+              <button name="submit">Submit</button>
             </div>
           </buttons>
         </form>
+        </Case>
+        <Case Remote>
+        <form class="pretty" action="new-remote" method="POST">
+          <context>Open New Issue</context>
+          <input name="uri" placeholder="Remote Issue URL" />
+          <buttons>
+            <div>
+              <button name="new" style="color: #bbb">File New Issue</button>
+            </div>
+            <div>
+              <button name="submit">Load</button>
+            </div>
+          </buttons>
+        </form>
+        </Case>
+      </Switch>
     </content>
   </body>
 </html>

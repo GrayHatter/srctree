@@ -9,7 +9,9 @@ pub const verse_router: Router.RouteFn = router;
 pub const routes = [_]Router.Match{
     ROUTE("", list),
     GET("new", new),
+    GET("new-remote", newRemote),
     POST("new", newPost),
+    POST("new-remote", newRemotePost),
     POST("add-comment", addComment),
 };
 
@@ -46,6 +48,22 @@ fn new(ctx: *verse.Frame) Error!void {
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
+        .flavor = .{ .default = .{} },
+    });
+    try ctx.sendPage(&page);
+}
+
+fn newRemote(ctx: *verse.Frame) Error!void {
+    const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
+
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
+    if (ctx.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
+    var page = IssueNewPage.init(.{
+        .meta_head = meta_head,
+        .body_header = body_header,
+        .flavor = .{ .remote = .{} },
     });
     try ctx.sendPage(&page);
 }
@@ -53,26 +71,71 @@ fn new(ctx: *verse.Frame) Error!void {
 const IssueCreateReq = struct {
     title: []const u8,
     desc: []const u8,
+
+    remote: ?bool,
+    submit: ?bool,
+    preview: ?bool,
+
+    pub fn validate(icr: IssueCreateReq) !void {
+        if (icr.title.len < 4) return error.TitleTooShort;
+    }
 };
+
+fn newPostError(_: *verse.Frame) Error!void {
+    // TODO create error page
+    return error.DataInvalid;
+}
 
 fn newPost(f: *verse.Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     var buf: [2048]u8 = undefined;
     if (f.request.data.post) |post| {
         const valid = post.validate(IssueCreateReq) catch return error.DataInvalid;
-        var delta = Delta.new(
-            rd.name,
-            valid.title,
-            valid.desc,
-            if (f.user) |usr| usr.username.? else try allocPrint(f.alloc, "remote_address", .{}),
-            f.io,
-        ) catch unreachable;
+        if (valid.remote) |_| return newRemote(f);
+
+        valid.validate() catch |err| switch (err) {
+            error.TitleTooShort => try newPostError(f),
+        };
+
+        var delta = Delta.new(rd.name, valid.title, valid.desc, if (f.user) |usr|
+            usr.username.?
+        else
+            try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
 
         delta.attach = .issue;
         delta.commit(f.io) catch unreachable;
 
         const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
         return f.redirect(loc, .see_other) catch unreachable;
+    }
+
+    const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
+    return f.redirect(loc, .see_other) catch unreachable;
+}
+
+const RemoteIssueCreateReq = struct {
+    uri: []const u8,
+
+    new: ?bool,
+    submit: ?bool,
+};
+
+const RemoteData = struct {
+    title: []const u8,
+    description: []const u8,
+    author: []const u8,
+
+    comments: [][]u8,
+};
+
+fn newRemotePost(f: *verse.Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+    var buf: [2048]u8 = undefined;
+    if (f.request.data.post) |post| {
+        const valid = post.validate(RemoteIssueCreateReq) catch return error.DataInvalid;
+        if (valid.new) |_| return new(f);
+
+        return fromRemoteUri(f, rd.name, valid.uri) catch return error.Unknown;
     }
 
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
@@ -216,14 +279,22 @@ fn list(f: *Frame) Error!void {
         _ = d.loadThread(f.alloc, f.io) catch return error.ServerFault;
         const cmtsmeta = d.countComments(f.io);
 
+        const msg = d.message[0..@min(
+            d.message.len,
+            findPos(u8, d.message, 256, " ") orelse d.message.len,
+            find(u8, d.message, "```") orelse d.message.len,
+        )];
+
         // TODO implement seen
         try d_list.append(f.alloc, .{
             .index = try allocPrint(f.alloc, "{x}", .{d.index}),
             .uri_base = uri_base[0..uri_base.len],
-            .title = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.title }}),
+            .title = try allocPrint(f.alloc, "{f}", .{
+                abx.Html{ .text = if (d.title.len == 0) "[No Title]" else d.title },
+            }),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
-            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.message }}),
+            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg }}),
             .delta_meta = null,
         });
     }
@@ -248,6 +319,109 @@ fn list(f: *Frame) Error!void {
     try f.sendPage(&page);
 }
 
+pub const SupportedRemotes = union(enum) {
+    codeberg: Forgejo,
+
+    unsupported: void,
+
+    pub fn fromHost(uri: std.Uri) !SupportedRemotes {
+        const host = uri.host orelse return error.NoHost;
+        if (std.mem.eql(u8, host.percent_encoded, "codeberg.org")) {
+            return .{ .codeberg = .{} };
+        }
+        return .unsupported;
+    }
+
+    pub const Forgejo = struct {
+        pub const IssueJson = struct {
+            id: usize,
+            number: usize,
+            user: User,
+            title: []const u8,
+            body: []const u8,
+            labels: []const Label,
+            state: []const u8,
+            comments: usize,
+            created_at: []const u8,
+            updated_at: []const u8,
+            closed_at: []const u8,
+            //milestone: ?Milestone = null,
+
+            pub const Label = struct {
+                id: usize,
+                name: []const u8,
+            };
+
+            pub const User = struct {
+                login: []const u8,
+                username: []const u8,
+            };
+
+            pub const Milestone = struct {
+                id: usize,
+                title: []const u8,
+                description: []const u8,
+                state: []const u8,
+                created_at: []const u8,
+                updated_at: []const u8,
+            };
+        };
+
+        fn buildUri(uri: std.Uri, buffer: []u8) !std.Uri {
+            var api = uri;
+            const api_path = try bufPrint(buffer, "/api/v1/repos{s}", .{api.path.percent_encoded});
+            api.path = .{ .percent_encoded = api_path };
+            return api;
+        }
+
+        pub fn getIssue(uri: std.Uri, a: Allocator, io: Io) !RemoteData {
+            var path_buffer: [2048]u8 = undefined;
+            const api = try buildUri(uri, &path_buffer);
+            var w: Io.Writer.Allocating = .init(a);
+
+            var client: std.http.Client = .{ .allocator = a, .io = io };
+            const page = try client.fetch(.{ .location = .{ .uri = api }, .response_writer = &w.writer });
+            if (page.status != .ok) return error.RequestFailed;
+
+            const page_text = w.written();
+            std.debug.print("page \n\n\n{s}\n\n", .{page_text});
+            const json: IssueJson = (try std.json.parseFromSlice(IssueJson, a, page_text, .{
+                .ignore_unknown_fields = true,
+            })).value;
+
+            return .{
+                .title = json.title,
+                .description = json.body,
+                .author = json.user.username,
+                .comments = &.{}, // TODO query comments too! /api/v1/group/repo/issues/id/comments
+            };
+        }
+    };
+};
+
+fn fromRemoteUri(f: *Frame, repo_name: []const u8, uri_str: []const u8) !void {
+    const uri: std.Uri = try .parse(uri_str);
+    const remote: SupportedRemotes = try .fromHost(uri);
+
+    const data: RemoteData = switch (remote) {
+        .codeberg => |cb| try @TypeOf(cb).getIssue(uri, f.alloc, f.io),
+        else => return error.Unsupported,
+    };
+
+    var delta = Delta.new(repo_name, data.title, data.description, if (f.user) |usr|
+        usr.username.?
+    else
+        try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
+
+    delta.attach = .issue;
+    delta.attach_remote = uri_str;
+    delta.commit(f.io) catch unreachable;
+
+    var buf: [2048]u8 = undefined;
+    const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ repo_name, delta.index });
+    return f.redirect(loc, .see_other) catch unreachable;
+}
+
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
@@ -255,6 +429,8 @@ const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
+const findPos = std.mem.findPos;
+const find = std.mem.find;
 
 const verse = @import("verse");
 const Frame = verse.Frame;

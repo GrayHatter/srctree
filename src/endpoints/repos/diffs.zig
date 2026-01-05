@@ -462,15 +462,15 @@ fn getLineAt(data: []const u8, target: u32, length: u32, right_only: bool) !?[]c
 
 /// TODO move to patch.zig
 fn parseBlockHeader(string: []const u8) !ParsedHeader {
-    const end = indexOf(u8, string[3..], " @@") orelse return error.InvalidBlockHeader;
+    const end = find(u8, string[3..], " @@") orelse return error.InvalidBlockHeader;
     const offsets = string[3 .. end + 3];
-    const mid = indexOf(u8, offsets, " ") orelse unreachable;
+    const mid = find(u8, offsets, " ") orelse unreachable;
     const left = offsets[1..mid];
     const right = offsets[mid + 2 ..];
-    const left_mid = indexOf(u8, left, ",") orelse unreachable;
+    const left_mid = find(u8, left, ",") orelse unreachable;
     const l_low = try parseInt(u32, left[0..left_mid], 10);
     const l_high = try parseInt(u32, left[left_mid + 1 ..], 10);
-    const right_mid = indexOf(u8, right, ",") orelse unreachable;
+    const right_mid = find(u8, right, ",") orelse unreachable;
     const r_low = try parseInt(u32, right[0..right_mid], 10);
     const r_high = try parseInt(u32, right[right_mid + 1 ..], 10);
     return .{
@@ -717,7 +717,7 @@ fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a:
         for (diffs) |*diff| {
             const filename = diff.filename orelse continue;
             //std.debug.print("files {s}\n", .{filename});
-            if (indexOf(u8, line, filename)) |filepos| {
+            if (find(u8, line, filename)) |filepos| {
                 if (indexOfAny(u8, line, "#:@")) |h| {
                     const left, const right = try lineNumberStride(line[h..]);
 
@@ -939,8 +939,8 @@ fn list(f: *Frame) Error!void {
     const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
     if (udata.q) |q| {
         var b: [0xFF]u8 = undefined;
-        if (indexOf(u8, q, "is:diff") == null or
-            indexOf(u8, q, try bufPrint(&b, "repo:{s}", .{rd.name})) == null)
+        if (find(u8, q, "is:diff") == null or
+            find(u8, q, try bufPrint(&b, "repo:{s}", .{rd.name})) == null)
         {
             var buf: [0x2FF]u8 = undefined;
             for (f.request.data.query.bytes) |c| if (!std.ascii.isAscii(c)) return error.Abuse;
@@ -959,6 +959,11 @@ fn list(f: *Frame) Error!void {
         if (d.attach != .diff) continue;
         if (d.state.closed) continue;
 
+        const msg = d.message[0..@min(
+            d.message.len,
+            findPos(u8, d.message, 256, " ") orelse d.message.len,
+            find(u8, d.message, "```") orelse d.message.len,
+        )];
         _ = d.loadThread(f.alloc, f.io) catch unreachable;
         const cmtsmeta = d.countComments(f.io);
         try d_list.append(f.alloc, .{
@@ -967,7 +972,7 @@ fn list(f: *Frame) Error!void {
             .title = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.title }}),
             .comment_new = if (cmtsmeta.new) " new" else "",
             .comment_count = cmtsmeta.count,
-            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = d.message }}),
+            .desc = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg }}),
             .delta_meta = null,
         });
     }
@@ -996,7 +1001,8 @@ const ArrayList = std.ArrayListUnmanaged;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
-const indexOf = std.mem.indexOf;
+const find = std.mem.find;
+const findPos = std.mem.findPos;
 const indexOfAny = std.mem.indexOfAny;
 const indexOfAnyPos = std.mem.indexOfAnyPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
