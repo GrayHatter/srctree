@@ -169,17 +169,18 @@ pub const Iterator = struct {
     }
 };
 
-pub const RepoIterator = search.RepoIterator(Index, Delta);
-pub const RepoSearchIterator = search.Iterator(search.RepoIterator(Index, Delta), Delta);
+pub const RepoIterator = Tsearch.RepoIterator(Index, Delta);
+pub const SearchIterator = Tsearch.Iterator(Iterator, Delta);
+pub const RepoSearchIterator = Tsearch.Iterator(RepoIterator, Delta);
 
-pub fn searchAny(rules: []const search.Rule, io: Io) search.Iterator(Iterator, Delta) {
+pub fn search(rules: []const Tsearch.Rule, io: Io) SearchIterator {
     return .{
         .rules = rules,
         .iterable = .init(io),
     };
 }
 
-pub fn searchRepo(repo: []const u8, rules: []const search.Rule, io: Io) RepoSearchIterator {
+pub fn searchRepo(repo: []const u8, rules: []const Tsearch.Rule, io: Io) RepoSearchIterator {
     return .{
         .rules = rules,
         .iterable = .init(repo, io),
@@ -250,4 +251,4 @@ const endian = builtin.cpu.arch.endian();
 const Types = @import("../types.zig");
 const Thread = Types.Thread;
 const Message = Types.Message;
-const search = @import("search.zig");
+const Tsearch = @import("search.zig");

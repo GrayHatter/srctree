@@ -90,7 +90,7 @@ fn newGET(f: *Frame) Error!void {
     var desc: ?[]const u8 = null;
 
     const routing_data = RouteData.init(f.uri) orelse return error.Unrouteable;
-    var repo = (Repos.open(routing_data.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    var repo = (repos.open(routing_data.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
 
@@ -763,7 +763,7 @@ fn view(f: *Frame) Error!void {
     const delta_id = f.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
 
-    var repo = (Repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    var repo = (repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
 
@@ -949,13 +949,15 @@ fn list(f: *Frame) Error!void {
     }
 
     const rules = try search.genRules(udata.q orelse "is:diff", f.alloc);
-
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
-    const uri_base = try allocPrint(f.alloc, "/repo/{s}/diffs", .{rd.name});
-
     var default_search_buf: [0xFF]u8 = undefined;
     const search_str = if (udata.q) |q| allocPrint(f.alloc, "{f}", .{abx.Html{ .text = q }}) catch unreachable else try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
-    return delta_shared.list(f, &itr, uri_base, search_str);
+
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &(endpt_repos.navButtons(f) catch unreachable) } };
+    if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
+    f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
+
+    return delta_shared.list(f, Delta.RepoIterator, &itr, search_str);
 }
 
 const std = @import("std");
@@ -995,7 +997,8 @@ const DOM = verse.DOM;
 const Git = @import("../../git.zig");
 const Highlighting = @import("../../syntax-highlight.zig");
 const Humanize = @import("../../humanize.zig");
-const Repos = @import("../../repos.zig");
+const repos = @import("../../repos.zig");
+const endpt_repos = @import("../repos.zig");
 const Patch = @import("../../patch.zig");
 const Route = verse.Router;
 const S = Template.Structs;

@@ -247,6 +247,10 @@ fn view(f: *verse.Frame) Error!void {
         .comments = .{
             .thread = root_thread,
         },
+        .tracking_remote = if (delta.attach == .remote)
+            .{ .url = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.attach_remote }}) }
+        else
+            null,
     });
     // required because linux will validate data.[slice].ptr and zig likes to
     // pretend that setting .ptr = undefined when .len == 0
@@ -263,15 +267,16 @@ fn view(f: *verse.Frame) Error!void {
 
 fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
-
-    const uri_base = try allocPrint(f.alloc, "/repo/{s}/issue", .{rd.name});
     var rules = try search.genRules("is:issue", f.alloc);
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
-
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue", .{rd.name});
 
-    return delta_shared.list(f, &itr, uri_base, def_search);
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &(Repos.navButtons(f) catch unreachable) } };
+    if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
+    f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
+
+    return delta_shared.list(f, Delta.RepoIterator, &itr, def_search);
 }
 
 pub const RemoteForge = enum {
@@ -456,7 +461,7 @@ fn fromRemoteUri(f: *Frame, repo_name: []const u8, uri_str: []const u8) !void {
     else
         try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
 
-    delta.attach = .issue;
+    delta.attach = .remote;
     delta.attach_remote = uri_str;
     delta.commit(f.io) catch unreachable;
 

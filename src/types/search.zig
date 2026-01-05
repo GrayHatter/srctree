@@ -86,6 +86,8 @@ pub fn Iterator(Itr: type, Output: type) type {
                         if (target.attach == .diff) return true;
                     } else if (eql(u8, is.match, "issue")) {
                         if (target.attach == .issue) return true;
+                        // TODO better hack
+                        if (target.attach == .remote) return true;
                     } else if (eql(u8, is.match, "open")) {
                         return !target.state.closed;
                     } else if (eql(u8, is.match, "closed")) {

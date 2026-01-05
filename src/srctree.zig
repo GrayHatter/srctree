@@ -118,7 +118,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
 
     var inbox_count: usize = 0;
     if (genRules("is:open", fr.alloc)) |rules| {
-        var search_results = Delta.searchAny(rules.items, fr.io);
+        var search_results = Delta.search(rules.items, fr.io);
         while (search_results.next(fr.alloc, fr.io)) |dlt| {
             inbox_count +|= 1;
             dlt.raze(fr.alloc);

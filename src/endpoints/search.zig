@@ -23,10 +23,8 @@ pub fn index(ctx: *Frame) Error!void {
     return custom(ctx, query_str);
 }
 
-const DeltaListPage = Template.PageData("delta-list.html");
-
-pub fn genRules(search_str: []const u8, a: Allocator) !ArrayList(search.Rule) {
-    var rules: ArrayList(search.Rule) = .{};
+pub fn genRules(search_str: []const u8, a: Allocator) !ArrayList(Tsearch.Rule) {
+    var rules: ArrayList(Tsearch.Rule) = .{};
     {
         var itr = splitScalar(u8, search_str, ' ');
         while (itr.next()) |r_line| {
@@ -45,28 +43,11 @@ fn custom(f: *Frame, search_str: []const u8) Error!void {
         log.warn("rule = {f}", .{rule});
     }
 
-    var d_list: ArrayList(S.DeltaListHtml.DeltaList) = .{};
-    var search_results = Delta.searchAny(rules.items, f.io);
-    while (search_results.next(f.alloc, f.io)) |deltaC| {
-        if (deltaC.title.len == 0) continue;
-        var delt: Delta = deltaC;
-        _ = delt.loadThread(f.alloc, f.io) catch return error.Unknown;
-        const cmtsmeta = delt.countComments(f.io);
-        try d_list.append(f.alloc, try delta_shared.deltaList(delt, try allocPrint(
-            f.alloc,
-            "/repo/{s}/{s}",
-            .{ delt.repo, if (delt.attach == .issue) "issue" else "diff" },
-        ), cmtsmeta, .{ .repo = delt.repo, .flavor = if (delt.attach == .issue) "issue" else "diff" }, f.alloc));
-    }
+    var itr = Delta.search(rules.items, f.io);
 
-    var page = DeltaListPage.init(.{
-        .meta_head = .{ .open_graph = .{} },
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
-        .delta_list = d_list.items,
-        .search = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = search_str }}) catch unreachable,
-    });
-
-    try f.sendPage(&page);
+    try delta_shared.list(f, Delta.Iterator, &itr, try allocPrint(f.alloc, "{f}", .{
+        abx.Html{ .text = search_str },
+    }));
 }
 
 const std = @import("std");
@@ -79,12 +60,10 @@ const allocPrint = std.fmt.allocPrint;
 const verse = @import("verse");
 const abx = verse.abx;
 const Frame = verse.Frame;
-const Template = verse.template;
 const Routes = verse.Router;
 const Error = Routes.Error;
 const ROUTE = Routes.ROUTE;
-const S = Template.Structs;
 
 const Delta = @import("../types.zig").Delta;
-const search = @import("../types/search.zig");
+const Tsearch = @import("../types/search.zig");
 const delta_shared = @import("delta.zig");

@@ -477,11 +477,11 @@ delta {
 		margin: 1em 1%;
 		comments {
 			min-width: 30rem;
-			flex-grow: 4;
+			flex-grow: 30;
 		}
 		sidebar {
-			flex-grow: 2;
-			max-width: 20rem;
+			flex-grow: 3;
+			min-width: 18rem;
 			margin: 0;
 			flex-direction: column;
 			gap: 1em;
