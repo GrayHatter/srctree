@@ -367,19 +367,25 @@ actionable {
 	min-height: 50px;
 	row  {
 		color: white;
-		display: flex;
-		justify-content: space-between;
-		margin-bottom: 15px;
-		border-bottom: 1px solid gray;
-		text-align: left;
-		a { display: block; }
+		a {
+			display: flex;
+			justify-content: space-between;
+			margin: 4px;
+			padding: 4px;
+			border-bottom: 1px solid gray;
+			text-align: left;
+		}
+		a:hover{ background: #ddd2; }
 		> div { margin: 0 1%; }
 		div.main {
 			flex-grow: 1;
 			font-size: 124%;
 			width: auto;
 		}
-		.meta { width: auto; }
+		.meta {
+			width: auto;
+			min-width: 35px;
+		}
 		.muted {
 			margin: 0 3px 0 0 ;
 			display: inline-block;
