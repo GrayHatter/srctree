@@ -6,6 +6,7 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content>
+      <Build RepoHeader _base_repo_header.html />
       <delta class="diff">
         <main>
           <name><Title /></name>
@@ -22,13 +23,8 @@
           </With>
           <comments>
             <Build Comments _comment_thread.html />
-            <form class="pretty" action="add-comment" method="POST">
-              <context>Commenting as <CurrentUsername /></context>
-              <textarea name="comment"></textarea>
-              <button type="submit" name="comment">Comment</button>
+            <Build CommentBox _comment_box.html />
               <With PatchWarning><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
-              <input type="hidden" name="did" value="<DeltaId>" />
-            </form>
           </comments>
         </extra>
       </delta>

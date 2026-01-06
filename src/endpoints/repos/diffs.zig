@@ -911,6 +911,12 @@ fn view(f: *Frame) Error!void {
     var page = DiffViewPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
+        .repo_header = .{
+            .blame = null,
+            .git_uri = null,
+            .repo_name = rd.name,
+            .upstream = null,
+        },
         .patch = patch_data,
         .curl_hint = curl_hint,
         .title = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.title }}) catch unreachable,
@@ -920,9 +926,11 @@ fn view(f: *Frame) Error!void {
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
         .comments = .{ .thread = root_thread },
-        .delta_id = delta_id,
+        .comment_box = .{
+            .current_username = username,
+            .delta_id = delta_id,
+        },
         .patch_warning = if (applies) null else .{},
-        .current_username = username,
     });
 
     try f.sendPage(&page);

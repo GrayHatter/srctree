@@ -236,16 +236,24 @@ fn view(f: *verse.Frame) Error!void {
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
+        .repo_header = .{
+            .blame = null,
+            .git_uri = null,
+            .repo_name = rd.name,
+            .upstream = null,
+        },
         .title = allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = delta.title }}) catch unreachable,
         .description = description,
-        .delta_id = delta_id,
-        .current_username = username,
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
         .status = status,
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .comments = .{
             .thread = root_thread,
+        },
+        .comment_box = .{
+            .current_username = username,
+            .delta_id = delta_id,
         },
         .tracking_remote = if (delta.attach == .remote)
             .{ .url = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.attach_remote }}) }

@@ -112,7 +112,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     else
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
-    const upstream: ?S.TreeBlobHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
@@ -120,10 +120,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .meta_head = .{ .title = page_title, .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .tree_blob_header = .{
-            .git_uri = .{
-                .host = "srctree.gr.ht",
-                .repo_name = rd.name,
-            },
+            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
             .repo_name = rd.name,
             .upstream = upstream,
             .blame = null,

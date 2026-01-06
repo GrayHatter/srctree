@@ -144,7 +144,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
 
     const inline_html: bool = getAndSavePatchView(f);
 
-    const upstream: ?S.TreeBlobHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
@@ -152,11 +152,8 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     var page = CommitPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
-        .tree_blob_header = .{
-            .git_uri = .{
-                .host = "srctree.gr.ht",
-                .repo_name = repo_name_,
-            },
+        .repo_header = .{
+            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = repo_name_ },
             .repo_name = repo_name_,
             .upstream = upstream,
             .blame = null,

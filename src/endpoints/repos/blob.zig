@@ -112,7 +112,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
 
     const wrapped = try wrapLineNumbers(frame.alloc, formatted);
 
-    const upstream: ?S.TreeBlobHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
@@ -132,14 +132,8 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
         },
         .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
         .tree_blob_header = .{
-            .blame = .{
-                .repo_name = rd.name,
-                .filename = path.buffer,
-            },
-            .git_uri = .{
-                .host = "srctree.gr.ht",
-                .repo_name = rd.name,
-            },
+            .blame = .{ .repo_name = rd.name, .filename = path.buffer },
+            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
             .repo_name = rd.name,
             .upstream = upstream,
         },
