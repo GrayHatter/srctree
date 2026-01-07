@@ -20,12 +20,11 @@
           <For CommitFilelistFiles>
           <span class="file"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
           <With CommitFilelistHidden>
-          <input class="magic" type="checkbox" id="dotfiles" style="display: none">
-          <div class="magic">
-            <label for="dotfiles" class="muted"><Count type="usize" /> hidden files</label>
+          <details>
+            <summary class="muted"><Count type="usize" /> hidden files</summary>
             <For CommitFilelistHiddenFiles>
             <span class="<Class />"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
-          </div>
+          </details>
           </With>
         </div>
       </repo>

@@ -109,13 +109,13 @@ pub const Comment = struct {
     message: []const u8,
 };
 
-pub fn addComment(delta: *Delta, c: Comment, a: Allocator, io: Io) !void {
+pub fn addComment(delta: *Delta, c: Comment, a: Allocator, io: Io) !Message {
     var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
-    try thread.addComment(c.author, c.message, a, io);
-    thread.messages.items[thread.messages.items.len - 1].extra0 = delta.attach_target;
+    const msg = try thread.addComment(c.author, c.message, a, io);
     try thread.commit(io);
     delta.updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
     try delta.commit(io);
+    return msg;
 }
 
 pub fn addMessage(delta: *Delta, m: Message, a: Allocator, io: Io) !void {

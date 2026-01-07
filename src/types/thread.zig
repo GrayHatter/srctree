@@ -76,8 +76,10 @@ pub fn commit(thread: Thread, io: Io) !void {
     try writer.flush();
 }
 
-pub fn addComment(thread: *Thread, author: []const u8, message: []const u8, a: Allocator, io: Io) !void {
-    try thread.addMessage(try .new(.comment, thread.index, author, message, io), a, io);
+pub fn addComment(thread: *Thread, author: []const u8, message: []const u8, a: Allocator, io: Io) !Message {
+    const msg: Message = try .new(.comment, thread.index, author, message, io);
+    try thread.addMessage(msg, a, io);
+    return msg;
 }
 
 pub fn addMessage(thread: *Thread, m: Message, a: Allocator, io: Io) !void {

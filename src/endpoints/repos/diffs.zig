@@ -271,6 +271,7 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
 
 const NewCmtReq = struct {
     did: []const u8,
+    diff_id: []const u8,
     comment: []const u8,
 };
 
@@ -286,7 +287,9 @@ fn newComment(f: *Frame) Error!void {
 
         var delta = Delta.open(rd.name, delta_index, f.alloc, f.io) catch return error.Unknown;
         const username = if (f.user) |usr| usr.username.? else "public";
-        delta.addComment(.{ .author = username, .message = valid.comment }, f.alloc, f.io) catch unreachable;
+        var msg = delta.addComment(.{ .author = username, .message = valid.comment }, f.alloc, f.io) catch return error.Unknown;
+        msg.extra0 = std.fmt.parseInt(usize, valid.diff_id, 10) catch return error.DataInvalid;
+        msg.commit(f.io) catch return error.ServerFault;
         // TODO record current revision at comment time
         return f.redirect(loc, .see_other) catch unreachable;
     }
@@ -430,34 +433,47 @@ fn getLineFrom(data: []const u8, target: u32, length: u32) !?[]const u8 {
     return null;
 }
 
-fn getLineAt(data: []const u8, target: u32, length: u32, right_only: bool) !?[]const u8 {
-    std.debug.assert(length == 1); // Not Implemented
-    var itr = splitScalar(u8, data, '\n');
-    const header = try parseBlockHeader(itr.next().?);
-    var i: usize = header.right.start;
-    while (itr.next()) |line| {
-        if (line.len == 0) @panic("unexpected line length");
+fn getCodeAt(data: []const u8, target: u32, length: u32, right_only: bool) !?[]const u8 {
+    var start: usize = findScalarPos(u8, data, 0, '\n') orelse return error.BadDiff;
+    var len = length;
+    const header = try parseBlockHeader(data[0..start]);
+    var current_line: usize = header.right.start;
+    var block: []const u8 = &.{};
+    start += 1;
+    while (findScalarPos(u8, data, start, '\n')) |nl| {
+        if (len == 0) break;
+        defer start = nl + 1;
+        const line = data[start..nl];
         switch (line[0]) {
             '-' => {
                 if (!right_only) {
-                    if (i == target) return line;
-                    i += 1;
+                    if (current_line >= target) {
+                        if (current_line == target) block = line else block.len += 1 + nl - start;
+                        len -|= 1;
+                    }
+                    current_line += 1;
                 }
             },
             '+' => {
                 if (right_only) {
-                    if (i == target) return line;
-                    i += 1;
+                    if (current_line >= target) {
+                        if (current_line == target) block = line else block.len += 1 + nl - start;
+                        len -|= 1;
+                    }
+                    current_line += 1;
                 }
             },
             ' ' => {
-                if (i == target) return line;
-                i += 1;
+                if (current_line >= target) {
+                    if (current_line == target) block = line else block.len += 1 + nl - start;
+                    len -|= 1;
+                }
+                current_line += 1;
             },
             else => {},
         }
     }
-    return null;
+    return if (block.len == 0) null else block;
 }
 
 /// TODO move to patch.zig
@@ -480,12 +496,30 @@ fn parseBlockHeader(string: []const u8) !ParsedHeader {
     };
 }
 
+fn highlightLineRef(
+    text: []const u8,
+    code: []const u8,
+    filename: []const u8,
+    color: []const u8,
+    a: Allocator,
+) ![]u8 {
+    const formatted = if (code.len == 0)
+        "&nbsp;"
+    else if (Highlighting.Language.guessFromFilename(filename)) |lang|
+        try Highlighting.highlight(a, lang, code)
+    else
+        try allocPrint(a, "{f}", .{abx.Html{ .text = code }});
+
+    return try allocPrint(a, "<div title=\"{s}\" class=\"coderef{s}\">{s}</div>", .{
+        try allocPrint(a, "{f}", .{abx.Html{ .text = text }}), color, formatted,
+    });
+}
+
 fn resolveLineRefRepo(
     line: []const u8,
     filename: []const u8,
     repo: *const Git.Repo,
-    line_number: u32,
-    line_stride: ?u32,
+    line_ref: LineRef,
     a: Allocator,
     io: Io,
 ) !?[][]const u8 {
@@ -513,8 +547,11 @@ fn resolveLineRefRepo(
     var file = try repo.loadBlob(blob_sha, a, io);
     var start: usize = 0;
     var end: usize = 0;
-    var count: usize = line_number;
-    var stride: usize = (line_stride orelse line_number) - line_number;
+    var count: usize, var stride: usize = switch (line_ref) {
+        .number => |n| .{ n, 0 },
+        .stride => |s| .{ s.number, s.stride - s.number },
+        .tag => return null,
+    };
     while (indexOfScalarPos(u8, file.data.?, @max(end, start) + 1, '\n')) |next| {
         if (count > 1) {
             start = next;
@@ -530,19 +567,8 @@ fn resolveLineRefRepo(
     }
     if (count > 1) return error.LineNotFound;
     const found_line = file.data.?[start..end];
-    const formatted = if (found_line.len == 0)
-        "&nbsp;"
-    else if (Highlighting.Language.guessFromFilename(filename)) |lang|
-        try Highlighting.highlight(a, lang, found_line[1..])
-    else
-        try allocPrint(a, "{f}", .{abx.Html{ .text = found_line[1..] }});
 
-    const wrapped_line = try allocPrint(
-        a,
-        "<div title=\"{s}\" class=\"coderef\">{s}</div>",
-        .{ try allocPrint(a, "{f}", .{abx.Html{ .text = line }}), formatted },
-    );
-    try found_lines.append(a, wrapped_line);
+    try found_lines.append(a, try highlightLineRef(line, found_line[1..], filename, "", a));
     return try found_lines.toOwnedSlice(a);
 }
 
@@ -551,47 +577,53 @@ fn resolveLineRefDiff(
     line: []const u8,
     filename: []const u8,
     diff: *Patch.Diff,
-    line_number: u32,
-    line_stride: ?u32,
+    line_ref: LineRef,
     fpos: usize,
 ) !?[][]const u8 {
-    _ = line_stride;
-    const side: ?Side = if (fpos > 0)
-        switch (line[fpos - 1]) {
-            '+' => .add,
-            '-' => .del,
-            else => null,
-        }
-    else
-        null;
+    const number, const ncount = switch (line_ref) {
+        .number => |n| .{ n, 1 },
+        .stride => |s| .{ s.number, 1 + s.stride - s.number },
+        .tag => unreachable,
+    };
+    const side: ?Side = switch (if (fpos > 0) line[fpos - 1] else ' ') {
+        '+' => .add,
+        '-' => .del,
+        else => null,
+    };
     var found_lines: ArrayList([]const u8) = .{};
     const blocks = try diff.blocksAlloc(a);
     for (blocks) |block| {
         const change = try parseBlockHeader(block);
-        const in_left = line_number >= change.left.start and line_number <= change.left.start + change.left.change;
-        const in_right = line_number >= change.right.start and line_number <= change.right.start + change.right.change;
+        const in_left = number >= change.left.start and number <= change.left.start + change.left.change;
+        const in_right = number >= change.right.start and number <= change.right.start + change.right.change;
         if (in_left or in_right) {
             const sided: bool = if (side) |s| if (s == .add) true else false else true;
-            if (try getLineAt(block, line_number, 1, sided)) |found_line| {
-                const color = switch (found_line[0]) {
-                    '+' => "green",
-                    '-' => "red",
-                    ' ' => "yellow",
-                    else => "error",
-                };
-                const formatted = if (found_line.len <= 1)
-                    "&nbsp;"
-                else if (Highlighting.Language.guessFromFilename(filename)) |lang|
-                    try Highlighting.highlight(a, lang, found_line[1..])
-                else
-                    try allocPrint(a, "{f}", .{abx.Html{ .text = found_line[1..] }});
 
-                const wrapped_line = try allocPrint(
-                    a,
-                    "<div title=\"{s}\" class=\"coderef {s}\">{s}</div>",
-                    .{ try allocPrint(a, "{f}", .{abx.Html{ .text = line }}), color, formatted },
-                );
-                try found_lines.append(a, wrapped_line);
+            if (try getCodeAt(block, number, ncount, sided)) |code| {
+                const color = switch (code[0]) {
+                    '+' => " green",
+                    '-' => " red",
+                    ' ' => " yellow",
+                    else => " error",
+                };
+                var fixed_code = code[1..];
+                if (std.mem.count(u8, code[1 .. code.len - 1], "\n") > 0) {
+                    var fixed = try a.alloc(u8, code.len);
+                    var i: usize = 0;
+                    var slide: usize = 1;
+                    while (slide < code.len) {
+                        fixed[i] = code[slide];
+                        i += 1;
+                        if (code[slide] == '\n') {
+                            slide += 2;
+                        } else {
+                            slide += 1;
+                        }
+                    }
+                    fixed_code = fixed[0..i];
+                }
+
+                try found_lines.append(a, try highlightLineRef(line, fixed_code, filename, color, a));
             }
             break;
         }
@@ -599,55 +631,65 @@ fn resolveLineRefDiff(
     return try found_lines.toOwnedSlice(a);
 }
 
-fn lineNumberStride(target: []const u8) !struct { u32, ?u32 } {
+const LineRef = union(enum) {
+    number: u32,
+    stride: Stride,
+    tag: Tag,
+
+    pub const Stride = struct {
+        number: u32,
+        stride: u32,
+    };
+    pub const Tag = []const u8;
+};
+
+const FileLineRef = struct {
+    file: []const u8,
+    line: LineRef,
+};
+
+fn lineRef(target: []const u8) !LineRef {
     std.debug.assert(target.len > 1);
     switch (target[0]) {
-        '#', ':', '@' => {
+        '@' => {
+            return .{ .tag = target[1..] };
+        },
+        '#', ':' => {
             var search_end: usize = 1;
-            while (search_end < target.len and
-                isDigit(target[search_end]))
-            {
-                search_end += 1;
-            }
-            var stride: ?u32 = null;
-            if (target.len > search_end) {
+            while (search_end < target.len and isDigit(target[search_end])) search_end += 1;
+            const number = try parseInt(u32, target[1..search_end], 10);
+
+            if (target.len > search_end) strd: {
                 switch (target[search_end]) {
-                    '-' => {
+                    '-', '+' => |op| {
                         const stride_start = search_end + 1;
                         var stride_end = stride_start;
-                        while (stride_end < target.len and isDigit(target[stride_end])) {
-                            stride_end += 1;
-                        }
-                        stride = parseInt(u32, target[stride_start..stride_end], 10) catch null;
+                        while (stride_end < target.len and isDigit(target[stride_end])) stride_end += 1;
+                        const stride = parseInt(u32, target[stride_start..stride_end], 10) catch break :strd;
+                        return .{ .stride = .{
+                            .number = number,
+                            .stride = if (op == '+') stride + number else stride,
+                        } };
                     },
-                    '+' => unreachable, // not implemented
                     else => {},
                 }
             }
 
-            const line_search = try parseInt(u32, target[1..search_end], 10);
-            return .{ line_search, stride };
+            return .{ .number = number };
         },
         else => return error.InvalidSpecifier,
     }
     return error.InvalidLineTarget;
 }
 
-test lineNumberStride {
-    const left, const missing = try lineNumberStride("#10");
+test lineRef {
+    const left = (try lineRef("#10")).number;
     try std.testing.expectEqual(10, left);
-    try std.testing.expectEqual(null, missing);
 
-    const left_, const right = try lineNumberStride("#10-20");
-    try std.testing.expectEqual(10, left_);
-    try std.testing.expectEqual(20, right);
+    const stride = (try lineRef("#10-20")).stride;
+    try std.testing.expectEqual(10, stride.number);
+    try std.testing.expectEqual(20, stride.stride);
 }
-
-const FileLineRef = struct {
-    file: []const u8,
-    line: u32,
-    stride: ?u32,
-};
 
 fn fileLineRef(str: []const u8) ?FileLineRef {
     var w_start: usize = 0;
@@ -661,11 +703,10 @@ fn fileLineRef(str: []const u8) ?FileLineRef {
         if (indexOfAnyPos(u8, str, w_start, " #:@")) |loc| {
             w_start = loc;
             if (str[loc] == ' ') continue;
-            const line, const stride = lineNumberStride(str[loc..]) catch return null;
+            const line_ref = lineRef(str[loc..]) catch return null;
             return .{
                 .file = str[file_start..loc],
-                .line = line,
-                .stride = stride,
+                .line = line_ref,
             };
         } else w_start += 1;
     }
@@ -678,29 +719,30 @@ test fileLineRef {
     try std.testing.expect(fileLineRef("srcmainzig#11") == null);
 
     try std.testing.expectEqualDeep(
-        FileLineRef{ .file = "src/main.zig", .line = 12, .stride = null },
+        FileLineRef{ .file = "src/main.zig", .line = .{ .number = 12 } },
         fileLineRef("src/main.zig#12").?,
     );
     try std.testing.expectEqualDeep(
-        FileLineRef{ .file = "src/main.zig", .line = 12, .stride = null },
+        FileLineRef{ .file = "src/main.zig", .line = .{ .number = 12 } },
         fileLineRef("src/main.zig:12").?,
     );
+    // Wrong, but currently unimplemented
     try std.testing.expectEqualDeep(
-        FileLineRef{ .file = "src/main.zig", .line = 12, .stride = null },
+        FileLineRef{ .file = "src/main.zig", .line = .{ .tag = "12" } },
         fileLineRef("src/main.zig@12").?,
     );
 
     try std.testing.expectEqualDeep(
-        FileLineRef{ .file = "src/srctree.zig", .line = 13, .stride = null },
+        FileLineRef{ .file = "src/srctree.zig", .line = .{ .number = 13 } },
         fileLineRef("some before text src/srctree.zig#13 and some after text").?,
     );
 
     try std.testing.expectEqualDeep(
-        FileLineRef{ .file = "main.zig", .line = 14, .stride = null },
+        FileLineRef{ .file = "main.zig", .line = .{ .number = 14 } },
         fileLineRef("main.zig#14").?,
     );
     try std.testing.expectEqualDeep(
-        FileLineRef{ .file = "src/main", .line = 15, .stride = null },
+        FileLineRef{ .file = "src/main", .line = .{ .number = 15 } },
         fileLineRef("src/main#15").?,
     );
 }
@@ -717,12 +759,14 @@ fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a:
         for (diffs) |*diff| {
             const filename = diff.filename orelse continue;
             //std.debug.print("files {s}\n", .{filename});
+            // Files changed in the diff can be bare referenced without a prefix.
             if (find(u8, line, filename)) |filepos| {
                 if (indexOfAny(u8, line, "#:@")) |h| {
-                    const left, const right = try lineNumberStride(line[h..]);
+                    const line_ref = try lineRef(line[h..]);
 
-                    if (try resolveLineRefDiff(a, line, filename, diff, left, right, filepos)) |lines| {
-                        try message_lines.appendSlice(a, lines);
+                    // default to
+                    if (try resolveLineRefDiff(a, line, filename, diff, line_ref, filepos)) |code| {
+                        try message_lines.appendSlice(a, code);
                         var end: usize = h;
                         while (end < line.len and !isWhitespace(line[end])) {
                             end += 1;
@@ -731,11 +775,11 @@ fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a:
                             a,
                             try allocPrint(a, "{f}", .{abx.Html{ .text = line[end..] }}),
                         );
-                    } else if (resolveLineRefRepo(line, filename, repo, left, right, a, io) catch |err| switch (err) {
+                    } else if (resolveLineRefRepo(line, filename, repo, line_ref, a, io) catch |err| switch (err) {
                         error.LineNotFound => null,
                         else => return err,
-                    }) |lines| {
-                        try message_lines.appendSlice(a, lines);
+                    }) |code| {
+                        try message_lines.appendSlice(a, code);
                     } else {
                         try message_lines.append(a, try allocPrint(
                             a,
@@ -872,7 +916,7 @@ fn view(f: *Frame) Error!void {
                 },
                 .diff_update => {
                     c_ctx.* = .{
-                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
+                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author orelse "" }}),
                         .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
                         .message = msg.message.?,
                         .direct_reply = null,
@@ -929,6 +973,7 @@ fn view(f: *Frame) Error!void {
         .comment_box = .{
             .current_username = username,
             .delta_id = delta_id,
+            .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
         },
         .patch_warning = if (applies) null else .{},
     });
@@ -977,6 +1022,7 @@ const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const find = std.mem.find;
 const findPos = std.mem.findPos;
+const findScalarPos = std.mem.findScalarPos;
 const indexOfAny = std.mem.indexOfAny;
 const indexOfAnyPos = std.mem.indexOfAnyPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;

@@ -45,6 +45,10 @@ div {
 
 h1,h2,h3 { margin: 0 }
 
+details:open > summary {
+	display: none;
+}
+
 .repo-header, .branch-header, .tag-header {
 	display: flex;
 	h3 {
@@ -683,15 +687,6 @@ span.coderef {
 	&.yellow { background: #333; }
 }
 
-input.magic:not(:checked) + div span.tree {
-	display: none;
-}
-input.magic:not(:checked) + div span.file {
-	display: none;
-}
-input.magic:checked + div label {
-	display: none;
-}
 
 blob, gist, patch {
 	text-align: left;

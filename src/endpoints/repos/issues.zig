@@ -158,7 +158,7 @@ fn addComment(f: *verse.Frame) Error!void {
         return error.Unknown;
     const username = if (f.user) |usr| usr.username.? else "public";
 
-    delta.addComment(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
+    _ = delta.addComment(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
     var buf: [2048]u8 = undefined;
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, did });
     f.redirect(loc, .see_other) catch unreachable;

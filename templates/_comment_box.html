@@ -3,4 +3,14 @@
               <textarea name="comment"></textarea>
               <button type="submit" name="comment">Comment</button>
               <input type="hidden" name="did" value="<DeltaId />" />
+              <input type="hidden" name="diff_id" value="<DiffId default="0" />" />
+              <details>
+                <summary>Supported Hints</summary>
+                Reference a line directly with: path/to/file.zig:[line number]<br>
+                Reference a line range with: path/to/file.zig:[line number]-[other line number]<br>
+                Reference a few lines with: path/to/file.zig:[line number]+[number of following lines]<br>
+                Reference a line that was deleted with: -path/to/file.zig:[line number]<br>
+                Reference a line that was added with: +path/to/file.zig:[line number]<br>
+                <!-- TODO Reference a line from a file not in the current diff with: path/to/file.zig:[line number]<br> -->
+              </details>
             </form>
