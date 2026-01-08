@@ -578,9 +578,9 @@ fn resolveLineRefDiff(
         .stride => |s| .{ s.number, 1 + s.stride - s.number },
         .tag => unreachable,
     };
-    const side: ?Side = switch (if (fpos > 0) line[fpos - 1] else ' ') {
-        '+' => .add,
-        '-' => .del,
+    const add_side: ?bool = switch (if (fpos > 0) line[fpos - 1] else ' ') {
+        '+' => true,
+        '-' => false,
         else => null,
     };
     var found_lines: ArrayList([]const u8) = .{};
@@ -590,9 +590,7 @@ fn resolveLineRefDiff(
         const in_left = number >= change.left.start and number <= change.left.start + change.left.change;
         const in_right = number >= change.right.start and number <= change.right.start + change.right.change;
         if (in_left or in_right) {
-            const sided: bool = if (side) |s| if (s == .add) true else false else true;
-
-            if (try getCodeAt(block, number, ncount, sided)) |code| {
+            if (try getCodeAt(block, number, ncount, add_side orelse true)) |code| {
                 const color = switch (code[0]) {
                     '+' => " green",
                     '-' => " red",
@@ -740,15 +738,14 @@ test fileLineRef {
     );
 }
 
-const Side = enum { del, add };
-fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) ![]u8 {
+fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) !struct { bool, []u8 } {
     var message_lines: ArrayList([]const u8) = .{};
     defer message_lines.clearAndFree(a);
-
+    var found_ref = false;
     var itr = splitScalar(u8, comment, '\n');
+    const diffs: []Patch.Diff = patch.diffs orelse &.{};
     while (itr.next()) |line_| {
         const line = std.mem.trim(u8, line_, "\r ");
-        const diffs: []Patch.Diff = patch.diffs orelse &.{};
         for (diffs) |*diff| {
             const filename = diff.filename orelse continue;
             //std.debug.print("files {s}\n", .{filename});
@@ -759,6 +756,7 @@ fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a:
 
                     // default to
                     if (try resolveLineRefDiff(a, line, filename, diff, line_ref, filepos)) |code| {
+                        found_ref = true;
                         try message_lines.appendSlice(a, code);
                         var end: usize = h;
                         while (end < line.len and !isWhitespace(line[end])) {
@@ -772,6 +770,7 @@ fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a:
                         error.LineNotFound => null,
                         else => return err,
                     }) |code| {
+                        found_ref = true;
                         try message_lines.appendSlice(a, code);
                     } else {
                         try message_lines.append(a, try allocPrint(
@@ -788,21 +787,16 @@ fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a:
         }
     }
 
-    return try std.mem.join(a, "<br />\n", message_lines.items);
+    return .{ found_ref, try std.mem.join(a, "<br />\n", message_lines.items) };
 }
 
 const DiffViewPage = Template.PageData("delta-diff.html");
 
 fn view(f: *Frame) Error!void {
-    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
     const delta_id = f.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
-
-    var repo = (repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
-    repo.loadData(f.alloc, f.io) catch return error.ServerFault;
-    defer repo.raze(f.alloc, f.io);
 
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch |err| switch (err) {
         error.FSFault => return error.ServerFault,
@@ -810,10 +804,14 @@ fn view(f: *Frame) Error!void {
         error.DeltaDoesNotExist => return error.InvalidURI,
     };
 
-    var diffM: ?Diff = null;
-    switch (delta.attach) {
-        .nos => {},
-        .diff => diffM = Diff.open(delta.attach_target, f.alloc, f.io) catch return error.Unknown,
+    const revision: ?u64 = if (f.uri.next()) |next| if (eql(u8, next, "rev")) rev: {
+        break :rev if (f.uri.next()) |str|
+            parseInt(u64, str, 10) catch return error.InvalidURI
+        else
+            return error.InvalidURI;
+    } else return error.Unrouteable else switch (delta.attach) {
+        .nos => null,
+        .diff => delta.attach_target,
         .issue => {
             var buf: [100]u8 = undefined;
             const loc = try bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
@@ -823,7 +821,24 @@ fn view(f: *Frame) Error!void {
             std.debug.print("can't redirect attach {s}\n", .{@tagName(delta.attach)});
             return error.DataInvalid;
         },
-    }
+    };
+
+    // TODO remove delta_id from call
+    return viewDiffRevision(f, &delta, revision, delta_id);
+}
+
+fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8) Error!void {
+    // TODO remove delta_index
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+
+    var repo = (repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    repo.loadData(f.alloc, f.io) catch return error.ServerFault;
+    defer repo.raze(f.alloc, f.io);
+
+    var diffM: ?Diff = if (rev) |r|
+        Diff.open(r, f.alloc, f.io) catch null
+    else
+        null;
 
     // meme saved to protect history
     //for ([_]Comment{ .{
@@ -837,6 +852,7 @@ fn view(f: *Frame) Error!void {
     //}
 
     const inline_html: bool = getAndSavePatchView(f);
+    //const outdated_revision = rev == null or rev.? != delta.attach_target;
 
     var patch_formatted: ?S.PatchHtml = null;
     //const patch_filename = try std.fmt.allocPrint(f.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
@@ -871,37 +887,61 @@ fn view(f: *Frame) Error!void {
         } else {
             curl_hint = .{
                 .repo_name = rd.name,
-                .diff_idx = delta_id,
+                .diff_idx = delta_index,
                 .host = f.request.host orelse "127.0.0.1",
             };
         }
     }
 
+    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
     var root_thread: []S.CommentThreadHtml.Thread = &.{};
     if (delta.loadThread(f.alloc, f.io)) |thread| {
         root_thread = try f.alloc.alloc(S.CommentThreadHtml.Thread, thread.messages.items.len);
-        var cmt_diff = diffM;
+        var comment_rev_diff = diffM;
+        var comment_rev_patch: ?Patch = patch;
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
-                    var comment_patch: ?Patch = patch;
-                    if (cmt_diff) |cd| {
-                        if (cd.index != msg.extra0) {
-                            cmt_diff = Diff.open(msg.extra0, f.alloc, f.io) catch cd;
-                            comment_patch = .init(cmt_diff.?.patch.blob);
+                    const cmt_rev: enum { older, current, newer } = if (rev) |r| if (msg.extra0 < r)
+                        .older
+                    else if (msg.extra0 > r)
+                        .newer
+                    else
+                        .current else .current;
+
+                    const system_tag: ?[]const u8 = switch (cmt_rev) {
+                        .older => "<div class=\"sysmsg\" style=\"background-color:red\">Comment on previous revision.</div>\n",
+                        .newer => "<div class=\"sysmsg\" style=\"background-color:red\">Comment on newer revision.</div>\n",
+                        .current => null,
+                    };
+                    if (comment_rev_diff) |*crd| {
+                        if (crd.index != msg.extra0) {
+                            comment_rev_diff = Diff.open(msg.extra0, f.alloc, f.io) catch crd.*;
+                            comment_rev_patch = .init(crd.patch.blob);
+                            if (comment_rev_patch) |*rp| rp.parse(f.alloc) catch {
+                                comment_rev_patch = null;
+                            };
+                        }
+                    } else {
+                        if (Diff.open(msg.extra0, f.alloc, f.io) catch null) |crd| {
+                            comment_rev_diff = crd;
+                            comment_rev_patch = .init(crd.patch.blob);
+                            if (comment_rev_patch) |*rp| rp.parse(f.alloc) catch {
+                                comment_rev_patch = null;
+                            };
                         }
                     }
-
-                    if (comment_patch) |*cp| if (cp.diffs == null) cp.parse(f.alloc) catch {};
+                    const found_ref, const ref_msg = if (comment_rev_patch) |cp|
+                        translateComment(msg.message.?, cp, &repo, f.alloc, f.io) catch return error.ServerFault
+                    else
+                        .{ false, try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.message.? }}) };
                     c_ctx.* = .{
                         .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
                         .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
-                        .message = if (comment_patch) |pt|
-                            translateComment(msg.message.?, pt, &repo, f.alloc, f.io) catch unreachable
-                        else
-                            try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.message.? }}),
+                        .system_tag = if (found_ref) system_tag else null,
+                        .message = ref_msg,
                         .direct_reply = .{ .uri = try allocPrint(f.alloc, "{}/direct_reply/{x}", .{
-                            idx,
+                            delta.index,
                             msg.hash[0..],
                         }) },
                         .sub_thread = null,
@@ -928,7 +968,7 @@ fn view(f: *Frame) Error!void {
             }
         }
     } else |err| {
-        std.debug.print("Unable to load comments for thread {} {}\n", .{ idx, err });
+        std.debug.print("Unable to load comments for thread {} {}\n", .{ delta.index, err });
         @panic("oops");
     }
 
@@ -965,7 +1005,7 @@ fn view(f: *Frame) Error!void {
         .comments = .{ .thread = root_thread },
         .comment_box = .{
             .current_username = username,
-            .delta_id = delta_id,
+            .delta_id = delta_index,
             .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
         },
         .patch_warning = if (applies) null else .{},
