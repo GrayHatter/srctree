@@ -338,17 +338,14 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !S.PatchHtml {
             .patch_inline = null,
             .patch_split = null,
         };
+        const patch_lines = try Patch.diffLineHtmlUnified(a, body);
         if (unified) {
-            const split = try Patch.diffLineHtmlSplit(a, body);
+            const split: Patch.Split = try .fromParsed(patch_lines, a);
             var lines_left: ArrayList([]u8) = .{};
             var lines_right: ArrayList([]u8) = .{};
             for (split.left) |left| try lines_left.append(a, switch (left) {
-                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
-                .add => |add| try allocPrint(
-                    a,
-                    "<div class=\"add\"><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
-                    .{ add.number, add.text },
-                ),
+                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
+                .add => unreachable,
                 .del => |del| try allocPrint(
                     a,
                     "<div class=\"del\"><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
@@ -359,26 +356,22 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !S.PatchHtml {
                     "<div><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
                     .{ ctx.number, ctx.text },
                 ),
-                .empty => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
+                .nul => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
             for (split.right) |right| try lines_right.append(a, switch (right) {
-                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
+                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
                 .add => |add| try allocPrint(
                     a,
                     "<div class=\"add\"><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
                     .{ add.number, add.text },
                 ),
-                .del => |del| try allocPrint(
-                    a,
-                    "<div class=\"del\"><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
-                    .{ del.number, del.text },
-                ),
+                .del => unreachable,
                 .ctx => |ctx| try allocPrint(
                     a,
                     "<div><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
-                    .{ ctx.number, ctx.text },
+                    .{ ctx.number_right, ctx.text },
                 ),
-                .empty => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
+                .nul => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
             file.*.patch_split = .{
                 .diff_lines_left = try lines_left.toOwnedSlice(a),
@@ -386,9 +379,9 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !S.PatchHtml {
             };
         } else {
             var lines: ArrayList([]u8) = .{};
-            for (try Patch.diffLineHtmlUnified(a, body)) |line| {
+            for (patch_lines) |line| {
                 try lines.append(a, switch (line) {
-                    .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr}),
+                    .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
                     .ctx => |ctx| try allocPrint(
                         a,
                         "<div><ln num=\"{0d}\" href=\"#L{1d}\"></ln><ln num=\"{1d}\" id=\"L{1d}\" href=\"#L{1d}\">{2s}</ln></div>",
@@ -404,7 +397,7 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !S.PatchHtml {
                         "<div class=\"add\"><ln href=\"#RL{0d}\"></ln><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
                         .{ add.number_right, add.text },
                     ),
-                    .empty => unreachable,
+                    .nul => unreachable,
                 });
             }
             file.patch_inline = .{

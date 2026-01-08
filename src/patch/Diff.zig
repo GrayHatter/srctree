@@ -8,16 +8,28 @@ blocks: ?[][]const u8 = null,
 const Diff = @This();
 
 pub const Line = union(enum) {
-    hdr: []const u8,
+    hdr: Line.Header,
     add: Numbered,
     del: Numbered,
     ctx: Numbered,
-    empty: void,
+    nul: void,
+
+    pub const empty: Line = .{ .nul = {} };
 
     pub const Numbered = struct {
         number: u32,
         number_right: u32 = 0,
         text: []const u8,
+    };
+
+    pub const Header = struct {
+        left: u32,
+        right: u32,
+        text: []const u8 = &.{},
+
+        pub fn split(h: Line.Header) struct { u32, u32 } {
+            return .{ h.left, h.right };
+        }
     };
 };
 
