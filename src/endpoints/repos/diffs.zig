@@ -64,24 +64,24 @@ const DiffCreateReq = struct {
 
 fn new(f: *Frame) Error!void {
     return switch (f.request.method) {
-        .GET => newGET(f),
+        .GET => pendingNew(f),
         .POST => newPOST(f),
         .PUT => newPUT(f),
-        else => newGET(f),
+        else => pendingNew(f),
     };
 }
 
 fn newPUT(f: *Frame) Error!void {
     std.debug.print("new put {any}\n", .{f.request.data});
-    return newGET(f);
+    return pendingNew(f);
 }
 
 fn newPOST(f: *Frame) Error!void {
     // TODO implementent
-    return newGET(f);
+    return pendingNew(f);
 }
 
-fn newGET(f: *Frame) Error!void {
+fn pendingNew(f: *Frame) Error!void {
     var patch_network: ?S.DiffNewHtml.PatchNetwork = null;
     var patch_uri: ?S.DiffNewHtml.PatchUri = null;
     var patch_paste: ?S.DiffNewHtml.PatchPaste = null;
