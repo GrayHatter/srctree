@@ -45,7 +45,8 @@ div {
 
 h1,h2,h3 { margin: 0 }
 
-details:open > summary {
+summary { display: block }
+details:open > summary.hide {
 	display: none;
 }
 
