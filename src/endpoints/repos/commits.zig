@@ -142,7 +142,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         }
     } else |_| {}
 
-    const inline_html: bool = getAndSavePatchView(f);
+    const patch_view_mode = updateFetchPatchView(f) catch .inlined;
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
@@ -160,8 +160,8 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         },
         .commit = try commitCtx(f.alloc, current, repo_name),
         .comments = .{ .thread = thread },
-        .patch = Diffs.patchStruct(f.alloc, &patch, !inline_html) catch return error.Unknown,
-        .inline_toggle = if (inline_html) .inlined else .split,
+        .patch = Diffs.patchStruct(f.alloc, &patch, patch_view_mode) catch return error.Unknown,
+        .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     });
 
     f.status = .ok;
@@ -419,7 +419,7 @@ const Diffs = @import("diffs.zig");
 
 const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
-const getAndSavePatchView = Repos.getAndSavePatchView;
+const updateFetchPatchView = Repos.updateFetchPatchView;
 
 const Datetime = @import("../../datetime.zig");
 const Git = @import("../../git.zig");

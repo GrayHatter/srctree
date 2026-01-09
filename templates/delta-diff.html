@@ -14,6 +14,11 @@
           <desc><Description /></desc>
         </main>
 
+        <Directive type="enum" name="InlineToggle" text="active" />
+        <div style="width: 100%"><span class="toggle">
+          <a class="<InlineToggle enum="inlined" />" href="?inline=true">inline</a>
+          <a class="<InlineToggle enum="split" />" href="?inline=false">split</a>
+        </span></div>
         <extra>
           <With Patch>
             <diff><Build Patch _patch.html /></diff>

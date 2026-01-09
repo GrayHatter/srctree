@@ -140,20 +140,36 @@ pub const PatchView = struct {
     @"inline": ?bool = null,
 };
 
-pub fn getAndSavePatchView(f: *Frame) bool {
-    const udata: PatchView = f.request.data.query.validate(PatchView) catch .{ .@"inline" = null };
-    if (udata.@"inline") |inln| {
-        f.cookie_jar.add(.{
-            .name = "diff-inline",
-            .value = if (inln) "1" else "0",
-        }) catch {};
-        return inln;
-    } else {
-        if (f.request.cookie_jar.get("diff-inline")) |cookie| {
-            return (cookie.value.len > 0 and cookie.value[0] == '1');
+pub const PatchViewMode = enum {
+    inlined,
+    split,
+};
+
+pub fn updatePatchView(f: *Frame) ?PatchViewMode {
+    if (f.request.data.query.validate(PatchView)) |data| {
+        if (data.@"inline") |inln| {
+            f.cookie_jar.add(.{
+                .name = "diff-inline",
+                .value = if (inln) "1" else "0",
+            }) catch {};
+            return if (inln) .inlined else .split;
         }
+    } else |_| {}
+    return null;
+}
+
+/// , or error when unknown
+pub fn updateFetchPatchView(f: *Frame) error{Unspecified}!PatchViewMode {
+    if (updatePatchView(f)) |q| {
+        return q;
+    } else if (f.request.cookie_jar.get("diff-inline")) |cookie| {
+        return if (cookie.value.len > 0 and cookie.value[0] == '1')
+            .inlined
+        else
+            .split;
     }
-    return true;
+
+    return error.Unspecified;
 }
 
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {

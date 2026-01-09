@@ -303,7 +303,7 @@ pub fn directReply(ctx: *Frame) Error!void {
     return error.Unknown;
 }
 
-pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !S.PatchHtml {
+pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.PatchHtml {
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("err: {any}\n", .{err});
@@ -339,7 +339,7 @@ pub fn patchStruct(a: Allocator, patch: *Patch, unified: bool) !S.PatchHtml {
             .patch_split = null,
         };
         const patch_lines = try Patch.diffLineHtmlUnified(a, body);
-        if (unified) {
+        if (view_mode == .split) {
             const split: Patch.Split = try .fromParsed(patch_lines, a);
             var lines_left: ArrayList([]u8) = .{};
             var lines_right: ArrayList([]u8) = .{};
@@ -831,6 +831,9 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     // TODO remove delta_index
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
 
+    if (updatePatchView(f)) |_| return f.redirect(f.request.uri, .see_other) catch unreachable;
+    const patch_view_mode = updateFetchPatchView(f) catch .inlined;
+
     var repo = (repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
@@ -851,7 +854,6 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     //    comments.pushSlice(addComment(f.alloc, cm) catch unreachable);
     //}
 
-    const inline_html: bool = getAndSavePatchView(f);
     //const outdated_revision = rev == null or rev.? != delta.attach_target;
 
     var patch_formatted: ?S.PatchHtml = null;
@@ -863,7 +865,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     if (diffM) |*diff| {
         if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {
             patch = .init(diff.patch.blob);
-            if (patchStruct(f.alloc, &patch.?, !inline_html)) |phtml| {
+            if (patchStruct(f.alloc, &patch.?, patch_view_mode)) |phtml| {
                 patch_formatted = phtml;
             } else |err| {
                 std.debug.print("Unable to generate patch {any}\n", .{err});
@@ -910,8 +912,8 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                         .current else .current;
 
                     const system_tag: ?[]const u8 = switch (cmt_rev) {
-                        .older => "<div class=\"sysmsg\" style=\"background-color:red\">Comment on previous revision.</div>\n",
-                        .newer => "<div class=\"sysmsg\" style=\"background-color:red\">Comment on newer revision.</div>\n",
+                        .older => "<div class=\"sysmsg\">Comment on previous revision.</div>\n",
+                        .newer => "<div class=\"sysmsg green\">Comment on newer revision.</div>\n",
                         .current => null,
                     };
                     if (comment_rev_diff) |*crd| {
@@ -988,12 +990,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     var page = DiffViewPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
-        .repo_header = .{
-            .blame = null,
-            .git_uri = null,
-            .repo_name = rd.name,
-            .upstream = null,
-        },
+        .repo_header = .{ .blame = null, .git_uri = null, .repo_name = rd.name, .upstream = null },
         .patch = patch_data,
         .curl_hint = curl_hint,
         .title = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.title }}) catch unreachable,
@@ -1009,6 +1006,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
         },
         .patch_warning = if (applies) null else .{},
+        .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     });
 
     try f.sendPage(&page);
@@ -1066,7 +1064,9 @@ const splitScalar = std.mem.splitScalar;
 
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.RouteData;
-const getAndSavePatchView = RepoEndpoint.getAndSavePatchView;
+const updateFetchPatchView = RepoEndpoint.updateFetchPatchView;
+const updatePatchView = RepoEndpoint.updatePatchView;
+const PatchViewMode = RepoEndpoint.PatchViewMode;
 
 const search = @import("../search.zig");
 const delta_shared = @import("../delta.zig");
