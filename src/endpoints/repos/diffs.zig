@@ -838,6 +838,8 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
 
+    const head_commit = repo.headSha(f.io) catch null;
+
     var diffM: ?Diff = if (rev) |r|
         Diff.open(r, f.alloc, f.io) catch null
     else
@@ -860,7 +862,13 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     //const patch_filename = try std.fmt.allocPrint(f.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
 
     var patch: ?Patch = null;
-    var curl_hint: ?S.DeltaDiffHtml.CurlHint = null;
+    const curl_hint: S.DeltaDiffHtml.CurlHint = .{
+        .repo_name = rd.name,
+        .diff_idx = delta_index,
+        .base_ref = if (head_commit) |ref| ref.hex()[0..8] else "base_commit",
+        .head_ref = "&lt;HEAD&gt;",
+        .host = f.request.host orelse "127.0.0.1",
+    };
     var applies: bool = false;
     if (diffM) |*diff| {
         if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {
@@ -886,12 +894,6 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 @memcpy(diff.applies_hash[0..40], cmt.sha.hex()[0..40]);
                 diff.commit(f.io) catch return error.ServerFault;
             }
-        } else {
-            curl_hint = .{
-                .repo_name = rd.name,
-                .diff_idx = delta_index,
-                .host = f.request.host orelse "127.0.0.1",
-            };
         }
     }
 
@@ -992,7 +994,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .body_header = body_header,
         .repo_header = .{ .blame = null, .git_uri = null, .repo_name = rd.name, .upstream = null },
         .patch = patch_data,
-        .curl_hint = curl_hint,
+        .curl_hint = if (diffM == null) curl_hint else null,
         .title = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.title }}) catch unreachable,
         .description = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.message }}) catch unreachable,
         .status = status,

@@ -71,6 +71,22 @@ details:open > summary.hide {
 	font-size: 80%;
 }
 
+.sysmsg {
+	padding: 0 8px;
+	background-color: #633;
+	border-left: 1px solid #737373;
+	border-right: 1px solid #444;
+}
+.sysmsg.red {
+	background-color: #633;
+}
+.sysmsg.yellow {
+	background-color: #636;
+}
+.sysmsg.green {
+	background-color: #343;
+}
+
 header {
 	display: flex;
 	justify-content: space-between;

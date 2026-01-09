@@ -309,17 +309,26 @@ pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
 }
 
 pub fn headCommit(self: *const Repo, a: Allocator, io: Io) !Commit {
-    const resolv: SHA = try self.headSha();
+    const resolv: SHA = try self.headSha(io);
     return try self.commit(resolv, a, io);
 }
 
-pub fn headSha(self: *const Repo) !SHA {
-    return switch (self.head.?) {
-        .sha => |s| s,
-        .branch => |b| try self.ref(b.name["refs/heads/".len..]),
-        .tag => return error.CommitMissing,
-        .missing => return error.CommitMissing,
-    };
+pub fn headSha(self: *const Repo, io: Io) !SHA {
+    var f = try self.dir.openFile(io, "HEAD", .{});
+    defer f.close(io);
+    var buff: [0xFF]u8 = undefined;
+
+    var reader = f.reader(io, &buff);
+    const head = try reader.interface.takeDelimiter('\n') orelse return error.RefParseFailed;
+
+    if (startsWith(u8, head, "ref: ")) {
+        return self.ref(head[16..head.len]) catch error.RefParseFailed;
+    } else if (head.len == 40) {
+        return .init(head[0..40]);
+    } else {
+        std.debug.print("unexpected HEAD {s}\n", .{head});
+        unreachable;
+    }
 }
 
 pub fn blob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {

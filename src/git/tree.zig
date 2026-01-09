@@ -68,7 +68,7 @@ pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Tree {
 }
 
 pub fn changedSet(self: Tree, repo: *const Repo, a: Allocator, io: Io) ![]ChangeSet {
-    return self.changedSetFrom(repo, try repo.headSha(), a, io);
+    return self.changedSetFrom(repo, try repo.headSha(io), a, io);
 }
 
 pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Allocator, io: Io) ![]ChangeSet {
