@@ -28,9 +28,9 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .href = try allocPrint(ctx.alloc, "{s}/tree/{s}", .{ prefix, p }),
     } else null;
 
-    var list_trees: std.ArrayListUnmanaged(S.TreeHtml.CommitFilelistTrees) = .{};
-    var list_files: std.ArrayListUnmanaged(S.TreeHtml.CommitFilelistFiles) = .{};
-    var list_hidden: std.ArrayListUnmanaged(S.TreeHtml.CommitFilelistHidden.CommitFilelistHiddenFiles) = .{};
+    var list_trees: ArrayList(S.TreeHtml.Trees) = .{};
+    var list_files: ArrayList(S.TreeHtml.Files) = .{};
+    var list_hidden: ArrayList(S.TreeHtml.Hidden.HiddenFiles) = .{};
 
     if (path) |p| try files.pushPath(ctx.alloc, p);
     if (files.changedSetFrom(repo, c.sha, ctx.alloc, ctx.io)) |changed| {
@@ -133,11 +133,11 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .commit_hex_short = commit_hex_short,
         .dot_dot = dot_dot,
         .branch_count = branch_count,
-        .commit_filelist_trees = list_trees.items,
-        .commit_filelist_files = list_files.items,
-        .commit_filelist_hidden = if (list_hidden.items.len == 0) null else .{
+        .trees = list_trees.items,
+        .files = list_files.items,
+        .hidden = if (list_hidden.items.len == 0) null else .{
             .count = list_hidden.items.len,
-            .commit_filelist_hidden_files = list_hidden.items,
+            .hidden_files = list_hidden.items,
         },
     });
 
@@ -173,6 +173,7 @@ const RouteData = repos_.RouteData;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;

@@ -15,14 +15,14 @@
         </intro>
         <div class="treelist">
           <With DotDot><tree><a href="<Href />">..</a></tree></With>
-          <For CommitFilelistTrees>
+          <For Trees>
           <span class="tree"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
-          <For CommitFilelistFiles>
+          <For Files>
           <span class="file"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
-          <With CommitFilelistHidden>
+          <With Hidden>
           <details>
             <summary class="muted hide"><Count type="usize" /> hidden files</summary>
-            <For CommitFilelistHiddenFiles>
+            <For HiddenFiles>
             <span class="<Class />"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
           </details>
           </With>

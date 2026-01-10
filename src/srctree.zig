@@ -98,7 +98,11 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         return Router.defaultResponse(.not_found);
                     }
                 },
-                .script, .unknown => {},
+                .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/")) {
+                    std.debug.print("Dropping malicious traffic\n", .{});
+                    return Router.defaultResponse(.not_found);
+                },
+                .script => {},
             }
             fr.dumpDebugData(.{});
             ua.dumpValidation(fr.request);
