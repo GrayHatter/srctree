@@ -15,20 +15,20 @@ Good luck!
 ## TODO
 In an unsorted order
   - [ ] srctree
-    - [ ] internal database upgrade scripts
+    - [x] internal database upgrade scripts
     - [ ] manual code sync
     - [x] view code
     - [x] public http clone
     - [x] view commits
-    - [ ] diff/code review
+    - [-] diff/code review
     - [ ] CI API
     - [x] blame view for files
     - [ ] blame view for dirs
-    - [ ] view history for file (navigable blame view)
+    - [x] view history for file (navigable blame view)
     - [x] syntax highlighting (ish)
     - [ ] native syntax highlighting
     - [x] README markdown support/formatting
-    - [ ] fold repo .files by default
+    - [x] fold repo .files by default
     - [ ] comment on commits
     - [ ] email support
       - [ ] outgoing email
@@ -41,7 +41,7 @@ In an unsorted order
     - [x] auto push to downstream
     - [ ] smart push/pull system
     - [ ] auto create git branch for issues/diffs
-    - [ ] support for viewing branches
+    - [x] support for viewing branches
     - [ ] network collection & browsing
     - [x] owner heat map
     - [x] owner activity journal
