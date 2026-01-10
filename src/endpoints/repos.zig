@@ -9,6 +9,7 @@ pub const verse_router = &router;
 pub const verse_endpoints_ = verse.Endpoints(.{
     @import("repos/issues.zig"),
     @import("repos/diffs.zig"),
+    @import("repos/search.zig"),
 });
 
 pub const routes = [_]Router.Match{
@@ -32,18 +33,20 @@ pub const RouteData = struct {
     const Path = std.mem.SplitIterator(u8, .scalar);
 
     pub const Verb = enum {
-        branches,
         blame,
         blob,
+        branches,
         commit,
         commits,
-        ref,
-        tree,
-        issue,
-        issues,
         diff,
         diffs,
+        issue,
+        issues,
+        ref,
+        search,
         tags,
+        tree,
+
         // gitweb endpoints
         info,
         objects,

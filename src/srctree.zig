@@ -216,6 +216,7 @@ const std = @import("std");
 const eql = std.mem.eql;
 const verse = @import("verse");
 const Frame = verse.Frame;
+const startsWith = std.mem.startsWith;
 
 const Delta = @import("types.zig").Delta;
 const genRules = @import("endpoints/search.zig").genRules;

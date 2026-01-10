@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <Build MetaHead _meta_head.html />
+  </head>
+  <body>
+    <Build BodyHeader _body_header.html />
+    <content class="search">
+      <Build RepoHeader _base_repo_header.html />
+      <search>
+        <form action="<Action default="search">" style="width:95%">
+          <input name="q" type="text" placeholder="Search" value="<Search ornull>" style="width:97%">
+          <button class="btn" href="new" style="width:5%" type="submit">New</button>
+        </form>
+      </search>
+
+      <For Commits> 
+        <Title />
+      </For>
+      <For Files> 
+        <Filename />
+      </For>
+    </content>
+  </body>
+</html>
+
