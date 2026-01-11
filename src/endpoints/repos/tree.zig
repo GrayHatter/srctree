@@ -162,8 +162,11 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]E {
     dom = dom.open(html.element("code", null, null));
 
     var r: Reader = .fixed(readme);
-    var w: Writer.Allocating = .init(a);
-    Highlight.Markdown.translate(&r, &w.writer, a) catch {};
+    var w: Writer.Allocating = try .initCapacity(a, readme.len);
+    Highlight.Markdown.translate(&r, &w.writer, a) catch |err| switch (err) {
+        error.InvalidMarkdown => try w.writer.print("{f}", .{abx.Html{ .text = readme }}),
+        error.OutOfMemory, error.WriteFailed => return error.ServerFault,
+    };
     dom.push(html.text(w.written()));
     dom = dom.close();
     dom = dom.close();

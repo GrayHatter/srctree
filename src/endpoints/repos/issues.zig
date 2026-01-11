@@ -218,7 +218,7 @@ fn view(f: *verse.Frame) Error!void {
     }
 
     var r: Reader = .fixed(delta.message);
-    var w: Writer.Allocating = .init(f.alloc);
+    var w: Writer.Allocating = try .initCapacity(f.alloc, delta.message.len);
     Highlight.Markdown.translate(&r, &w.writer, f.alloc) catch |err| switch (err) {
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
         error.InvalidMarkdown => try w.writer.print("{f}", .{abx.Html{ .text = delta.message }}),

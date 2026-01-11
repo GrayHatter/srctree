@@ -227,11 +227,11 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.Comm
 pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.CommitHtml.Commit {
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     var r: Reader = .fixed(c.body);
-    var w: Writer.Allocating = .init(a);
-    Highlight.Markdown.translate(&r, &w.writer, a) catch {};
-    //allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable
-    //else
-    //    allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable;
+    var w: Writer.Allocating = try .initCapacity(a, c.body.len);
+    Highlight.Markdown.translate(&r, &w.writer, a) catch |err| switch (err) {
+        error.InvalidMarkdown => w.writer.print("{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable,
+        error.OutOfMemory, error.WriteFailed => return error.ServerFault,
+    };
     const sha = try a.dupe(u8, c.sha.hex()[0..]);
     return .{
         .author = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.author.name }}) catch unreachable,
