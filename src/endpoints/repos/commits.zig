@@ -226,10 +226,12 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.Comm
 
 pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.CommitHtml.Commit {
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
-    const body = if (c.body.len > 3)
-        Highlight.translate(a, .markdown, c.body) catch allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable
-    else
-        allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable;
+    var r: Reader = .fixed(c.body);
+    var w: Writer.Allocating = .init(a);
+    Highlight.Markdown.translate(&r, &w.writer, a) catch {};
+    //allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable
+    //else
+    //    allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable;
     const sha = try a.dupe(u8, c.sha.hex()[0..]);
     return .{
         .author = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.author.name }}) catch unreachable,
@@ -238,7 +240,7 @@ pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.CommitHtml.Co
         .sha = sha,
         .sha_short = sha[0..8],
         .title = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.title }}) catch unreachable,
-        .body = body,
+        .body = w.written(),
     };
 }
 
@@ -399,6 +401,8 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const Reader = Io.Reader;
+const Writer = Io.Writer;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const endsWith = std.mem.endsWith;

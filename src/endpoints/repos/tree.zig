@@ -160,8 +160,11 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]E {
     dom = dom.open(html.element("readme", null, null));
     dom.push(html.element("intro", "README.md", null));
     dom = dom.open(html.element("code", null, null));
-    const translated = try Highlight.translate(a, .markdown, readme);
-    dom.push(html.text(translated));
+
+    var r: Reader = .fixed(readme);
+    var w: Writer.Allocating = .init(a);
+    Highlight.Markdown.translate(&r, &w.writer, a) catch {};
+    dom.push(html.text(w.written()));
     dom = dom.close();
     dom = dom.close();
 
@@ -175,6 +178,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
+const Reader = std.Io.Reader;
+const Writer = std.Io.Writer;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;

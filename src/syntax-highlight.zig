@@ -88,7 +88,7 @@ pub const Language = enum {
     }
 };
 
-pub fn translate(a: Allocator, lang: Language, text: []const u8) ![]u8 {
+pub fn translate(r: *Reader, w: Writer, lang: Language, a: Allocator) !void {
     return switch (lang) {
         .bash,
         .c,
@@ -106,13 +106,13 @@ pub fn translate(a: Allocator, lang: Language, text: []const u8) ![]u8 {
         .vim,
         .zig,
         => return error.NotSupported,
-        .markdown => translateInternal(a, lang, text),
+        .markdown => translateInternal(r, w, lang, a),
     };
 }
 
-pub fn translateInternal(a: Allocator, lang: Language, text: []const u8) ![]u8 {
+pub fn translateInternal(r: *Reader, w: Writer, lang: Language, a: Allocator) !void {
     return switch (lang) {
-        .markdown => try Markdown.translate(a, text),
+        .markdown => try Markdown.translate(r, w, a),
         else => unreachable,
     };
 }
@@ -198,5 +198,7 @@ pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Reader = std.Io.Reader;
+const Writer = std.Io.Writer;
 const endsWith = std.mem.endsWith;
 const eql = std.mem.eql;

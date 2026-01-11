@@ -217,8 +217,13 @@ fn view(f: *verse.Frame) Error!void {
         @panic("oops");
     }
 
-    const description = Highlight.Markdown.translate(f.alloc, delta.message) catch
-        try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.message }});
+    var r: Reader = .fixed(delta.message);
+    var w: Writer.Allocating = .init(f.alloc);
+    Highlight.Markdown.translate(&r, &w.writer, f.alloc) catch |err| switch (err) {
+        error.OutOfMemory, error.WriteFailed => return error.ServerFault,
+        error.InvalidMarkdown => try w.writer.print("{f}", .{abx.Html{ .text = delta.message }}),
+    };
+    const description = w.written();
 
     const username = if (f.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
@@ -482,6 +487,8 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
+const Reader = Io.Reader;
+const Writer = Io.Writer;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;

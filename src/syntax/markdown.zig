@@ -1,7 +1,7 @@
 pub fn highlight() void {}
 
-pub fn translate(a: Allocator, blob: []const u8) ![]u8 {
-    return try Translate.source(a, blob);
+pub fn translate(r: *Reader, w: *Writer, a: Allocator) !void {
+    return try Translate.source(r, w, a);
 }
 
 const AST = struct {
@@ -34,76 +34,80 @@ const AST = struct {
 };
 
 pub const Translate = struct {
-    pub fn source(a: Allocator, src: []const u8) ![]u8 {
-        var dst: ArrayList(u8) = .{};
-        var used = try block(src, &dst, a);
-        while (used < src.len) {
-            used += try block(src[used..], &dst, a);
+    pub fn source(reader: *Reader, dst: *Writer, a: Allocator) error{ InvalidMarkdown, OutOfMemory, WriteFailed }!void {
+        while (reader.bufferedLen() > 0) {
+            block(reader, dst, a) catch |err| switch (err) {
+                error.WriteFailed => return,
+                inline else => |e| return e,
+            };
         }
-        return try dst.toOwnedSlice(a);
     }
 
-    fn block(src: []const u8, dst: *ArrayList(u8), a: Allocator) !usize {
-        @setRuntimeSafety(false); // an LLVM bug causes this to crash
-        if (src.len == 0) return 0;
-        var idx: usize = 0;
-        while (idx < src.len and (src[idx] == ' ' or src[idx] == '\t')) {
-            idx = idx + if (src[idx] == '\t') 4 else @as(usize, 1);
+    fn block(r: *Reader, dst: *Writer, a: Allocator) error{ InvalidMarkdown, OutOfMemory, WriteFailed }!void {
+        //@setRuntimeSafety(false); // an LLVM bug causes this to crash
+        if (r.bufferedLen() == 0) return;
+        var indent = r.buffered();
+        var indent_len: usize = 0;
+        for (indent) |c| {
+            if (c != ' ') break;
+            indent_len += 1;
         }
-        var indent = idx;
-
-        sw: switch (src[idx]) {
+        indent = indent[0..indent_len];
+        for (indent) |c| assert(c == ' ');
+        sw: switch (r.peekByte() catch return) {
             '\r', '\n' => {
-                indent = 0;
-                idx += 1;
-                if (idx < src.len) continue :sw src[idx];
+                indent = &.{};
+                indent_len = 0;
+                r.toss(1);
+                continue :sw r.peekByte() catch return;
             },
             ' ' => {
-                indent += 1;
-                idx += 1;
-                if (idx < src.len) continue :sw src[idx];
+                var peek = r.buffered();
+                while (indent_len < peek.len and peek[indent_len] == ' ') {
+                    indent_len += 1;
+                }
+                indent = peek[0..indent_len];
+                for (indent) |c| assert(c == ' ');
+                continue :sw peek[indent_len];
             },
             '#' => {
-                const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
-                try header(a, src[idx..until], dst);
-                idx = until;
-                if (idx < src.len) {
-                    try dst.append(a, '\n');
-                    continue :sw src[idx];
-                }
+                if (r.takeDelimiter('\n')) |until| {
+                    header(until orelse r.take(r.bufferedLen()) catch unreachable, dst) catch return;
+                } else |_| return;
+                try dst.writeByte('\n');
+                continue :sw r.peekByte() catch return;
             },
             '>' => {
-                _ = try quote(a, src[idx..], dst, indent);
+                quote(r, dst, indent) catch return;
             },
             '`' => {
-                if (idx + 7 < src.len and
-                    src[idx + 1] == '`' and src[idx + 2] == '`' and
-                    indexOfPos(u8, src, idx + 3, "\n```") != null)
-                {
-                    idx += try code(a, src[idx..], dst);
+                if (eql(u8, r.peek(3) catch "", "```") and findPos(u8, r.buffered(), 3, "\n```") != null) {
+                    code(r, dst, a) catch |err| switch (err) {
+                        error.OutOfMemory => return error.OutOfMemory,
+                        error.WriteFailed => return error.WriteFailed,
+                        else => return error.InvalidMarkdown,
+                    };
                 } else {
-                    idx = idx + try paragraph(a, src[idx..], dst, indent);
+                    paragraph(r, dst, indent) catch {};
                 }
-                if (idx < src.len) continue :sw src[idx];
+                continue :sw r.peekByte() catch return;
             },
             '-', '*', '+' => {
-                if (idx + 2 < src.len) {
-                    idx = idx + try list(a, src[idx..], dst, indent);
-                    if (idx < src.len) continue :sw src[idx];
+                if (r.bufferedLen() > 2 and (r.peek(2) catch unreachable)[1] == ' ') {
+                    list(r, dst, indent) catch {};
                 } else {
-                    idx = idx + try paragraph(a, src[idx..], dst, indent);
-                    if (idx < src.len) continue :sw src[idx];
+                    paragraph(r, dst, indent) catch {};
                 }
+                continue :sw r.peekByte() catch return;
             },
             else => {
-                idx = idx + try paragraph(a, src[idx..], dst, indent);
-                if (idx < src.len) continue :sw src[idx];
+                paragraph(r, dst, indent) catch {};
+                continue :sw r.peekByte() catch return;
             },
         }
-        return idx;
     }
 
-    fn header(a: Allocator, src: []const u8, dst: *ArrayList(u8)) !void {
+    fn header(src: []const u8, dst: *Writer) error{WriteFailed}!void {
         var idx: usize = 0;
         var hlvl: u8 = 0;
         while (idx < src.len) : (idx += 1) {
@@ -120,174 +124,175 @@ pub const Translate = struct {
             5 => "<h5>",
             6 => "<h6>",
             else => t: {
-                for (0..hlvl) |_| try dst.append(a, '#');
+                for (0..hlvl) |_| try dst.writeByte('#');
                 break :t "";
             },
         };
 
         while (idx < src.len and src[idx] == ' ') idx += 1;
-        try dst.appendSlice(a, tag);
-        if (indexOfScalarPos(u8, src, idx, '\n')) |eol| {
+        try dst.writeAll(tag);
+        if (findScalarPos(u8, src, idx, '\n')) |eol| {
             var i = eol;
             while (src[i] == '#' or src[i] == ' ' or src[i] == '\n') i -= 1;
-            try dst.appendSlice(a, src[idx .. i + 1]);
+            try dst.writeAll(src[idx .. i + 1]);
             idx = eol;
         } else {
-            try dst.appendSlice(a, src[idx..]);
+            try dst.writeAll(src[idx..]);
             idx = src.len - 1;
         }
         if (tag.len > 1) {
-            try dst.appendSlice(a, "</");
-            try dst.appendSlice(a, tag[1..]);
+            try dst.writeAll("</");
+            try dst.writeAll(tag[1..]);
         }
         if (src[idx] != '\n') idx += 1;
     }
 
-    fn quote(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+    fn quote(r: *Reader, dst: *Writer, indent: []const u8) error{WriteFailed}!void {
         _ = indent;
-        const idx: usize = 0;
-        const until = indexOfScalarPos(u8, src, idx, '\n') orelse src.len;
-        try dst.appendSlice(a, "<blockquote>");
-        try line(a, src[idx..until], dst);
-        try dst.appendSlice(a, "</blockquote>\n");
-        return until;
+        const until = (r.takeDelimiter('\n') catch null) orelse r.take(r.bufferedLen()) catch unreachable;
+        try dst.writeAll("<blockquote>");
+        try line(until, dst);
+        try dst.writeAll("</blockquote>\n");
     }
 
-    fn paragraph(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) error{OutOfMemory}!usize {
-        try dst.appendSlice(a, "<p>");
-        const until = indexOfPos(u8, src, 0, "\n\n") orelse
-            indexOfPos(u8, src, 0, "\r\n\r\n") orelse src.len;
-        try leaf(a, src[0..until], dst, indent);
-        try dst.appendSlice(a, "</p>\n");
-        if (until < src.len and src[until] == '\r') {
-            return until + 4;
+    fn paragraph(r: *Reader, dst: *Writer, indent: []const u8) error{ WriteFailed, Indent }!void {
+        try dst.writeAll("<p>");
+        const until = findPos(u8, r.buffered(), 0, "\n\n") orelse
+            findPos(u8, r.buffered(), 0, "\r\n\r\n") orelse r.bufferedLen();
+        var leaf_r: Reader = .fixed(r.take(until) catch unreachable);
+        try leaf(&leaf_r, dst, indent);
+        if (r.bufferedLen() >= 2) {
+            if (r.peekByte() catch unreachable == '\r') r.toss(4) else r.toss(2);
         }
-        return until + 2;
+        try dst.writeAll("</p>\n");
     }
 
-    fn code(a: Allocator, src: []const u8, dst: *ArrayList(u8)) !usize {
-        var idx: usize = 0;
-        if (src.len > idx + 7) {
-            if (src[idx + 1] == '`' and src[idx + 2] == '`') {
-                // TODO does the closing ``` need a \n prefix
-                if (std.mem.indexOfPos(u8, src, idx + 3, "\n```")) |i| {
-                    var highlighted: ?[]const u8 = null;
-                    defer if (highlighted) |hl| a.free(hl);
+    fn code(reader: *Reader, dst: *Writer, a: Allocator) !void {
+        std.debug.assert(eql(u8, try reader.take(3), "```"));
+        // TODO does the closing ``` need a \n prefix
+        const end = findPos(u8, reader.buffered(), 0, "\n```") orelse unreachable;
+        var r: Reader = .fixed(reader.take(end) catch unreachable);
+        reader.toss(4);
 
-                    if (src[idx + 3] >= 'a' and src[idx + 3] <= 'z') {
-                        var lang_len = idx + 3;
-                        while (lang_len < i and src[lang_len] >= 'a' and src[lang_len] <= 'z') {
-                            lang_len += 1;
-                        }
-                        if (parseCodeblockFlavor(src[idx + 3 .. lang_len])) |flavor| {
-                            highlighted = try syntax.highlight(a, flavor, src[lang_len..i]);
-                        }
-                    }
-
-                    try dst.appendSlice(a, "<div class=\"codeblock\">");
-                    idx += 3;
-                    try dst.appendSlice(a, std.mem.trim(u8, highlighted orelse src[idx..i], " \n"));
-                    try dst.appendSlice(a, "</div>");
-                    idx = i + 4;
-                }
+        const lang_name = r.peekDelimiterExclusive('\n') catch unreachable;
+        var lang: ?[]const u8 = null;
+        if (lang_name.len > 0) {
+            for (lang_name) |chr| {
+                if (chr < 'a' or chr > 'z') break;
+            } else {
+                lang = lang_name;
+                r.toss(lang_name.len + 1);
             }
         }
-        return idx;
+        try dst.writeAll("<div class=\"codeblock\">");
+        if (lang) |l| if (parseCodeblockFlavor(l)) |flavor| {
+            try dst.writeAll(try syntax.highlight(a, flavor, r.buffered()));
+            try dst.writeAll("</div>");
+            return;
+        };
+        try dst.print("{s}</div>", .{trim(u8, r.buffered(), " \n")});
     }
 
-    fn leaf(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !void {
-        var idx: usize = 0;
-        while (indexOfScalarPos(u8, src, idx, '\n')) |i| : (try dst.append(a, ' ')) {
-            var line_indent: usize = 0;
-            while (src[idx + line_indent] == ' ') {
-                line_indent += 1;
-            }
-            if (line_indent > indent) {
-                switch (src[idx + line_indent]) {
-                    '-', '*', '+' => {
-                        if (idx + 2 < src.len) {
-                            idx = idx + try list(a, src[idx..], dst, line_indent);
-                        } else {
-                            idx = idx + try paragraph(a, src[idx..], dst, line_indent);
-                        }
-                    },
-                    else => {
-                        std.debug.print("leeaf line {s}\n", .{src[idx..i]});
-                        try line(a, src[idx..i], dst);
-                        idx = i + 1;
-                    },
-                }
-                if (i + 1 >= src.len) return;
+    fn leaf(r: *Reader, dst: *Writer, indent: []const u8) error{ WriteFailed, Indent }!void {
+        for (indent) |c| assert(c == ' ');
+        while (r.peekDelimiterInclusive('\n') catch null) |until| {
+            if (until.len == 1) {
+                r.toss(1);
                 continue;
             }
-            try line(a, src[idx..i], dst);
-            if (i + 1 >= src.len) return;
-            idx = i + 1;
-        }
-        if (idx >= src.len) return;
-        try line(a, src[idx..], dst);
-    }
-
-    fn list(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
-        try dst.appendSlice(a, "<ul>\n");
-        var idx: usize = 0;
-        l: while (indexOfScalarPos(u8, src, idx, '\n')) |until| {
-            while (idx < src.len and (src[idx] == ' ' or src[idx] == '-')) idx += 1;
-            try dst.appendSlice(a, "<li>");
-            if (src[idx] == '[' and src[idx + 2] == ']') {
-                try dst.appendSlice(a, "<input type=\"checkbox\"");
-                if (src[idx + 1] == 'x') try dst.appendSlice(a, " checked");
-                try dst.appendSlice(a, " >");
-                idx += 4;
+            var new_indent: u8 = 0;
+            for (until) |chr| {
+                if (chr != ' ') break;
+                new_indent += 1;
             }
-            try line(a, src[idx..until], dst);
-            try dst.appendSlice(a, "</li>\n");
-            idx = until + 1;
-            if (idx + indent + 2 >= src.len) break;
-            for (0..indent) |i| if (src[idx + i] != ' ') break :l;
-            idx += indent;
+            const local_indent = if (new_indent > indent.len) until[0..new_indent] else indent;
+            switch (until[new_indent]) {
+                '-', '*', '+' => try list(r, dst, local_indent),
+                else => {
+                    try line(until[0 .. until.len - 1], dst);
+                    r.toss(until.len);
+                },
+            }
+            if (r.bufferedLen() == 0) return;
+            try dst.writeByte(' ');
+            continue;
         }
-        try dst.appendSlice(a, "</ul>\n");
 
-        return idx;
+        try line(r.take(r.bufferedLen()) catch unreachable, dst);
     }
 
-    fn listOrdered(a: Allocator, src: []const u8, dst: *ArrayList(u8), indent: usize) !usize {
+    fn list(r: *Reader, dst: *Writer, indent: []const u8) error{ WriteFailed, Indent }!void {
+        for (indent) |c| assert(c == ' ');
+        try dst.writeAll("<ul>\n");
+        while (r.peekDelimiterExclusive('\n') catch null) |until_prefix| {
+            var until = cutPrefix(u8, until_prefix, indent) orelse {
+                try dst.writeAll("</ul>\n");
+                return error.Indent;
+            };
+            //const until = until_prefix[0 .. until_prefix.len - 1];
+            var new_indent: u8 = 0;
+            for (until_prefix) |chr| {
+                if (chr != ' ') break;
+                new_indent += 1;
+            }
+            if (until.len <= 1) {
+                r.toss(1);
+                break;
+            }
+            if (new_indent > indent.len) {
+                try dst.writeAll("<li>");
+                list(r, dst, until_prefix[0..new_indent]) catch |err| switch (err) {
+                    error.Indent => continue,
+                    else => return err,
+                };
+                try dst.writeAll("</li>\n");
+            } else {
+                try dst.writeAll("<li>");
+                r.toss(indent.len);
+                if (until[2] == '[' and until[4] == ']') {
+                    try dst.print(
+                        "<input type=\"checkbox\"{s}>",
+                        .{if (until[3] == 'x' or until[3] == 'X') " checked" else ""},
+                    );
+                    r.toss(4);
+                }
+                r.toss(2);
+                if (r.takeDelimiter('\n')) |lline| {
+                    if (lline) |l| try line(trim(u8, l, "\t\n "), dst);
+                } else |_| {}
+                try dst.writeAll("</li>\n");
+            }
+        }
+        try dst.writeAll("</ul>\n");
+    }
+
+    fn listOrdered(a: Allocator, src: []const u8, dst: *Writer, indent: usize) !void {
         _ = a;
         _ = src;
         _ = dst;
         _ = indent;
     }
 
-    fn line(a: Allocator, src: []const u8, dst: *ArrayList(u8)) !void {
-        var backtick: bool = false;
+    fn line(src: []const u8, dst: *Writer) error{WriteFailed}!void {
         var idx: usize = 0;
         while (idx < src.len) : (idx += 1) {
             switch (src[idx]) {
                 '\\' => {
                     idx += 1;
                     if (idx < src.len) {
-                        try dst.append(a, src[idx]);
+                        try dst.writeByte(src[idx]);
                     }
                 },
                 '`' => {
-                    if (backtick) {
-                        backtick = false;
-                        try dst.appendSlice(a, "</span>");
-                    } else if (indexOfScalarPos(u8, src, idx + 1, '`') != null) {
-                        backtick = true;
-                        try dst.appendSlice(a, "<span class=\"coderef\">");
-                    } else {
-                        try dst.append(a, '`');
+                    if (findScalarPos(u8, src, idx + 1, '`')) |end| {
+                        try dst.print("<span class=\"coderef\">{f}</span>", .{
+                            abx.Html{ .text = src[idx + 1 .. end] },
+                        });
+                        idx = end;
                     }
                 },
+                else => abx.Html.clean(src[idx], dst) catch unreachable,
                 '\r' => {},
-                else => {
-                    var w_b: [10]u8 = undefined;
-                    var w: Writer = .fixed(&w_b);
-                    abx.Html.clean(src[idx], &w) catch unreachable;
-                    try dst.appendSlice(a, w.buffered());
-                },
             }
         }
     }
@@ -301,12 +306,14 @@ fn parseCodeblockFlavor(str: []const u8) ?syntax.Language {
 test "title 0" {
     const a = std.testing.allocator;
     const blob = "# Title";
-    const expected = "<h1>Title</h1>";
+    const expected = "<h1>Title</h1>\n";
 
-    const html = try Translate.source(a, blob);
-    defer a.free(html);
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
 
-    try std.testing.expectEqualStrings(expected, html);
+    try std.testing.expectEqualStrings(expected, w.written());
 }
 
 test "title 1" {
@@ -314,10 +321,12 @@ test "title 1" {
     const blob = "# Title Title Title\n";
     const expected = "<h1>Title Title Title</h1>\n";
 
-    const html = try Translate.source(a, blob);
-    defer a.free(html);
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
 
-    try std.testing.expectEqualStrings(expected, html);
+    try std.testing.expectEqualStrings(expected, w.written());
 }
 
 test "title 2" {
@@ -341,10 +350,12 @@ test "title 2" {
         \\
     ;
 
-    const html = try Translate.source(a, blob);
-    defer a.free(html);
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
 
-    try std.testing.expectEqualStrings(expected, html);
+    try std.testing.expectEqualStrings(expected, w.written());
 }
 
 test "paragraph" {
@@ -365,10 +376,12 @@ test "paragraph" {
         \\
     ;
 
-    const html = try Translate.source(a, blob);
-    defer a.free(html);
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
 
-    try std.testing.expectEqualStrings(expected, html);
+    try std.testing.expectEqualStrings(expected, w.written());
 }
 
 test "paragraph CRLF" {
@@ -388,10 +401,12 @@ test "paragraph CRLF" {
         \\
     ;
 
-    const html = try Translate.source(a, blob);
-    defer a.free(html);
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
 
-    try std.testing.expectEqualStrings(expected, html);
+    try std.testing.expectEqualStrings(expected, w.written());
 }
 
 test "backtick" {
@@ -399,10 +414,12 @@ test "backtick" {
     const blob = "`backtick`";
     const expected = "<p><span class=\"coderef\">backtick</span></p>\n";
 
-    const html = try Translate.source(a, blob);
-    defer a.free(html);
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
 
-    try std.testing.expectEqualStrings(expected, html);
+    try std.testing.expectEqualStrings(expected, w.written());
 }
 
 test "backtick block" {
@@ -411,20 +428,51 @@ test "backtick block" {
         const blob = "```backtick block\n```";
         const expected = "<div class=\"codeblock\">backtick block</div>";
 
-        const html = try Translate.source(a, blob);
-        defer a.free(html);
+        var r: Reader = .fixed(blob);
+        var w: Writer.Allocating = .init(a);
+        try Translate.source(&r, &w.writer, a);
+        defer w.deinit();
 
-        try std.testing.expectEqualStrings(expected, html);
+        try std.testing.expectEqualStrings(expected, w.written());
     }
     {
         const blob = "```backtick```";
         const expected = "<p><span class=\"coderef\"></span><span class=\"coderef\">backtick</span><span class=\"coderef\"></span></p>\n";
 
-        const html = try Translate.source(a, blob);
-        defer a.free(html);
+        var r: Reader = .fixed(blob);
+        var w: Writer.Allocating = .init(a);
+        try Translate.source(&r, &w.writer, a);
+        defer w.deinit();
 
-        try std.testing.expectEqualStrings(expected, html);
+        try std.testing.expectEqualStrings(expected, w.written());
     }
+}
+
+test "list" {
+    const a = std.testing.allocator;
+    const blob =
+        \\  * hi, mom
+        \\  * hello world
+        \\  * smile, smile!
+        \\  * <extra code>
+        \\
+    ;
+    const expected =
+        \\<ul>
+        \\<li>hi, mom</li>
+        \\<li>hello world</li>
+        \\<li>smile, smile!</li>
+        \\<li>&lt;extra code&gt;</li>
+        \\</ul>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
 }
 
 const syntax = @import("../syntax-highlight.zig");
@@ -434,6 +482,10 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Writer = std.Io.Writer;
+const Reader = std.Io.Reader;
 const eql = std.mem.eql;
-const indexOfScalarPos = std.mem.indexOfScalarPos;
-const indexOfPos = std.mem.indexOfPos;
+const trim = std.mem.trim;
+const findScalarPos = std.mem.findScalarPos;
+const findPos = std.mem.findPos;
+const cutPrefix = std.mem.cutPrefix;
+const assert = std.debug.assert;
