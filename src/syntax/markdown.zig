@@ -93,7 +93,7 @@ pub const Translate = struct {
                 continue :sw r.peekByte() catch return;
             },
             '-', '*', '+' => {
-                if (r.bufferedLen() > 2 and (r.peek(2) catch unreachable)[1] == ' ') {
+                if (indent_len > 0 and r.bufferedLen() > 2 and (r.peek(2) catch unreachable)[1] == ' ') {
                     list(r, dst, indent) catch {};
                 } else {
                     paragraph(r, dst, indent) catch {};
@@ -207,7 +207,14 @@ pub const Translate = struct {
             }
             const local_indent = if (new_indent > indent.len) until[0..new_indent] else indent;
             switch (until[new_indent]) {
-                '-', '*', '+' => try list(r, dst, local_indent),
+                '-', '*', '+' => {
+                    if (indent.len > 0 and until.len > new_indent + 2 and until[new_indent + 1] == ' ') {
+                        try list(r, dst, local_indent);
+                    } else {
+                        try line(until[0 .. until.len - 1], dst);
+                        r.toss(until.len);
+                    }
+                },
                 else => {
                     try line(until[0 .. until.len - 1], dst);
                     r.toss(until.len);
@@ -281,9 +288,10 @@ pub const Translate = struct {
             switch (src[idx]) {
                 '\\' => {
                     idx += 1;
-                    if (idx < src.len) {
-                        try dst.writeByte(src[idx]);
-                    }
+                    if (idx < src.len)
+                        try dst.writeByte(src[idx])
+                    else
+                        try dst.writeByte('\\');
                 },
                 '`' => {
                     if (findScalarPos(u8, src, idx + 1, '`')) |end| {
@@ -293,10 +301,39 @@ pub const Translate = struct {
                         idx = end;
                     }
                 },
+                '*' => {
+                    if (idx + 7 < src.len and src[idx + 1] == '*' and src[idx + 2] == '*' and src[idx + 3] != ' ') {
+                        if (findClosing(src[idx..], "***")) |estrong| {
+                            try dst.print("<em><strong>{s}</strong></em>", .{estrong[3..]});
+                            idx += estrong.len + 2;
+                        }
+                    } else if (idx + 5 < src.len and src[idx + 1] == '*' and src[idx + 2] != ' ') {
+                        if (findClosing(src[idx..], "**")) |strong| {
+                            try dst.print("<strong>{s}</strong>", .{strong[2..]});
+                            idx += strong.len + 1;
+                        }
+                    } else if (idx + 2 < src.len and src[idx + 1] != ' ') {
+                        if (findClosing(src[idx..], "*")) |em| {
+                            try dst.print("<em>{s}</em>", .{em[1..]});
+                            idx += em.len;
+                        }
+                    } else try dst.writeByte('*');
+                },
                 else => abx.Html.clean(src[idx], dst) catch unreachable,
                 '\r' => {},
             }
         }
+    }
+
+    pub fn findClosing(src: []const u8, comptime tag: []const u8) ?[]const u8 {
+        var search: usize = tag.len;
+        while (search + tag.len < src.len) : (search += 1) {
+            if (findPos(u8, src, search, tag)) |end| {
+                if (src[end - 1] == ' ' or src[end - 1] == '\\') continue;
+                return src[0..end];
+            }
+        }
+        return null;
     }
 };
 
@@ -501,6 +538,120 @@ test "list nested" {
         \\</ul></li>
         \\<li>&lt;extra code&gt;</li>
         \\</ul>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "em" {
+    const a = std.testing.allocator;
+    const blob =
+        \\*hi, mom*
+        \\
+    ;
+    const expected =
+        \\<p><em>hi, mom</em></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "em2" {
+    const a = std.testing.allocator;
+    const blob =
+        \\*hi, mom* *other line*
+        \\
+    ;
+    const expected =
+        \\<p><em>hi, mom</em> <em>other line</em></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "em3" {
+    const a = std.testing.allocator;
+    const blob =
+        \\* hi, mom*
+        \\
+    ;
+    const expected =
+        \\<p>* hi, mom*</p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "strong" {
+    const a = std.testing.allocator;
+    const blob =
+        \\**hi, mom**
+        \\
+    ;
+    const expected =
+        \\<p><strong>hi, mom</strong></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "strong2" {
+    const a = std.testing.allocator;
+    const blob =
+        \\**strong** **like bull!**
+        \\
+    ;
+    const expected =
+        \\<p><strong>strong</strong> <strong>like bull!</strong></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "em+strong" {
+    const a = std.testing.allocator;
+    const blob =
+        \\***hi, mom***
+        \\
+    ;
+    const expected =
+        \\<p><em><strong>hi, mom</strong></em></p>
         \\
     ;
 
