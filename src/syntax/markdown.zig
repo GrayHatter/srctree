@@ -226,7 +226,7 @@ pub const Translate = struct {
         try dst.writeAll("<ul>\n");
         while (r.peekDelimiterExclusive('\n') catch null) |until_prefix| {
             var until = cutPrefix(u8, until_prefix, indent) orelse {
-                try dst.writeAll("</ul>\n");
+                try dst.writeAll("</ul>");
                 return error.Indent;
             };
             //const until = until_prefix[0 .. until_prefix.len - 1];
@@ -242,10 +242,12 @@ pub const Translate = struct {
             if (new_indent > indent.len) {
                 try dst.writeAll("<li>");
                 list(r, dst, until_prefix[0..new_indent]) catch |err| switch (err) {
-                    error.Indent => continue,
+                    error.Indent => {
+                        try dst.writeAll("</li>\n");
+                        continue;
+                    },
                     else => return err,
                 };
-                try dst.writeAll("</li>\n");
             } else {
                 try dst.writeAll("<li>");
                 r.toss(indent.len);
@@ -462,6 +464,41 @@ test "list" {
         \\<li>hi, mom</li>
         \\<li>hello world</li>
         \\<li>smile, smile!</li>
+        \\<li>&lt;extra code&gt;</li>
+        \\</ul>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "list nested" {
+    const a = std.testing.allocator;
+    const blob =
+        \\  * hi, mom
+        \\  * hello world
+        \\  * smile, smile!
+        \\    * nested
+        \\    * lists
+        \\    * work
+        \\  * <extra code>
+        \\
+    ;
+    const expected =
+        \\<ul>
+        \\<li>hi, mom</li>
+        \\<li>hello world</li>
+        \\<li>smile, smile!</li>
+        \\<li><ul>
+        \\<li>nested</li>
+        \\<li>lists</li>
+        \\<li>work</li>
+        \\</ul></li>
         \\<li>&lt;extra code&gt;</li>
         \\</ul>
         \\
