@@ -82,7 +82,7 @@ fn loadFile(objs: Objects, sha: SHA, a: Allocator, io: Io) !Any {
         } else if (startsWith(u8, data, "tree ")) {
             return .{ .tree = try .initOwned(sha, a, body, data) };
         } else if (startsWith(u8, data, "commit ")) {
-            return .{ .commit = try .initOwned(sha, a, body, data) };
+            return .{ .commit = try .initOwned(sha, body, data) };
         } else if (startsWith(u8, data, "tag ")) {
             return .{ .tag = try .initOwned(sha, body) };
         }

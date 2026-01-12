@@ -352,7 +352,7 @@ pub fn resolveObject(self: Pack, sha: SHA, offset: usize, objs: *const Objects, 
     return switch (resolved.header.kind) {
         .blob => .{ .blob = .initOwned(sha, .{ 0, 0, 0, 0, 0, 0 }, resolved.data, resolved.data, resolved.data) },
         .tree => .{ .tree = try .initOwned(sha, a, resolved.data, resolved.data) },
-        .commit => .{ .commit = try .initOwned(sha, a, resolved.data, resolved.data) },
+        .commit => .{ .commit = try .initOwned(sha, resolved.data, resolved.data) },
         .tag => .{ .tag = try .initOwned(sha, resolved.data) },
         else => return error.IncompleteObject,
     };

@@ -163,12 +163,12 @@ test "toParent" {
         count += 1;
         if (commit.parent[0]) |_| {
             const parent = try commit.toParent(0, &repo, a, io);
-            commit.raze();
+            commit.raze(a);
 
             commit = parent;
         } else break;
     }
-    commit.raze();
+    commit.raze(a);
     try std.testing.expect(count >= 31); // LOL SORRY!
 }
 
@@ -209,7 +209,7 @@ test "commit to tree" {
     try repo.loadData(a, io);
 
     const cmt = try repo.headCommit(a, io);
-    defer cmt.raze();
+    defer cmt.raze(a);
     const tree = try cmt.loadTree(&repo, a, io);
     defer tree.raze();
     if (false) std.debug.print("tree {}\n", .{tree});
@@ -226,7 +226,7 @@ test "blob to commit" {
     defer repo.raze(a, io);
 
     const cmtt = try repo.headCommit(a, io);
-    defer cmtt.raze();
+    defer cmtt.raze(a);
 
     const tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze();
@@ -363,7 +363,7 @@ test "ref delta" {
     try repo.loadData(a, io);
 
     const cmtt = try repo.headCommit(a, io);
-    defer cmtt.raze();
+    defer cmtt.raze(a);
 
     const tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze();

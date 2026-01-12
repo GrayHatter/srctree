@@ -395,7 +395,7 @@ pub fn updatedAt(self: *const Repo, a: Allocator, io: Io) !i64 {
         switch (r) {
             .branch => |br| {
                 const cmt = try br.toCommit(self, a, io);
-                defer cmt.raze();
+                defer cmt.raze(a);
                 if (cmt.committer.timestamp > oldest) oldest = cmt.committer.timestamp;
             },
             else => unreachable, // not implemented... sorry :/

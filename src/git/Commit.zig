@@ -1,4 +1,3 @@
-alloc: ?Allocator = null,
 memory: ?[]u8 = null,
 sha: SHA,
 tree: SHA,
@@ -80,9 +79,8 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
     };
 }
 
-pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Commit {
+pub fn initOwned(sha: SHA, body: []const u8, memory: []u8) !Commit {
     var commit = try init(sha, body);
-    commit.alloc = a;
     commit.memory = memory;
     return commit;
 }
@@ -132,9 +130,8 @@ pub fn mkSubTree(self: Commit, subpath: ?[]const u8, repo: *const Repo, a: Alloc
     return root;
 }
 
-/// Warning; this function is probably unsafe
-pub fn raze(self: Commit) void {
-    if (self.alloc) |a| a.free(self.memory.?);
+pub fn raze(self: Commit, a: Allocator) void {
+    a.free(self.memory.?);
 }
 
 pub fn format(

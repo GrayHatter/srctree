@@ -99,7 +99,7 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
                         changed[i] = try .init(a, search.name, old);
                     }
                 }
-                old.raze();
+                old.raze(a);
                 oldtree.raze();
                 break;
             },
@@ -113,7 +113,7 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
                         changed[i] = try .init(a, search.name, old);
                     }
                 }
-                old.raze();
+                old.raze(a);
                 oldtree.raze();
                 break;
             },
@@ -128,11 +128,11 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
                 continue;
             }
         }
-        old.raze();
+        old.raze(a);
         oldtree.raze();
     }
 
-    par.raze();
+    par.raze(a);
     ptree.raze();
     return changed;
 }
@@ -220,7 +220,7 @@ test "mk sub tree" {
     try repo.loadData(a, io);
 
     const cmtt = try repo.headCommit(a, io);
-    defer cmtt.raze();
+    defer cmtt.raze(a);
 
     var tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze();
@@ -248,7 +248,7 @@ test "commit mk sub tree" {
     try repo.loadData(a, io);
 
     const cmtt = try repo.headCommit(a, io);
-    defer cmtt.raze();
+    defer cmtt.raze(a);
 
     var tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze();
