@@ -53,7 +53,7 @@ pub const endpoints = verse.Endpoints(.{
 const E404Page = template.PageData("4XX.html");
 
 fn notFound(vrs: *Frame) Router.Error!void {
-    std.debug.print("404 for route\n", .{});
+    log.warn("404 for route", .{});
     vrs.status = .not_found;
     var page = E404Page.init(.{});
     vrs.sendPage(&page) catch unreachable;
@@ -77,17 +77,17 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 .googlebot => return null,
                 .unknown => {
                     if (std.mem.indexOf(u8, fr.request.user_agent.?.string, "SearchBot/1.0") == null) return null;
-                    log.err("Dropping malicious traffic\n", .{});
+                    log.err("Dropping malicious traffic", .{});
                     return Router.defaultResponse(.not_found);
                 },
                 .gptbot => {
-                    log.err("Dropping malicious traffic\n", .{});
+                    log.err("Dropping malicious traffic", .{});
                     return Router.defaultResponse(.not_found);
                 },
                 else => {
                     if (bot.malicious) {
-                        log.err("Dropping malicious traffic\n", .{});
-                        return Router.defaultResponse(.not_found);
+                        log.err("Dropping malicious traffic", .{});
+                        return Router.defaultResponse(.forbidden);
                     }
                 },
             },
@@ -99,14 +99,14 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     real_ua.agent.bot.name == .malicious)) and
                     ua.agent.browser.version != 128)
                 {
-                    log.err("Dropping malicious traffic\n", .{});
+                    log.err("Dropping malicious traffic", .{});
                     fr.dumpDebugData(.{});
                     ua.dumpValidation(fr.request);
                     return Router.defaultResponse(.not_found);
                 }
             },
             .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/")) {
-                log.err("Dropping malicious traffic\n", .{});
+                log.err("Dropping malicious traffic", .{});
                 return Router.defaultResponse(.not_found);
             },
             .script => {},

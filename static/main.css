@@ -269,7 +269,7 @@ repos {
 	color: #bbb;
 	font-family: 'Titillium Web', sans-serif;
 	font-size: 80%;
-	&a:visited { color: #bbb; }
+	&:visited { color: #bbb; }
 }
 
 repo {
