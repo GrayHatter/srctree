@@ -77,9 +77,7 @@ pub const Translate = struct {
                 try dst.writeByte('\n');
                 continue :sw r.peekByte() catch return;
             },
-            '>' => {
-                quote(r, dst, indent) catch return;
-            },
+            '>' => quote(r, dst, indent) catch return,
             '`' => {
                 if (eql(u8, r.peek(3) catch "", "```") and findPos(u8, r.buffered(), 3, "\n```") != null) {
                     code(r, dst, a) catch |err| switch (err) {
@@ -195,8 +193,8 @@ pub const Translate = struct {
 
     fn leaf(r: *Reader, dst: *Writer, indent: []const u8) error{ WriteFailed, Indent }!void {
         for (indent) |c| assert(c == ' ');
-        while (r.peekDelimiterInclusive('\n') catch null) |until| {
-            if (until.len == 1) {
+        while (r.peekSentinel('\n') catch null) |until| {
+            if (until.len == 0) {
                 r.toss(1);
                 continue;
             }
@@ -211,18 +209,17 @@ pub const Translate = struct {
                     if (indent.len > 0 and until.len > new_indent + 2 and until[new_indent + 1] == ' ') {
                         try list(r, dst, local_indent);
                     } else {
-                        try line(until[0 .. until.len - 1], dst);
-                        r.toss(until.len);
+                        try line(until, dst);
+                        r.toss(until.len + 1);
                     }
                 },
                 else => {
-                    try line(until[0 .. until.len - 1], dst);
-                    r.toss(until.len);
+                    try line(until, dst);
+                    r.toss(until.len + 1);
                 },
             }
             if (r.bufferedLen() == 0) return;
             try dst.writeByte(' ');
-            continue;
         }
 
         try line(r.take(r.bufferedLen()) catch unreachable, dst);
@@ -231,20 +228,20 @@ pub const Translate = struct {
     fn list(r: *Reader, dst: *Writer, indent: []const u8) error{ WriteFailed, Indent }!void {
         for (indent) |c| assert(c == ' ');
         try dst.writeAll("<ul>\n");
-        while (r.peekDelimiterExclusive('\n') catch null) |until_prefix| {
+        while (r.peekSentinel('\n') catch null) |until_prefix| {
             var until = cutPrefix(u8, until_prefix, indent) orelse {
                 try dst.writeAll("</ul>");
                 return error.Indent;
             };
+            if (until.len <= 1) {
+                r.toss(until_prefix.len + 1);
+                continue;
+            }
             //const until = until_prefix[0 .. until_prefix.len - 1];
             var new_indent: u8 = 0;
             for (until_prefix) |chr| {
                 if (chr != ' ') break;
                 new_indent += 1;
-            }
-            if (until.len <= 1) {
-                r.toss(1);
-                break;
             }
             if (new_indent > indent.len) {
                 try dst.writeAll("<li>");
@@ -266,8 +263,8 @@ pub const Translate = struct {
                     r.toss(4);
                 }
                 r.toss(2);
-                if (r.takeDelimiter('\n')) |lline| {
-                    if (lline) |l| try line(trim(u8, l, "\t\n "), dst);
+                if (r.takeSentinel('\n')) |l| {
+                    try line(trim(u8, l, "\t\n "), dst);
                 } else |_| {}
                 try dst.writeAll("</li>\n");
             }
