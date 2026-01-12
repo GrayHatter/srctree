@@ -65,51 +65,57 @@ fn debug(_: *Frame) Router.Error!void {
 
 fn userAgentResolution(fr: *Frame) ?BuildFn {
     const botdetect: verse.Robots = .init(fr.request);
+    if (fr.user != null) return null;
     if (fr.request.user_agent) |*ua| {
-        if (fr.user == null) {
-            switch (ua.agent) {
-                .bot => |bot| switch (bot.name) {
-                    .googlebot => return null,
-                    .unknown => {
-                        if (eql(u8, fr.request.uri, "/robots.txt")) return null;
-                        if (std.mem.indexOf(u8, fr.request.user_agent.?.string, "SearchBot/1.0") == null) return null;
-                        std.debug.print("Dropping malicious traffic\n", .{});
-                        return Router.defaultResponse(.not_found);
-                    },
-                    .gptbot => {
-                        if (eql(u8, fr.request.uri, "/robots.txt")) return null;
-                        std.debug.print("Dropping malicious traffic\n", .{});
-                        return Router.defaultResponse(.not_found);
-                    },
-                    else => {},
+        if (eql(u8, fr.request.uri, "/robots.txt")) {
+            fr.dumpDebugData(.{});
+            ua.dumpValidation(fr.request);
+            return null;
+        }
+        switch (ua.agent) {
+            .bot => |bot| switch (bot.name) {
+                .googlebot => return null,
+                .unknown => {
+                    if (std.mem.indexOf(u8, fr.request.user_agent.?.string, "SearchBot/1.0") == null) return null;
+                    log.err("Dropping malicious traffic\n", .{});
+                    return Router.defaultResponse(.not_found);
                 },
-                .browser => {
-                    const real_ua = ua.validate(fr.request);
-                    std.debug.print("Claims to be a browser\n", .{});
-
-                    if ((botdetect.score >= 1 or (real_ua.agent == .bot and
-                        real_ua.agent.bot.name == .malicious)) and
-                        ua.agent.browser.version != 128)
-                    {
-                        if (eql(u8, fr.request.uri, "/robots.txt")) return null;
-                        std.debug.print("Dropping malicious traffic\n", .{});
-                        fr.dumpDebugData(.{});
-                        ua.dumpValidation(fr.request);
+                .gptbot => {
+                    log.err("Dropping malicious traffic\n", .{});
+                    return Router.defaultResponse(.not_found);
+                },
+                else => {
+                    if (bot.malicious) {
+                        log.err("Dropping malicious traffic\n", .{});
                         return Router.defaultResponse(.not_found);
                     }
                 },
-                .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/")) {
-                    std.debug.print("Dropping malicious traffic\n", .{});
+            },
+            .browser => {
+                const real_ua = ua.validate(fr.request);
+                log.warn("Claims to be a browser\n", .{});
+
+                if ((botdetect.score >= 1 or (real_ua.agent == .bot and
+                    real_ua.agent.bot.name == .malicious)) and
+                    ua.agent.browser.version != 128)
+                {
+                    log.err("Dropping malicious traffic\n", .{});
+                    fr.dumpDebugData(.{});
+                    ua.dumpValidation(fr.request);
                     return Router.defaultResponse(.not_found);
-                },
-                .script => {},
-            }
-            fr.dumpDebugData(.{});
-            ua.dumpValidation(fr.request);
+                }
+            },
+            .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/")) {
+                log.err("Dropping malicious traffic\n", .{});
+                return Router.defaultResponse(.not_found);
+            },
+            .script => {},
         }
+        fr.dumpDebugData(.{});
+        ua.dumpValidation(fr.request);
         return null;
     } else {
-        std.debug.print("No User agent for request\n\n\n\n", .{});
+        log.err("No User agent for request\n\n\n\n", .{});
         fr.dumpDebugData(.{});
         return null;
     }
@@ -218,13 +224,11 @@ test "fuzzing" {
 
 const std = @import("std");
 const eql = std.mem.eql;
+const startsWith = std.mem.startsWith;
+const log = std.log.scoped(.srctree);
+
 const verse = @import("verse");
 const Frame = verse.Frame;
-const startsWith = std.mem.startsWith;
-
-const Delta = @import("types.zig").Delta;
-const genRules = @import("endpoints/search.zig").genRules;
-
 const Router = verse.Router;
 const template = verse.template;
 const S = template.Structs;
@@ -235,4 +239,6 @@ const STATIC = Router.STATIC;
 const Match = Router.Match;
 const BuildFn = Router.BuildFn;
 
+const Delta = @import("types.zig").Delta;
+const genRules = @import("endpoints/search.zig").genRules;
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
