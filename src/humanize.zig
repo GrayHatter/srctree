@@ -1,9 +1,6 @@
-const std = @import("std");
-const DT = @import("datetime.zig");
-
-pub const Humanize = @This();
-
 seconds: i64,
+
+const Humanize = @This();
 
 pub const Width = enum {
     seconds,
@@ -81,3 +78,6 @@ pub fn format(self: Humanize, w: *std.Io.Writer) !void {
 pub fn printAlloc(self: Humanize, a: std.mem.Allocator) ![]u8 {
     return std.fmt.allocPrint(a, "{f}", .{self});
 }
+
+const std = @import("std");
+const DT = @import("datetime.zig");

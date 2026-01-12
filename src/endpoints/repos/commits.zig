@@ -78,19 +78,6 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     //}
 
     const diffstat = patch.patchStat();
-    const og_title = try allocPrint(f.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
-        allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
-        diffstat.files,
-        if (diffstat.files > 1) "s" else "",
-        diffstat.additions,
-        diffstat.deletions,
-    });
-    const meta_head = S.MetaHeadHtml{
-        .open_graph = .{
-            .title = og_title,
-            .desc = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.message }}) catch unreachable,
-        },
-    };
 
     var thread: []Template.Structs.CommentThreadHtml.Thread = &[0]Template.Structs.CommentThreadHtml.Thread{};
     if (CommitMap.open(repo_name_, current.sha.hex(), f.alloc, f.io)) |map| {
@@ -149,8 +136,22 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     } else null;
 
     const repo_name = try f.alloc.dupe(u8, repo_name_);
+    const page_title = try allocPrint(f.alloc, "{f} - [{s}] committed to {s} about {f} - srctree", .{
+        abx.Html{ .text = current.title },
+        current.sha.hex()[0..10],
+        repo_name,
+        Humanize.unix(current.committer.timestamp, now),
+    });
+    const og_title = try allocPrint(f.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
+        allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
+        diffstat.files,
+        if (diffstat.files > 1) "s" else "",
+        diffstat.additions,
+        diffstat.deletions,
+    });
+    const og_desc = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.message }}) catch unreachable;
     var page = CommitPage.init(.{
-        .meta_head = meta_head,
+        .meta_head = .{ .title = page_title, .open_graph = .{ .title = og_title, .desc = og_desc } },
         .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
         .repo_header = .{
             .git_uri = .{ .host = "srctree.gr.ht", .repo_name = repo_name_ },
