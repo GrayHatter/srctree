@@ -6,6 +6,7 @@ tree: SHA,
 parent: [9]?SHA = .{null} ** 9,
 author: Actor,
 committer: Actor,
+
 /// Raw message including the title and body
 message: []const u8,
 title: []const u8,
