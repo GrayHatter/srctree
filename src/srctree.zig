@@ -12,7 +12,12 @@ pub const verse_routes = [_]Match{
         .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
         .{ .name = "GPTBot", .allow = false }, // aggressive, selfish
         .{ .name = "OAI-SearchBot", .allow = false },
-        .{ .name = "Amazonbot", .allow = false }, // aggressive, selfish
+        //
+        // If you're the kind of person who enables this, you're part of the problem
+        .{ .name = "Amazonbot", .allow = false }, // aggressive, malicious
+        .{ .name = "Amzn-SearchBot", .allow = false }, //  malicious
+        .{ .name = "Amzn-User", .allow = false }, // malicious
+        //
         .{ .name = "AhrefsBot", .allow = false }, // selfish
         .{ .name = "dotbot", .allow = false }, // selfish
         .{ .name = "PerplexityBot", .allow = false },
@@ -87,6 +92,8 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 else => {
                     if (bot.malicious) {
                         log.err("Dropping malicious traffic", .{});
+                        fr.dumpDebugData(.{});
+                        ua.dumpValidation(fr.request);
                         return Router.defaultResponse(.forbidden);
                     }
                 },
