@@ -1,4 +1,3 @@
-alloc: Allocator,
 memory: ?[]u8 = null,
 sha: SHA,
 path: ?[]const u8 = null,
@@ -13,29 +12,28 @@ pub fn pushPath(self: *Tree, a: Allocator, path: []const u8) !void {
         return;
     };
 
-    self.path = try std.mem.join(a, "/", &[_][]const u8{ spath, path });
+    self.path = try join(a, "/", &[_][]const u8{ spath, path });
     a.free(spath);
 }
 
 pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
     var self: Tree = .{
-        .alloc = a,
         .sha = sha,
         .blob = blob,
-        .blobs = try a.alloc(Blob, std.mem.count(u8, blob, "\x00")),
+        .blobs = try a.alloc(Blob, count(u8, blob, "\x00")),
     };
 
     var i: usize = 0;
-    if (std.mem.indexOf(u8, blob, "tree ")) |tidx| {
-        if (std.mem.indexOfScalarPos(u8, blob, i, 0)) |index| {
+    if (find(u8, blob, "tree ")) |tidx| {
+        if (findScalarPos(u8, blob, i, 0)) |index| {
             // This is probably wrong for large trees, but #YOLO
             std.debug.assert(tidx == 0);
-            std.debug.assert(std.mem.eql(u8, "tree ", blob[0..5]));
+            std.debug.assert(eql(u8, "tree ", blob[0..5]));
             i = index + 1;
         }
     }
     var real_count: usize = 0;
-    while (std.mem.indexOfScalarPos(u8, blob, i, 0)) |str_end| {
+    while (findScalarPos(u8, blob, i, 0)) |str_end| {
         var mode: [6]u8 = @splat('0');
         var name = blob[i + 7 .. str_end];
         if (blob[i] == '1') {
@@ -100,7 +98,7 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
                     }
                 }
                 old.raze(a);
-                oldtree.raze();
+                oldtree.raze(a);
                 break;
             },
             else => |e| return e,
@@ -114,14 +112,14 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
                     }
                 }
                 old.raze(a);
-                oldtree.raze();
+                oldtree.raze(a);
                 break;
             },
             else => |e| return e,
         };
         for (search_list, 0..) |*search_ish, i| {
             const search = search_ish.* orelse continue;
-            if (std.mem.indexOf(u8, ptree.blob, &search.sha.bin)) |_| {} else {
+            if (find(u8, ptree.blob, &search.sha.bin)) |_| {} else {
                 search_ish.* = null;
                 found += 1;
                 changed[i] = try .init(a, search.name, old);
@@ -129,18 +127,18 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
             }
         }
         old.raze(a);
-        oldtree.raze();
+        oldtree.raze(a);
     }
 
     par.raze(a);
-    ptree.raze();
+    ptree.raze(a);
     return changed;
 }
 
-pub fn raze(self: Tree) void {
-    if (self.path) |p| self.alloc.free(p);
-    if (self.memory) |m| self.alloc.free(m);
-    self.alloc.free(self.blobs);
+pub fn raze(tree: Tree, a: Allocator) void {
+    if (tree.path) |p| a.free(p);
+    if (tree.memory) |m| a.free(m);
+    a.free(tree.blobs);
 }
 
 pub fn format(self: Tree, out: *Io.Writer) !void {
@@ -183,10 +181,10 @@ test "tree decom" {
     const b = d.reader.buffered();
     const buf = try a.dupe(u8, b[0..]);
     defer a.free(buf);
-    const blob = buf[(indexOf(u8, buf, "\x00") orelse unreachable) + 1 ..];
+    const blob = buf[(find(u8, buf, "\x00") orelse unreachable) + 1 ..];
     //std.debug.print("{s}\n", .{buf});
     const tree = try Tree.init(SHA.init("5edabf724389ef87fa5a5ddb2ebe6dbd888885ae"), a, blob);
-    defer tree.raze();
+    defer tree.raze(a);
     for (tree.blobs) |tobj| {
         if (false) std.debug.print("{s} {s} {s}\n", .{ tobj.mode, tobj.hash, tobj.name });
     }
@@ -223,10 +221,10 @@ test "mk sub tree" {
     defer cmtt.raze(a);
 
     var tree = try cmtt.loadTree(&repo, a, io);
-    defer tree.raze();
+    defer tree.raze(a);
 
     var blob: Blob = blb: for (tree.blobs) |obj| {
-        if (std.mem.eql(u8, obj.name, "src")) break :blb obj;
+        if (eql(u8, obj.name, "src")) break :blb obj;
     } else return error.ExpectedBlobMissing;
     var subtree = try blob.toTree(&repo, a, io);
     if (false) std.debug.print("{any}\n", .{subtree});
@@ -234,7 +232,7 @@ test "mk sub tree" {
         if (false) std.debug.print("{any}\n", .{obj});
     }
 
-    subtree.raze();
+    subtree.raze(a);
 }
 
 test "commit mk sub tree" {
@@ -251,27 +249,27 @@ test "commit mk sub tree" {
     defer cmtt.raze(a);
 
     var tree = try cmtt.loadTree(&repo, a, io);
-    defer tree.raze();
+    defer tree.raze(a);
 
     var blob: Blob = blb: for (tree.blobs) |obj| {
-        if (std.mem.eql(u8, obj.name, "src")) break :blb obj;
+        if (eql(u8, obj.name, "src")) break :blb obj;
     } else return error.ExpectedBlobMissing;
     var subtree = try blob.toTree(&repo, a, io);
     if (false) std.debug.print("{any}\n", .{subtree});
     for (subtree.blobs) |obj| {
         if (false) std.debug.print("{any}\n", .{obj});
     }
-    defer subtree.raze();
+    defer subtree.raze(a);
 
     const csubtree = try cmtt.mkSubTree("src", &repo, a, io);
     if (false) std.debug.print("{any}\n", .{csubtree});
-    csubtree.raze();
+    csubtree.raze(a);
 
     const csubtree2 = try cmtt.mkSubTree("src/endpoints", &repo, a, io);
     if (false) std.debug.print("{any}\n", .{csubtree2});
     if (false) for (csubtree2.objects) |obj|
         std.debug.print("{any}\n", .{obj});
-    defer csubtree2.raze();
+    defer csubtree2.raze(a);
 
     const changed = try csubtree2.changedSet(&repo, a, io);
     for (csubtree2.blobs, changed) |o, c| {
@@ -290,7 +288,10 @@ const ChangeSet = @import("changeset.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const hexLower = std.fmt.fmtSliceHexLower;
 const bufPrint = std.fmt.bufPrint;
 const zstd = std.compress.zstd;
-const indexOf = std.mem.indexOf;
+const find = std.mem.find;
+const findScalarPos = std.mem.findScalarPos;
+const join = std.mem.join;
+const count = std.mem.count;
+const eql = std.mem.eql;

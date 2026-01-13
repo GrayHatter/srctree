@@ -211,7 +211,7 @@ test "commit to tree" {
     const cmt = try repo.headCommit(a, io);
     defer cmt.raze(a);
     const tree = try cmt.loadTree(&repo, a, io);
-    defer tree.raze();
+    defer tree.raze(a);
     if (false) std.debug.print("tree {}\n", .{tree});
     if (false) for (tree.objects) |obj| std.debug.print("    {}\n", .{obj});
 }
@@ -229,7 +229,7 @@ test "blob to commit" {
     defer cmtt.raze(a);
 
     const tree = try cmtt.loadTree(&repo, a, io);
-    defer tree.raze();
+    defer tree.raze(a);
 
     var timer = try std.time.Timer.start();
     var lap = timer.lap();
@@ -366,7 +366,7 @@ test "ref delta" {
     defer cmtt.raze(a);
 
     const tree = try cmtt.loadTree(&repo, a, io);
-    defer tree.raze();
+    defer tree.raze(a);
 
     var timer = try std.time.Timer.start();
     var lap = timer.lap();

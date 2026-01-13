@@ -115,14 +115,14 @@ pub fn mkSubTree(self: Commit, subpath: ?[]const u8, repo: *const Repo, a: Alloc
         for (root.blobs) |obj| {
             if (std.mem.eql(u8, obj.name, path)) {
                 if (itr.rest().len == 0) {
-                    defer root.raze();
+                    defer root.raze(a);
                     var out = try obj.toTree(repo, a, io);
                     out.path = try a.dupe(u8, rootpath);
                     return out;
                 } else {
                     const tree = try obj.toTree(repo, a, io);
                     defer root = tree;
-                    root.raze();
+                    root.raze(a);
                     continue :iter;
                 }
             }
