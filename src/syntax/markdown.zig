@@ -44,7 +44,6 @@ pub const Translate = struct {
     }
 
     fn block(r: *Reader, dst: *Writer, a: Allocator) error{ InvalidMarkdown, OutOfMemory, WriteFailed }!void {
-        //@setRuntimeSafety(false); // an LLVM bug causes this to crash
         if (r.bufferedLen() == 0) return;
         var indent = r.buffered();
         var indent_len: usize = 0;
@@ -77,7 +76,7 @@ pub const Translate = struct {
                 try dst.writeByte('\n');
                 continue :sw r.peekByte() catch return;
             },
-            '>' => quote(r, dst, indent) catch return,
+            '>' => quote(r, dst) catch return,
             '`' => {
                 if (eql(u8, r.peek(3) catch "", "```") and findPos(u8, r.buffered(), 3, "\n```") != null) {
                     code(r, dst, a) catch |err| switch (err) {
@@ -86,20 +85,45 @@ pub const Translate = struct {
                         else => return error.InvalidMarkdown,
                     };
                 } else {
-                    paragraph(r, dst, indent) catch {};
+                    paragraph(r, dst, indent) catch |err| switch (err) {
+                        error.Indent => {
+                            indent = &.{};
+                            indent_len = 0;
+                        },
+                        error.WriteFailed => return error.WriteFailed,
+                    };
                 }
                 continue :sw r.peekByte() catch return;
             },
             '-', '*', '+' => {
                 if (indent_len > 0 and r.bufferedLen() > 2 and (r.peek(2) catch unreachable)[1] == ' ') {
-                    list(r, dst, indent) catch {};
+                    list(r, dst, indent) catch |err| switch (err) {
+                        error.Indent => {
+                            indent = &.{};
+                            indent_len = 0;
+                        },
+                        error.WriteFailed => return error.WriteFailed,
+                    };
                 } else {
-                    paragraph(r, dst, indent) catch {};
+                    paragraph(r, dst, indent) catch |err| switch (err) {
+                        error.Indent => {
+                            indent = &.{};
+                            indent_len = 0;
+                        },
+                        error.WriteFailed => return error.WriteFailed,
+                    };
                 }
                 continue :sw r.peekByte() catch return;
             },
             else => {
-                paragraph(r, dst, indent) catch {};
+                paragraph(r, dst, indent) catch |err| switch (err) {
+                    error.Indent => {
+                        indent = &.{};
+                        indent_len = 0;
+                    },
+                    error.WriteFailed => return error.WriteFailed,
+                };
+
                 continue :sw r.peekByte() catch return;
             },
         }
@@ -145,8 +169,7 @@ pub const Translate = struct {
         if (src[idx] != '\n') idx += 1;
     }
 
-    fn quote(r: *Reader, dst: *Writer, indent: []const u8) error{WriteFailed}!void {
-        _ = indent;
+    fn quote(r: *Reader, dst: *Writer) error{WriteFailed}!void {
         const until = (r.takeDelimiter('\n') catch null) orelse r.take(r.bufferedLen()) catch unreachable;
         try dst.writeAll("<blockquote>");
         try line(until, dst);
