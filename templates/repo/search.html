@@ -10,15 +10,17 @@
       <search>
         <form action="<Action default="search">" style="width:95%">
           <input name="q" type="text" placeholder="Search" value="<Search ornull>" style="width:97%">
-          <button class="btn" href="new" style="width:5%" type="submit">New</button>
+          <button class="btn" href="new" style="width:10%" type="submit">Quick Search</button>
+          <button class="btn" href="new" style="width:10%" type="submit" formaction="search/deep">Deep Search</button>
         </form>
       </search>
 
       <For Commits> 
         <Title />
       </For>
+      <CountFiles type="usize" />
       <For Files> 
-        <Filename />
+      <div><a href="blob/<Filename />#L<Line type="usize" />"><Filename /></a></div>
       </For>
     </content>
   </body>

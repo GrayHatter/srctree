@@ -110,21 +110,16 @@ pub fn mkSubTree(self: Commit, subpath: ?[]const u8, repo: *const Repo, a: Alloc
 
     var itr = std.mem.splitScalar(u8, rootpath, '/');
     var root = try self.loadTree(repo, a, io);
-    root.path = try a.dupe(u8, rootpath);
     iter: while (itr.next()) |path| {
         for (root.blobs) |obj| {
-            if (std.mem.eql(u8, obj.name, path)) {
+            if (eql(u8, obj.name, path)) {
                 if (itr.rest().len == 0) {
                     defer root.raze(a);
-                    var out = try obj.toTree(repo, a, io);
-                    out.path = try a.dupe(u8, rootpath);
-                    return out;
-                } else {
-                    const tree = try obj.toTree(repo, a, io);
-                    defer root = tree;
-                    root.raze(a);
-                    continue :iter;
+                    return try obj.toTree(repo, a, io);
                 }
+                root.raze(a);
+                root = try obj.toTree(repo, a, io);
+                continue :iter;
             }
         } else return error.PathNotFound;
     }
@@ -135,29 +130,12 @@ pub fn raze(self: Commit, a: Allocator) void {
     a.free(self.memory.?);
 }
 
-pub fn format(
-    self: Commit,
-    comptime _: []const u8,
-    _: std.fmt.FormatOptions,
-    out: anytype,
-) !void {
-    try out.print(
-        \\Commit{{
-        \\commit {s}
-        \\tree {s}
-        \\
-    , .{ self.sha.hex[0..], self.tree.hex[0..] });
-    for (self.parent) |par| {
-        if (par) |p|
-            try out.print("parent {s}\n", .{p.hex[0..]});
+pub fn format(cmt: Commit, out: *Writer) !void {
+    try out.print("Commit{{\ncommit {s}\ntree {s}\n", .{ cmt.sha.hex()[0..], cmt.tree.hex()[0..] });
+    for (cmt.parent) |par| {
+        if (par) |p| try out.print("parent {s}\n", .{p.hex()[0..10]});
     }
-    try out.print(
-        \\author {}
-        \\commiter {}
-        \\
-        \\{s}
-        \\}}
-    , .{ self.author, self.committer, self.message });
+    try out.print("author {f}\ncommiter {f}\n\n{s}\n}}", .{ cmt.author, cmt.committer, cmt.message });
 }
 
 /// TODO this
@@ -216,6 +194,7 @@ const Objects = @import("Objects.zig");
 
 const std = @import("std");
 const Io = std.Io;
+const Writer = Io.Writer;
 const log = std.log.scoped(.git_internals);
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;

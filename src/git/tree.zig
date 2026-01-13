@@ -119,7 +119,7 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
         };
         for (search_list, 0..) |*search_ish, i| {
             const search = search_ish.* orelse continue;
-            if (find(u8, ptree.blob, &search.sha.bin)) |_| {} else {
+            if (find(u8, ptree.blob, &search.sha.bin) == null) {
                 search_ish.* = null;
                 found += 1;
                 changed[i] = try .init(a, search.name, old);
@@ -150,9 +150,7 @@ pub fn format(self: Tree, out: *Io.Writer) !void {
         else
             f += 1;
     }
-    try out.print(
-        \\Tree{{ {} Objects, {} files {} directories }}
-    , .{ self.blobs.len, f, d });
+    try out.print("Tree{{ {} Objects, {} files {} directories }}", .{ self.blobs.len, f, d });
 }
 
 test "tree decom" {
@@ -287,6 +285,7 @@ const ChangeSet = @import("changeset.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 const Io = std.Io;
 const bufPrint = std.fmt.bufPrint;
 const zstd = std.compress.zstd;

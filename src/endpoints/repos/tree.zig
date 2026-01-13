@@ -38,28 +38,23 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         for (files.blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
-                    const commit_title = try allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = ch.commit_title }});
+                    const commit_title = try allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = ch.title }});
                     const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, ch.sha.hex()[0..8] });
                     const ctime = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(ch.timestamp, now)});
+                    const href: []const u8 = if (obj.isFile())
+                        try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{ prefix, path orelse "", obj.name })
+                    else
+                        try allocPrint(ctx.alloc, "{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name });
                     if (ch.name.len > 0 and ch.name[0] == '.') {
-                        const href: []const u8, const class: []const u8 = if (obj.isFile()) .{ try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
-                            prefix, path orelse "", obj.name,
-                        }), "file" } else .{ try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
-                            prefix, path orelse "", obj.name,
-                        }), "tree" };
-
                         try list_hidden.append(ctx.alloc, .{
                             .name = ch.name,
                             .href = href,
                             .commit_title = commit_title,
                             .commit_href = chref,
                             .commit_time = ctime,
-                            .class = class,
+                            .class = if (obj.isFile()) "tree" else "blob",
                         });
                     } else if (obj.isFile()) {
-                        const href = try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{
-                            prefix, path orelse "", obj.name,
-                        });
                         try list_files.append(ctx.alloc, .{
                             .name = ch.name,
                             .href = href,
@@ -68,9 +63,6 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                             .commit_time = ctime,
                         });
                     } else {
-                        const href = try allocPrint(ctx.alloc, "{s}/tree/{s}{s}/", .{
-                            prefix, path orelse "", obj.name,
-                        });
                         try list_trees.append(ctx.alloc, .{
                             .name = ch.name,
                             .href = href,

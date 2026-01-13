@@ -161,11 +161,12 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
 
 /// TODO write the real function that goes here
 pub fn ref(self: Repo, str: []const u8) !SHA {
+    const target = cutPrefix(u8, str, "refs/heads/") orelse str;
     for (self.refs) |r| {
         switch (r) {
             .sha => |s| return s,
             .tag => @panic("not implemented"),
-            .branch => |b| if (eql(u8, b.name, str)) return b.sha,
+            .branch => |b| if (eql(u8, b.name, target)) return b.sha,
             .missing => return error.EmptyRef,
         }
     }
@@ -233,7 +234,7 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
     if (pk_refs) |pkrefs| {
         var lines = splitScalar(u8, pkrefs, '\n');
         while (lines.next()) |line| {
-            if (indexOf(u8, line, "refs/tags/")) |i| {
+            if (find(u8, line, "refs/tags/")) |i| {
                 const name = line[i + 10 ..];
 
                 try tags.append(a, try .fromObject(
@@ -319,14 +320,20 @@ pub fn headSha(self: *const Repo, io: Io) !SHA {
     var buff: [0xFF]u8 = undefined;
 
     var reader = f.reader(io, &buff);
-    const head = try reader.interface.takeDelimiter('\n') orelse return error.RefParseFailed;
+    const head = try reader.interface.takeDelimiter('\n') orelse {
+        log.err("Head SHA failed '{s}'\n", .{reader.interface.buffered()});
+        return error.RefParseFailed;
+    };
 
     if (startsWith(u8, head, "ref: ")) {
-        return self.ref(head[16..head.len]) catch error.RefParseFailed;
+        return self.ref(head[16..]) catch {
+            log.err("Head SHA failed '{s}'\n", .{head[16..]});
+            return error.RefParseFailed;
+        };
     } else if (head.len == 40) {
         return .init(head[0..40]);
     } else {
-        std.debug.print("unexpected HEAD {s}\n", .{head});
+        log.err("unexpected HEAD {s}\n", .{head});
         unreachable;
     }
 }
@@ -444,6 +451,7 @@ const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
 const endsWith = std.mem.endsWith;
-const indexOf = std.mem.indexOf;
+const find = std.mem.find;
 const zlib = std.compress.flate;
 const bufPrint = std.fmt.bufPrint;
+const cutPrefix = std.mem.cutPrefix;

@@ -1,7 +1,3 @@
-const std = @import("std");
-
-pub const Actor = @This();
-
 name: []const u8,
 email: []const u8,
 timestr: []const u8,
@@ -9,6 +5,8 @@ tzstr: []const u8,
 timestamp: i64 = 0,
 /// TODO: This will not remain i64
 tz: i64 = 0,
+
+const Actor = @This();
 
 pub fn make(data: []const u8) !Actor {
     var itr = std.mem.splitBackwardsScalar(u8, data, ' ');
@@ -33,6 +31,9 @@ pub fn trimEmail(str: []const u8) []const u8 {
     return str[start..end];
 }
 
-pub fn format(self: Actor, comptime _: []const u8, _: std.fmt.FormatOptions, out: anytype) !void {
-    try out.print("Actor{{ name {s}, email {s} time {} }}", .{ self.name, self.email, self.timestamp });
+pub fn format(actor: Actor, w: *Writer) !void {
+    try w.print("Actor{{ name {s}, email {s} time {} }}", .{ actor.name, actor.email, actor.timestamp });
 }
+
+const std = @import("std");
+const Writer = std.Io.Writer;
