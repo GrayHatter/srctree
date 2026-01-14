@@ -153,7 +153,7 @@ pub const Translate = struct {
     fn quote(r: *Reader, dst: *Writer) error{WriteFailed}!void {
         const until = (r.takeDelimiter('\n') catch null) orelse r.take(r.bufferedLen()) catch unreachable;
         try dst.writeAll("<blockquote>");
-        try line(until, dst);
+        try lineBasic(until, dst);
         try dst.writeAll("</blockquote>\n");
     }
 
@@ -220,12 +220,12 @@ pub const Translate = struct {
                     if (indent.len >= 0 and until.len > new_indent + 2 and until[new_indent + 1] == ' ') {
                         try list(r, dst, local_indent);
                     } else {
-                        try line(until, dst);
+                        try lineBasic(until, dst);
                         r.toss(until.len + 1);
                     }
                 },
                 else => {
-                    try line(until, dst);
+                    try lineBasic(until, dst);
                     r.toss(until.len + 1);
                 },
             }
@@ -233,7 +233,7 @@ pub const Translate = struct {
             try dst.writeByte(' ');
         }
 
-        try line(r.take(r.bufferedLen()) catch unreachable, dst);
+        try lineBasic(r.take(r.bufferedLen()) catch unreachable, dst);
     }
 
     fn list(r: *Reader, dst: *Writer, indent: []const u8) error{ WriteFailed, Indent }!void {
@@ -275,7 +275,7 @@ pub const Translate = struct {
                 }
                 r.toss(2);
                 if (r.takeSentinel('\n')) |l| {
-                    try line(trim(u8, l, "\t\n "), dst);
+                    try lineBasic(trim(u8, l, "\t\n "), dst);
                 } else |_| {}
                 try dst.writeAll("</li>\n");
             }
@@ -290,7 +290,7 @@ pub const Translate = struct {
         _ = indent;
     }
 
-    fn line(src: []const u8, dst: *Writer) error{WriteFailed}!void {
+    fn lineBasic(src: []const u8, dst: *Writer) error{WriteFailed}!void {
         var idx: usize = 0;
         while (idx < src.len) : (idx += 1) {
             switch (src[idx]) {
