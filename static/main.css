@@ -332,6 +332,8 @@ readme {
 	}
 	.codeblock { white-space: pre; }
 	code { width: 98%; }
+	a { color: cadetblue; }
+	a:visited { color: purple; }
 }
 
 .treelist {

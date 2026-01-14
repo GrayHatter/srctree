@@ -178,13 +178,20 @@ pub const Translate = struct {
 
     fn paragraph(r: *Reader, dst: *Writer, indent: []const u8) error{ WriteFailed, Indent }!void {
         try dst.writeAll("<p>");
-        const until = findPos(u8, r.buffered(), 0, "\n\n") orelse
-            findPos(u8, r.buffered(), 0, "\r\n\r\n") orelse r.bufferedLen();
-        var leaf_r: Reader = .fixed(r.take(until) catch unreachable);
+        const until: usize = findPos(u8, r.buffered(), 0, "\n\n") orelse
+            findPos(u8, r.buffered(), 0, "\r\n\r\n") orelse
+            r.bufferedLen();
+        const extra: usize = if (until == r.bufferedLen())
+            0
+        else if (r.bufferedLen() >= 4 and r.peekByte() catch unreachable == '\r')
+            2
+        else
+            1;
+
+        var leaf_r: Reader = .fixed(r.take(until + extra) catch unreachable);
         try leaf(&leaf_r, dst, indent);
-        if (r.bufferedLen() >= 2) {
-            if (r.peekByte() catch unreachable == '\r') r.toss(4) else r.toss(2);
-        }
+        r.toss(extra);
+
         try dst.writeAll("</p>\n");
     }
 
@@ -229,7 +236,7 @@ pub const Translate = struct {
             const local_indent = if (new_indent > indent.len) until[0..new_indent] else indent;
             switch (until[new_indent]) {
                 '-', '*', '+' => {
-                    if (indent.len > 0 and until.len > new_indent + 2 and until[new_indent + 1] == ' ') {
+                    if (indent.len >= 0 and until.len > new_indent + 2 and until[new_indent + 1] == ' ') {
                         try list(r, dst, local_indent);
                     } else {
                         try line(until, dst);
@@ -326,23 +333,76 @@ pub const Translate = struct {
                         if (findClosing(src[idx..], "***")) |estrong| {
                             try dst.print("<em><strong>{s}</strong></em>", .{estrong[3..]});
                             idx += estrong.len + 2;
-                        }
+                        } else try dst.writeByte('*');
                     } else if (idx + 5 < src.len and src[idx + 1] == '*' and src[idx + 2] != ' ') {
                         if (findClosing(src[idx..], "**")) |strong| {
                             try dst.print("<strong>{s}</strong>", .{strong[2..]});
                             idx += strong.len + 1;
-                        }
+                        } else try dst.writeByte('*');
                     } else if (idx + 2 < src.len and src[idx + 1] != ' ') {
                         if (findClosing(src[idx..], "*")) |em| {
                             try dst.print("<em>{s}</em>", .{em[1..]});
                             idx += em.len;
-                        }
+                        } else try dst.writeByte('*');
                     } else try dst.writeByte('*');
+                },
+                '[' => {
+                    if (findLink(src[idx + 1 ..])) |found| {
+                        const text, const url, const end = found;
+                        const valid_url = validUrl(url) orelse {
+                            abx.Html.clean(src[idx], dst) catch unreachable;
+                            continue;
+                        };
+                        idx = end + 3;
+
+                        try dst.print("<a href=\"{f}\">{f}</a>", .{
+                            abx.Html{ .text = valid_url }, abx.Html{ .text = text },
+                        });
+                    } else try dst.writeByte('[');
+                },
+                '!' => {
+                    if (idx + 5 < src.len) {
+                        if (findLink(src[idx + 2 ..])) |found| {
+                            const text, const url, const end = found;
+                            const valid_url = validUrl(url) orelse {
+                                abx.Html.clean(src[idx], dst) catch unreachable;
+                                continue;
+                            };
+                            idx = end + 4;
+                            const safe_url = abx.Html{ .text = valid_url };
+                            try dst.print("<a href=\"{f}\"><img src=\"{f}\" title=\"{f}\"></a>", .{
+                                safe_url, safe_url, abx.Html{ .text = text },
+                            });
+                        }
+                    } else try dst.writeByte('!');
                 },
                 else => abx.Html.clean(src[idx], dst) catch unreachable,
                 '\r' => {},
             }
         }
+    }
+
+    pub fn findLink(src: []const u8) ?struct { []const u8, []const u8, usize } {
+        var search: usize = 0;
+        while (search + 2 < src.len) : (search += 1) {
+            if (findPos(u8, src, search, "](")) |mid| {
+                if (src[mid - 1] == '\\') {
+                    search = mid;
+                    continue;
+                }
+                if (mid + 2 >= src.len) return null;
+                if (findPos(u8, src, mid, ")")) |end| {
+                    if (src[end - 1] == '\\') return null;
+                    return .{ src[0..mid], src[mid + 2 .. end], end };
+                }
+            }
+        }
+        return null;
+    }
+
+    fn validUrl(src: []const u8) ?[]const u8 {
+        if (startsWith(u8, src, "https://") or startsWith(u8, src, "https://")) return src;
+        return null;
     }
 
     pub fn findClosing(src: []const u8, comptime tag: []const u8) ?[]const u8 {
@@ -610,11 +670,11 @@ test "em2" {
 test "em3" {
     const a = std.testing.allocator;
     const blob =
-        \\* hi, mom*
+        \\*hi, mom *
         \\
     ;
     const expected =
-        \\<p>* hi, mom*</p>
+        \\<p>*hi, mom *</p>
         \\
     ;
 
@@ -683,6 +743,89 @@ test "em+strong" {
     try std.testing.expectEqualStrings(expected, w.written());
 }
 
+test "link" {
+    const a = std.testing.allocator;
+    const blob =
+        \\[link](https://this-is-the-url.com)
+        \\
+    ;
+    const expected =
+        \\<p><a href="https://this-is-the-url.com">link</a></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "fake link" {
+    const a = std.testing.allocator;
+    const blob =
+        \\[not a link]
+        \\
+    ;
+    const expected =
+        \\<p>[not a link]</p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "listed links" {
+    const a = std.testing.allocator;
+    const blob =
+        \\ * [first](https://one.com)
+        \\ * [second](https://two.com)
+        \\ * [third](https://three.com)
+        \\
+    ;
+    const expected =
+        \\<p><ul>
+        \\<li><a href="https://one.com">first</a></li>
+        \\<li><a href="https://two.com">second</a></li>
+        \\<li><a href="https://three.com">third</a></li>
+        \\</ul>
+        \\</p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "img" {
+    const a = std.testing.allocator;
+    const blob =
+        \\![IMG](https://this-is-the-url.com/img.png)
+        \\
+    ;
+    const expected =
+        \\<p><a href="https://this-is-the-url.com/img.png"><img src="https://this-is-the-url.com/img.png" title="IMG"></a></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
 const syntax = @import("../syntax-highlight.zig");
 const abx = @import("verse").abx;
 
@@ -693,6 +836,7 @@ const Writer = std.Io.Writer;
 const Reader = std.Io.Reader;
 const eql = std.mem.eql;
 const trim = std.mem.trim;
+const startsWith = std.mem.startsWith;
 const findScalarPos = std.mem.findScalarPos;
 const findPos = std.mem.findPos;
 const cutPrefix = std.mem.cutPrefix;
