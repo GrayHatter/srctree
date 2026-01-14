@@ -131,10 +131,14 @@ fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io:
     defer files.deinit(a);
     var commit = try repo.headCommit(a, io);
     var tree: git.Tree = try commit.loadTree(repo, a, io);
-    var excludes: Exclude = try .fromRepo(repo, &tree, a, io);
+    var excludes: Exclude = .new;
+    try excludes.fromRepo(repo, &tree, a, io);
+    try excludes.fromSearch(str, a);
     defer excludes.list.deinit(a);
     for (excludes.list.items) |ex| log.warn("tree exclude {s}", .{ex});
-    try searchTree(&files, &tree, repo, "", str, &excludes, &limit, a, io);
+    // TODO real tokenization
+    const string = str[0 .. findScalarPos(u8, str, 0, ' ') orelse str.len];
+    try searchTree(&files, &tree, repo, "", string, &excludes, &limit, a, io);
 
     var hits: ArrayList(S.SearchHtml.Files) = try .initCapacity(a, files.items.len);
     for (files.items) |hit| {
@@ -166,7 +170,9 @@ fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io:
 }
 
 const Exclude = struct {
-    list: ArrayList([]const u8) = .{},
+    list: ArrayList([]const u8),
+
+    pub const new: Exclude = .{ .list = .{} };
 
     fn excluded(e: *Exclude, path: []const u8) bool {
         for (e.list.items, 0..) |ex, i| {
@@ -178,9 +184,18 @@ const Exclude = struct {
         return false;
     }
 
-    fn fromRepo(repo: *git.Repo, tree: *git.Tree, a: Allocator, io: Io) !Exclude {
-        var list: ArrayList([]const u8) = .{};
+    fn fromSearch(e: *Exclude, str: []const u8, a: Allocator) !void {
+        var idx: usize = 0;
+        while (idx < str.len) {
+            if (findPos(u8, str, idx, "exclude:")) |pos| {
+                idx = pos + 1;
+                const end = findScalarPos(u8, str, pos, ' ') orelse str.len;
+                try e.list.append(a, str[pos + 8 .. end]);
+            } else return;
+        }
+    }
 
+    fn fromRepo(e: *Exclude, repo: *git.Repo, tree: *git.Tree, a: Allocator, io: Io) !void {
         for (tree.blobs) |obj| {
             if (eql(u8, obj.name, ".gitattributes")) {
                 switch (repo.objects.load(obj.sha, a, io) catch return error.ServerFault) {
@@ -190,7 +205,7 @@ const Exclude = struct {
                         while (r.takeSentinel('\n')) |line| {
                             if (endsWith(u8, line, "linguist-vendored") or endsWith(u8, line, " binary")) {
                                 if (find(u8, line, "/** ")) |idx| {
-                                    try list.append(a, line[0..idx]);
+                                    try e.list.append(a, line[0..idx]);
                                 }
                             }
                         } else |_| break;
@@ -198,8 +213,6 @@ const Exclude = struct {
                 }
             }
         }
-
-        return .{ .list = list };
     }
 };
 
@@ -233,6 +246,7 @@ const endsWith = std.mem.endsWith;
 const find = std.mem.find;
 const eql = std.mem.eql;
 const findPos = std.mem.findPos;
+const findScalarPos = std.mem.findScalarPos;
 const countScalar = std.mem.countScalar;
 const log = std.log.scoped(.repo_search);
 
