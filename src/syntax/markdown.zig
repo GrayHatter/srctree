@@ -76,7 +76,10 @@ pub const Translate = struct {
                 try dst.writeByte('\n');
                 continue :sw r.peekByte() catch return;
             },
-            '>' => quote(r, dst) catch return,
+            '>' => {
+                quote(r, dst) catch return;
+                continue :sw r.peekByte() catch return;
+            },
             '`' => {
                 if (eql(u8, r.peek(3) catch "", "```") and findPos(u8, r.buffered(), 3, "\n```") != null) {
                     code(r, dst, a) catch |err| switch (err) {
@@ -131,42 +134,20 @@ pub const Translate = struct {
 
     fn header(src: []const u8, dst: *Writer) error{WriteFailed}!void {
         var idx: usize = 0;
-        var hlvl: u8 = 0;
-        while (idx < src.len) : (idx += 1) {
-            switch (src[idx]) {
-                '#' => hlvl +|= 1,
-                else => break,
-            }
-        }
-        const tag = switch (hlvl) {
-            1 => "<h1>",
-            2 => "<h2>",
-            3 => "<h3>",
-            4 => "<h4>",
-            5 => "<h5>",
-            6 => "<h6>",
-            else => t: {
-                for (0..hlvl) |_| try dst.writeByte('#');
-                break :t "";
-            },
-        };
+        while (idx < src.len and src[idx] == '#' and idx < 100) : (idx += 1) {}
 
-        while (idx < src.len and src[idx] == ' ') idx += 1;
-        try dst.writeAll(tag);
-        if (findScalarPos(u8, src, idx, '\n')) |eol| {
-            var i = eol;
-            while (src[i] == '#' or src[i] == ' ' or src[i] == '\n') i -= 1;
-            try dst.writeAll(src[idx .. i + 1]);
-            idx = eol;
-        } else {
-            try dst.writeAll(src[idx..]);
-            idx = src.len - 1;
+        switch (idx) {
+            1 => try dst.print("<h1>{s}</h1>", .{trim(u8, src[idx..], "\n ")}),
+            2 => try dst.print("<h2>{s}</h2>", .{trim(u8, src[idx..], "\n ")}),
+            3 => try dst.print("<h3>{s}</h3>", .{trim(u8, src[idx..], "\n ")}),
+            4 => try dst.print("<h4>{s}</h4>", .{trim(u8, src[idx..], "\n ")}),
+            5 => try dst.print("<h5>{s}</h5>", .{trim(u8, src[idx..], "\n ")}),
+            6 => try dst.print("<h6>{s}</h6>", .{trim(u8, src[idx..], "\n ")}),
+            else => |cnt| {
+                _ = try dst.splatByte('#', cnt);
+                try dst.writeAll(src[idx..]);
+            },
         }
-        if (tag.len > 1) {
-            try dst.writeAll("</");
-            try dst.writeAll(tag[1..]);
-        }
-        if (src[idx] != '\n') idx += 1;
     }
 
     fn quote(r: *Reader, dst: *Writer) error{WriteFailed}!void {
