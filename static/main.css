@@ -394,7 +394,8 @@ searchresults {
 
 		filename {
 			display: block;
-			background: #333;
+			background: #404040;
+			color: #a6a6a6;
 			border-radius: 3px 3px 0 0;
 			border: 1px gray solid;
 			border-bottom: 0px;
@@ -845,7 +846,7 @@ blob, gist, patch {
 	}
 	.col {
 		width: 13px;
-		margin: 0 2px;
+		margin: 0 0 0 3px;
 		display: inline-table;
 		text-align: center;
 		padding: 2px 0;
@@ -859,7 +860,8 @@ blob, gist, patch {
 			height: 13px;
 			display: inline-table;
 			border: solid 1px;
-			border-radius: 4px;
+			border-radius: 3px;
+			margin: 2px 0 0;
 			border-color: #484848 #606060 #808080;
 			transition: 0.2s;
 			background-size: 200% auto;
