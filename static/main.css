@@ -860,7 +860,7 @@ blob, gist, patch {
 			height: 13px;
 			display: inline-table;
 			border: solid 1px;
-			border-radius: 3px;
+			border-radius: 1px 4px 1px 3px;
 			margin: 2px 0 0;
 			border-color: #484848 #606060 #808080;
 			transition: 0.2s;
