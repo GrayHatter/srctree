@@ -265,6 +265,7 @@ repos {
 	}
 }
 
+
 .tag.muted {
 	color: #bbb;
 	font-family: 'Titillium Web', sans-serif;
@@ -381,6 +382,33 @@ search {
 		flex-grow: 1;
 		display: flex;
 		input { flex-grow: 1; }
+	}
+}
+
+searchresults {
+	display:block;
+	div {
+		display: block;
+		margin: 1rem 0;
+		text-align:left;
+
+		filename {
+			display: block;
+			background: #333;
+			border-radius: 3px 3px 0 0;
+			border: 1px gray solid;
+			border-bottom: 0px;
+			height: 1.5em;
+			padding: 4px 12px;
+		}
+		code {
+			background: #333;
+			border-radius: 0 0 3px 3px;
+			border: 1px gray solid;
+			border-top: 0px;
+			white-space: break-spaces;
+			overflow: scroll;
+		}
 	}
 }
 
@@ -958,7 +986,6 @@ span.linenos { color: inherit; background-color: transparent; padding-left: 5px;
 td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
 span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
 .hll { background-color: #ebdbb2 }
-{ background: #282828; color: #dddddd }
 .c { color: #928374; font-style: italic } /* Comment */
 .err { color: #282828; background-color: #fb4934 } /* Error */
 .esc { color: #dddddd } /* Escape */

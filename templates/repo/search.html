@@ -18,10 +18,15 @@
       <For Commits> 
         <Title />
       </For>
-      <CountFiles type="usize" />
+      Found <CountFiles type="usize" /> files
+      <searchresults>
       <For Files> 
-      <div><a href="blob/<Filename />#L<Line type="usize" />"><Filename /></a></div>
+      <div>
+        <filename>Filename: <a href="blob/<Filename />#L<Line type="usize" />"><Filename /></a></filename>
+        <code><Code /></code>
+      </div>
       </For>
+      </searchresults>
     </content>
   </body>
 </html>

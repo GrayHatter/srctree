@@ -117,6 +117,7 @@ fn searchTree(
                         .sha = b.sha,
                         .idx = idx,
                         .line = @truncate(countScalar(u8, b.data.?[0..idx], '\n')),
+                        .code = b.data.?,
                     });
             },
             .commit, .tag => return error.CorruptedRepo,
@@ -137,10 +138,28 @@ fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io:
 
     var hits: ArrayList(S.SearchHtml.Files) = try .initCapacity(a, files.items.len);
     for (files.items) |hit| {
-        hits.appendAssumeCapacity(.{
-            .filename = hit.path,
-            .line = hit.line + 1,
-        });
+        var start: usize = hit.idx;
+        var before: usize = 4;
+        while (start > 0 and before > 0) : (start -|= 1) {
+            if (hit.code[start] == '\n') before -|= 1;
+        }
+        var end: usize = hit.idx;
+        var after: usize = 4;
+        while (end < hit.code.len and after > 0) : (end += 1) {
+            if (hit.code[end] == '\n') after -|= 1;
+        }
+        if (start > 0) start += 2;
+        const code = hit.code[start .. end - 1];
+        var line_number = hit.line + 1 - countScalar(u8, code[0 .. hit.idx - start], '\n');
+        var writer: Writer.Allocating = try .initCapacity(a, code.len * 2);
+        var source = std.mem.splitScalar(u8, code, '\n');
+        while (source.next()) |line| {
+            try writer.writer.print("<ln num=\"{}\" id=\"L{}\" href=\"#L{}\">{f}</ln>\n", .{
+                line_number, line_number, line_number, abx.Html{ .text = line },
+            });
+            line_number += 1;
+        }
+        hits.appendAssumeCapacity(.{ .filename = hit.path, .line = hit.line + 1, .code = writer.written() });
     }
 
     return try hits.toOwnedSlice(a);
@@ -198,6 +217,7 @@ const Hit = struct {
         sha: git.SHA,
         idx: usize,
         line: u32,
+        code: []const u8,
     };
 };
 
@@ -206,6 +226,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
 const Reader = Io.Reader;
+const Writer = Io.Writer;
 const allocPrint = std.fmt.allocPrint;
 const startsWith = std.mem.startsWith;
 const endsWith = std.mem.endsWith;
