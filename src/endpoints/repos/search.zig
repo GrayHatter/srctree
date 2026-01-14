@@ -26,7 +26,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
         .{ null, "" };
     const commits, const files = if (str) |s|
         .{
-            searchCommits(s, &repo, count, f.alloc, f.io) catch return error.ServerFault,
+            searchCommits(s, &repo, count >> 2, f.alloc, f.io) catch return error.ServerFault,
             searchFiles(s, &repo, count, f.alloc, f.io) catch |err| {
                 log.err("search file err {}", .{err});
                 return error.ServerFault;
@@ -169,7 +169,7 @@ const Exclude = struct {
                     .blob => |b| {
                         var r: Reader = .fixed(b.data.?);
                         while (r.takeSentinel('\n')) |line| {
-                            if (endsWith(u8, line, "linguist-vendored")) {
+                            if (endsWith(u8, line, "linguist-vendored") or endsWith(u8, line, " binary")) {
                                 if (find(u8, line, "/** ")) |idx| {
                                     try list.append(a, line[0..idx]);
                                 }
