@@ -8,7 +8,7 @@ head: ?Ref = null,
 tags: ?[]Tag = null,
 branches: ?[]Branch = null,
 remotes: ?[]Remote = null,
-config: ?Ini.Any = null,
+config: ?Ini.Config(void) = null,
 config_data: ?[]u8 = null,
 
 repo_name: ?[]const u8 = null,
@@ -88,7 +88,7 @@ fn loadConfig(self: *Repo, a: Allocator, io: Io) !void {
     self.config = try .init(a, self.config_data.?);
 }
 
-fn loadRemotes(cfg: Ini.Any, a: Allocator) ![]Remote {
+fn loadRemotes(cfg: Ini.Config(void), a: Allocator) ![]Remote {
     var list: ArrayList(Remote) = .{};
     errdefer list.clearAndFree(a);
     for (0..cfg.ctx.ns.len) |i| {
