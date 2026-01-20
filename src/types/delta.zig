@@ -1,5 +1,4 @@
 index: usize,
-//state: State = .{},
 created: i64 = 0,
 updated: i64 = 0,
 repo: []const u8,
@@ -88,13 +87,13 @@ pub fn loadThread(delta: *Delta, a: Allocator, io: Io) !*Thread {
     if (delta.thread) |thr| return thr;
     const t = try a.create(Thread);
     t.* = Thread.open(delta.thread_id, a, io) catch |err| t: {
-        std.debug.print("Error loading thread!! {}", .{err});
-        std.debug.print(" old thread_id {};", .{delta.thread_id});
+        log.err("Error loading thread!! {}", .{err});
+        log.err(" old thread_id {};", .{delta.thread_id});
         const thread = Thread.new(delta.*, io) catch |err2| {
-            std.debug.print(" unable to create new {}\n", .{err2});
+            log.err(" unable to create new {}", .{err2});
             return error.UnableToLoadThread;
         };
-        std.debug.print("new thread_id {}\n", .{thread.index});
+        log.err("new thread_id {}", .{thread.index});
         delta.thread_id = thread.index;
         try delta.commit(io);
         break :t thread;
@@ -186,6 +185,7 @@ pub fn searchRepo(repo: []const u8, rules: []const Tsearch.Rule, io: Io) RepoSea
         .iterable = .init(repo, io),
     };
 }
+
 test Delta {
     const a = std.testing.allocator;
     const io = std.testing.io;
@@ -235,6 +235,7 @@ test Delta {
 
 const std = @import("std");
 const builtin = @import("builtin");
+const log = std.log.scoped(.srctree_type_delta);
 const Allocator = std.mem.Allocator;
 const fs = std.fs;
 const Io = std.Io;
