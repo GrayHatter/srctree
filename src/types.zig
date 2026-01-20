@@ -46,6 +46,14 @@ pub fn VarString(comptime size: usize) type {
     };
 }
 
+const enabled_structs: struct {
+    types: []const type,
+    pub fn contains(es: @This(), t: type) bool {
+        inline for (es.types) |enable| if (enable == t) return true;
+        return false;
+    }
+} = .{ .types = &.{common.State} };
+
 var storage_dir: Storage = undefined;
 
 pub fn init(dir: Storage, io: Io) !void {
@@ -60,6 +68,7 @@ pub fn init(dir: Storage, io: Io) !void {
         Network,
         Thread,
         User,
+        Viewers,
     }) |inc| {
         if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
             try inc.initType(try dir.makeOpenPath(io, inc.TYPE_PREFIX, .{ .iterate = true }));
@@ -101,10 +110,25 @@ pub fn loadDataReader(comptime type_name: @EnumLiteral(), name: []const u8, a: A
     return .fixed(reader.interface.buffer);
 }
 
+pub fn loadDataHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, a: Allocator, io: Io) !Io.Reader {
+    var buf: [@sizeOf(DefaultHash) * 2 + 1 + @tagName(type_name).len]u8 = undefined;
+    const filename = bufPrint(&buf, "{x}." ++ @tagName(type_name), .{&hash}) catch unreachable;
+    return loadDataReader(type_name, filename, a, io);
+}
+
 pub fn commit(comptime type_name: @EnumLiteral(), name: []const u8, io: Io) !fs.File {
     var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
     defer type_dir.close(io);
     const new = try type_dir.createFile(io, name, .{});
+    return .adaptFromNewApi(new);
+}
+
+pub fn commitHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, io: Io) !fs.File {
+    var buf: [@sizeOf(DefaultHash) * 2 + 1 + @tagName(type_name).len]u8 = undefined;
+    const filename = bufPrint(&buf, "{x}." ++ @tagName(type_name), .{&hash}) catch unreachable;
+    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+    defer type_dir.close(io);
+    const new = try type_dir.createFile(io, filename, .{});
     return .adaptFromNewApi(new);
 }
 
@@ -251,9 +275,12 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         },
                     } else if (startsWith(u8, name, field.name)) switch (@typeInfo(field.type)) {
                         .@"struct" => {
-                            const save = r.seek;
-                            @field(output, field.name) = readStruct(field.type, @field(output, field.name), field.name, r);
-                            r.seek = save;
+                            if (enabled_structs.contains(field.type)) {
+                                const save = r.seek;
+                                @field(output, field.name) = readStruct(field.type, @field(output, field.name), field.name, r);
+                                r.seek = save;
+                            } else if (comptime type_debugging)
+                                log.err("skipped type {s} on {s} (not enabled)", .{ @typeName(field.type), @typeName(T) });
                         },
                         else => {},
                     };
@@ -319,8 +346,11 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                             try w.print("{s}: {s}\n", .{ field.name, @tagName(@field(t, field.name)) });
                         },
                         .@"struct" => |_| {
-                            const prefix = if (name.len > 0) name ++ "." ++ field.name else field.name;
-                            try writeStruct(field.type, &@field(t, field.name), prefix, w);
+                            if (enabled_structs.contains(field.type)) {
+                                const prefix = if (name.len > 0) name ++ "." ++ field.name else field.name;
+                                try writeStruct(field.type, &@field(t, field.name), prefix, w);
+                            } else if (comptime type_debugging)
+                                log.err("skipped type {s} on {s} (not enabled)", .{ @typeName(field.type), @typeName(T) });
                         },
                         else => if (comptime type_debugging)
                             log.err("skipped type {s} on {s}", .{ @typeName(field.type), @typeName(T) }),
