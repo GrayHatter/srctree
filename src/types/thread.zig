@@ -1,10 +1,10 @@
 index: usize,
-//state: State = .{},
 created: i64 = 0,
 updated: i64 = 0,
 delta_hash: Types.DefaultHash = @splat(0),
 hash: Types.DefaultHash = @splat(0),
 
+state: State = .default,
 closed: bool = false,
 locked: bool = false,
 embargoed: bool = false,
@@ -16,6 +16,8 @@ const Thread = @This();
 
 pub const type_prefix = .thread;
 pub const type_version = 0;
+
+pub const State = @import("common.zig").State;
 
 const Index = Types.Index(type_prefix);
 
@@ -119,6 +121,53 @@ pub const Iterator = struct {
 
 pub fn iterator() Iterator {
     return Iterator.init();
+}
+
+test Thread {
+    const a = std.testing.allocator;
+    const io = std.testing.io;
+    var tempdir = std.testing.tmpDir(.{});
+    defer tempdir.cleanup();
+    try Types.init(
+        (try tempdir.dir.makeOpenPath(@tagName(type_prefix), .{ .iterate = true })).adaptToNewApi(),
+        io,
+    );
+
+    var delta: Delta = undefined;
+    delta.hash = @splat('d');
+    var t = try Thread.new(delta, io);
+
+    // LOL, you thought
+    const mask: i64 = ~@as(i64, 0x7ffffff);
+    t.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    t.updated = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+
+    var writer = std.Io.Writer.Allocating.init(a);
+    defer writer.deinit();
+    try writerFn(&t, &writer.writer);
+
+    const v1_text: []const u8 =
+        \\# thread/0
+        \\index: 1
+        \\created: 1744830464
+        \\updated: 1744830464
+        \\delta_hash: 6464646464646464646464646464646464646464646464646464646464646464
+        \\hash: 0000000000000000000000000000000000000000000000000000000000000000
+        \\state.closed: false
+        \\state.locked: false
+        \\state.embargoed: false
+        \\closed: false
+        \\locked: false
+        \\embargoed: false
+        \\
+        \\
+    ;
+
+    try std.testing.expectEqualStrings(v1_text, writer.written());
+
+    var r: Io.Reader = .fixed(writer.written());
+    const read = readerFn(&r);
+    try std.testing.expectEqualDeep(t, read);
 }
 
 const typeio = Types.readerWriter(Thread, .{ .index = 0 });
