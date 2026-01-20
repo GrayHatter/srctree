@@ -1,14 +1,9 @@
 index: usize,
 created: i64 = 0,
 updated: i64 = 0,
+state: State = .default,
 delta_hash: Types.DefaultHash = @splat(0),
 hash: Types.DefaultHash = @splat(0),
-
-state: State = .default,
-closed: bool = false,
-locked: bool = false,
-embargoed: bool = false,
-padding: u61 = 0,
 
 messages: ArrayList(Message) = .{},
 
@@ -151,14 +146,11 @@ test Thread {
         \\index: 1
         \\created: 1744830464
         \\updated: 1744830464
-        \\delta_hash: 6464646464646464646464646464646464646464646464646464646464646464
-        \\hash: 0000000000000000000000000000000000000000000000000000000000000000
         \\state.closed: false
         \\state.locked: false
         \\state.embargoed: false
-        \\closed: false
-        \\locked: false
-        \\embargoed: false
+        \\delta_hash: 6464646464646464646464646464646464646464646464646464646464646464
+        \\hash: 0000000000000000000000000000000000000000000000000000000000000000
         \\
         \\
     ;

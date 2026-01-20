@@ -93,9 +93,8 @@ test Viewers {
     defer writer.deinit();
     try writerFn(&viewers, &writer.writer);
 
-    for (viewers.viewers.items) |view| {
+    for (viewers.viewers.items) |view|
         try writer.writer.print("{}:{s}\n", .{ view.time, view.name });
-    }
     try writer.writer.flush();
 
     const v1_text: []const u8 =
