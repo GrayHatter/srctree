@@ -1,12 +1,12 @@
 pub const common = @import("types/common.zig");
 pub const search = @import("types/search.zig");
 
-pub const Message = @import("types/message.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
 pub const Diff = @import("types/diff.zig");
 pub const Gist = @import("types/gist.zig");
 pub const Issue = @import("types/issue.zig");
+pub const Message = @import("types/message.zig");
 pub const Network = @import("types/network.zig");
 pub const Tags = @import("types/tags.zig");
 pub const Thread = @import("types/thread.zig");
@@ -51,12 +51,12 @@ var storage_dir: Storage = undefined;
 pub fn init(dir: Storage, io: Io) !void {
     storage_dir = dir;
     inline for (.{
-        Message,
         CommitMap,
         Delta,
         Diff,
         Gist,
         Issue,
+        Message,
         Network,
         Thread,
         User,
