@@ -58,9 +58,7 @@ pub fn commit(msg: Message, io: Io) !void {
 }
 
 pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{x}.message", .{&hash});
-    var reader = try Types.loadDataReader(.message, filename, a, io);
+    var reader = try Types.loadDataHashId(.message, hash, a, io);
     return readerFn(&reader);
 }
 
