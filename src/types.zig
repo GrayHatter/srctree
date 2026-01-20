@@ -1,6 +1,7 @@
 pub const common = @import("types/common.zig");
 pub const search = @import("types/search.zig");
 
+pub const CI = @import("types/CI.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
 pub const Diff = @import("types/diff.zig");
@@ -60,6 +61,7 @@ var storage_dir: Storage = undefined;
 pub fn init(dir: Storage, io: Io) !void {
     storage_dir = dir;
     inline for (.{
+        CI,
         CommitMap,
         Delta,
         Diff,
