@@ -13,9 +13,10 @@ pub const Thread = @import("types/thread.zig");
 pub const User = @import("types/user.zig");
 pub const Viewers = @import("types/viewers.zig");
 
-pub const DefaultHash = [sha256.digest_length]u8;
+pub const DefaultHash = [DefaultHasher.digest_length]u8;
 pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
 pub const Sha1Hex = [40]u8;
+pub const Sha1Bin = [20]u8;
 
 pub const Storage = Io.Dir;
 
@@ -246,10 +247,15 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                                 }
                             }
                         },
-                        Sha1Hex => {
-                            if (value.len == 40) {
-                                @memcpy(@field(output, field.name)[0..40], value[0..40]);
+                        Sha1Bin => if (value.len == 40) {
+                            var hex: []const u8 = value;
+                            for (0..20) |i| {
+                                @field(output, field.name)[i] = parseInt(u8, hex[0..2], 16) catch 0;
+                                hex = hex[2..];
                             }
+                        },
+                        Sha1Hex => if (value.len == 40) {
+                            @memcpy(@field(output, field.name)[0..40], value[0..40]);
                         },
                         []u8, []const u8, ?[]const u8 => {
                             for (value) |*chr| {
@@ -333,6 +339,7 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                     },
 
                     DefaultHash => try w.print("{s}: {x}\n", .{ field.name, &@field(t, field.name) }),
+                    Sha1Bin => try w.print("{s}: {x}\n", .{ field.name, &@field(t, field.name) }),
                     Sha1Hex => try w.print("{s}: {s}\n", .{ field.name, &@field(t, field.name) }),
                     usize,
                     isize,
@@ -375,6 +382,4 @@ const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const bufPrint = std.fmt.bufPrint;
 
-const sha256 = std.crypto.hash.sha2.Sha256;
-// TODO buildtime const/flag
 const type_debugging = false;
