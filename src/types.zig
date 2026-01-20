@@ -240,25 +240,21 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                     const name, const value: []u8 = split(line) orelse break;
                     const field_name = if (prefix.len > 0) prefix ++ "." ++ field.name else field.name;
                     if (eql(u8, name, field_name)) switch (field.type) {
-                        DefaultHash => {
-                            if (value.len == 64) {
-                                var hex: []const u8 = value;
-                                for (0..32) |i| {
-                                    @field(output, field.name)[i] = parseInt(u8, hex[0..2], 16) catch 0;
-                                    hex = hex[2..];
-                                }
+                        DefaultHash => if (value.len == 64) {
+                            var hex: []const u8 = value;
+                            for (0..32) |i| {
+                                @field(output, field.name)[i] = parseInt(u8, hex[0..2], 16) catch 0;
+                                hex = hex[2..];
                             }
-                        },
+                        } else log.warn("bad value length when reading " ++ field.name, .{}),
+                        Sha1Hex => if (value.len == 40) @memcpy(@field(output, field.name)[0..40], value[0..40]),
                         Sha1Bin => if (value.len == 40) {
                             var hex: []const u8 = value;
                             for (0..20) |i| {
                                 @field(output, field.name)[i] = parseInt(u8, hex[0..2], 16) catch 0;
                                 hex = hex[2..];
                             }
-                        },
-                        Sha1Hex => if (value.len == 40) {
-                            @memcpy(@field(output, field.name)[0..40], value[0..40]);
-                        },
+                        } else log.warn("bad value length when reading " ++ field.name, .{}),
                         []u8, []const u8, ?[]const u8 => {
                             for (value) |*chr| {
                                 if (chr.* == 0x1a) chr.* = '\n';
@@ -278,18 +274,18 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                                     @field(output, field.name) = enumV;
                                 }
                             },
-                            else => if (comptime type_debugging)
-                                log.err("skipped type {s} on {s}", .{ @typeName(field.type), @typeName(T) }),
+                            else => if (comptime type_debugging) log.err("skipped type {s} on {s}", .{
+                                @typeName(field.type), @typeName(T),
+                            }),
                         },
                     } else if (startsWith(u8, name, field.name)) switch (@typeInfo(field.type)) {
-                        .@"struct" => {
-                            if (enabled_structs.contains(field.type)) {
-                                const save = r.seek;
-                                @field(output, field.name) = readStruct(field.type, @field(output, field.name), field.name, r);
-                                r.seek = save;
-                            } else if (comptime type_debugging)
-                                log.err("skipped type {s} on {s} (not enabled)", .{ @typeName(field.type), @typeName(T) });
-                        },
+                        .@"struct" => if (enabled_structs.contains(field.type)) {
+                            const save = r.seek;
+                            @field(output, field.name) = readStruct(field.type, @field(output, field.name), field.name, r);
+                            r.seek = save;
+                        } else if (comptime type_debugging) log.err("skipped type {s} on {s} (not enabled)", .{
+                            @typeName(field.type), @typeName(T),
+                        }),
                         else => {},
                     };
                 }
