@@ -52,16 +52,39 @@ details:open > summary.hide {
 
 .repo-header, .branch-header, .tag-header {
 	display: flex;
+	justify-content: space-between;
 	h3 {
 		font-family: 'Titillium Web', sans-serif;
 		font-size: 220%;
 		margin: 0 auto 0 0;
+		display:inline-block;
 	}
+	.description {
+		padding: 0 0 0 1rem;
+		font-size: 90%;
+		color: #aaa;
+	}
+	.repo-header-side {
+		margin: auto 0 0.5rem;
+	}
+	span.gituri {
+		display: inline-block;
+		border-top: 1px solid black;
+		border-left: 1px solid black;
+		border-radius: 6px;
+		border-bottom: 1px solid #737373;
+		border-right: 1px solid #737373;
+		margin: auto 14px;
+		padding: 5px 12px;
+		background: #333;
+		white-space: pre;
+	}
+
 }
 
 .act-btns {
 	display: inline-block;
-	margin: 0 0 16px;
+	margin: 0 0;
 	text-align: right;
 }
 
@@ -704,19 +727,6 @@ div.coderef {
 	&.red { background: #433; }
 	&.green { background: #343; }
 	&.yellow { background: #333; }
-}
-
-span.gituri {
-	display: inline-block;
-	border-top: 1px solid black;
-	border-left: 1px solid black;
-	border-radius: 6px;
-	border-bottom: 1px solid #737373;
-	border-right: 1px solid #737373;
-	margin: auto 14px 18px;
-	padding: 5px 12px;
-	background: #333;
-	white-space: pre;
 }
 
 span.coderef {

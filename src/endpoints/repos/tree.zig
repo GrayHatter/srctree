@@ -90,14 +90,10 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         }
     }
 
-    var open_graph: S.OpenGraph = .{ .title = rd.name };
-    var page_desc: ?[]const u8 = null;
-    if (repo.description(ctx.alloc, ctx.io)) |desc| {
-        if (!std.mem.startsWith(u8, desc, "Unnamed repository; edit this file")) {
-            page_desc = std.mem.trim(u8, desc, " \n\r\t");
-            open_graph.desc = page_desc.?;
-        }
-    } else |_| {}
+    const page_desc: ?[]const u8 = try allocPrint(ctx.alloc, "{f}", .{
+        abx.Html{ .text = repo.description(ctx.alloc, ctx.io) catch "" },
+    });
+    const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse "" };
 
     const page_title = if (page_desc) |pd|
         try allocPrint(ctx.alloc, "{s} - {s} - srctree", .{ rd.name, pd })
@@ -111,8 +107,9 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     var page = TreePage.init(.{
         .meta_head = .{ .title = page_title, .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
-        .tree_blob_header = .{
+        .repo_header = .{
             .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
+            .description = open_graph.desc,
             .repo_name = rd.name,
             .upstream = upstream,
             .blame = null,

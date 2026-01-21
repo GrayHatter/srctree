@@ -38,7 +38,15 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } },
-        .repo_header = .{ .blame = null, .git_uri = null, .repo_name = rd.name, .upstream = null },
+        .repo_header = .{
+            .repo_name = rd.name,
+            .description = try allocPrint(f.alloc, "{f}", .{
+                abx.Html{ .text = repo.description(f.alloc, f.io) catch "" },
+            }),
+            .blame = null,
+            .git_uri = null,
+            .upstream = null,
+        },
         .search = safe_str,
         .commits = commits,
         .count_files = files.len,

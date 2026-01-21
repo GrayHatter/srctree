@@ -276,12 +276,11 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn repoBlock(name: []const u8, repo: Git.Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
+fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
     const now = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
-    var desc: ?[]const u8 = try repo.description(a, io);
-    if (std.mem.startsWith(u8, desc.?, "Unnamed repository; edit this file")) {
-        desc = null;
-    }
+    const desc: []const u8 = try allocPrint(a, "{f}", .{
+        abx.Html{ .text = repo.description(a, io) catch "" },
+    });
 
     var upstream: ?[]const u8 = null;
     if (repo.findRemote("upstream")) |remote| {
@@ -359,20 +358,18 @@ fn list(f: *Frame) Router.Error!void {
         .by = if (tag_sort) .tag else .commit,
     }, repoSorterNew);
 
-    var repo_buttons: ?[]const u8 = null;
-    if (f.user != null and f.user.?.valid()) {
-        repo_buttons =
-            \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
-        ;
-    }
-
     const repos_compiled = try f.alloc.alloc(S.ReposHtml.RepoList, current_repos.items.len);
     for (current_repos.items, repos_compiled) |*repo, *compiled| {
         defer repo.raze(f.alloc, f.io);
-        compiled.* = repoBlock(repo.repo_name orelse "unknown", repo.*, f.alloc, f.io) catch {
+        compiled.* = repoBlock(repo.repo_name orelse "unknown", repo, f.alloc, f.io) catch {
             return error.Unknown;
         };
     }
+
+    const repo_buttons: ?[]const u8 = if (f.user != null and f.user.?.valid())
+        \\<div class="act-btns"><a class="btn" href="/admin/clone-upstream">New Upstream</a></div>
+    else
+        null;
 
     var page = ReposPage.init(.{
         .meta_head = .{ .open_graph = .{} },
@@ -399,6 +396,7 @@ const eql = std.mem.eql;
 const log = std.log.scoped(.srctree);
 
 const verse = @import("verse");
+const abx = verse.abx;
 const Frame = verse.Frame;
 const Router = verse.Router;
 const PageData = verse.template.PageData;

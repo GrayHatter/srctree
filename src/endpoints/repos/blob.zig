@@ -8,16 +8,14 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
 
     const ograph: S.OpenGraph = .{
         .title = rd.name,
-        .desc = desc: {
-            var d = repo.description(frame.alloc, frame.io) catch return error.Unknown;
-            if (startsWith(u8, d, "Unnamed repository; edit this file")) {
-                d = try allocPrint(
-                    frame.alloc,
-                    "An Indescribable repo with {s} commits",
-                    .{"[todo count commits]"},
-                );
-            }
-            break :desc d;
+        .desc = repo.description(frame.alloc, frame.io) catch |err| switch (err) {
+            error.DefaultDescription, error.NoDescription => try allocPrint(
+                frame.alloc,
+                "An Indescribable repo with {s} commits",
+                .{"[todo count commits]"},
+            ),
+            error.OutOfMemory => return error.OutOfMemory,
+            else => return error.ServerFault,
         },
     };
     _ = ograph;
@@ -80,7 +78,7 @@ fn traverseTree(repo: *const Git.Repo, uri: *verse.Uri.Iterator, in_tree: Git.Tr
 
 const BlobPage = PageData("blob.html");
 
-fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
+fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
     var blb: Git.Blob = undefined;
     var files = tree;
     var path = rd.path orelse return error.InvalidURI;
@@ -92,7 +90,7 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
                     if (path.next() != null) return error.InvalidURI;
                     break :search;
                 }
-                files = switch (repo.objects.load(obj.sha, frame.alloc, frame.io) catch return error.Unknown) {
+                files = switch (repo.objects.load(obj.sha, f.alloc, f.io) catch return error.Unknown) {
                     .tree => |t| t,
                     else => return error.Unknown,
                 };
@@ -101,25 +99,25 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
         } else return error.InvalidURI;
     }
 
-    var resolve = repo.loadBlob(blb.sha, frame.alloc, frame.io) catch return error.Unknown;
+    var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.Unknown;
     if (!resolve.isFile()) return error.Unknown;
     const formatted: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
-        try Highlight.highlight(frame.alloc, lang, resolve.data.?)
+        try Highlight.highlight(f.alloc, lang, resolve.data.?)
     else if (excludedExt(blb.name))
         "This file type is currently unsupported"
     else
-        allocPrint(frame.alloc, "{f}", .{abx.Html{ .text = resolve.data.? }}) catch return error.Unknown;
+        allocPrint(f.alloc, "{f}", .{abx.Html{ .text = resolve.data.? }}) catch return error.Unknown;
 
-    const wrapped = try wrapLineNumbers(frame.alloc, formatted);
+    const wrapped = try wrapLineNumbers(f.alloc, formatted);
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+        .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
-    const safe_name = try allocPrint(frame.alloc, "{f}", .{abx.Html{ .text = blb.name }});
-    const meta_title = try allocPrint(frame.alloc, "{s} - {s} -- srctree", .{ safe_name, rd.name });
+    const safe_name = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blb.name }});
+    const meta_title = try allocPrint(f.alloc, "{s} - {s} -- srctree", .{ safe_name, rd.name });
     const ext: ?[]const u8 = if (std.mem.findLast(u8, safe_name, ".")) |lst| safe_name[lst + 1 ..] else null;
-    const meta_desc = try allocPrint(frame.alloc, "{} lines {s}{s}", .{
+    const meta_desc = try allocPrint(f.alloc, "{} lines {s}{s}", .{
         wrapped.len,
         if (ext) |_| " of " else "",
         if (ext) |e| e else "",
@@ -130,18 +128,19 @@ fn blob(frame: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
             .title = meta_title,
             .open_graph = .{ .title = safe_name, .desc = meta_desc },
         },
-        .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
-        .tree_blob_header = .{
+        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .repo_header = .{
+            .repo_name = rd.name,
+            .description = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = repo.description(f.alloc, f.io) catch "" }}),
             .blame = .{ .repo_name = rd.name, .filename = path.buffer },
             .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
-            .repo_name = rd.name,
             .upstream = upstream,
         },
         .filename = blb.name,
         .numbered_lines = wrapped,
     });
 
-    try frame.sendPage(&page);
+    try f.sendPage(&page);
 }
 
 fn excludedExt(name: []const u8) bool {

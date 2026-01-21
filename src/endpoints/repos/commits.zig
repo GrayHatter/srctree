@@ -154,8 +154,11 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         .meta_head = .{ .title = page_title, .open_graph = .{ .title = og_title, .desc = og_desc } },
         .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
         .repo_header = .{
-            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = repo_name_ },
             .repo_name = repo_name_,
+            .description = try allocPrint(f.alloc, "{f}", .{
+                abx.Html{ .text = repo.description(f.alloc, f.io) catch "" },
+            }),
+            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = repo_name_ },
             .upstream = upstream,
             .blame = null,
         },

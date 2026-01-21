@@ -345,14 +345,15 @@ pub fn blob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
 pub fn description(self: Repo, a: Allocator, io: Io) ![]u8 {
     if (self.dir.openFile(io, "description", .{})) |*file| {
         defer file.close(io);
-        const stat = try file.stat(io);
-        std.debug.assert(stat.size < 0xFFFF);
-        const data = try a.alloc(u8, stat.size);
-        var reader = file.reader(io, data);
-        try reader.interface.fill(stat.size);
-        return data;
-    } else |_| {}
-    return error.NoDescription;
+        var buf: [0x400]u8 = undefined;
+        var reader = file.reader(io, &buf);
+        try reader.interface.fillMore();
+        const desc = trim(u8, try reader.interface.takeDelimiterExclusive('\n'), " \n\r\t");
+
+        if (find(u8, desc, "Unnamed repository; edit this file") != null)
+            return error.DefaultDescription;
+        return try a.dupe(u8, desc);
+    } else |_| return error.NoDescription;
 }
 
 pub fn raze(self: *Repo, a: Allocator, io: Io) void {
@@ -455,3 +456,4 @@ const find = std.mem.find;
 const zlib = std.compress.flate;
 const bufPrint = std.fmt.bufPrint;
 const cutPrefix = std.mem.cutPrefix;
+const trim = std.mem.trim;

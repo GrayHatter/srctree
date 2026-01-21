@@ -992,7 +992,13 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     var page = DiffViewPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
-        .repo_header = .{ .blame = null, .git_uri = null, .repo_name = rd.name, .upstream = null },
+        .repo_header = .{
+            .repo_name = rd.name,
+            .description = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = repo.description(f.alloc, f.io) catch "" }}),
+            .blame = null,
+            .git_uri = null,
+            .upstream = null,
+        },
         .patch = patch_data,
         .curl_hint = if (diffM == null) curl_hint else null,
         .title = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.title }}) catch unreachable,

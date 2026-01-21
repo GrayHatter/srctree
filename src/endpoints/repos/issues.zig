@@ -242,9 +242,10 @@ fn view(f: *verse.Frame) Error!void {
         .meta_head = meta_head,
         .body_header = body_header,
         .repo_header = .{
+            .repo_name = rd.name,
+            .description = "",
             .blame = null,
             .git_uri = null,
-            .repo_name = rd.name,
             .upstream = null,
         },
         .title = allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = delta.title }}) catch unreachable,
