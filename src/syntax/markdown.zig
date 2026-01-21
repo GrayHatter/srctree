@@ -328,7 +328,27 @@ pub const Translate = struct {
                     } else try dst.writeByte('*');
                 },
                 '[' => {
-                    if (findLink(src[idx + 1 ..])) |found| {
+                    if (src.len < idx + 5) {
+                        try dst.writeByte('[');
+                        continue;
+                    }
+                    if (src[idx + 1] == '!') {
+                        const imgend = try makeImage(src[idx + 1 ..], dst, false);
+                        if (imgend > 1) {
+                            if (findLink(src[idx + imgend ..])) |found| {
+                                const text, const url, const end = found;
+                                const valid_url = validUrl(url) orelse {
+                                    abx.Html.clean(src[idx], dst) catch unreachable;
+                                    continue;
+                                };
+                                idx = end + 3;
+
+                                try dst.print("<a href=\"{f}\">{f}</a>", .{
+                                    abx.Html{ .text = valid_url }, abx.Html{ .text = text },
+                                });
+                            } else idx += imgend;
+                        }
+                    } else if (findLink(src[idx + 1 ..])) |found| {
                         const text, const url, const end = found;
                         const valid_url = validUrl(url) orelse {
                             abx.Html.clean(src[idx], dst) catch unreachable;
@@ -342,25 +362,37 @@ pub const Translate = struct {
                     } else try dst.writeByte('[');
                 },
                 '!' => {
-                    if (idx + 5 < src.len) {
-                        if (findLink(src[idx + 2 ..])) |found| {
-                            const text, const url, const end = found;
-                            const valid_url = validUrl(url) orelse {
-                                abx.Html.clean(src[idx], dst) catch unreachable;
-                                continue;
-                            };
-                            idx = end + 4;
-                            const safe_url = abx.Html{ .text = valid_url };
-                            try dst.print("<a href=\"{f}\"><img src=\"{f}\" title=\"{f}\"></a>", .{
-                                safe_url, safe_url, abx.Html{ .text = text },
-                            });
-                        }
+                    if (src.len > idx + 5) {
+                        idx +|= try makeImage(src[idx..], dst, true);
                     } else try dst.writeByte('!');
                 },
                 else => abx.Html.clean(src[idx], dst) catch unreachable,
                 '\r' => {},
             }
         }
+    }
+
+    pub fn makeImage(src: []const u8, w: *Writer, auto_link: bool) !usize {
+        if (findLink(src[2..])) |found| {
+            const text, const url, const end = found;
+            const valid_url = validUrl(url) orelse {
+                abx.Html.clean(src[0], w) catch unreachable;
+                return 0;
+            };
+            const safe_url = abx.Html{ .text = valid_url };
+            if (auto_link) {
+                try w.print("<a href=\"{f}\"><img src=\"{f}\" title=\"{f}\"></a>", .{
+                    safe_url, safe_url, abx.Html{ .text = text },
+                });
+            } else {
+                try w.print("<img src=\"{f}\" title=\"{f}\">", .{
+                    safe_url, abx.Html{ .text = text },
+                });
+            }
+            return end + 4;
+        }
+        abx.Html.clean(src[0], w) catch unreachable;
+        return 0;
     }
 
     pub fn findLink(src: []const u8) ?struct { []const u8, []const u8, usize } {
