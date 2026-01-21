@@ -396,7 +396,7 @@ pub const Translate = struct {
     }
 
     pub fn findLink(src: []const u8) ?struct { []const u8, []const u8, usize } {
-        var search: usize = 0;
+        var search: usize = 1;
         while (search + 2 < src.len) : (search += 1) {
             if (findPos(u8, src, search, "](")) |mid| {
                 if (src[mid - 1] == '\\') {
@@ -836,6 +836,49 @@ test "img" {
     try Translate.source(&r, &w.writer, a);
     defer w.deinit();
 
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "nested img" {
+    const a = std.testing.allocator;
+    const blob =
+        \\[![IMG](https://this-is-the-img.com/img.png)](https://this-is-the-url.com/url.html)
+        \\
+    ;
+    const expected =
+        \\<p><a href="https://this-is-the-url.com/img.png"><img src="https://this-is-the-url.com/img.png" title="IMG"></a></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    if (true) return error.SkipZigTest;
+    try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "ref link" {
+    const a = std.testing.allocator;
+    const blob =
+        \\[link text][ref_to_link]
+        \\
+        \\
+        \\[ref_to_link]: https://it-was-easy-to-write-it-should-be-hard-to-parse.markdown
+        \\
+    ;
+    const expected =
+        \\<p><a href="https://it-was-easy-to-write-it-should-be-hard-to-parse.markdown">link text</a></p>
+        \\
+    ;
+
+    var r: Reader = .fixed(blob);
+    var w: Writer.Allocating = .init(a);
+    try Translate.source(&r, &w.writer, a);
+    defer w.deinit();
+
+    if (true) return error.SkipZigTest;
     try std.testing.expectEqualStrings(expected, w.written());
 }
 
