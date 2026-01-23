@@ -79,13 +79,13 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
 
     const diffstat = patch.patchStat();
 
-    var thread: []Template.Structs.CommentThreadHtml.Thread = &[0]Template.Structs.CommentThreadHtml.Thread{};
+    var thread: []Template.Structs.CommentThreadHtml.Messages = &.{};
     if (CommitMap.open(repo_name_, current.sha.hex(), f.alloc, f.io)) |map| {
         switch (map.attach_to) {
             .delta => {
                 var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
                 if (delta.loadThread(f.alloc, f.io)) |dthread| {
-                    thread = try f.alloc.alloc(Template.Structs.CommentThreadHtml.Thread, dthread.messages.items.len);
+                    thread = try f.alloc.alloc(Template.Structs.CommentThreadHtml.Messages, dthread.messages.items.len);
                     for (dthread.messages.items, thread) |msg, *pg_comment| {
                         switch (msg.kind) {
                             .comment => {
@@ -163,7 +163,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
             .blame = null,
         },
         .commit = try commitCtx(f.alloc, current, repo_name),
-        .comments = .{ .thread = thread },
+        .comments = .{ .messages = thread },
         .patch = Diffs.patchStruct(f.alloc, &patch, patch_view_mode) catch return error.Unknown,
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     });

@@ -174,10 +174,10 @@ fn view(f: *verse.Frame) Error!void {
 
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch return error.Unrouteable;
 
-    var root_thread: []S.CommentThreadHtml.Thread = &[0]S.CommentThreadHtml.Thread{};
+    var root_thread: []S.CommentThreadHtml.Messages = &.{};
     const now = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
     if (delta.loadThread(f.alloc, f.io)) |thread| {
-        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Thread, thread.messages.items.len);
+        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
             switch (msg.kind) {
                 .comment => {
@@ -254,9 +254,7 @@ fn view(f: *verse.Frame) Error!void {
         .status = status,
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
-        .comments = .{
-            .thread = root_thread,
-        },
+        .comments = .{ .messages = root_thread },
         .comment_box = .{
             .current_username = username,
             .delta_id = delta_id,
@@ -281,7 +279,7 @@ fn view(f: *verse.Frame) Error!void {
 
 fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
-    var rules = try search.genRules("is:issue", f.alloc);
+    const rules = try search.genRules("is:issue", f.alloc);
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue", .{rd.name});

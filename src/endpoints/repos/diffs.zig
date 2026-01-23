@@ -898,9 +898,9 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     }
 
     const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
-    var root_thread: []S.CommentThreadHtml.Thread = &.{};
+    var root_thread: []S.CommentThreadHtml.Messages = &.{};
     if (delta.loadThread(f.alloc, f.io)) |thread| {
-        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Thread, thread.messages.items.len);
+        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
         var comment_rev_diff = diffM;
         var comment_rev_patch: ?Patch = patch;
         for (thread.messages.items, root_thread) |msg, *c_ctx| {
@@ -1007,7 +1007,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
-        .comments = .{ .thread = root_thread },
+        .comments = .{ .messages = root_thread },
         .comment_box = .{
             .current_username = username,
             .delta_id = delta_index,
