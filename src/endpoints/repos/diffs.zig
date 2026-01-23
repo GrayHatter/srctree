@@ -545,7 +545,7 @@ fn resolveLineRefRepo(
         .stride => |s| .{ s.number, s.stride - s.number },
         .tag => return null,
     };
-    while (indexOfScalarPos(u8, file.data.?, @max(end, start) + 1, '\n')) |next| {
+    while (findScalarPos(u8, file.data.?, @max(end, start) + 1, '\n')) |next| {
         if (count > 1) {
             start = next;
         } else if (count == 1) {
@@ -686,12 +686,12 @@ fn fileLineRef(str: []const u8) ?FileLineRef {
     var w_start: usize = 0;
 
     while (w_start + 3 < str.len) {
-        w_start = indexOfAnyPos(u8, str, w_start, "/.") orelse return null;
+        w_start = findAnyPos(u8, str, w_start, "/.") orelse return null;
         var file_start = w_start;
         while (file_start > 0 and str[file_start] != ' ') file_start -= 1;
         if (str[file_start] == ' ') file_start += 1;
 
-        if (indexOfAnyPos(u8, str, w_start, " #:@")) |loc| {
+        if (findAnyPos(u8, str, w_start, " #:@")) |loc| {
             w_start = loc;
             if (str[loc] == ' ') continue;
             const line_ref = lineRef(str[loc..]) catch return null;
@@ -738,7 +738,8 @@ test fileLineRef {
     );
 }
 
-pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) !struct { bool, []u8 } {
+const TrnsCmt = struct { bool, []u8 };
+pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) !TrnsCmt {
     var message_lines: ArrayList([]const u8) = .{};
     defer message_lines.clearAndFree(a);
     var found_ref = false;
@@ -748,10 +749,9 @@ pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo
         const line = std.mem.trim(u8, line_, "\r ");
         for (diffs) |*diff| {
             const filename = diff.filename orelse continue;
-            //std.debug.print("files {s}\n", .{filename});
             // Files changed in the diff can be bare referenced without a prefix.
             if (find(u8, line, filename)) |filepos| {
-                if (indexOfAny(u8, line, "#:@")) |h| {
+                if (findAnyPos(u8, line, filepos, "#:@")) |h| {
                     const line_ref = try lineRef(line[h..]);
 
                     // default to
@@ -762,10 +762,10 @@ pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo
                         while (end < line.len and !isWhitespace(line[end])) {
                             end += 1;
                         }
-                        if (end < line.len) try message_lines.append(
-                            a,
-                            try allocPrint(a, "{f}", .{abx.Html{ .text = line[end..] }}),
-                        );
+                        if (end < line.len)
+                            try message_lines.append(a, try allocPrint(a, "{f}", .{
+                                abx.Html{ .text = line[end..] },
+                            }));
                     } else if (resolveLineRefRepo(line, filename, repo, line_ref, a, io) catch |err| switch (err) {
                         error.LineNotFound => null,
                         else => return err,
@@ -856,10 +856,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     //    comments.pushSlice(addComment(f.alloc, cm) catch unreachable);
     //}
 
-    //const outdated_revision = rev == null or rev.? != delta.attach_target;
-
     var patch_formatted: ?S.PatchHtml = null;
-    //const patch_filename = try std.fmt.allocPrint(f.alloc, "data/patch/{s}.{x}.patch", .{ rd.name, delta.index });
 
     var patch: ?Patch = null;
     const curl_hint: S.DeltaDiffHtml.CurlHint = .{
@@ -986,10 +983,8 @@ const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const find = std.mem.find;
 const findPos = std.mem.findPos;
+const findAnyPos = std.mem.findAnyPos;
 const findScalarPos = std.mem.findScalarPos;
-const indexOfAny = std.mem.indexOfAny;
-const indexOfAnyPos = std.mem.indexOfAnyPos;
-const indexOfScalarPos = std.mem.indexOfScalarPos;
 const isDigit = std.ascii.isDigit;
 const isWhitespace = std.ascii.isWhitespace;
 const parseInt = std.fmt.parseInt;
