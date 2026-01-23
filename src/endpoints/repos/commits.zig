@@ -79,51 +79,12 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
 
     const diffstat = patch.patchStat();
 
-    var thread: []Template.Structs.CommentThreadHtml.Messages = &.{};
+    var messages: []S.CommentThreadHtml.Messages = &.{};
     if (CommitMap.open(repo_name_, current.sha.hex(), f.alloc, f.io)) |map| {
         switch (map.attach_to) {
             .delta => {
                 var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
-                if (delta.loadThread(f.alloc, f.io)) |dthread| {
-                    thread = try f.alloc.alloc(Template.Structs.CommentThreadHtml.Messages, dthread.messages.items.len);
-                    for (dthread.messages.items, thread) |msg, *pg_comment| {
-                        switch (msg.kind) {
-                            .comment => {
-                                pg_comment.* = .{
-                                    .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
-                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
-                                    .message = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.message.? }}),
-                                    .direct_reply = null,
-                                    .sub_thread = null,
-                                };
-                            },
-                            .diff_update => {
-                                pg_comment.* = .{
-                                    .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
-                                    .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
-                                    .message = msg.message.?,
-                                    .direct_reply = null,
-                                    .sub_thread = null,
-                                };
-                            },
-                            //else => {
-                            //    pg_comment.* = .{
-                            //        .author = "",
-                            //        .date = "",
-                            //        .message = "unsupported message type",
-                            //        .direct_reply = null,
-                            //        .sub_thread = null,
-                            //    };
-                            //},
-                        }
-                    }
-                } else |err| {
-                    std.debug.print(
-                        "Unable to load comments for thread {} {}\n",
-                        .{ map.attach_target, err },
-                    );
-                    @panic("oops");
-                }
+                messages = try delta_shared.genThreadMessages(&delta, &repo, &patch, f.alloc, f.io);
             },
             else => {},
         }
@@ -163,7 +124,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
             .blame = null,
         },
         .commit = try commitCtx(f.alloc, current, repo_name),
-        .comments = .{ .messages = thread },
+        .comments = .{ .messages = messages },
         .patch = Diffs.patchStruct(f.alloc, &patch, patch_view_mode) catch return error.Unknown,
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     });
@@ -435,6 +396,7 @@ const Highlight = @import("../../syntax-highlight.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../patch.zig");
 const repos = @import("../../repos.zig");
+const delta_shared = @import("../delta.zig");
 
 const Types = @import("../../types.zig");
 const CommitMap = Types.CommitMap;

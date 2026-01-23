@@ -738,7 +738,7 @@ test fileLineRef {
     );
 }
 
-fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) !struct { bool, []u8 } {
+pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) !struct { bool, []u8 } {
     var message_lines: ArrayList([]const u8) = .{};
     defer message_lines.clearAndFree(a);
     var found_ref = false;
@@ -873,6 +873,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     if (diffM) |*diff| {
         if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {
             patch = .init(diff.patch.blob);
+            patch.?.revision = rev;
             if (patchStruct(f.alloc, &patch.?, patch_view_mode)) |phtml| {
                 patch_formatted = phtml;
             } else |err| {
@@ -898,83 +899,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     }
 
     const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
-    var root_thread: []S.CommentThreadHtml.Messages = &.{};
-    if (delta.loadThread(f.alloc, f.io)) |thread| {
-        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
-        var comment_rev_diff = diffM;
-        var comment_rev_patch: ?Patch = patch;
-        for (thread.messages.items, root_thread) |msg, *c_ctx| {
-            switch (msg.kind) {
-                .comment => {
-                    const cmt_rev: enum { older, current, newer } = if (rev) |r| if (msg.extra0 < r)
-                        .older
-                    else if (msg.extra0 > r)
-                        .newer
-                    else
-                        .current else .current;
-
-                    const system_tag: ?[]const u8 = switch (cmt_rev) {
-                        .older => "<div class=\"sysmsg\">Comment on previous revision.</div>\n",
-                        .newer => "<div class=\"sysmsg green\">Comment on newer revision.</div>\n",
-                        .current => null,
-                    };
-                    if (comment_rev_diff) |*crd| {
-                        if (crd.index != msg.extra0) {
-                            comment_rev_diff = Diff.open(msg.extra0, f.alloc, f.io) catch crd.*;
-                            comment_rev_patch = .init(crd.patch.blob);
-                            if (comment_rev_patch) |*rp| rp.parse(f.alloc) catch {
-                                comment_rev_patch = null;
-                            };
-                        }
-                    } else {
-                        if (Diff.open(msg.extra0, f.alloc, f.io) catch null) |crd| {
-                            comment_rev_diff = crd;
-                            comment_rev_patch = .init(crd.patch.blob);
-                            if (comment_rev_patch) |*rp| rp.parse(f.alloc) catch {
-                                comment_rev_patch = null;
-                            };
-                        }
-                    }
-                    const found_ref, const ref_msg = if (comment_rev_patch) |cp|
-                        translateComment(msg.message.?, cp, &repo, f.alloc, f.io) catch return error.ServerFault
-                    else
-                        .{ false, try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.message.? }}) };
-                    c_ctx.* = .{
-                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
-                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
-                        .system_tag = if (found_ref) system_tag else null,
-                        .message = ref_msg,
-                        .direct_reply = .{ .uri = try allocPrint(f.alloc, "{}/direct_reply/{x}", .{
-                            delta.index,
-                            msg.hash[0..],
-                        }) },
-                        .sub_thread = null,
-                    };
-                },
-                .diff_update => {
-                    c_ctx.* = .{
-                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author orelse "" }}),
-                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
-                        .message = msg.message.?,
-                        .direct_reply = null,
-                        .sub_thread = null,
-                    };
-                },
-                //else => {
-                //    c_ctx.* = .{
-                //        .author = "",
-                //        .date = "",
-                //        .message = "unsupported message type",
-                //        .direct_reply = null,
-                //        .sub_thread = null,
-                //    };
-                //},
-            }
-        }
-    } else |err| {
-        std.debug.print("Unable to load comments for thread {} {}\n", .{ delta.index, err });
-        @panic("oops");
-    }
+    const messages = try delta_shared.genThreadMessages(delta, &repo, if (patch) |*p| p else null, f.alloc, f.io);
 
     const username = if (f.user) |usr| usr.username.? else "public";
 
@@ -1007,7 +932,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
-        .comments = .{ .messages = root_thread },
+        .comments = .{ .messages = messages },
         .comment_box = .{
             .current_username = username,
             .delta_id = delta_index,

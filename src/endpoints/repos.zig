@@ -92,6 +92,12 @@ pub const RouteData = struct {
         return repos.exists(self.name, .public);
     }
 
+    pub fn repoHeader(rd: RouteData, host: []const u8) !S.BaseRepoHeaderHtml {
+        _ = rd;
+        _ = host;
+        unreachable;
+    }
+
     fn validRepoName(name: ?[]const u8) ?[]const u8 {
         if (name) |n| {
             // why 30? who knows

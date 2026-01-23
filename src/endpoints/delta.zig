@@ -69,11 +69,110 @@ pub fn list(f: *Frame, Itr: type, itr: *search.Iterator(Itr, Delta), search_str:
     try f.sendPage(&page);
 }
 
+const MsgData = struct {
+    ?[]const u8, // system tag
+    []const u8, // comment body
+};
+
+fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Allocator, io: Io) !MsgData {
+    var systag: ?[]const u8 = null;
+    var comment_body: []const u8 = "";
+    if (patch) |p| {
+        var comment_diff: Diff = undefined;
+        var comment_patch = p.*;
+
+        const comment_rev: enum { older, current, newer } = if (p.revision) |r| if (msg.extra0 < r)
+            .older
+        else if (msg.extra0 > r)
+            .newer
+        else
+            .current else .current;
+
+        systag = switch (comment_rev) {
+            .older => "<div class=\"sysmsg\">Comment on previous revision.</div>\n",
+            .newer => "<div class=\"sysmsg green\">Comment on newer revision.</div>\n",
+            .current => null,
+        };
+        switch (comment_rev) {
+            .older, .newer => {
+                comment_diff = (Diff.open(msg.extra0, a, io) catch
+                    return error.ServerFault) orelse return error.ServerFault;
+                comment_patch = .init(comment_diff.patch.blob);
+                comment_patch.parse(a) catch {
+                    return .{
+                        "<div class=\"sysmsg red\">Unable to parse invalid patch.</div>\n",
+                        try allocPrint(a, "{f}", .{abx.Html{ .text = msg.message orelse "[Empty Message]" }}),
+                    };
+                };
+            },
+            .current => {},
+        }
+        const found, comment_body = diffs_ep.translateComment(msg.message.?, comment_patch, repo, a, io) catch
+            return error.ServerFault;
+        if (!found) systag = null;
+    } else {
+        comment_body = try allocPrint(a, "{f}", .{abx.Html{ .text = msg.message orelse "[Empty Message]" }});
+    }
+    return .{ systag, comment_body };
+}
+
+const Messages = S.CommentThreadHtml.Messages;
+pub fn genThreadMessages(
+    delta: *Delta,
+    repo: *const Repo,
+    patch: ?*const Patch,
+    a: Allocator,
+    io: Io,
+) ![]Messages {
+    const now: i64 = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    var thread = delta.loadThread(a, io) catch |err| {
+        log.err("Unable to load comments for thread {} {}", .{ delta.index, err });
+        return error.ServerFault;
+    };
+    if (thread.messages.items.len == 0) return &.{};
+    const messages = try a.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
+    for (thread.messages.items, messages) |msg, *html| {
+        const author = if (msg.author) |athr| try allocPrint(a, "{f}", .{abx.Html{ .text = athr }}) else "";
+        const date = try allocPrint(a, "{f}", .{Humanize.unix(msg.updated, now)});
+        switch (msg.kind) {
+            .comment => {
+                const systag, const body = try decodeMessage(msg, repo, patch, a, io);
+                html.* = .{
+                    .author = author,
+                    .date = date,
+                    .system_tag = systag,
+                    .message = body,
+                    .direct_reply = .{
+                        .index = delta.index,
+                        .hash = try allocPrint(a, "{x}", .{msg.hash[0..10]}),
+                    },
+                    .sub_thread = null,
+                };
+            },
+            .diff_update => html.* = .{
+                .author = author,
+                .date = date,
+                .message = msg.message.?,
+                .direct_reply = null,
+                .sub_thread = null,
+            },
+        }
+    }
+    return messages;
+}
+
 const Repos = @import("repos.zig");
 const Types = @import("../types.zig");
 const search = Types.search;
 const Delta = Types.Delta;
+const Message = Types.Message;
+const Diff = Types.Diff;
 const CommentsMeta = Delta.CommentsMeta;
+const Humanize = @import("../humanize.zig");
+const Repo = @import("../git.zig").Repo;
+const Patch = @import("../patch.zig");
+
+const diffs_ep = @import("repos/diffs.zig");
 
 const verse = @import("verse");
 const abx = verse.abx;
@@ -84,7 +183,9 @@ const S = T.Structs;
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const ArrayList = std.ArrayList;
+const log = std.log.scoped(.srctree_delta);
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const findPos = std.mem.findPos;

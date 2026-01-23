@@ -41,7 +41,7 @@ const IssueNewPage = T.PageData("issue-new.html");
 fn new(ctx: *verse.Frame) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(ctx) } };
     if (ctx.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
@@ -56,7 +56,7 @@ fn new(ctx: *verse.Frame) Error!void {
 fn newRemote(ctx: *verse.Frame) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(ctx) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(ctx) } };
     if (ctx.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
@@ -172,50 +172,11 @@ fn view(f: *verse.Frame) Error!void {
     const delta_id = f.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
 
+    var repo = (repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    defer repo.raze(f.alloc, f.io);
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch return error.Unrouteable;
 
-    var root_thread: []S.CommentThreadHtml.Messages = &.{};
-    const now = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
-    if (delta.loadThread(f.alloc, f.io)) |thread| {
-        root_thread = try f.alloc.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
-        for (thread.messages.items, root_thread) |msg, *c_ctx| {
-            switch (msg.kind) {
-                .comment => {
-                    c_ctx.* = .{
-                        .author = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = msg.author.? }}),
-                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
-                        .message = try allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = msg.message.? }}),
-                        .direct_reply = .{
-                            .uri = try allocPrint(f.alloc, "{}/direct_reply/{x}", .{ idx, msg.hash[0..] }),
-                        },
-                        .sub_thread = null,
-                    };
-                },
-                .diff_update => {
-                    // TODO Is this unreachable?
-                    c_ctx.* = .{
-                        .author = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = msg.author.? }}),
-                        .date = try allocPrint(f.alloc, "{f}", .{Humanize.unix(msg.updated, now)}),
-                        .message = msg.message.?,
-                        .direct_reply = null,
-                        .sub_thread = null,
-                    };
-                },
-                //else => {
-                //    c_ctx.* = .{
-                //        .author = "",
-                //        .date = "",
-                //        .message = "unsupported message type",
-                //        .direct_reply = null,
-                //        .sub_thread = null,
-                //    };
-                //},
-            }
-        }
-    } else |err| {
-        std.debug.print("Unable to load comments for thread {} {}\n", .{ idx, err });
-        @panic("oops");
-    }
+    const messages = try delta_shared.genThreadMessages(&delta, &repo, null, f.alloc, f.io);
 
     var r: Reader = .fixed(delta.message);
     var w: Writer.Allocating = try .initCapacity(f.alloc, delta.message.len);
@@ -228,7 +189,7 @@ fn view(f: *verse.Frame) Error!void {
     const username = if (f.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(f) } };
     if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
@@ -238,6 +199,7 @@ fn view(f: *verse.Frame) Error!void {
     else
         "<span class=open>open</span>";
 
+    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
@@ -254,11 +216,8 @@ fn view(f: *verse.Frame) Error!void {
         .status = status,
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
-        .comments = .{ .messages = root_thread },
-        .comment_box = .{
-            .current_username = username,
-            .delta_id = delta_id,
-        },
+        .comments = .{ .messages = messages },
+        .comment_box = .{ .current_username = username, .delta_id = delta_id },
         .tracking_remote = if (delta.attach == .remote)
             .{ .url = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.attach_remote }}) }
         else
@@ -284,7 +243,7 @@ fn list(f: *Frame) Error!void {
     var default_search_buf: [0xFF]u8 = undefined;
     const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue", .{rd.name});
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &(Repos.navButtons(f) catch unreachable) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &(repos_ep.navButtons(f) catch unreachable) } };
     if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
     f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
 
@@ -506,8 +465,9 @@ const POST = Router.POST;
 const GET = Router.GET;
 const S = T.Structs;
 
-const Repos = @import("../repos.zig");
-const RouteData = Repos.RouteData;
+const repos = @import("../../repos.zig");
+const repos_ep = @import("../repos.zig");
+const RouteData = @import("../repos.zig").RouteData;
 
 const search = @import("../search.zig");
 const delta_shared = @import("../delta.zig");

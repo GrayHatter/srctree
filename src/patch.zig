@@ -1,5 +1,7 @@
 blob: []const u8,
 diffs: ?[]Diff = null,
+/// srctree metadata
+revision: ?u64 = null,
 
 const Patch = @This();
 
