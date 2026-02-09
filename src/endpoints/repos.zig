@@ -185,6 +185,16 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     const rd = RouteData.init(f.uri) orelse return list;
 
     if (rd.exists()) {
+        if (repos.open(rd.name, .public, f.io)) |repo_| b: {
+            var repo = repo_ orelse break :b;
+            if (repo.loadData(f.alloc, f.io)) {
+                defer repo.raze(f.alloc, f.io);
+                if (repo.findRemote("upstream")) |_| {
+                    if (repo.config.?.ctx.get("srctree")) |s| if (s.getBool("pinned")) |p| if (p) break :b;
+                    f.headers.addCustom(f.alloc, "X-Robots-Tag", "none") catch {};
+                }
+            } else |_| {}
+        } else |_| {}
         const bh: *S.BodyHeaderHtml = if (f.response_data.get(S.BodyHeaderHtml)) |bhP| bhP else bhP: {
             f.response_data.clone(S.BodyHeaderHtml, f.alloc, .{ .nav = .{
                 .nav_auth = "Error",
