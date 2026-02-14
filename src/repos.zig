@@ -8,9 +8,9 @@ pub const RepoDirs = struct {
     private: ?[]const u8 = null,
     secret: ?[]const u8 = null,
 
-    pub fn directory(rds: RepoDirs, vis: Visibility) !std.fs.Dir {
-        var cwd = std.fs.cwd();
-        return cwd.openDir(switch (vis) {
+    pub fn directory(rds: RepoDirs, vis: Visibility, io: Io) !std.Io.Dir {
+        var cwd = std.Io.Dir.cwd();
+        return cwd.openDir(io, switch (vis) {
             .public => rds.public orelse return error.NoDirectory,
             .private => rds.private orelse return error.NoDirectory,
             .secret => rds.secret orelse return error.NoDirectory,
@@ -64,11 +64,11 @@ pub fn isHidden(name: []const u8) bool {
     return visibility(name) != .public;
 }
 
-pub fn exists(name: []const u8, vis: Visibility) bool {
-    var dir = dirs.directory(vis) catch return false;
-    defer dir.close();
+pub fn exists(name: []const u8, vis: Visibility, io: Io) bool {
+    var dir = dirs.directory(vis, io) catch return false;
+    defer dir.close(io);
     var itr = dir.iterate();
-    while (itr.next() catch return false) |file| {
+    while (itr.next(io) catch return false) |file| {
         if (file.kind != .directory and file.kind != .sym_link) continue;
         if (eql(u8, file.name, name)) {
             // lol, crap, there's a side channel leak no matter where I put
@@ -90,25 +90,24 @@ pub fn exists(name: []const u8, vis: Visibility) bool {
 
 pub fn open(name: []const u8, vis: Visibility, io: Io) !?Git.Repo {
     if (!visibility(name).isVisible(vis)) return null;
-    var root = try dirs.directory(vis);
-    defer root.close();
-    const dir = root.openDir(name, .{}) catch |err| switch (err) {
+    var root = try dirs.directory(vis, io);
+    defer root.close(io);
+    const dir = root.openDir(io, name, .{}) catch |err| switch (err) {
         error.FileNotFound => return null,
         error.NotDir => return null,
         else => return err,
     };
-    const dir2 = dir.adaptToNewApi();
-    return try Git.Repo.init(dir2, io);
+    return try Git.Repo.init(dir, io);
 }
 
-pub fn allNames(a: Allocator) !ArrayList([]u8) {
+pub fn allNames(a: Allocator, io: Io) !ArrayList([]u8) {
     var list: std.ArrayList([]u8) = .{};
 
-    var dir_set = try dirs.directory(.public);
-    defer dir_set.close();
+    var dir_set = try dirs.directory(.public, io);
+    defer dir_set.close(io);
     var itr_repo = dir_set.iterate();
 
-    while (itr_repo.next() catch null) |dir| {
+    while (itr_repo.next(io) catch null) |dir| {
         if (dir.kind != .directory and dir.kind != .sym_link) continue;
         if (isHidden(dir.name)) continue;
         try list.append(a, try a.dupe(u8, dir.name));
@@ -117,30 +116,29 @@ pub fn allNames(a: Allocator) !ArrayList([]u8) {
 }
 
 pub const RepoIterator = struct {
-    dir: std.fs.Dir,
-    itr: std.fs.Dir.Iterator,
+    dir: Io.Dir,
+    itr: Io.Dir.Iterator,
     vis: Visibility,
     /// only valid until the following call to next()
     current_name: ?[]const u8 = null,
 
     pub fn next(ri: *RepoIterator, io: Io) !?Git.Repo {
-        while (try ri.itr.next()) |file| {
+        while (try ri.itr.next(io)) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
             if (!visibility(file.name).isVisible(ri.vis)) continue;
-            const rdir = ri.dir.openDir(file.name, .{}) catch continue;
+            const rdir = ri.dir.openDir(io, file.name, .{}) catch continue;
             ri.current_name = file.name;
-            const rdir2 = rdir.adaptToNewApi();
-            return try Git.Repo.init(rdir2, io);
+            return try Git.Repo.init(rdir, io);
         }
         ri.current_name = null;
-        ri.dir.close();
+        ri.dir.close(io);
         return null;
     }
 };
 
-pub fn allRepoIterator(vis: Visibility) !RepoIterator {
-    const dir = try dirs.directory(vis);
+pub fn allRepoIterator(vis: Visibility, io: Io) !RepoIterator {
+    const dir = try dirs.directory(vis, io);
     return .{
         .dir = dir,
         .itr = dir.iterate(),
@@ -220,9 +218,8 @@ pub const Agent = struct {
     fn setUpdated(dir: Io.Dir, update: Updated, io: Io) void {
         const file = dir.createFile(io, "srctree_sync", .{}) catch return;
         defer file.close(io);
-        var old: fs.File = .adaptFromNewApi(file);
         var w_b: [1024]u8 = undefined;
-        var writer = old.writer(&w_b);
+        var writer = file.writer(io, &w_b);
         writer.interface.print("{f}", .{update}) catch return;
         writer.interface.flush() catch return;
     }
@@ -266,13 +263,13 @@ pub const Agent = struct {
 
         if (repo.findRemote("upstream")) |_| {
             var gitagent = repo.getAgent(a);
-            if (gitagent.pullUpstream(head)) {
+            if (gitagent.pullUpstream(head, io)) {
                 log.debug("Update Successful on repo {s}", .{name});
             } else |err| switch (err) {
                 error.NonAncestor => {},
                 else => log.warn("Warning upstream pull failed repo {s} {}", .{ name, err }),
             }
-            update.upstream_pull = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+            update.upstream_pull = Io.Clock.real.now(io).toSeconds();
             setUpdated(repo.dir, update, io);
         } else log.debug("repo {s} doesn't have an upstream peer", .{name});
     }
@@ -284,11 +281,11 @@ pub const Agent = struct {
         if (repo_update > update.downstream_push) {
             if (repo.findRemote("downstream")) |_| {
                 var gitagent = repo.getAgent(a);
-                const updated = gitagent.pushDownstream() catch er: {
+                const updated = gitagent.pushDownstream(io) catch er: {
                     log.warn("Warning, unable to push to downstream repo {s}", .{name});
                     break :er false;
                 };
-                update.downstream_push = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+                update.downstream_push = Io.Clock.real.now(io).toSeconds();
                 setUpdated(repo.dir, update, io);
                 if (!updated) log.warn("Warning downstream push failed repo {s}", .{name});
             } else log.debug("repo {s} doesn't have any downstream peers", .{name});
@@ -314,7 +311,7 @@ pub const Agent = struct {
         log.info("Spawning update thread", .{});
         // TODO past me is evil for doing this (replace with sane alloc source)
         const alloc = std.heap.page_allocator;
-        var n_array = allNames(alloc) catch unreachable;
+        var n_array = allNames(alloc, a.io) catch unreachable;
         // TODO drop skipped repos here
         const names = n_array.toOwnedSlice(alloc) catch unreachable;
         defer alloc.free(names);

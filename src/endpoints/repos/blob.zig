@@ -99,14 +99,14 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
         } else return error.InvalidURI;
     }
 
-    var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.Unknown;
+    var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (!resolve.isFile()) return error.Unknown;
     const formatted: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
-        try Highlight.highlight(f.alloc, lang, resolve.data.?)
+        Highlight.highlight(lang, resolve.data.?, f.alloc, f.io) catch return error.ServerFault
     else if (excludedExt(blb.name))
         "This file type is currently unsupported"
     else
-        allocPrint(f.alloc, "{f}", .{abx.Html{ .text = resolve.data.? }}) catch return error.Unknown;
+        try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = resolve.data.? }});
 
     const wrapped = try wrapLineNumbers(f.alloc, formatted);
 

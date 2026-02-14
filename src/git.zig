@@ -70,19 +70,17 @@ test {
 
 test "read" {
     const io = std.testing.io;
-    var cwd = std.fs.cwd();
-    var file = cwd.openFile(
-        "./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1",
-        .{},
-    ) catch |err| switch (err) {
-        error.FileNotFound => {
-            return error.SkipZigTest;
-            // Sadly this was a predictable error that past me should have know
-            // better, alas, actually fixing it [by creating a test vector repo]
-            // is still a future me problem!
-        },
-        else => return err,
-    };
+    var cwd = Io.Dir.cwd();
+    var file = cwd.openFile(io, "./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{}) catch |err|
+        switch (err) {
+            error.FileNotFound => {
+                return error.SkipZigTest;
+                // Sadly this was a predictable error that past me should have know
+                // better, alas, actually fixing it [by creating a test vector repo]
+                // is still a future me problem!
+            },
+            else => return err,
+        };
 
     var r_b: [2048]u8 = undefined;
     var reader = file.reader(io, &r_b);
@@ -90,9 +88,7 @@ test "read" {
     var d = zstd.Decompress.init(&reader.interface, &z_b, .{});
     try d.reader.fillMore();
     const b = d.reader.buffered();
-    //std.debug.print("{s}\n", .{b[0..count]});
     const commit = try Commit.init(SHA.init("370303630b3fc631a0cb3942860fb6f77446e9c1"), b[11..]);
-    //std.debug.print("{}\n", .{commit});
     try std.testing.expectEqualStrings("fcb6817b0efc397f1525ff7ee375e08703ed17a9", commit.tree.hex()[0..]);
     try std.testing.expectEqualStrings("370303630b3fc631a0cb3942860fb6f77446e9c1", commit.sha.hex()[0..]);
 }
@@ -101,19 +97,17 @@ test "file" {
     const a = std.testing.allocator;
     const io = std.testing.io;
 
-    var cwd = std.fs.cwd();
-    var file = cwd.openFile(
-        "./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1",
-        .{},
-    ) catch |err| switch (err) {
-        error.FileNotFound => {
-            return error.SkipZigTest;
-            // Sadly this was a predictable error that past me should have know
-            // better, alas, actually fixing it [by creating a test vector repo]
-            // is still a future me problem!
-        },
-        else => return err,
-    };
+    var cwd = Io.Dir.cwd();
+    var file = cwd.openFile(io, "./.git/objects/37/0303630b3fc631a0cb3942860fb6f77446e9c1", .{}) catch |err|
+        switch (err) {
+            error.FileNotFound => {
+                return error.SkipZigTest;
+                // Sadly this was a predictable error that past me should have know
+                // better, alas, actually fixing it [by creating a test vector repo]
+                // is still a future me problem!
+            },
+            else => return err,
+        };
     var r_b: [2048]u8 = undefined;
     var reader = file.reader(io, &r_b);
     var z_b: [8 * 1024 * 1024]u8 = undefined;
@@ -152,8 +146,8 @@ test "toParent" {
     const a = std.testing.allocator;
     const io = std.testing.io;
 
-    const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd.adaptToNewApi(), io);
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
     defer repo.raze(a, io);
     try repo.loadData(a, io);
     var commit = try repo.headCommit(a, io);
@@ -175,9 +169,9 @@ test "toParent" {
 test "pack contains" {
     const a = std.testing.allocator;
     const io = std.testing.io;
-    var cwd = std.fs.cwd();
-    const dir = try cwd.openDir("repos/srctree", .{});
-    var repo = try Repo.init(dir.adaptToNewApi(), io);
+    var cwd = Io.Dir.cwd();
+    const dir = try cwd.openDir(io, "repos/srctree", .{});
+    var repo = try Repo.init(dir, io);
     try repo.loadData(a, io);
     defer repo.raze(a, io);
 
@@ -202,8 +196,8 @@ test "pack contains" {
 test "commit to tree" {
     const a = std.testing.allocator;
     const io = std.testing.io;
-    const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd.adaptToNewApi(), io);
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
     defer repo.raze(a, io);
 
     try repo.loadData(a, io);
@@ -220,8 +214,8 @@ test "blob to commit" {
     var a = std.testing.allocator;
     const io = std.testing.io;
 
-    const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd.adaptToNewApi(), io);
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
     try repo.loadData(a, io);
     defer repo.raze(a, io);
 
@@ -231,19 +225,15 @@ test "blob to commit" {
     const tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze(a);
 
-    var timer = try std.time.Timer.start();
-    var lap = timer.lap();
     const found = try tree.changedSet(&repo, a, io);
     if (false) std.debug.print("found {any}\n", .{found});
     for (found) |f| f.raze(a);
     a.free(found);
-    lap = timer.lap();
-    if (false) std.debug.print("timer {}\n", .{lap});
 }
 
 test "considering optimizing blob to commit" {
     //var a = std.testing.allocator;
-    //var cwd = std.fs.cwd();
+    //var cwd = Io.Dir.cwd();
 
     //var dir = try cwd.openDir("repos/zig", .{});
     //var repo = try Repo.init(dir);
@@ -354,10 +344,10 @@ test "considering optimizing blob to commit" {
 test "ref delta" {
     var a = std.testing.allocator;
     const io = std.testing.io;
-    var cwd = std.fs.cwd();
-    const dir = cwd.openDir("repos/hastur", .{}) catch return error.skip;
+    var cwd = Io.Dir.cwd();
+    const dir = cwd.openDir(io, "repos/hastur", .{}) catch return error.skip;
 
-    var repo = try Repo.init(dir.adaptToNewApi(), io);
+    var repo = try Repo.init(dir, io);
     defer repo.raze(a, io);
 
     try repo.loadData(a, io);
@@ -368,14 +358,10 @@ test "ref delta" {
     const tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze(a);
 
-    var timer = try std.time.Timer.start();
-    var lap = timer.lap();
     const found = try tree.changedSet(&repo, a, io);
     if (false) std.debug.print("found {any}\n", .{found});
     for (found) |f| f.raze(a);
     a.free(found);
-    lap = timer.lap();
-    if (false) std.debug.print("timer {}\n", .{lap});
 }
 
 test "forkRemote" {
@@ -400,7 +386,7 @@ test "new repo" {
     defer tdir.cleanup();
 
     var new_repo = try Repo.createNew(tdir.dir, "new_repo", a, io);
-    _ = try tdir.dir.openDir("new_repo", .{});
+    _ = try tdir.dir.openDir(io, "new_repo", .{});
     try new_repo.loadData(a, io);
     defer new_repo.raze(a, io);
 }
@@ -409,8 +395,8 @@ test "updated at" {
     const a = std.testing.allocator;
     const io = std.testing.io;
 
-    const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd.adaptToNewApi(), io);
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
     defer repo.raze(a, io);
 
     try repo.loadData(a, io);
@@ -423,8 +409,8 @@ test "list remotes" {
     const a = std.testing.allocator;
     const io = std.testing.io;
 
-    const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd.adaptToNewApi(), io);
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
     try repo.loadData(a, io);
     defer repo.raze(a, io);
     const remotes = repo.remotes orelse unreachable;
@@ -434,6 +420,7 @@ test "list remotes" {
 }
 
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;

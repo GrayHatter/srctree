@@ -105,7 +105,7 @@ fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.GistHtml.GistFiles.Numbe
     return lines;
 }
 
-fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistHtml.GistFiles {
+fn toTemplate(files: []const Gist.File, a: Allocator, io: Io) ![]S.GistHtml.GistFiles {
     const out = try a.alloc(S.GistHtml.GistFiles, files.len);
 
     var w: Writer.Allocating = try .initCapacity(a, 20);
@@ -115,7 +115,7 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistHtml.GistFiles {
         const file_name = try w.toOwnedSlice();
         var formatted: []const u8 = undefined;
         if (Highlight.Language.guessFromFilename(file.name)) |lang| {
-            formatted = try Highlight.highlight(a, lang, file.blob);
+            formatted = try Highlight.highlight(lang, file.blob, a, io);
         } else {
             w.writer.print("{f}", .{verse.abx.Html{ .text = file.blob }}) catch return error.Unknown;
 
@@ -134,13 +134,14 @@ fn toTemplate(a: Allocator, files: []const Gist.File) ![]S.GistHtml.GistFiles {
 
 fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
-    const body_header: *const S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{ .nav_buttons = &.{} } };
+    const body_header: *const S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) orelse
+        &S.BodyHeaderHtml{ .nav = .{ .nav_buttons = &.{} } };
 
     const hash = vrs.uri.next() orelse return error.InvalidURI;
     if (hash.len != 64) return error.DataInvalid;
 
     const gist = Gist.open(hash[0..64].*, vrs.alloc, vrs.io) catch return error.InvalidURI;
-    const files = toTemplate(vrs.alloc, gist.files) catch return error.Unknown;
+    const files = toTemplate(gist.files, vrs.alloc, vrs.io) catch return error.Unknown;
     var page = GistPage.init(.{
         .meta_head = .{ .open_graph = .{
             .title = try allocPrint(vrs.alloc, "A perfect paste from {f}", .{verse.abx.Html{ .text = gist.owner }}),
@@ -158,6 +159,9 @@ fn view(vrs: *Frame) Error!void {
 
 const std = @import("std");
 const allocPrint = std.fmt.allocPrint;
+const Io = std.Io;
+const Allocator = std.mem.Allocator;
+const Writer = std.Io.Writer;
 
 const verse = @import("verse");
 const abx = verse.abx;
@@ -165,8 +169,6 @@ const Frame = verse.Frame;
 const template = verse.template;
 const S = template.Structs;
 const RequestData = verse.RequestData.RequestData;
-const Allocator = std.mem.Allocator;
-const Writer = std.Io.Writer;
 
 const Highlight = @import("../syntax-highlight.zig");
 const Gist = @import("../types.zig").Gist;

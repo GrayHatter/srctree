@@ -37,9 +37,9 @@ pub const File = struct {
     pub fn commit(file: File, io: Io) ![64]u8 {
         const name = file.filename();
         const data_file = try Types.commit(.gist_files, &name, io);
-        defer data_file.close();
+        defer data_file.close(io);
         var w_b: [2048]u8 = undefined;
-        var data_writer = data_file.writer(&w_b);
+        var data_writer = data_file.writer(io, &w_b);
         try File.writerFn(&file, &data_writer.interface);
         return name[0..64].*;
     }
@@ -68,8 +68,8 @@ const readerFn = RW.read;
 pub fn new(owner: []const u8, files: []const File, io: Io) ![64]u8 {
     var gist = Gist{
         .owner = owner,
-        .created = (try Io.Clock.now(.real, io)).toSeconds(),
-        .updated = (try Io.Clock.now(.real, io)).toSeconds(),
+        .created = Io.Clock.real.now(io).toSeconds(),
+        .updated = Io.Clock.real.now(io).toSeconds(),
         .file_count = files.len,
         .files = files,
     };
@@ -107,9 +107,9 @@ pub fn commit(gist: *Gist, io: Io) !void {
     const hash = gist.genHash();
     const filename = try bufPrint(&buf, "{x}.gist", .{hash});
     const file = try Types.commit(.gist, filename, io);
-    defer file.close();
+    defer file.close(io);
     var w_b: [2048]u8 = undefined;
-    var writer = file.writer(&w_b);
+    var writer = file.writer(io, &w_b);
     try writerFn(gist, &writer.interface);
 
     for (gist.files) |gistfile| {
@@ -138,12 +138,12 @@ test {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true })).adaptToNewApi(), io);
+    try Types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
     const mask: i64 = ~@as(i64, 0x7ffffff);
 
     var gist: Gist = .{
-        .created = (try Io.Clock.now(.real, io)).toSeconds() & mask,
-        .updated = (try Io.Clock.now(.real, io)).toSeconds() & mask,
+        .created = Io.Clock.now(.real, io).toSeconds() & mask,
+        .updated = Io.Clock.now(.real, io).toSeconds() & mask,
         .owner = "user",
         .file_count = 3,
         .files = &[_]File{
@@ -170,9 +170,9 @@ test {
     for (gist.files) |gistfile| {
         const name = gistfile.filename();
         const data_file = try Types.commit(.gist_files, &name, io);
-        defer data_file.close();
+        defer data_file.close(io);
         var w_b: [2048]u8 = undefined;
-        var data_writer = data_file.writer(&w_b);
+        var data_writer = data_file.writer(io, &w_b);
         try File.writerFn(&gistfile, &data_writer.interface);
         try writer.writer.print("{s}\n", .{name[0..64]});
     }

@@ -28,9 +28,8 @@ fn findFileSha(objs: Objects, sha: *SHA, io: Io) !Io.File {
     const objdir = try bufPrint(&fb, "./{x}", .{sha.bin[0..1]});
     const dir = try objs.dir.openDir(io, objdir, .{ .iterate = true });
     defer dir.close(io);
-    const old: std.fs.Dir = .adaptFromNewApi(dir);
-    var itr = old.iterate();
-    while (itr.next() catch null) |file| {
+    var itr = dir.iterate();
+    while (itr.next(io) catch null) |file| {
         if (startsWith(u8, file.name, sha.hex()[2 .. (sha.len - 1) * 2])) {
             return try dir.openFile(io, file.name, .{});
         }
@@ -121,7 +120,6 @@ pub fn resolveSha(objs: Objects, sha: SHA, io: Io) !?SHA {
     for (objs.packs) |pack| {
         if (pack.expandPrefix(sha) catch |err| switch (err) {
             error.AmbiguousRef => return error.AmbiguousRef,
-            else => return err,
         }) |s| {
             return s;
         }
@@ -168,10 +166,10 @@ test "read pack" {
 test "hopefully a delta" {
     const a = std.testing.allocator;
     const io = std.testing.io;
-    var cwd = std.fs.cwd();
-    const dir = try cwd.openDir("repos/hastur/.git", .{});
+    var cwd = Io.Dir.cwd();
+    const dir = try cwd.openDir(io, "repos/hastur/.git", .{});
 
-    var objs: Objects = try .init(dir.adaptToNewApi(), io);
+    var objs: Objects = try .init(dir, io);
     try objs.initPacks(a, io);
     defer objs.raze(a, io);
 

@@ -43,8 +43,8 @@ pub fn new(delta: *Delta, author: []const u8, patch: []const u8, a: Allocator, i
     const d = Diff{
         .index = idx,
         .state = .nos,
-        .created = (try Io.Clock.now(.real, io)).toSeconds(),
-        .updated = (try Io.Clock.now(.real, io)).toSeconds(),
+        .created = Io.Clock.now(.real, io).toSeconds(),
+        .updated = Io.Clock.now(.real, io).toSeconds(),
         .delta_hash = delta.hash,
         .source_uri = null,
         .author = author,
@@ -95,9 +95,9 @@ pub fn commit(d: Diff, io: Io) !void {
     var buf: [512]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.diff", .{d.index});
     const file = try Types.commit(.diffs, filename, io);
-    defer file.close();
+    defer file.close(io);
     var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(&w_b);
+    var fd_writer = file.writer(io, &w_b);
     try writerFn(&d, &fd_writer.interface);
     try fd_writer.interface.writeAll(d.patch.blob);
     try fd_writer.interface.flush();

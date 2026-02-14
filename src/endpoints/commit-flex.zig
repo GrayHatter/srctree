@@ -440,7 +440,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     );
     defer journal.raze(ctx.alloc, ctx.io);
 
-    var all_repos = repos.allRepoIterator(.public) catch return error.Unknown;
+    var all_repos = repos.allRepoIterator(.public, ctx.io) catch return error.Unknown;
     while (all_repos.next(ctx.io) catch return error.Unknown) |input| {
         var repo = input;
         repo.loadData(ctx.alloc, ctx.io) catch {

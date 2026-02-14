@@ -45,7 +45,7 @@ const fmt_str = "{s}.{x}." ++ @tagName(type_prefix);
 
 pub fn new(repo: []const u8, reason: []const u8, source: []const u8, result: Result, commit_hash: Hash, io: Io) !CI {
     const max: usize = try Index.nextExtra(repo, io);
-    const now = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    const now = Io.Clock.real.now(io).toSeconds();
     var ci = CI{
         .index = max,
         .created = now,
@@ -73,9 +73,9 @@ pub fn commit(ci: CI, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, fmt_str, .{ ci.repo, ci.index });
     const file = try Types.commit(type_prefix, filename, io);
-    defer file.close();
+    defer file.close(io);
     var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(&w_b);
+    var fd_writer = file.writer(io, &w_b);
     try writerFn(&ci, &fd_writer.interface);
 }
 
@@ -89,16 +89,13 @@ test CI {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(
-        (try tempdir.dir.makeOpenPath("continuous_integration", .{ .iterate = true })).adaptToNewApi(),
-        io,
-    );
+    try Types.init(try tempdir.dir.createDirPathOpen(io, "continuous_integration", .{ .open_options = .{ .iterate = true } }), io);
 
     var ci = try CI.new("repo_name", "reason", "source", .@"error", @splat('z'), io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    ci.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    ci.created = Io.Clock.real.now(io).toSeconds() & mask;
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();

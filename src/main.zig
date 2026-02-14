@@ -87,14 +87,14 @@ pub var global_config: SrcConfig = .{ .config = .empty, .ctx = .empty };
 
 const Auth = @import("Auth.zig");
 
-pub fn main() !void {
+pub fn main(mini: std.process.Init.Minimal) !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
     defer _ = gpa.deinit();
     const a = gpa.allocator();
 
     var runmode: verse.Server.RunModes = .zwsgi;
 
-    var args = std.process.args();
+    var args = mini.args.iterate();
     arg0 = args.next() orelse "srctree";
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "-h") or
@@ -143,7 +143,7 @@ pub fn main() !void {
     if (global_config.config.server) |srv| {
         if (srv.remove_on_start) {
             comptime std.debug.assert(builtin.zig_version.order(.{ .major = 0, .minor = 16, .patch = 0 }) == .lt);
-            std.fs.cwd().deleteFile("./srctree.sock") catch |err| switch (err) {
+            Io.Dir.cwd().deleteFile(io, "./srctree.sock") catch |err| switch (err) {
                 error.FileNotFound => {},
                 else => return err,
             };
@@ -192,7 +192,7 @@ pub fn main() !void {
         if (@errorReturnTrace()) |trace| {
             std.debug.dumpStackTrace(trace);
         }
-        std.posix.exit(1);
+        std.process.exit(1);
     };
     agent.enabled = false;
 }
@@ -202,6 +202,7 @@ const builtin = @import("builtin");
 const verse = @import("verse");
 const Allocator = std.mem.Allocator;
 const Thread = std.Thread;
+const Io = std.Io;
 const Server = verse.Server;
 const log = std.log;
 

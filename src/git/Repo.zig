@@ -60,12 +60,12 @@ pub fn init(d: Dir, io: Io) Error!Repo {
 }
 
 /// Dir name must be relative (probably)
-pub fn createNew(chdir: fs.Dir, dir_name: []const u8, a: Allocator, io: Io) !Repo {
+pub fn createNew(chdir: Io.Dir, dir_name: []const u8, a: Allocator, io: Io) !Repo {
     var agent = Agent{ .alloc = a, .cwd = chdir };
-    a.free(try agent.initRepo(dir_name, .{}));
-    var dir = try chdir.openDir(dir_name, .{});
-    errdefer dir.close();
-    return init(dir.adaptToNewApi(), io);
+    a.free(try agent.initRepo(dir_name, .{}, io));
+    var dir = try chdir.openDir(io, dir_name, .{});
+    errdefer dir.close(io);
+    return init(dir, io);
 }
 
 pub fn loadData(self: *Repo, a: Allocator, io: Io) !void {
@@ -123,9 +123,8 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
     var list: std.ArrayList(Ref) = .{};
     var ndir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
     defer ndir.close(io);
-    var idir: fs.Dir = .adaptFromNewApi(ndir);
-    var itr = idir.iterate();
-    while (try itr.next()) |file| {
+    var itr = ndir.iterate();
+    while (try itr.next(io)) |file| {
         if (file.kind != .file) continue;
         var f_b: [2048]u8 = @splat(0);
         const fname: []u8 = try bufPrint(&f_b, "./refs/heads/{s}", .{file.name});
@@ -247,10 +246,9 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
 
     var newdir = try self.dir.openDir(io, "refs/tags", .{ .iterate = true });
     defer newdir.close(io);
-    var tagdir: fs.Dir = .adaptFromNewApi(newdir);
-    var itr = tagdir.iterate();
+    var itr = newdir.iterate();
 
-    while (try itr.next()) |next| {
+    while (try itr.next(io)) |next| {
         if (next.kind != .file) continue;
         var fnbuf: [2048]u8 = undefined;
         const fname = try bufPrint(&fnbuf, "refs/tags/{s}", .{next.name});
@@ -273,12 +271,11 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
 }
 
 fn loadBranches(self: *Repo, a: Allocator, io: Io) !void {
-    var newdir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
-    defer newdir.close(io);
+    var dir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
+    defer dir.close(io);
     var list: ArrayList(Branch) = .{};
-    var branchdir: fs.Dir = .adaptFromNewApi(newdir);
-    var itr = branchdir.iterate();
-    while (try itr.next()) |file| {
+    var itr = dir.iterate();
+    while (try itr.next(io)) |file| {
         if (file.kind != .file) continue;
         var fnbuf: [2048]u8 = undefined;
         const fname = try bufPrint(&fnbuf, "refs/heads/{s}", .{file.name});
@@ -417,7 +414,7 @@ pub fn getAgent(self: *const Repo, a: Allocator) Agent {
     return .{
         .alloc = a,
         .repo = self,
-        .cwd = .adaptFromNewApi(self.dir),
+        .cwd = self.dir,
     };
 }
 
@@ -444,7 +441,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
-const fs = std.fs;
 const Reader = Io.Reader;
 const Dir = Io.Dir;
 const log = std.log.scoped(.git_repo);

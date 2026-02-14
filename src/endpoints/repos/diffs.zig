@@ -495,11 +495,12 @@ fn highlightLineRef(
     filename: []const u8,
     color: []const u8,
     a: Allocator,
+    io: Io,
 ) ![]u8 {
     const formatted = if (code.len == 0)
         "&nbsp;"
     else if (Highlighting.Language.guessFromFilename(filename)) |lang|
-        try Highlighting.highlight(a, lang, code)
+        try Highlighting.highlight(lang, code, a, io)
     else
         try allocPrint(a, "{f}", .{abx.Html{ .text = code }});
 
@@ -561,17 +562,18 @@ fn resolveLineRefRepo(
     if (count > 1) return error.LineNotFound;
     const found_line = file.data.?[start..end];
 
-    try found_lines.append(a, try highlightLineRef(line, found_line[1..], filename, "", a));
+    try found_lines.append(a, try highlightLineRef(line, found_line[1..], filename, "", a, io));
     return try found_lines.toOwnedSlice(a);
 }
 
 fn resolveLineRefDiff(
-    a: Allocator,
     line: []const u8,
     filename: []const u8,
     diff: *Patch.Diff,
     line_ref: LineRef,
     fpos: usize,
+    a: Allocator,
+    io: Io,
 ) !?[][]const u8 {
     const number, const ncount = switch (line_ref) {
         .number => |n| .{ n, 1 },
@@ -614,7 +616,7 @@ fn resolveLineRefDiff(
                     fixed_code = fixed[0..i];
                 }
 
-                try found_lines.append(a, try highlightLineRef(line, fixed_code, filename, color, a));
+                try found_lines.append(a, try highlightLineRef(line, fixed_code, filename, color, a, io));
             }
             break;
         }
@@ -755,7 +757,7 @@ pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo
                     const line_ref = try lineRef(line[h..]);
 
                     // default to
-                    if (try resolveLineRefDiff(a, line, filename, diff, line_ref, filepos)) |code| {
+                    if (try resolveLineRefDiff(line, filename, diff, line_ref, filepos, a, io)) |code| {
                         found_ref = true;
                         try message_lines.appendSlice(a, code);
                         var end: usize = h;
@@ -881,7 +883,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 applies = diff.applies;
             } else {
                 var agent = repo.getAgent(f.alloc);
-                if (agent.checkPatch(diff.patch.blob)) |_| {
+                if (agent.checkPatch(diff.patch.blob, f.io)) |_| {
                     applies = true;
                     diff.applies = true;
                 } else |err| {
@@ -895,7 +897,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         }
     }
 
-    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
+    const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     const messages = try delta_shared.genThreadMessages(delta, &repo, if (patch) |*p| p else null, f.alloc, f.io);
 
     const username = if (f.user) |usr| usr.username.? else "public";

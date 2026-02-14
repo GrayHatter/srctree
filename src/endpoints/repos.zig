@@ -88,8 +88,8 @@ pub const RouteData = struct {
         };
     }
 
-    pub fn exists(self: RouteData) bool {
-        return repos.exists(self.name, .public);
+    pub fn exists(self: RouteData, io: Io) bool {
+        return repos.exists(self.name, .public, io);
     }
 
     pub fn repoHeader(rd: RouteData, host: []const u8) !S.BaseRepoHeaderHtml {
@@ -116,7 +116,7 @@ pub const RouteData = struct {
 
 pub fn navButtons(f: *Frame) ![2]S.NavButtons {
     const rd = RouteData.init(f.uri) orelse return error.InvalidURI;
-    if (!rd.exists()) return error.InvalidURI;
+    if (!rd.exists(f.io)) return error.InvalidURI;
     var i_count: usize = 0;
     var d_count: usize = 0;
     var itr: Delta.RepoIterator = .init(rd.name, f.io);
@@ -184,7 +184,7 @@ pub fn updateFetchPatchView(f: *Frame) error{Unspecified}!PatchViewMode {
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     const rd = RouteData.init(f.uri) orelse return list;
 
-    if (rd.exists()) {
+    if (rd.exists(f.io)) {
         if (repos.open(rd.name, .public, f.io)) |repo_| b: {
             var repo = repo_ orelse break :b;
             if (repo.loadData(f.alloc, f.io)) {
@@ -293,7 +293,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
 }
 
 fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
-    const now = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    const now = Io.Clock.real.now(io).toSeconds();
     const desc: []const u8 = try allocPrint(a, "{f}", .{
         abx.Html{ .text = repo.description(a, io) catch "" },
     });
@@ -352,7 +352,7 @@ fn list(f: *Frame) Router.Error!void {
     const udata = f.request.data.query.validate(RepoSortReq) catch return error.DataInvalid;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
-    var repo_iter = repos.allRepoIterator(.public) catch return error.Unknown;
+    var repo_iter = repos.allRepoIterator(.public, f.io) catch return error.Unknown;
     var current_repos: ArrayList(Git.Repo) = .{};
     while (repo_iter.next(f.io) catch return error.Unknown) |rpo_| {
         var rpo = rpo_;

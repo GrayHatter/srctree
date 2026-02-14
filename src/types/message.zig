@@ -35,8 +35,8 @@ pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8, io: 
         .state = 0,
         .kind = kind,
         .target = tid,
-        .created = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
-        .updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
+        .created = Io.Clock.real.now(io).toSeconds(),
+        .updated = Io.Clock.real.now(io).toSeconds(),
         .author = author,
         .message = message,
     };
@@ -49,11 +49,11 @@ pub fn commit(msg: Message, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.message", .{&msg.hash});
     const file = try Types.commit(.message, filename, io);
-    defer file.close();
+    defer file.close(io);
 
     std.debug.assert(!std.mem.eql(u8, msg.hash[0..], &[_]u8{0} ** 32));
     var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(&w_b);
+    var fd_writer = file.writer(io, &w_b);
     try writerFn(&msg, &fd_writer.interface);
 }
 
@@ -97,18 +97,14 @@ test "comment" {
     };
 
     const hash = c.genHash();
-    try std.testing.expectEqualSlices(
-        u8,
-        &[_]u8{
-            0x5A, 0x6E, 0x83, 0xD6, 0xDE, 0xC1, 0x97, 0x77, 0x8A, 0x73, 0x79, 0xBB, 0x32, 0x76, 0xDF, 0xF2,
-            0xB3, 0x74, 0xBB, 0x02, 0x19, 0x45, 0xB0, 0x29, 0x44, 0xEF, 0x00, 0xDC, 0x91, 0x62, 0x29, 0x41,
-        },
-        hash,
-    );
+    try std.testing.expectEqualSlices(u8, &[_]u8{
+        0x5A, 0x6E, 0x83, 0xD6, 0xDE, 0xC1, 0x97, 0x77, 0x8A, 0x73, 0x79, 0xBB, 0x32, 0x76, 0xDF, 0xF2,
+        0xB3, 0x74, 0xBB, 0x02, 0x19, 0x45, 0xB0, 0x29, 0x44, 0xEF, 0x00, 0xDC, 0x91, 0x62, 0x29, 0x41,
+    }, hash);
 
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true })).adaptToNewApi(), io);
+    try Types.init(try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } }), io);
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{hash});
@@ -119,9 +115,9 @@ test "comment" {
 
     {
         var file = try Types.commit(.message, filename, io);
-        defer file.close();
+        defer file.close(io);
         var w_b: [2048]u8 = undefined;
-        var writer = file.writer(&w_b);
+        var writer = file.writer(io, &w_b);
         try writerFn(&c, &writer.interface);
     }
     var reader = try Types.loadDataReader(.message, filename, a, io);
@@ -151,14 +147,14 @@ test Message {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{ .iterate = true })).adaptToNewApi(), io);
+    try Types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
 
     var c = try Message.new(.comment, 0, "author", "message", io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    c.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
-    c.updated = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    c.created = Io.Clock.real.now(io).toSeconds() & mask;
+    c.updated = Io.Clock.real.now(io).toSeconds() & mask;
     // required to overwrite the timestamp
     c.hash = @splat(0);
     _ = c.genHash();

@@ -74,7 +74,7 @@ pub fn init(dir: Storage, io: Io) !void {
         Viewers,
     }) |inc| {
         if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
-            try inc.initType(try dir.makeOpenPath(io, inc.TYPE_PREFIX, .{ .iterate = true }));
+            try inc.initType(try dir.createDirPathOpen(io, inc.TYPE_PREFIX, .{ .open_options = .{ .iterate = true } }));
         }
     }
 }
@@ -84,11 +84,11 @@ pub fn raze(io: Io) void {
 }
 
 pub fn iterableDir(comptime type_name: @EnumLiteral(), io: Io) !Io.Dir {
-    return try storage_dir.makeOpenPath(io, @tagName(type_name), .{ .iterate = true });
+    return try storage_dir.createDirPathOpen(io, @tagName(type_name), .{ .open_options = .{ .iterate = true } });
 }
 
 pub fn loadDataAlloc(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) ![]u8 {
-    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
     defer type_dir.close(io);
     const file = try type_dir.openFile(io, name, .{});
     defer file.close(io);
@@ -101,7 +101,7 @@ pub fn loadDataAlloc(comptime type_name: @EnumLiteral(), name: []const u8, a: Al
 }
 
 pub fn loadDataReader(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) !Io.Reader {
-    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
     defer type_dir.close(io);
     const file = try type_dir.openFile(io, name, .{});
     defer file.close(io);
@@ -119,20 +119,18 @@ pub fn loadDataHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, a: 
     return loadDataReader(type_name, filename, a, io);
 }
 
-pub fn commit(comptime type_name: @EnumLiteral(), name: []const u8, io: Io) !fs.File {
-    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+pub fn commit(comptime type_name: @EnumLiteral(), name: []const u8, io: Io) !Io.File {
+    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
     defer type_dir.close(io);
-    const new = try type_dir.createFile(io, name, .{});
-    return .adaptFromNewApi(new);
+    return try type_dir.createFile(io, name, .{});
 }
 
-pub fn commitHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, io: Io) !fs.File {
+pub fn commitHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, io: Io) !Io.File {
     var buf: [@sizeOf(DefaultHash) * 2 + 1 + @tagName(type_name).len]u8 = undefined;
     const filename = bufPrint(&buf, "{x}." ++ @tagName(type_name), .{&hash}) catch unreachable;
-    var type_dir = try storage_dir.makeOpenPath(io, @tagName(type_name), .{});
+    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
     defer type_dir.close(io);
-    const new = try type_dir.createFile(io, filename, .{});
-    return .adaptFromNewApi(new);
+    return try type_dir.createFile(io, filename, .{});
 }
 
 pub fn Index(type_name: @EnumLiteral()) type {
@@ -160,9 +158,8 @@ pub fn Index(type_name: @EnumLiteral()) type {
             return idx;
         }
 
-        fn increment(fd: Io.File, idx: usize, _: Io) !void {
-            var new: fs.File = .adaptFromNewApi(fd);
-            var writer = new.writer(&.{});
+        fn increment(fd: Io.File, idx: usize, io: Io) !void {
+            var writer = fd.writer(io, &.{});
             try writer.interface.writeInt(usize, idx, .big);
             try writer.interface.flush();
         }
@@ -350,7 +347,7 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                             if (!enumT.is_exhaustive) @compileError("non-exaustive enums are not supported");
                             try w.print("{s}: {s}\n", .{ field.name, @tagName(@field(t, field.name)) });
                         },
-                        .@"struct" => |_| {
+                        .@"struct" => {
                             if (enabled_structs.contains(field.type)) {
                                 const prefix = if (name.len > 0) name ++ "." ++ field.name else field.name;
                                 try writeStruct(field.type, &@field(t, field.name), prefix, w);

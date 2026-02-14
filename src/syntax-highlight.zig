@@ -117,7 +117,7 @@ pub fn translateInternal(r: *Reader, w: Writer, lang: Language, a: Allocator) !v
     };
 }
 
-pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
+pub fn highlight(lang: Language, text: []const u8, a: Allocator, io: Io) ![]u8 {
     return switch (lang) {
         .bash,
         .c,
@@ -135,7 +135,7 @@ pub fn highlight(a: Allocator, lang: Language, text: []const u8) ![]u8 {
         .txt,
         .vim,
         .zig,
-        => highlightPygmentize(a, lang, text),
+        => highlightPygmentize(lang, text, a, io),
         //else => highlightInternal(a, lang, text),
 
     };
@@ -148,57 +148,54 @@ pub fn highlightInternal(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     comptime unreachable;
 }
 
-pub fn highlightPygmentize(a: Allocator, lang: Language, text: []const u8) ![]u8 {
-    var child = std.process.Child.init(&[_][]const u8{
-        "pygmentize",
-        "-f",
-        "html",
-        "-l",
-        try lang.toString(),
-    }, a);
-    child.stdin_behavior = .Pipe;
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    child.expand_arg0 = .no_expand;
-    child.spawn() catch unreachable;
+pub fn highlightPygmentize(lang: Language, text: []const u8, a: Allocator, io: Io) ![]u8 {
+    var child = try std.process.spawn(io, .{
+        .argv = &[_][]const u8{ "pygmentize", "-f", "html", "-l", try lang.toString() },
+        .expand_arg0 = .no_expand,
+        .environ_map = &.init(a),
+        .cwd = .inherit,
+        .stdin = .pipe,
+        .stdout = .pipe,
+        .stderr = .ignore,
+    });
 
-    const err_mask = std.posix.POLL.ERR | std.posix.POLL.NVAL | std.posix.POLL.HUP;
-    var poll_fd = [_]std.posix.pollfd{
-        .{
-            .fd = child.stdout.?.handle,
-            .events = std.posix.POLL.IN,
-            .revents = undefined,
-        },
-    };
-    _ = std.posix.write(child.stdin.?.handle, text) catch unreachable;
-    std.posix.close(child.stdin.?.handle);
-    child.stdin = null;
-    var buf: std.ArrayList(u8) = .{};
-    const abuf = try a.alloc(u8, 0xffffff);
-    defer a.free(abuf);
-    while (true) {
-        const events_len = std.posix.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
-        if (events_len == 0) continue;
-        if (poll_fd[0].revents & std.posix.POLL.IN != 0) {
-            const amt = std.posix.read(poll_fd[0].fd, abuf) catch unreachable;
-            if (amt == 0) break;
-            const start: usize = if (std.mem.startsWith(u8, abuf, "<div class=\"highlight\"><pre>")) 28 else 0;
-            try buf.appendSlice(a, abuf[start..amt]);
-        } else if (poll_fd[0].revents & err_mask != 0) {
-            break;
-        }
+    var stdout: Writer.Allocating = try .initCapacity(a, text.len * 2);
+    errdefer stdout.deinit();
+
+    if (child.stdin) |cstdin| {
+        var writer = cstdin.writer(io, &.{});
+        try writer.interface.writeAll(text);
+        cstdin.close(io);
+        child.stdin = null;
     }
 
-    _ = child.wait() catch unreachable;
-    if (std.mem.endsWith(u8, buf.items, "</pre></div>\n")) {
-        buf.items.len -= 13;
+    defer if (child.stdout) |out| out.close(io);
+
+    var r_b: [8196]u8 = undefined;
+    var outr = child.stdout.?.reader(io, &r_b);
+    // We just assume the prefix doesn't change
+    try outr.interface.fill(28);
+    outr.interface.toss(28);
+    while (outr.interface.stream(&stdout.writer, .limited(0x800000))) |_| {
+        // continue until we hit EOS
+    } else |err| switch (err) {
+        error.EndOfStream => {},
+        else => log.err("err {}", .{err}),
     }
-    return try buf.toOwnedSlice(a);
+
+    _ = try child.wait(io);
+    if (endsWith(u8, stdout.writer.buffer[0..stdout.writer.end], "</pre></div>\n"))
+        stdout.writer.end -|= 13;
+
+    return try stdout.toOwnedSlice();
 }
+const log = std.log.scoped(.bleh);
 
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const Reader = std.Io.Reader;
 const Writer = std.Io.Writer;
 const endsWith = std.mem.endsWith;
+const startsWith = std.mem.startsWith;
 const eql = std.mem.eql;

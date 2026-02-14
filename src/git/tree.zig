@@ -156,20 +156,18 @@ pub fn format(self: Tree, out: *Io.Writer) !void {
 test "tree decom" {
     var a = std.testing.allocator;
     const io = std.testing.io;
+    var cwd = Io.Dir.cwd();
 
-    var cwd = std.fs.cwd();
-    var file = cwd.openFile(
-        "./.git/objects/5e/dabf724389ef87fa5a5ddb2ebe6dbd888885ae",
-        .{},
-    ) catch |err| switch (err) {
-        error.FileNotFound => {
-            return error.SkipZigTest;
-            // Sadly this was a predictable error that past me should have know
-            // better, alas, actually fixing it [by creating a test vector repo]
-            // is still a future me problem!
-        },
-        else => return err,
-    };
+    var file = cwd.openFile(io, "./.git/objects/5e/dabf724389ef87fa5a5ddb2ebe6dbd888885ae", .{}) catch |err|
+        switch (err) {
+            error.FileNotFound => {
+                return error.SkipZigTest;
+                // Sadly this was a predictable error that past me should have know
+                // better, alas, actually fixing it [by creating a test vector repo]
+                // is still a future me problem!
+            },
+            else => return err,
+        };
 
     var r_b: [2048]u8 = undefined;
     var reader = file.reader(io, &r_b);
@@ -180,7 +178,6 @@ test "tree decom" {
     const buf = try a.dupe(u8, b[0..]);
     defer a.free(buf);
     const blob = buf[(find(u8, buf, "\x00") orelse unreachable) + 1 ..];
-    //std.debug.print("{s}\n", .{buf});
     const tree = try Tree.init(SHA.init("5edabf724389ef87fa5a5ddb2ebe6dbd888885ae"), a, blob);
     defer tree.raze(a);
     for (tree.blobs) |tobj| {
@@ -189,28 +186,12 @@ test "tree decom" {
     if (false) std.debug.print("{}\n", .{tree});
 }
 
-test "tree child" {
-    var a = std.testing.allocator;
-    const child = try std.process.Child.run(.{
-        .allocator = a,
-        .argv = &[_][]const u8{
-            "git",
-            "cat-file",
-            "-p",
-            "5edabf724389ef87fa5a5ddb2ebe6dbd888885ae",
-        },
-    });
-    //std.debug.print("{s}\n", .{child.stdout});
-    a.free(child.stdout);
-    a.free(child.stderr);
-}
-
 test "mk sub tree" {
     const a = std.testing.allocator;
     const io = std.testing.io;
 
-    const cwd = try std.fs.cwd().openDir(".", .{});
-    var repo = try Repo.init(cwd.adaptToNewApi(), io);
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
     defer repo.raze(a, io);
 
     try repo.loadData(a, io);

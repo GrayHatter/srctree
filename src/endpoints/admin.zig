@@ -127,7 +127,7 @@ const Repo = struct {
         var buf: [2048]u8 = undefined;
         const dir_name = try std.fmt.bufPrint(&buf, "repos/{s}", .{repo_req.repo_name});
 
-        if (std.fs.cwd().openDir(dir_name, .{})) |_| return error.Unknown else |_| {}
+        if (Io.Dir.cwd().openDir(f.io, dir_name, .{})) |_| return error.Unknown else |_| {}
 
         const redirect_uri = try std.fmt.bufPrint(&buf, "/repo/{s}", .{repo_req.repo_name});
         return f.redirect(redirect_uri, .see_other) catch unreachable;
@@ -186,14 +186,14 @@ const Repo = struct {
         const new_repo_name = nameitr.first();
         std.debug.print("repo uri {s}\n", .{new_repo_name});
         // TODO sanitize requested repo name
-        const dir = std.fs.cwd().openDir("repos", .{}) catch |err| {
+        const dir = Io.Dir.cwd().openDir(f.io, "repos", .{}) catch |err| {
             page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
             return try f.sendPage(&page);
         };
 
         var agent = git.Agent{ .alloc = f.alloc, .cwd = dir };
         std.debug.print("fork bare {s}\n", .{
-            agent.forkRemote(clone_req.repo_uri, new_repo_name) catch |err| {
+            agent.forkRemote(clone_req.repo_uri, new_repo_name, f.io) catch |err| {
                 page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
                 return try f.sendPage(&page);
             },
@@ -223,6 +223,7 @@ const git = @import("../git.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const mem = std.mem;
 const verse = @import("verse");

@@ -29,7 +29,7 @@ const readerFn = typeio.read;
 const Index = Types.Index(type_prefix);
 
 pub fn new(src: Types.DefaultHash, viewer: []const u8, io: Io) !Viewers {
-    const now = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    const now = Io.Clock.real.now(io).toSeconds();
     var view: [1]View = .{
         .{ .time = now, .name = viewer },
     };
@@ -60,9 +60,9 @@ pub fn open(src: Types.DefaultHash, a: Allocator, io: Io) !Viewers {
 
 pub fn commit(v: Viewers, io: Io) !void {
     const file = try Types.commitHashId(type_prefix, v.src, io);
-    defer file.close();
+    defer file.close(io);
     var w_b: [2048]u8 = undefined;
-    var writer = file.writer(&w_b);
+    var writer = file.writer(io, &w_b);
     try writerFn(&v, &writer.interface);
 
     for (v.viewers.items) |view| {
@@ -77,12 +77,12 @@ test Viewers {
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
     try Types.init(
-        (try tempdir.dir.makeOpenPath(@tagName(type_prefix), .{ .iterate = true })).adaptToNewApi(),
+        (try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } })),
         io,
     );
 
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    const real = (try Io.Clock.now(.real, io)).toSeconds();
+    const real = Io.Clock.real.now(io).toSeconds();
     const now = real & mask;
     var viewers = try Viewers.new(@splat('v'), "grayhatter", io);
     try std.testing.expectEqual(real, viewers.time);

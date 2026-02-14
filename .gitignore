@@ -1,6 +1,7 @@
 repos/*
 zig-out/*
 zig-cache/*
+zig-pkg/*
 .zig-cache/*
 data/*
 

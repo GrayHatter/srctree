@@ -25,8 +25,8 @@ pub fn blame(f: *Frame) Router.Error!void {
 
     var actions = repo.getAgent(f.alloc);
     const new: Io.Dir = if (!repo.bare) repo.dir.openDir(f.io, "..", .{}) catch return error.Unknown else repo.dir;
-    actions.cwd = .adaptFromNewApi(new);
-    defer if (!repo.bare) actions.cwd.?.close();
+    actions.cwd = new;
+    defer if (!repo.bare) actions.cwd.?.close(f.io);
     const ref: ?Git.Ref = if (rd.ref) |r|
         if (Git.SHA.initCheck(r)) |sha|
             Git.Ref{ .sha = sha }
@@ -34,7 +34,7 @@ pub fn blame(f: *Frame) Router.Error!void {
             null
     else
         null;
-    const git_blame = actions.blame(blame_file, ref) catch return error.InvalidURI;
+    const git_blame = actions.blame(blame_file, ref, f.io) catch return error.InvalidURI;
 
     const map, const lines = parseBlame(f.alloc, git_blame) catch return error.Unknown;
     var source_lines: ArrayList(u8) = .{};
@@ -59,7 +59,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     }
 
     const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang|
-        try Highlight.highlight(f.alloc, lang, source_lines.items)
+        Highlight.highlight(lang, source_lines.items, f.alloc, f.io) catch return error.Unknown
     else
         allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = source_lines.items }}) catch return error.Unknown;
 
@@ -102,7 +102,7 @@ fn wrapLineNumbersBlame(
     path: []const u8,
     include_email: bool,
 ) ![]S.BlameHtml.BlameLines {
-    const now: i64 = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    const now: i64 = Io.Clock.real.now(io).toSeconds();
     const b_lines = try a.alloc(S.BlameHtml.BlameLines, blames.len);
     const shas = try a.alloc([8]u8, blames.len);
     var prev_sha: SHA = .{ .bin = @splat(0xff) };

@@ -5,7 +5,7 @@ const NetworkPage = template.PageData("network.html");
 pub fn index(ctx: *Frame) Error!void {
     var dom: *DOM = .create(ctx.alloc);
 
-    var repo_iter = Repos.allRepoIterator(.public) catch return error.Unknown;
+    var repo_iter = Repos.allRepoIterator(.public, ctx.io) catch return error.Unknown;
     while (repo_iter.next(ctx.io) catch return error.Unknown) |repoC| {
         var repo = repoC;
         repo.loadData(ctx.alloc, ctx.io) catch |err| {

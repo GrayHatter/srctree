@@ -1,7 +1,7 @@
 pub fn highlight() void {}
 
-pub fn translate(r: *Reader, w: *Writer, a: Allocator) !void {
-    return try Translate.source(r, w, a);
+pub fn translate(r: *Reader, w: *Writer, a: Allocator, io: Io) !void {
+    return try Translate.source(r, w, a, io);
 }
 
 const AST = struct {
@@ -34,16 +34,16 @@ const AST = struct {
 };
 
 pub const Translate = struct {
-    pub fn source(reader: *Reader, dst: *Writer, a: Allocator) error{ InvalidMarkdown, OutOfMemory, WriteFailed }!void {
+    pub fn source(reader: *Reader, dst: *Writer, a: Allocator, io: Io) error{ InvalidMarkdown, OutOfMemory, WriteFailed }!void {
         while (reader.bufferedLen() > 0) {
-            block(reader, dst, a) catch |err| switch (err) {
+            block(reader, dst, a, io) catch |err| switch (err) {
                 error.WriteFailed => return,
                 inline else => |e| return e,
             };
         }
     }
 
-    fn block(r: *Reader, dst: *Writer, a: Allocator) error{ InvalidMarkdown, OutOfMemory, WriteFailed }!void {
+    fn block(r: *Reader, dst: *Writer, a: Allocator, io: Io) error{ InvalidMarkdown, OutOfMemory, WriteFailed }!void {
         if (r.bufferedLen() == 0) return;
         var indent = r.buffered();
         var indent_len: usize = 0;
@@ -82,7 +82,7 @@ pub const Translate = struct {
             },
             '`' => {
                 if (eql(u8, r.peek(3) catch "", "```") and findPos(u8, r.buffered(), 3, "\n```") != null) {
-                    code(r, dst, a) catch |err| switch (err) {
+                    code(r, dst, a, io) catch |err| switch (err) {
                         error.OutOfMemory => return error.OutOfMemory,
                         error.WriteFailed => return error.WriteFailed,
                         else => return error.InvalidMarkdown,
@@ -176,7 +176,7 @@ pub const Translate = struct {
         try dst.writeAll("</p>\n");
     }
 
-    fn code(reader: *Reader, dst: *Writer, a: Allocator) !void {
+    fn code(reader: *Reader, dst: *Writer, a: Allocator, io: Io) !void {
         std.debug.assert(eql(u8, try reader.take(3), "```"));
         // TODO does the closing ``` need a \n prefix
         const end = findPos(u8, reader.buffered(), 0, "\n```") orelse unreachable;
@@ -195,7 +195,7 @@ pub const Translate = struct {
         }
         try dst.writeAll("<div class=\"codeblock\">");
         if (lang) |l| if (parseCodeblockFlavor(l)) |flavor| {
-            try dst.writeAll(try syntax.highlight(a, flavor, r.buffered()));
+            try dst.writeAll(try syntax.highlight(flavor, r.buffered(), a, io));
             try dst.writeAll("</div>");
             return;
         };
@@ -442,7 +442,7 @@ test "title 0" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -455,7 +455,7 @@ test "title 1" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -484,7 +484,7 @@ test "title 2" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -510,7 +510,7 @@ test "paragraph" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -535,7 +535,7 @@ test "paragraph CRLF" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -548,7 +548,7 @@ test "backtick" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -562,7 +562,7 @@ test "backtick block" {
 
         var r: Reader = .fixed(blob);
         var w: Writer.Allocating = .init(a);
-        try Translate.source(&r, &w.writer, a);
+        try Translate.source(&r, &w.writer, a, std.testing.io);
         defer w.deinit();
 
         try std.testing.expectEqualStrings(expected, w.written());
@@ -573,7 +573,7 @@ test "backtick block" {
 
         var r: Reader = .fixed(blob);
         var w: Writer.Allocating = .init(a);
-        try Translate.source(&r, &w.writer, a);
+        try Translate.source(&r, &w.writer, a, std.testing.io);
         defer w.deinit();
 
         try std.testing.expectEqualStrings(expected, w.written());
@@ -601,7 +601,7 @@ test "list" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -636,7 +636,7 @@ test "list nested" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -655,7 +655,7 @@ test "em" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -674,7 +674,7 @@ test "em2" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -693,7 +693,7 @@ test "em3" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -712,7 +712,7 @@ test "strong" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -731,7 +731,7 @@ test "strong2" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -750,7 +750,7 @@ test "em+strong" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -769,7 +769,7 @@ test "link" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -788,7 +788,7 @@ test "fake link" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -814,7 +814,7 @@ test "listed links" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -833,7 +833,7 @@ test "img" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     try std.testing.expectEqualStrings(expected, w.written());
@@ -852,7 +852,7 @@ test "nested img" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     if (true) return error.SkipZigTest;
@@ -875,7 +875,7 @@ test "ref link" {
 
     var r: Reader = .fixed(blob);
     var w: Writer.Allocating = .init(a);
-    try Translate.source(&r, &w.writer, a);
+    try Translate.source(&r, &w.writer, a, std.testing.io);
     defer w.deinit();
 
     if (true) return error.SkipZigTest;
@@ -886,6 +886,7 @@ const syntax = @import("../syntax-highlight.zig");
 const abx = @import("verse").abx;
 
 const std = @import("std");
+const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Writer = std.Io.Writer;

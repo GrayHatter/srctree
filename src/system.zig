@@ -2,7 +2,7 @@ pub const page_size_min = std.heap.page_size_min;
 pub const MMapError = std.posix.MMapError;
 
 pub const MMapOptions = struct {
-    prot: u32 = std.posix.PROT.READ,
+    prot: std.os.linux.PROT = .{ .READ = true },
     flags: system.MAP = .{ .TYPE = .SHARED },
     offset: u64 = 0,
 };

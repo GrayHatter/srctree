@@ -12,30 +12,30 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
     return Router.router(ctx, &endpoints);
 }
 
-fn gitUploadPack(ctx: *Frame) Error!void {
-    ctx.uri.reset();
-    _ = ctx.uri.first();
-    const name = ctx.uri.next() orelse return error.Unknown;
-    const target = ctx.uri.rest();
+fn gitUploadPack(f: *Frame) Error!void {
+    f.uri.reset();
+    _ = f.uri.first();
+    const name = f.uri.next() orelse return error.Unknown;
+    const target = f.uri.rest();
     if (!eql(u8, target, "info/refs") and !eql(u8, target, "git-upload-pack")) {
         return error.Abuse;
     }
 
     var path_buf: [2048]u8 = undefined;
     const path_tr = std.fmt.bufPrint(&path_buf, "repos/{s}/{s}", .{ name, target }) catch unreachable;
-    std.debug.print("pathtr {s}\n", .{path_tr});
+    log.warn("pathtr {s}", .{path_tr});
 
-    var map = std.process.EnvMap.init(ctx.alloc);
+    var map = std.process.Environ.Map.init(f.alloc);
     defer map.deinit();
     try map.put("PATH_TRANSLATED", path_tr);
     var gz_encoding = false;
     //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
-    if (ctx.request.method == .GET) {
+    if (f.request.method == .GET) {
         try map.put("REQUEST_METHOD", "GET");
     } else {
         try map.put("REQUEST_METHOD", "POST");
     }
-    const qstr = ctx.request.data.query.bytes;
+    const qstr = f.request.data.query.bytes;
     if (eql(u8, qstr, "service=git-upload-pack")) {
         try map.put("QUERY_STRING", "service=git-upload-pack");
     } else {
@@ -44,12 +44,12 @@ fn gitUploadPack(ctx: *Frame) Error!void {
     }
 
     try map.put("REMOTE_USER", "");
-    try map.put("REMOTE_ADDR", ctx.request.remote_addr);
+    try map.put("REMOTE_ADDR", f.request.remote_addr);
     try map.put("CONTENT_TYPE", "application/x-git-upload-pack-request");
     try map.put("GIT_PROTOCOL", "version=2");
     try map.put("GIT_HTTP_EXPORT_ALL", "true");
 
-    switch (ctx.downstream.gateway) {
+    switch (f.downstream.gateway) {
         .zwsgi => |z| {
             for (z.vars.items) |vars| {
                 log.info("each {s} {s}", .{ vars.key, vars.val });
@@ -57,7 +57,7 @@ fn gitUploadPack(ctx: *Frame) Error!void {
                     if (eql(u8, vars.val, "gzip")) {
                         gz_encoding = true;
                     } else {
-                        std.debug.print("unexpected encoding\n", .{});
+                        log.err("unexpected encoding", .{});
                     }
                 }
             }
@@ -65,76 +65,60 @@ fn gitUploadPack(ctx: *Frame) Error!void {
         else => @panic("not implemented"),
     }
 
-    var child = std.process.Child.init(&[_][]const u8{ "git", "http-backend" }, ctx.alloc);
-    child.stdin_behavior = .Pipe;
-    child.stdout_behavior = .Pipe;
-    child.stderr_behavior = .Ignore;
-    //child.stderr_behavior = .Pipe;
-    child.env_map = &map;
-    child.expand_arg0 = .no_expand;
-
-    ctx.status = .ok;
-
-    child.spawn() catch log.err("unable to spawn git http", .{});
-
-    const err_mask = POLL.ERR | POLL.NVAL | POLL.HUP;
-    var poll_fd = [_]std.posix.pollfd{
-        .{ .fd = child.stdout.?.handle, .events = POLL.IN, .revents = 0 },
+    var child = std.process.spawn(f.io, .{
+        .argv = &.{ "git", "http-backend" },
+        .stdin = .pipe,
+        .stdout = .pipe,
+        .stderr = .pipe,
+        .environ_map = &map,
+    }) catch |err| {
+        log.err("Unable to spawn for gitweb {}", .{err});
+        return error.ServerFault;
     };
 
-    const post_data: ?[]const u8 = if (ctx.request.data.post) |pd| pd.bytes else null;
-    if (post_data) |pd| {
-        var w_b: [6400]u8 = undefined; // This is what I saw while debugging
-        var writer = child.stdin.?.writer(&w_b);
+    if (f.request.data.post) |pd| {
+        const stdin = child.stdin orelse return error.ServerFault;
         defer child.stdin = null;
-        defer child.stdin.?.close();
-        defer writer.interface.flush() catch log.err("flush to git failed", .{});
+        defer stdin.close(f.io);
 
+        var w_b: [6400]u8 = undefined; // This is what I saw while debugging
+        var stdin_w = stdin.writer(f.io, &w_b);
         if (gz_encoding) {
-            var post_reader: Reader = .fixed(pd);
+            var post_reader: Reader = .fixed(pd.bytes);
             var gz_b: [std.compress.flate.max_window_len]u8 = undefined;
             var gzip: std.compress.flate.Decompress = .init(&post_reader, .gzip, &gz_b);
-            _ = gzip.reader.streamRemaining(&writer.interface) catch |err| {
+            _ = gzip.reader.streamRemaining(&stdin_w.interface) catch |err| {
                 log.err("gz stream error {}", .{err});
+                return error.ServerFault;
             };
         } else {
-            writer.interface.writeAll(pd) catch @panic("child writer");
+            try stdin_w.interface.writeAll(pd.bytes);
         }
+        try stdin_w.interface.flush();
     }
 
-    var buf = try ctx.alloc.alloc(u8, 0xffffff);
-    var headers_required = true;
-    const debug_git = false;
-    while (true) {
-        const events_len = std.posix.poll(&poll_fd, std.math.maxInt(i32)) catch unreachable;
-        if (events_len == 0) continue;
-        if (poll_fd[0].revents & POLL.IN != 0) {
-            const amt = std.posix.read(poll_fd[0].fd, buf) catch @panic("posix read");
-            if (amt == 0) break;
-            if (headers_required) {
-                ctx.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch log.err("unable to start headers", .{});
-                headers_required = false;
-                ctx.downstream.writer.flush() catch log.err("Unable to flush headers", .{});
-            }
-            if (debug_git) {
-                std.debug.print("git data\n", .{});
-                std.debug.print("{s}\n", .{buf[0..amt]});
-            }
-            ctx.downstream.writer.writeAll(buf[0..amt]) catch unreachable;
-        } else if (poll_fd[0].revents & err_mask != 0) {
-            break;
-        }
-    }
-    ctx.downstream.writer.flush() catch log.err("final flush failed", .{});
+    const stdout = child.stdout orelse return error.ServerFault;
+    var r_b: [6400]u8 = undefined; // This is what I saw while debugging
+    var stdout_r = stdout.reader(f.io, &r_b);
+    stdout_r.interface.fillMore() catch
+        return debugStderr("unable to start headers", &child, f.io);
 
-    if (child.stderr) |stderr| {
-        var stderr_buf = try ctx.alloc.alloc(u8, 0xffffff);
-        const stderr_read = std.posix.read(stderr.handle, stderr_buf) catch unreachable;
-        std.debug.print("stderr\n{s}\n", .{stderr_buf[0..stderr_read]});
+    if (stdout_r.interface.bufferedLen() > 0) {
+        f.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch
+            return debugStderr("unable to start headers", &child, f.io);
     }
-    if (child.wait()) |chld| {
-        if (chld.Exited != 0) {
-            log.err("child exit failed {}", .{chld});
+
+    while (stdout_r.interface.stream(f.downstream.writer, .limited(0x800000))) |_| {
+        //
+    } else |err| switch (err) {
+        error.EndOfStream => {},
+        else => return debugStderr("unable to stream body", &child, f.io),
+    }
+    f.downstream.writer.flush() catch log.err("final flush failed", .{});
+
+    if (child.wait(f.io)) |chld| {
+        if (chld.exited != 0) {
+            return debugStderr("unable to stream body", &child, f.io);
         } else {
             log.info("child {}", .{chld});
         }
@@ -142,6 +126,19 @@ fn gitUploadPack(ctx: *Frame) Error!void {
         log.err("Error waiting for child {}", .{err});
         return error.ServerFault;
     }
+}
+
+fn debugStderr(comptime msg: []const u8, child: *std.process.Child, io: std.Io) !void {
+    log.err(msg, .{});
+    if (child.stderr) |stderr| {
+        var b: [2048]u8 = undefined;
+        var stderr_r = stderr.reader(io, &b);
+        while (stderr_r.interface.takeDelimiter('\n') catch null) |line| {
+            log.err("stderr {s}", .{line});
+        }
+    }
+    _ = child.wait(io) catch unreachable;
+    return error.ServerFault;
 }
 
 const std = @import("std");

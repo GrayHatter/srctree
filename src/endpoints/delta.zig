@@ -124,7 +124,7 @@ pub fn genThreadMessages(
     a: Allocator,
     io: Io,
 ) ![]Messages {
-    const now: i64 = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    const now: i64 = Io.Clock.real.now(io).toSeconds();
     var thread = delta.loadThread(a, io) catch |err| {
         log.err("Unable to load comments for thread {} {}", .{ delta.index, err });
         return error.ServerFault;

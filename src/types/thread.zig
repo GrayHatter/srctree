@@ -21,8 +21,8 @@ pub fn new(delta: Delta, io: Io) !Thread {
     const thread = Thread{
         .index = max,
         .delta_hash = delta.hash,
-        .created = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
-        .updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
+        .created = Io.Clock.real.now(io).toSeconds(),
+        .updated = Io.Clock.real.now(io).toSeconds(),
     };
     try thread.commit(io);
     return thread;
@@ -58,10 +58,10 @@ pub fn commit(thread: Thread, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{thread.index});
     const file = try Types.commit(.thread, filename, io);
-    defer file.close();
+    defer file.close(io);
 
     var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(&w_b);
+    var fd_writer = file.writer(io, &w_b);
     const writer = &fd_writer.interface;
     try writerFn(&thread, writer);
 
@@ -81,7 +81,7 @@ pub fn addComment(thread: *Thread, author: []const u8, message: []const u8, a: A
 
 pub fn addMessage(thread: *Thread, m: Message, a: Allocator, io: Io) !void {
     try thread.messages.append(a, m);
-    thread.updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    thread.updated = Io.Clock.real.now(io).toSeconds();
     try thread.commit(io);
 }
 
@@ -124,7 +124,7 @@ test Thread {
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
     try Types.init(
-        (try tempdir.dir.makeOpenPath(@tagName(type_prefix), .{ .iterate = true })).adaptToNewApi(),
+        (try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } })),
         io,
     );
 
@@ -134,8 +134,8 @@ test Thread {
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    t.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
-    t.updated = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    t.created = Io.Clock.real.now(io).toSeconds() & mask;
+    t.updated = Io.Clock.real.now(io).toSeconds() & mask;
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();

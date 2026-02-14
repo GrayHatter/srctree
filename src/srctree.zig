@@ -210,7 +210,7 @@ test {
 
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.makeOpenPath("datadir", .{})).adaptToNewApi(), io);
+    try Types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{})), io);
     defer Types.raze(io);
 
     try endpoints.smokeTest(a, .{

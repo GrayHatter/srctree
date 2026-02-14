@@ -13,7 +13,7 @@ pub const Options = struct {
 pub fn init(options: Options, io: std.Io) !void {
     switch (options.backing) {
         .filesys => |fs| try Types.init(
-            try std.Io.Dir.cwd().makeOpenPath(io, fs.dir, .{ .iterate = true }),
+            try std.Io.Dir.cwd().createDirPathOpen(io, fs.dir, .{ .open_options = .{ .iterate = true } }),
             io,
         ),
     }

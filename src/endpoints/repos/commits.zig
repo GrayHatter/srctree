@@ -39,7 +39,7 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
 }
 
 fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
-    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
+    const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     if (!Git.commitish(sha)) {
         std.debug.print("Abuse ''{s}''\n", .{sha});
         return error.Abuse;
@@ -57,8 +57,8 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     };
 
     var git = repo.getAgent(f.alloc);
-    var diff = git.show(current.sha) catch |err| switch (err) {
-        error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
+    var diff = git.show(current.sha, f.io) catch |err| switch (err) {
+        //error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
         else => return error.Unknown,
     };
 
@@ -123,7 +123,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
             .upstream = upstream,
             .blame = null,
         },
-        .commit = try commitCtx(f.alloc, current, repo_name),
+        .commit = try commitCtx(current, repo_name, f.alloc, f.io),
         .comments = .{ .messages = messages },
         .patch = Diffs.patchStruct(f.alloc, &patch, patch_view_mode) catch return error.Unknown,
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
@@ -140,7 +140,7 @@ pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
         const commit_only = sha[0 .. sha.len - 6];
         const range = try bufPrint(rbuf[0..], "{s}^..{s}", .{ commit_only, commit_only });
 
-        const diff = acts.formatPatchRange(range) catch return error.ServerFault;
+        const diff = acts.formatPatchRange(range, f.io) catch return error.ServerFault;
         f.status = .ok;
         f.content_type = null;
         f.headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
@@ -170,7 +170,7 @@ pub fn viewCommit(f: *Frame) Error!void {
     }
 }
 
-pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.CommitHtml.Commit.Parents {
+pub fn commitCtxParents(c: Git.Commit, repo: []const u8, a: Allocator) ![]S.CommitHtml.Commit.Parents {
     var plen: usize = 0;
     for (c.parent) |cp| {
         if (cp != null) plen += 1;
@@ -189,18 +189,18 @@ pub fn commitCtxParents(a: Allocator, c: Git.Commit, repo: []const u8) ![]S.Comm
     return parents;
 }
 
-pub fn commitCtx(a: Allocator, c: Git.Commit, repo: []const u8) !S.CommitHtml.Commit {
+pub fn commitCtx(c: Git.Commit, repo: []const u8, a: Allocator, io: Io) !S.CommitHtml.Commit {
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     var r: Reader = .fixed(c.body);
     var w: Writer.Allocating = try .initCapacity(a, c.body.len);
-    Highlight.Markdown.translate(&r, &w.writer, a) catch |err| switch (err) {
+    Highlight.Markdown.translate(&r, &w.writer, a, io) catch |err| switch (err) {
         error.InvalidMarkdown => w.writer.print("{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable,
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };
     const sha = try a.dupe(u8, c.sha.hex()[0..]);
     return .{
         .author = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.author.name }}) catch unreachable,
-        .parents = try commitCtxParents(a, c, repo),
+        .parents = try commitCtxParents(c, repo, a),
         .repo = repo,
         .sha = sha,
         .sha_short = sha[0..8],

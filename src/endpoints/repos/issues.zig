@@ -180,7 +180,7 @@ fn view(f: *verse.Frame) Error!void {
 
     var r: Reader = .fixed(delta.message);
     var w: Writer.Allocating = try .initCapacity(f.alloc, delta.message.len);
-    Highlight.Markdown.translate(&r, &w.writer, f.alloc) catch |err| switch (err) {
+    Highlight.Markdown.translate(&r, &w.writer, f.alloc, f.io) catch |err| switch (err) {
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
         error.InvalidMarkdown => try w.writer.print("{f}", .{abx.Html{ .text = delta.message }}),
     };
@@ -199,7 +199,7 @@ fn view(f: *verse.Frame) Error!void {
     else
         "<span class=open>open</span>";
 
-    const now: i64 = (Io.Clock.now(.real, f.io) catch unreachable).toSeconds();
+    const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,

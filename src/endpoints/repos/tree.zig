@@ -1,7 +1,7 @@
 const TreePage = PageData("tree.html");
 
 pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
-    const now: i64 = (Io.Clock.now(.real, ctx.io) catch unreachable).toSeconds();
+    const now: i64 = Io.Clock.real.now(ctx.io).toSeconds();
     const c = if (rd.ref) |ref|
         switch (repo.objects.load(.init(ref), ctx.alloc, ctx.io) catch return error.InvalidURI) {
             .commit => |cm| cm,
@@ -84,7 +84,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     for (files.blobs) |obj| {
         if (isReadme(obj.name)) {
             const resolve = repo.blob(obj.sha, ctx.alloc, ctx.io) catch return error.Unknown;
-            const readme_html = htmlReadme(ctx.alloc, resolve.data.?) catch unreachable;
+            const readme_html = htmlReadme(resolve.data.?, ctx.alloc, ctx.io) catch unreachable;
             readme = try allocPrint(ctx.alloc, "{f}", .{readme_html[0]});
             break;
         }
@@ -143,7 +143,7 @@ fn isReadme(name: []const u8) bool {
     return false;
 }
 
-fn htmlReadme(a: Allocator, readme: []const u8) ![]E {
+fn htmlReadme(readme: []const u8, a: Allocator, io: Io) ![]E {
     var dom: *DOM = .create(a);
 
     dom = dom.open(html.element("readme", null, null));
@@ -152,7 +152,7 @@ fn htmlReadme(a: Allocator, readme: []const u8) ![]E {
 
     var r: Reader = .fixed(readme);
     var w: Writer.Allocating = try .initCapacity(a, readme.len);
-    Highlight.Markdown.translate(&r, &w.writer, a) catch |err| switch (err) {
+    Highlight.Markdown.translate(&r, &w.writer, a, io) catch |err| switch (err) {
         error.InvalidMarkdown => try w.writer.print("{f}", .{abx.Html{ .text = readme }}),
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };

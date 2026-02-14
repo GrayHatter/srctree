@@ -125,7 +125,7 @@ pub fn tzAdjusted(dt: DateTime) i64 {
 }
 
 pub fn now(io: std.Io) DateTime {
-    return fromEpoch((std.Io.Clock.now(.real, io) catch unreachable).toSeconds());
+    return fromEpoch(std.Io.Clock.real.now(io).toSeconds());
 }
 
 pub fn today(io: std.Io) DateTime {
@@ -301,7 +301,7 @@ pub fn fromActor(actor: Actor) !DateTime {
 }
 
 test "now" {
-    const timestamp = try std.Io.Clock.now(.real, std.testing.io);
+    const timestamp = std.Io.Clock.real.now(std.testing.io);
     // If this breaks, I know... I KNOW, non-deterministic tests... and I'm sorry!
     const this = now(std.testing.io);
     try std.testing.expectEqual(timestamp.toSeconds(), this.timestamp);

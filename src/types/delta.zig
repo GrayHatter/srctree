@@ -47,8 +47,8 @@ pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const
     const max: usize = try Index.nextExtra(repo, io);
     var d = Delta{
         .index = max,
-        .created = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
-        .updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds(),
+        .created = Io.Clock.real.now(io).toSeconds(),
+        .updated = Io.Clock.real.now(io).toSeconds(),
         .repo = repo,
         .title = title,
         .message = msg,
@@ -77,9 +77,9 @@ pub fn commit(delta: Delta, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ delta.repo, delta.index });
     const file = try Types.commit(.deltas, filename, io);
-    defer file.close();
+    defer file.close(io);
     var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(&w_b);
+    var fd_writer = file.writer(io, &w_b);
     try writerFn(&delta, &fd_writer.interface);
 }
 
@@ -112,7 +112,7 @@ pub fn addComment(delta: *Delta, c: Comment, a: Allocator, io: Io) !Message {
     var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
     const msg = try thread.addComment(c.author, c.message, a, io);
     try thread.commit(io);
-    delta.updated = (Io.Clock.now(.real, io) catch unreachable).toSeconds();
+    delta.updated = Io.Clock.real.now(io).toSeconds();
     try delta.commit(io);
     return msg;
 }
@@ -128,7 +128,7 @@ pub const CommentsMeta = struct { count: usize, new: bool };
 
 pub fn countComments(delta: Delta, io: Io) CommentsMeta {
     const thread = delta.thread orelse return .{ .count = 0, .new = false };
-    const ts = (Io.Clock.now(.real, io) catch unreachable).toSeconds() - 86400;
+    const ts = Io.Clock.real.now(io).toSeconds() - 86400;
     var cmtnew: bool = false;
     var cmtlen: usize = 0;
     for (thread.messages.items) |m| switch (m.kind) {
@@ -148,17 +148,17 @@ pub fn raze(_: Delta, _: std.mem.Allocator) void {
 }
 
 pub const Iterator = struct {
-    dir: std.fs.Dir.Iterator,
+    dir: Io.Dir.Iterator,
 
     pub fn init(io: Io) Iterator {
-        const dir: fs.Dir = .adaptFromNewApi(Types.iterableDir(.deltas, io) catch unreachable);
+        const dir: Io.Dir = Types.iterableDir(.deltas, io) catch unreachable;
         return .{
             .dir = dir.iterate(),
         };
     }
 
     pub fn next(self: *Iterator, a: Allocator, io: Io) ?Delta {
-        const line = (self.dir.next() catch return null) orelse return null;
+        const line = (self.dir.next(io) catch return null) orelse return null;
         if (line.kind != .file) return self.next(a, io);
         const name = cutSuffix(u8, line.name, ".delta") orelse return self.next(a, io);
         const i = lastIndexOf(u8, name, ".") orelse return self.next(a, io);
@@ -191,14 +191,14 @@ test Delta {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.makeOpenPath("delta", .{ .iterate = true })).adaptToNewApi(), io);
+    try Types.init((try tempdir.dir.createDirPathOpen(io, "delta", .{ .open_options = .{ .iterate = true } })), io);
 
     var d = try Delta.new("repo_name", "title", "message", "author", io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    d.created = (try Io.Clock.now(.real, io)).toSeconds() & mask;
-    d.updated = (try Io.Clock.now(.real, io)).toSeconds() & mask;
+    d.created = Io.Clock.real.now(io).toSeconds() & mask;
+    d.updated = Io.Clock.real.now(io).toSeconds() & mask;
     d.state.locked = true;
 
     var writer = std.Io.Writer.Allocating.init(a);

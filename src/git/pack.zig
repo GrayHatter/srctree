@@ -52,18 +52,17 @@ pub fn init(dir: Io.Dir, name: []const u8, io: Io) !Pack {
     const pfd = try dir.openFile(io, try bufPrint(&filename, "{s}.pack", .{name}), .{});
     defer pfd.close(io);
     var pack = Pack{
-        .pack = try mmap(.adaptFromNewApi(pfd)),
-        .idx = try mmap(.adaptFromNewApi(ifd)),
+        .pack = try mmap(pfd, io),
+        .idx = try mmap(ifd, io),
     };
     try pack.prepare();
     return pack;
 }
 
 pub fn initAllFromDir(dir: Io.Dir, a: Allocator, io: Io) ![]Pack {
-    var dir2: fs.Dir = .adaptFromNewApi(dir);
-    var itr = dir2.iterate();
+    var itr = dir.iterate();
     var packs: ArrayList(Pack) = try .initCapacity(a, 4);
-    while (try itr.next()) |file| {
+    while (try itr.next(io)) |file| {
         if (!endsWith(u8, file.name, ".idx")) continue;
         try packs.append(a, try .init(dir, file.name[0 .. file.name.len - 4], io));
     }
@@ -91,8 +90,9 @@ fn preparePack(self: *Pack) !void {
     self.idx_header = @ptrCast(@alignCast(self.idx.ptr));
 }
 
-fn mmap(f: std.fs.File) ![]u8 {
-    return system.mmap(f.handle, try f.getEndPos(), .{});
+fn mmap(f: Io.File, io: Io) ![]u8 {
+    const stats = try f.stat(io);
+    return system.mmap(f.handle, stats.size, .{});
 }
 
 fn munmap(mem: []align(std.heap.page_size_min) const u8) void {
