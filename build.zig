@@ -64,7 +64,7 @@ pub fn build(b: *std.Build) void {
     const deploy_bin = b.addInstallArtifact(exe, .{});
     deploy.dependOn(&deploy_bin.step);
     const static_files = b.addInstallDirectory(.{
-        .source_dir = b.path("static/"),
+        .source_dir = b.path("static"),
         .install_dir = .prefix,
         .install_subdir = "static",
     });

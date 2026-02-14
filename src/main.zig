@@ -112,8 +112,9 @@ pub fn main(mini: std.process.Init.Minimal) !void {
         }
     }
 
-    var threaded: std.Io.Threaded = .init_single_threaded;
-    const io = threaded.ioBasic();
+    // *SIGH*, I love zig master :/
+    var threaded: std.Io.Threaded = .init(a, .{ .environ = mini.environ });
+    const io = threaded.io();
     const cwd = std.Io.Dir.cwd();
 
     var cfg_file: ?std.Io.File = null;

@@ -6,37 +6,20 @@ const Agent = @This();
 
 const DEBUG_GIT_ACTIONS = false;
 
-pub fn pullUpstream(self: Agent, branch: []const u8, io: Io) !void {
-    const fetch = try self.exec(&[_][]const u8{
-        "git",
-        "fetch",
-        "upstream",
-        "-q",
-    }, io);
+pub fn pullUpstream(agent: Agent, branch: []const u8, io: Io) !void {
+    const fetch = try agent.exec(&.{ "git", "fetch", "upstream", "-q" }, io);
     if (fetch.len > 0) log.warn("fetch {s}", .{fetch});
-    self.alloc.free(fetch);
+    agent.alloc.free(fetch);
 
     var buf: [512]u8 = undefined;
     const up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
-    const pull = try self.execCustom(&[_][]const u8{
-        "git",
-        "merge-base",
-        "--is-ancestor",
-        "HEAD",
-        up_branch,
-    }, io);
-    defer self.alloc.free(pull.stdout);
-    defer self.alloc.free(pull.stderr);
+    const pull = try agent.execCustom(&.{ "git", "merge-base", "--is-ancestor", "HEAD", up_branch }, io);
+    defer agent.alloc.free(pull.stdout);
+    defer agent.alloc.free(pull.stderr);
 
     if (pull.term.exited == 0) {
-        const move = try self.exec(&[_][]const u8{
-            "git",
-            "fetch",
-            "upstream",
-            "*:*",
-            "-q",
-        }, io);
-        self.alloc.free(move);
+        const move = try agent.exec(&.{ "git", "fetch", "upstream", "*:*", "-q" }, io);
+        agent.alloc.free(move);
         return;
     }
 
@@ -44,84 +27,67 @@ pub fn pullUpstream(self: Agent, branch: []const u8, io: Io) !void {
     return error.NonAncestor;
 }
 
-pub fn pushDownstream(self: Agent, io: Io) !bool {
-    const push = try self.exec(&[_][]const u8{
-        "git",
-        "push",
-        "downstream",
-        "*:*",
-        "--porcelain",
-    }, io);
+pub fn pushDownstream(agent: Agent, io: Io) !bool {
+    const push = try agent.exec(&[_][]const u8{ "git", "push", "downstream", "*:*", "--porcelain" }, io);
     std.debug.print("pushing downstream ->\n{s}\n", .{push});
-    self.alloc.free(push);
+    agent.alloc.free(push);
     return true;
 }
 
-pub fn forkRemote(self: Agent, uri: []const u8, local_dir: []const u8, io: Io) ![]u8 {
-    const child = try self.execCustom(&[_][]const u8{
-        "git",
-        "clone",
-        "--bare",
-        "--origin",
-        "upstream",
-        uri,
-        local_dir,
-    }, io);
+pub fn forkRemote(agent: Agent, uri: []const u8, local_dir: []const u8, io: Io) !void {
+    const child = try agent.execCustom(
+        &.{ "git", "clone", "--bare", "--origin", "upstream", uri, local_dir },
+        io,
+    );
     if (child.stderr.len > 0) {
         std.debug.print("git Agent error\nstderr: {s}\n", .{child.stderr});
-        if (std.mem.indexOf(u8, child.stderr, "does not exist")) |_| {
-            return error.RemoteRepoUnreachable;
-        } else {
+        if (find(u8, child.stderr, "does not exist")) |_|
+            return error.RemoteRepoUnreachable
+        else
             return error.UnexpectedGitError;
-        }
     }
-    defer self.alloc.free(child.stderr);
+    defer agent.alloc.free(child.stderr);
+
+    const cwd = agent.cwd orelse Io.Dir.cwd();
+    var dir = cwd.openDir(io, local_dir, .{}) catch return error.FileSysFailed;
+    defer dir.close(io);
+    var file = dir.openFile(io, "config", .{ .mode = .read_write }) catch return error.FileSysFailed;
+    defer file.close(io);
+    var w = file.writer(io, &.{});
+    w.seekTo(file.length(io) catch return error.FileSysFailed) catch return error.FileSysFailed;
+    try w.interface.writeAll("    fetch = +refs/heads/*:refs/remotes/upstream/*\n");
+    try w.interface.flush();
 
     if (DEBUG_GIT_ACTIONS) std.debug.print(
         "git action\n{s}\n'''\n{s} \n''' \n{s} \n''' \ngit agent\n{any}\n",
-        .{ uri, child.stdout, child.stderr, self.cwd },
+        .{ uri, child.stdout, child.stderr, agent.cwd },
     );
-
-    return child.stdout;
 }
 
-pub fn initRepo(self: Agent, dir: []const u8, opt: struct { bare: bool = true }, io: Io) ![]u8 {
-    return try self.exec(&[_][]const u8{ "git", "init", if (opt.bare) "--bare" else "", dir }, io);
+pub fn initRepo(agent: Agent, dir: []const u8, opt: struct { bare: bool = true }, io: Io) ![]u8 {
+    return try agent.exec(&.{ "git", "init", if (opt.bare) "--bare" else "", dir }, io);
 }
 
-pub fn show(self: Agent, sha: SHA, io: Io) ![]u8 {
-    return try self.exec(&[_][]const u8{
-        "git",
-        "show",
-        "--histogram",
-        "--diff-merges=1",
-        "-p",
-        sha.hex()[0 .. sha.len * 2],
-    }, io);
+pub fn show(agent: Agent, sha: SHA, io: Io) ![]u8 {
+    return try agent.exec(
+        &.{ "git", "show", "--histogram", "--diff-merges=1", "-p", sha.hex()[0 .. sha.len * 2] },
+        io,
+    );
 }
 
-pub fn formatPatch(self: Agent, sha: SHA, io: Io) ![]u8 {
-    return try self.exec(&[_][]const u8{
-        "git",
-        "format-patch",
-        "--histogram",
-        "--stdout",
-        sha.hex()[0 .. sha.len * 2],
-    }, io);
+pub fn formatPatch(agent: Agent, sha: SHA, io: Io) ![]u8 {
+    return try agent.exec(
+        &.{ "git", "format-patch", "--histogram", "--stdout", sha.hex()[0 .. sha.len * 2] },
+        io,
+    );
 }
 
-pub fn formatPatchRange(self: Agent, range: []const u8, io: Io) ![]u8 {
-    return try self.exec(&[_][]const u8{
-        "git",
-        "format-patch",
-        "--histogram",
-        "--stdout",
-        range,
-    }, io);
+pub fn formatPatchRange(agent: Agent, range: []const u8, io: Io) ![]u8 {
+    return try agent.exec(&.{ "git", "format-patch", "--histogram", "--stdout", range }, io);
 }
 
-pub fn checkPatch(self: Agent, patch: []const u8, io: Io) !?[]u8 {
-    const res = try self.execCustomStdin(&.{
+pub fn checkPatch(agent: Agent, patch: []const u8, io: Io) !?[]u8 {
+    const res = try agent.execCustomStdin(&.{
         "git",
         "apply",
         "--check",
@@ -136,33 +102,20 @@ pub fn checkPatch(self: Agent, patch: []const u8, io: Io) !?[]u8 {
     return error.DoesNotApply;
 }
 
-pub fn blame(self: Agent, name: []const u8, ref: ?Ref, io: Io) ![]u8 {
+pub fn blame(agent: Agent, name: []const u8, ref: ?Ref, io: Io) ![]u8 {
     std.debug.print("Git blame on file {s}\n", .{name});
 
     const argv: []const []const u8 = if (ref) |r| switch (r) {
-        .sha => |s| &[_][]const u8{
-            "git",
-            "blame",
-            "--porcelain",
-            s.hex()[0..40],
-            "--",
-            name,
-        },
+        .sha => |s| &.{ "git", "blame", "--porcelain", s.hex()[0..40], "--", name },
         inline else => |_, t| {
             std.debug.print("Git blame not implemented for {}\n", .{t});
             return error.NotImplemented;
         },
-    } else &[_][]const u8{
-        "git",
-        "blame",
-        "--porcelain",
-        "--",
-        name,
-    };
-    if (self.execCustom(argv, io)) |res| {
+    } else &.{ "git", "blame", "--porcelain", "--", name };
+    if (agent.execCustom(argv, io)) |res| {
         if (res.term != .exited or res.term.exited != 0) {
             std.debug.print("git Agent error\nstderr: {s}\n", .{res.stderr});
-            self.alloc.free(res.stderr);
+            agent.alloc.free(res.stderr);
             return error.BlameFailed;
         }
         return res.stdout;
@@ -175,19 +128,20 @@ pub const ExecResult = struct {
     stderr: []u8,
 };
 
-fn execCustomStdin(self: Agent, argv: []const []const u8, stdin: []const u8, io: Io) !ExecResult {
+fn execCustomStdin(agent: Agent, argv: []const []const u8, stdin: []const u8, io: Io) !ExecResult {
     std.debug.assert(std.mem.eql(u8, argv[0], "git"));
     var child = try std.process.spawn(io, .{
         .argv = argv,
-        .expand_arg0 = .expand,
-        .cwd = if (self.cwd != null and self.cwd.?.handle != Io.Dir.cwd().handle) .{ .dir = self.cwd.? } else .inherit,
+        .environ_map = &.init(agent.alloc),
+        .expand_arg0 = .no_expand,
+        .cwd = if (agent.cwd != null and agent.cwd.?.handle != Io.Dir.cwd().handle) .{ .dir = agent.cwd.? } else .inherit,
         .stdin = if (stdin.len > 0) .pipe else .ignore,
         .stdout = .pipe,
         .stderr = .pipe,
     });
 
-    var stdout: Writer.Allocating = .init(self.alloc);
-    var stderr: Writer.Allocating = .init(self.alloc);
+    var stdout: Writer.Allocating = try .initCapacity(agent.alloc, 2048);
+    var stderr: Writer.Allocating = try .initCapacity(agent.alloc, 2048);
     errdefer {
         stdout.deinit();
         stderr.deinit();
@@ -204,15 +158,20 @@ fn execCustomStdin(self: Agent, argv: []const []const u8, stdin: []const u8, io:
     defer if (child.stderr) |err| err.close(io);
 
     var outr = child.stdout.?.reader(io, &.{});
+    while (outr.interface.stream(&stdout.writer, .limited(0x800000))) |_| {
+        //
+    } else |e| switch (e) {
+        error.EndOfStream => {},
+        error.WriteFailed, error.ReadFailed => return e,
+    }
+
     var errr = child.stderr.?.reader(io, &.{});
-    _ = outr.interface.stream(&stdout.writer, .limited(0x800000)) catch |e| switch (e) {
+    while (errr.interface.stream(&stderr.writer, .limited(0x800000))) |_| {
+        //
+    } else |e| switch (e) {
         error.EndOfStream => {},
-        else => return e,
-    };
-    _ = errr.interface.stream(&stderr.writer, .limited(0x800000)) catch |e| switch (e) {
-        error.EndOfStream => {},
-        else => return e,
-    };
+        error.WriteFailed, error.ReadFailed => return e,
+    }
 
     return .{
         .term = child.wait(io) catch |err| {
@@ -231,17 +190,16 @@ fn execCustomStdin(self: Agent, argv: []const []const u8, stdin: []const u8, io:
     };
 }
 
-fn execCustom(self: Agent, argv: []const []const u8, io: Io) !ExecResult {
-    std.debug.assert(std.mem.eql(u8, argv[0], "git"));
-    return self.execCustomStdin(argv, &.{}, io);
+fn execCustom(agent: Agent, argv: []const []const u8, io: Io) !ExecResult {
+    return try agent.execCustomStdin(argv, &.{}, io);
 }
 
-fn exec(self: Agent, argv: []const []const u8, io: Io) ![]u8 {
-    const child = try self.execCustom(argv, io);
+fn exec(agent: Agent, argv: []const []const u8, io: Io) ![]u8 {
+    const child = try agent.execCustom(argv, io);
     if (child.stderr.len > 0) {
         std.debug.print("git Agent error\nstderr: {s}\n", .{child.stderr});
     }
-    defer self.alloc.free(child.stderr);
+    defer agent.alloc.free(child.stderr);
 
     if (DEBUG_GIT_ACTIONS) std.debug.print(
         \\git action
@@ -255,7 +213,7 @@ fn exec(self: Agent, argv: []const []const u8, io: Io) ![]u8 {
         \\git agent
         \\{any}
         \\
-    , .{ argv[1], child.stdout, child.stderr, self.cwd });
+    , .{ argv[1], child.stdout, child.stderr, agent.cwd });
     return child.stdout;
 }
 
@@ -264,6 +222,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Writer = Io.Writer;
 const log = std.log.scoped(.git_agent);
+const find = std.mem.find;
 
 const Repo = @import("Repo.zig");
 const Tree = @import("tree.zig");

@@ -266,7 +266,7 @@ pub const Agent = struct {
             if (gitagent.pullUpstream(head, io)) {
                 log.debug("Update Successful on repo {s}", .{name});
             } else |err| switch (err) {
-                error.NonAncestor => {},
+                error.NonAncestor => log.warn("{s} was skipped", .{name}),
                 else => log.warn("Warning upstream pull failed repo {s} {}", .{ name, err }),
             }
             update.upstream_pull = Io.Clock.real.now(io).toSeconds();

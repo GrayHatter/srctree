@@ -192,12 +192,10 @@ const Repo = struct {
         };
 
         var agent = git.Agent{ .alloc = f.alloc, .cwd = dir };
-        std.debug.print("fork bare {s}\n", .{
-            agent.forkRemote(clone_req.repo_uri, new_repo_name, f.io) catch |err| {
-                page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
-                return try f.sendPage(&page);
-            },
-        });
+        agent.forkRemote(clone_req.repo_uri, new_repo_name, f.io) catch |err| {
+            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
+            return try f.sendPage(&page);
+        };
 
         // TODO redirect to new repo
         var buf: [2048]u8 = undefined;
