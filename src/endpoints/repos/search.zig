@@ -226,16 +226,16 @@ const Exclude = struct {
 
 const Hit = struct {
     const Commit = struct {
-        sha: git.SHA,
+        sha: git.Sha,
         idx: usize,
 
-        pub fn init(s: git.SHA, idx: usize) Commit {
+        pub fn init(s: git.Sha, idx: usize) Commit {
             return .{ .sha = s, .idx = idx };
         }
     };
     const File = struct {
         path: []const u8,
-        sha: git.SHA,
+        sha: git.Sha,
         idx: usize,
         line: u32,
         code: []const u8,

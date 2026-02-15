@@ -68,16 +68,16 @@ pub fn initRepo(agent: Agent, dir: []const u8, opt: struct { bare: bool = true }
     return try agent.exec(&.{ "git", "init", if (opt.bare) "--bare" else "", dir }, io);
 }
 
-pub fn show(agent: Agent, sha: SHA, io: Io) ![]u8 {
+pub fn show(agent: Agent, sha: Sha, io: Io) ![]u8 {
     return try agent.exec(
-        &.{ "git", "show", "--histogram", "--diff-merges=1", "-p", sha.hex()[0 .. sha.len * 2] },
+        &.{ "git", "show", "--histogram", "--diff-merges=1", "-p", sha.text().sha1[0..] },
         io,
     );
 }
 
-pub fn formatPatch(agent: Agent, sha: SHA, io: Io) ![]u8 {
+pub fn formatPatch(agent: Agent, sha: Sha, io: Io) ![]u8 {
     return try agent.exec(
-        &.{ "git", "format-patch", "--histogram", "--stdout", sha.hex()[0 .. sha.len * 2] },
+        &.{ "git", "format-patch", "--histogram", "--stdout", sha.text().sha1[0..] },
         io,
     );
 }
@@ -106,7 +106,7 @@ pub fn blame(agent: Agent, name: []const u8, ref: ?Ref, io: Io) ![]u8 {
     std.debug.print("Git blame on file {s}\n", .{name});
 
     const argv: []const []const u8 = if (ref) |r| switch (r) {
-        .sha => |s| &.{ "git", "blame", "--porcelain", s.hex()[0..40], "--", name },
+        .sha => |s| &.{ "git", "blame", "--porcelain", s.text().sha1[0..40], "--", name },
         inline else => |_, t| {
             std.debug.print("Git blame not implemented for {}\n", .{t});
             return error.NotImplemented;
@@ -227,4 +227,4 @@ const find = std.mem.find;
 const Repo = @import("Repo.zig");
 const Tree = @import("tree.zig");
 const Ref = @import("ref.zig").Ref;
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");

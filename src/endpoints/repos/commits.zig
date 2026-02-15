@@ -50,7 +50,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         std.debug.print("unable to find commit, trying expensive fallback\n", .{});
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(f.alloc, f.io) catch return error.Unknown;
-        while (!std.mem.startsWith(u8, fallback.sha.hex()[0..], sha)) {
+        while (!std.mem.startsWith(u8, fallback.sha.text().sha1[0..], sha)) {
             fallback = fallback.toParent(0, &repo, f.alloc, f.io) catch return f.sendDefaultErrorPage(.not_found);
         }
         break :cmt fallback;
@@ -80,7 +80,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const diffstat = patch.patchStat();
 
     var messages: []S.CommentThreadHtml.Messages = &.{};
-    if (CommitMap.open(repo_name_, current.sha.hex(), f.alloc, f.io)) |map| {
+    if (CommitMap.open(repo_name_, current.sha.text().sha1, f.alloc, f.io)) |map| {
         switch (map.attach_to) {
             .delta => {
                 var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
@@ -99,7 +99,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const repo_name = try f.alloc.dupe(u8, repo_name_);
     const page_title = try allocPrint(f.alloc, "{f} - [{s}] committed to {s} about {f} - srctree", .{
         abx.Html{ .text = current.title },
-        current.sha.hex()[0..10],
+        current.sha.text().sha1[0..10],
         repo_name,
         Humanize.unix(current.committer.timestamp, now),
     });
@@ -182,7 +182,7 @@ pub fn commitCtxParents(c: Git.Commit, repo: []const u8, a: Allocator) ![]S.Comm
         if (par_cmt == null) continue;
         par.* = .{
             .repo = repo,
-            .parent_sha_short = try a.dupe(u8, par_cmt.?.hex()[0..8]),
+            .parent_sha_short = try a.dupe(u8, par_cmt.?.text().sha1[0..8]),
         };
     }
 
@@ -197,7 +197,7 @@ pub fn commitCtx(c: Git.Commit, repo: []const u8, a: Allocator, io: Io) !S.Commi
         error.InvalidMarkdown => w.writer.print("{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable,
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };
-    const sha = try a.dupe(u8, c.sha.hex()[0..]);
+    const sha = try a.dupe(u8, c.sha.text().sha1[0..]);
     return .{
         .author = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.author.name }}) catch unreachable,
         .parents = try commitCtxParents(c, repo, a),
@@ -214,7 +214,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
     for (c.parent) |p| {
         if (p != null) parcount += 1;
     }
-    var par_ptr: [*]const ?Git.SHA = &c.parent;
+    var par_ptr: [*]const ?Git.Sha = &c.parent;
     for (0..parcount) |i| {
         var lim = 9 - i;
         while (lim > 0 and par_ptr[i] == null) {
@@ -240,7 +240,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
         .day = try allocPrint(a, "{f}", .{std.fmt.alt(date, .format)}),
         .weekday = date.weekdaySlice(),
         .time = try allocPrint(a, "{f}", .{std.fmt.alt(date, .fmtDay)}),
-        .sha = try allocPrint(a, "{s}", .{c.sha.hex()[0..8]}),
+        .sha = try allocPrint(a, "{s}", .{c.sha.text().sha1[0..8]}),
     };
 }
 
@@ -248,11 +248,11 @@ fn buildList(
     list: *ArrayList(S.CommitListHtml.CommitList),
     repo: *const Git.Repo,
     name: []const u8,
-    before: ?Git.SHA,
+    before: ?Git.Sha,
     include_email: bool,
     a: Allocator,
     io: Io,
-) !?Git.SHA {
+) !?Git.Sha {
     return buildListBetween(list, repo, name, null, before, include_email, a, io);
 }
 
@@ -260,12 +260,12 @@ fn buildListBetween(
     list: *ArrayList(S.CommitListHtml.CommitList),
     repo: *const Git.Repo,
     name: []const u8,
-    left: ?Git.SHA,
-    right: ?Git.SHA,
+    left: ?Git.Sha,
+    right: ?Git.Sha,
     include_email: bool,
     a: Allocator,
     io: Io,
-) !?Git.SHA {
+) !?Git.Sha {
     var current: Git.Commit = repo.headCommit(a, io) catch return error.Unknown;
     if (right) |r| while (!current.sha.startsWith(r)) {
         current = current.toParent(0, repo, a, io) catch |err| {
@@ -295,9 +295,9 @@ pub fn commitList(f: *Frame) Error!void {
         if (!std.mem.eql(u8, next, "commits")) return error.Unrouteable;
     }
 
-    var commitish: ?Git.SHA = null;
+    var commitish: ?Git.Sha = null;
     if (f.uri.next()) |next| if (eql(u8, next, "before")) {
-        if (f.uri.next()) |before| commitish = Git.SHA.initPartial(before);
+        if (f.uri.next()) |before| commitish = Git.Sha.initPartial(before);
     };
 
     // TODO use left and right commit finding
@@ -320,7 +320,7 @@ pub fn commitList(f: *Frame) Error!void {
 
     var l_b: [50]S.CommitListHtml.CommitList = undefined;
     var list: ArrayList(S.CommitListHtml.CommitList) = .initBuffer(&l_b);
-    const last_sha: ?Git.SHA = buildList(&list, &repo, rd.name, commitish, f.user != null, f.alloc, f.io) catch
+    const last_sha: ?Git.Sha = buildList(&list, &repo, rd.name, commitish, f.user != null, f.alloc, f.io) catch
         return error.Unknown;
 
     return sendCommits(f, list.items, rd.name, last_sha);
@@ -336,7 +336,7 @@ pub fn commitsBefore(f: *Frame) Error!void {
     repo.loadData(f.alloc) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
-    const before: Git.SHA = if (f.uri.next()) |bf| Git.SHA.initPartial(bf);
+    const before: Git.Sha = if (f.uri.next()) |bf| Git.Sha.initPartial(bf);
     const commits_b = try f.alloc.alloc(Template.Verse, 50);
 
     var l_b: [50]S.CommitListHtml.CommitList = undefined;
@@ -345,9 +345,9 @@ pub fn commitsBefore(f: *Frame) Error!void {
     return sendCommits(f, list.items, rd.name, last_sha);
 }
 
-fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Git.SHA) Error!void {
+fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Git.Sha) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
-    const last_sha: ?[]const u8 = if (sha) |s| s.hex()[0..8] else null;
+    const last_sha: ?[]const u8 = if (sha) |s| s.text().sha1[0..8] else null;
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },

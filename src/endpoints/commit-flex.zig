@@ -86,7 +86,7 @@ const Journal = struct {
         const until = j.scribe_until;
 
         while (true) {
-            if (lseen.contains(commit.sha.bin[0..])) break;
+            if (lseen.contains(commit.sha.hash.sha1[0..])) break;
             const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
             if (commit_time < until) break;
             if (eql(u8, j.email, commit.author.email)) {
@@ -138,11 +138,11 @@ const Journal = struct {
         if (!repo_gop.found_existing) {
             repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, jrepo.name);
             @memset(&heatmap.hits, 0);
-            heatmap.shahex = @splat(0);
+            heatmap.shatext = .zeros;
         }
 
-        if (!eql(u8, heatmap.shahex[0..], commit.sha.hex()[0..])) {
-            heatmap.shahex = commit.sha.hex();
+        if (!eql(u8, heatmap.shatext.sha1[0..], commit.sha.text().sha1[0..])) {
+            heatmap.shatext = commit.sha.text();
             @memset(&heatmap.hits, 0);
             try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until, a, io);
         }
@@ -167,8 +167,8 @@ const Journal = struct {
                 return;
             }
 
-            if (jrepo.bufset.contains(commit.sha.bin[0..])) return;
-            jrepo.bufset.insert(commit.sha.bin[0..]) catch unreachable;
+            if (jrepo.bufset.contains(commit.sha.hash.sha1[0..])) return;
+            jrepo.bufset.insert(commit.sha.hash.sha1[0..]) catch unreachable;
 
             if (eql(u8, j.email, commit.author.email)) {
                 const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
@@ -323,10 +323,10 @@ const Scribe = struct {
         title: []const u8,
         body: ?[]const u8,
         date: DateTime,
-        sha: Git.SHA,
+        sha: Git.Sha,
 
         pub fn toTemplate(self: Commit, a: Allocator) !S.UserCommitsHtml.Months.JournalRows {
-            const shahex = try a.dupe(u8, self.sha.hex()[0..]);
+            const shahex = try a.dupe(u8, self.sha.text().sha1[0..]);
 
             const continuation = "...";
             const title_max = 80;
@@ -372,7 +372,7 @@ const Scribe = struct {
 };
 
 pub const HeatMap = struct {
-    shahex: Git.SHA.Hex,
+    shatext: Git.Sha.Text,
     hits: HeatMapArray,
 };
 

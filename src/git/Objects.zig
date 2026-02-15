@@ -22,46 +22,54 @@ pub fn raze(objs: Objects, a: Allocator, io: Io) void {
     a.free(objs.packs);
 }
 
-fn findFileSha(objs: Objects, sha: *SHA, io: Io) !Io.File {
+fn findFileSha(objs: Objects, sha: *Sha, io: Io) !Io.File {
     // TODO error on ambiguous ref
     var fb = [_]u8{0} ** 2048;
-    const objdir = try bufPrint(&fb, "./{x}", .{sha.bin[0..1]});
+    const objdir = try bufPrint(&fb, "./{x}", .{switch (sha.hash) {
+        .sha1 => |sh| sh[0..1],
+        .sha256 => |sh| sh[0..1],
+        .partial => return error.NotImplemented,
+    }});
     const dir = try objs.dir.openDir(io, objdir, .{ .iterate = true });
     defer dir.close(io);
     var itr = dir.iterate();
     while (itr.next(io) catch null) |file| {
-        if (startsWith(u8, file.name, sha.hex()[2 .. (sha.len - 1) * 2])) {
+        if (startsWith(u8, file.name, sha.text().sha1[2..])) {
             return try dir.openFile(io, file.name, .{});
         }
     }
     return error.FileNotFound;
 }
 
-fn findFile(objs: Objects, sha: SHA, io: Io) !Io.File {
-    if (sha.len == 20) {
-        var fb = [_]u8{0} ** 2048;
-        const grouped = try bufPrint(&fb, "./{s}/{s}", .{ sha.hex()[0..2], sha.hex()[2..] });
-        const file = objs.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
-            error.FileNotFound => {
-                const exact = try bufPrint(&fb, "./{s}", .{sha.hex()[0..]});
-                return objs.dir.openFile(io, exact, .{}) catch |err2| switch (err2) {
-                    error.FileNotFound => {
-                        log.warn("unable to find commit '{s}'", .{sha.hex()[0..]});
-                        return error.ObjectMissing;
-                    },
-                    else => return err2,
-                };
-            },
-            else => return err,
-        };
-        return file;
-    } else if (sha.len >= 6) {
+fn findFile(objs: Objects, sha: Sha, io: Io) !Io.File {
+    if (sha.hash == .partial and sha.hash.partial.len >= 6) {
         var new_sha = sha;
         return try objs.findFileSha(&new_sha, io);
-    } else return error.InvalidSha;
+    }
+    const shatext: Sha.Text = sha.text();
+    const text: []const u8 = switch (shatext) {
+        .sha1 => |sh| &sh,
+        .sha256 => |sh| &sh,
+    };
+    var fb = [_]u8{0} ** 2048;
+    const grouped = try bufPrint(&fb, "./{s}/{s}", .{ text[0..2], text[2..] });
+    const file = objs.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
+        error.FileNotFound => {
+            const exact = try bufPrint(&fb, "./{s}", .{text[0..]});
+            return objs.dir.openFile(io, exact, .{}) catch |err2| switch (err2) {
+                error.FileNotFound => {
+                    log.warn("unable to find commit '{s}'", .{text[0..]});
+                    return error.ObjectMissing;
+                },
+                else => return err2,
+            };
+        },
+        else => return err,
+    };
+    return file;
 }
 
-fn loadFile(objs: Objects, sha: SHA, a: Allocator, io: Io) !Any {
+fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) !Any {
     var file = try objs.findFile(sha, io);
     defer file.close(io);
     const stat = try file.stat(io);
@@ -88,16 +96,19 @@ fn loadFile(objs: Objects, sha: SHA, a: Allocator, io: Io) !Any {
     }
     return error.InvalidObject;
 }
-fn loadFromPacks(objs: Objects, sha: SHA, a: Allocator, io: Io) !?Any {
+fn loadFromPacks(objs: Objects, sha: Sha, a: Allocator, io: Io) !?Any {
     for (objs.packs) |pack| {
         const offset = try pack.contains(sha) orelse continue;
-        const fullsha = if (sha.len < 20) try pack.expandPrefix(sha) orelse unreachable else sha;
+        const fullsha = switch (sha.hash) {
+            .partial => |p| try pack.expandPrefix(p) orelse unreachable,
+            else => sha,
+        };
         return try pack.resolveObject(fullsha, offset, &objs, a, io);
     }
     return null;
 }
 
-pub fn loadObjectOrDelta(objs: Objects, sha: SHA, a: Allocator, io: Io) !union(enum) {
+pub fn loadObjectOrDelta(objs: Objects, sha: Sha, a: Allocator, io: Io) !union(enum) {
     pack: Pack.PackedObject,
     file: Any,
 } {
@@ -109,16 +120,16 @@ pub fn loadObjectOrDelta(objs: Objects, sha: SHA, a: Allocator, io: Io) !union(e
     return .{ .file = try objs.loadFile(sha, a, io) };
 }
 
-pub fn load(objs: Objects, sha: SHA, a: Allocator, io: Io) !Any {
+pub fn load(objs: Objects, sha: Sha, a: Allocator, io: Io) !Any {
     return try objs.loadFromPacks(sha, a, io) orelse try objs.loadFile(sha, a, io);
 }
 
-pub fn resolveSha(objs: Objects, sha: SHA, io: Io) !?SHA {
-    if (sha.len == 20) return sha;
-    if (sha.len < 3) return error.TooShort; // not supported
+pub fn resolveSha(objs: Objects, sha: Sha, io: Io) !?Sha {
+    if (sha.hash != .partial) return sha;
+    if (sha.hash.partial.len < 6) return error.TooShort; // not supported
 
     for (objs.packs) |pack| {
-        if (pack.expandPrefix(sha) catch |err| switch (err) {
+        if (pack.expandPrefix(sha.hash.partial) catch |err| switch (err) {
             error.AmbiguousRef => return error.AmbiguousRef,
         }) |s| {
             return s;
@@ -157,7 +168,7 @@ test "read pack" {
             }
         }
     }
-    const obj = try objs.load(SHA.init(lol), a, io);
+    const obj = try objs.load(Sha.init(lol), a, io);
     defer a.free(obj.commit.memory.?);
     try std.testing.expect(obj == .commit);
     if (false) std.debug.print("{}\n", .{obj});
@@ -215,8 +226,8 @@ const bufPrint = std.fmt.bufPrint;
 const log = std.log.scoped(.git_objects);
 const startsWith = std.mem.startsWith;
 const indexOf = std.mem.indexOf;
-const SHA = @import("SHA.zig");
-const Pack = @import("pack.zig");
+const Sha = @import("Sha.zig");
+const Pack = @import("Pack.zig");
 const Blob = @import("blob.zig");
 const Tree = @import("tree.zig");
 const Commit = @import("Commit.zig");

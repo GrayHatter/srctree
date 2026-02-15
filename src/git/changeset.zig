@@ -1,5 +1,5 @@
 name: []const u8,
-sha: SHA,
+sha: Sha,
 title: []const u8,
 timestamp: i64,
 
@@ -22,5 +22,5 @@ pub fn raze(cs: ChangeSet, a: Allocator) void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Commit = @import("Commit.zig");
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");
 const trim = std.mem.trim;

@@ -1,5 +1,5 @@
 name: []u8,
-sha: SHA,
+sha: Sha,
 object: []const u8,
 type: TagType,
 tagger: Actor,
@@ -30,11 +30,11 @@ pub fn raze(tag: Tag, a: std.mem.Allocator) void {
     }
 }
 
-pub fn init(sha: SHA, data: []const u8) !Tag {
+pub fn init(sha: Sha, data: []const u8) !Tag {
     return fromSlice(sha, data);
 }
 
-pub fn initOwned(sha: SHA, data: []u8) !Tag {
+pub fn initOwned(sha: Sha, data: []u8) !Tag {
     var tag = try init(sha, data);
     tag.memory = data;
     return tag;
@@ -48,7 +48,7 @@ pub fn fromObject(obj: Object, name: []u8) !Tag {
     };
 }
 
-pub fn fromSlice(sha: SHA, bblob: []const u8) !Tag {
+pub fn fromSlice(sha: Sha, bblob: []const u8) !Tag {
     // sometimes, the slice will have a preamble
     var blob = bblob;
     if (indexOf(u8, bblob[0..20], "\x00")) |i| {
@@ -68,7 +68,7 @@ pub fn fromSlice(sha: SHA, bblob: []const u8) !Tag {
 /// future me!
 /// Dear past me... fuck you! dear future me... HA same!
 /// Dear past mes... you both suck!
-pub fn lightTag(sha: SHA, name: []u8, blob: []const u8) !Tag {
+pub fn lightTag(sha: Sha, name: []u8, blob: []const u8) !Tag {
     var actor: ?Actor = null;
     if (indexOf(u8, blob, "committer ")) |i| {
         var act = blob[i + 10 ..];
@@ -79,7 +79,7 @@ pub fn lightTag(sha: SHA, name: []u8, blob: []const u8) !Tag {
     return .{
         .name = name,
         .sha = sha,
-        .object = sha.hex()[0..],
+        .object = sha.text().sha1[0..],
         .type = .lightweight,
         .tagger = actor orelse unreachable,
         .message = "",
@@ -87,7 +87,7 @@ pub fn lightTag(sha: SHA, name: []u8, blob: []const u8) !Tag {
     };
 }
 
-pub fn fullTag(sha: SHA, blob: []const u8) !Tag {
+pub fn fullTag(sha: Sha, blob: []const u8) !Tag {
     var name: ?[]u8 = null;
     var object: ?[]const u8 = null;
     var ttype: ?TagType = null;
@@ -153,7 +153,7 @@ test fromSlice {
         \\
     ;
     const t_msg = "Yet another bugfix release for 0.7.0, especially for Samsung phones.\n";
-    const t = try fromSlice(SHA.init("c66fba80f3351a94432a662b1ecc55a21898f830"), blob);
+    const t = try fromSlice(Sha.init("c66fba80f3351a94432a662b1ecc55a21898f830"), blob);
     try std.testing.expectEqualStrings("v0.7.3", t.name);
     try std.testing.expectEqualStrings("73751d1c0e9eaeaafbf38a938afd652d98ee9772", t.object);
     try std.testing.expectEqual(TagType.commit, t.type);
@@ -165,6 +165,6 @@ const std = @import("std");
 const indexOf = std.mem.indexOf;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");
 const Actor = @import("actor.zig");
 const Object = @import("Objects.zig").Any;

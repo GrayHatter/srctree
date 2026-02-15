@@ -1,12 +1,12 @@
 memory: ?[]u8 = null,
-sha: Git.SHA,
+sha: Git.Sha,
 mode: [6]u8,
 name: []const u8,
 data: ?[]u8 = null,
 
 const Blob = @This();
 
-pub fn init(sha: SHA, mode: [6]u8, name: []const u8, data: []u8) Blob {
+pub fn init(sha: Sha, mode: [6]u8, name: []const u8, data: []u8) Blob {
     return .{
         .sha = sha,
         .mode = mode,
@@ -15,7 +15,7 @@ pub fn init(sha: SHA, mode: [6]u8, name: []const u8, data: []u8) Blob {
     };
 }
 
-pub fn initOwned(sha: SHA, mode: [6]u8, name: []const u8, data: []u8, memory: []u8) Blob {
+pub fn initOwned(sha: Sha, mode: [6]u8, name: []const u8, data: []u8, memory: []u8) Blob {
     var b: Blob = .init(sha, mode, name, data);
     b.memory = memory;
     return b;
@@ -58,4 +58,4 @@ const Git = @import("../git.zig");
 const Repo = Git.Repo;
 const Object = Git.Object;
 const Tree = @import("tree.zig");
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");

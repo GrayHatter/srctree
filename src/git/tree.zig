@@ -1,5 +1,5 @@
 memory: ?[]u8 = null,
-sha: SHA,
+sha: Sha,
 path: ?[]const u8 = null,
 blob: []const u8,
 blobs: []Blob,
@@ -16,11 +16,17 @@ pub fn pushPath(self: *Tree, a: Allocator, path: []const u8) !void {
     a.free(spath);
 }
 
-pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
+pub fn init(sha: Sha, a: Allocator, blob: []const u8) !Tree {
     var self: Tree = .{
         .sha = sha,
         .blob = blob,
         .blobs = try a.alloc(Blob, count(u8, blob, "\x00")),
+    };
+
+    const width: usize = switch (sha.hash) {
+        .sha1 => 20,
+        .sha256 => 32,
+        .partial => unreachable,
     };
 
     var i: usize = 0;
@@ -45,10 +51,10 @@ pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
         self.blobs[real_count] = .{
             .mode = mode,
             .name = name,
-            .sha = .init(blob[str_end + 1 ..][0..20]),
+            .sha = .init(blob[str_end + 1 ..][0..width]),
         };
         real_count += 1;
-        i = str_end + 21;
+        i = str_end + width + 1;
     }
 
     if (a.resize(self.blobs, real_count)) {
@@ -59,7 +65,7 @@ pub fn init(sha: SHA, a: Allocator, blob: []const u8) !Tree {
     return self;
 }
 
-pub fn initOwned(sha: SHA, a: Allocator, body: []const u8, memory: []u8) !Tree {
+pub fn initOwned(sha: Sha, a: Allocator, body: []const u8, memory: []u8) !Tree {
     var tree = try init(sha, a, body);
     tree.memory = memory;
     return tree;
@@ -69,7 +75,7 @@ pub fn changedSet(self: Tree, repo: *const Repo, a: Allocator, io: Io) ![]Change
     return self.changedSetFrom(repo, try repo.headSha(io), a, io);
 }
 
-pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Allocator, io: Io) ![]ChangeSet {
+pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: Sha, a: Allocator, io: Io) ![]ChangeSet {
     const search_list: []?Blob = try a.alloc(?Blob, self.blobs.len);
     for (search_list, self.blobs) |*dst, src| {
         dst.* = src;
@@ -119,7 +125,12 @@ pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: SHA, a: Alloc
         };
         for (search_list, 0..) |*search_ish, i| {
             const search = search_ish.* orelse continue;
-            if (find(u8, ptree.blob, &search.sha.bin) == null) {
+            const sha_bin: []const u8 = switch (search.sha.hash) {
+                .sha1 => |sh| &sh,
+                .sha256 => |sh| &sh,
+                .partial => unreachable,
+            };
+            if (find(u8, ptree.blob, sha_bin) == null) {
                 search_ish.* = null;
                 found += 1;
                 changed[i] = try .init(a, search.name, old);
@@ -178,7 +189,7 @@ test "tree decom" {
     const buf = try a.dupe(u8, b[0..]);
     defer a.free(buf);
     const blob = buf[(find(u8, buf, "\x00") orelse unreachable) + 1 ..];
-    const tree = try Tree.init(SHA.init("5edabf724389ef87fa5a5ddb2ebe6dbd888885ae"), a, blob);
+    const tree = try Tree.init(Sha.init("5edabf724389ef87fa5a5ddb2ebe6dbd888885ae"), a, blob);
     defer tree.raze(a);
     for (tree.blobs) |tobj| {
         if (false) std.debug.print("{s} {s} {s}\n", .{ tobj.mode, tobj.hash, tobj.name });
@@ -258,7 +269,7 @@ test "commit mk sub tree" {
     a.free(changed);
 }
 
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");
 const Repo = @import("Repo.zig");
 const Blob = @import("blob.zig");
 const Commit = @import("Commit.zig");

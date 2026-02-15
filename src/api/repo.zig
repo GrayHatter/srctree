@@ -51,7 +51,7 @@ pub fn repo(ctx: *API.verse.Frame) API.Router.Error!void {
 
     return try ctx.sendJSON(.ok, [1]Repo{.{
         .name = req.name,
-        .head = head.hex()[0..],
+        .head = head.text().sha1[0..], // TODO FIXME
         .updated = "undefined",
     }});
 }
@@ -84,7 +84,7 @@ pub fn repoBranches(ctx: *API.verse.Frame) API.Router.Error!void {
     for (branches, gitrepo.branches.?) |*dst, src| {
         dst.* = .{
             .name = src.name,
-            .hash = src.sha.hex(),
+            .hash = src.sha.text().sha1, // TODO FIXME
         };
     }
 

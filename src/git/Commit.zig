@@ -1,9 +1,9 @@
 memory: ?[]u8 = null,
-sha: SHA,
-tree: SHA,
+sha: Sha,
+tree: Sha,
 /// 9 ought to be enough for anyone... or at least robinli ... at least for a while
 /// TODO fix and make this dynamic
-parent: [9]?SHA = .{null} ** 9,
+parent: [9]?Sha = .{null} ** 9,
 author: Actor,
 committer: Actor,
 
@@ -17,15 +17,21 @@ ptr_parent: ?*Commit = null, // TOOO multiple parents
 
 const Commit = @This();
 
-pub fn init(sha: SHA, data: []const u8) !Commit {
+pub fn init(sha: Sha, data: []const u8) !Commit {
     if (std.mem.startsWith(u8, data, "commit")) unreachable;
     var lines = std.mem.splitSequence(u8, data, "\n");
     // I don't like it either, but... lazy
     var p_idx: usize = 0;
-    var parent: [9]?SHA = .{ null, null, null, null, null, null, null, null, null };
-    var tree: ?SHA = null;
+    var parent: [9]?Sha = .{ null, null, null, null, null, null, null, null, null };
+    var tree: ?Sha = null;
     var author: ?Actor = null;
     var committer: ?Actor = null;
+
+    const width: usize = switch (sha.hash) {
+        .sha1 => 40,
+        .sha256 => 64,
+        .partial => unreachable,
+    };
 
     while (lines.next()) |line| {
         if (startsWith(u8, line, "gpgsig")) {
@@ -43,10 +49,10 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
             const name = line[0..brk];
             const payload = line[brk + 1 ..];
             if (eql(u8, name, "tree")) {
-                tree = SHA.init(payload[0..40]);
+                tree = .init(payload[0..width]);
             } else if (eql(u8, name, "parent")) {
                 if (p_idx >= parent.len) return error.TooManyParents;
-                parent[p_idx] = SHA.init(payload[0..40]);
+                parent[p_idx] = .init(payload[0..width]);
                 p_idx += 1;
             } else if (eql(u8, name, "author")) {
                 author = try Actor.make(payload);
@@ -80,7 +86,7 @@ pub fn init(sha: SHA, data: []const u8) !Commit {
     };
 }
 
-pub fn initOwned(sha: SHA, body: []const u8, memory: []u8) !Commit {
+pub fn initOwned(sha: Sha, body: []const u8, memory: []u8) !Commit {
     var commit = try init(sha, body);
     commit.memory = memory;
     return commit;
@@ -157,10 +163,10 @@ test "parse commit" {
         \\clean up blame.zig
     ;
 
-    const commit = try Commit.init(SHA.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), commit_data);
-    const parents: [9]?SHA = .{ SHA.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), null, null, null, null, null, null, null, null };
-    try std.testing.expectEqualSlices(?SHA, &parents, &commit.parent);
-    try std.testing.expectEqual(SHA.init("863dce25c7370ca052f0efddd1e3aa73569fb37b"), commit.tree);
+    const commit = try Commit.init(Sha.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), commit_data);
+    const parents: [9]?Sha = .{ Sha.init("ac7bc0f8c6d88e2595d6147f79d88b91476acdde"), null, null, null, null, null, null, null, null };
+    try std.testing.expectEqualSlices(?Sha, &parents, &commit.parent);
+    try std.testing.expectEqual(Sha.init("863dce25c7370ca052f0efddd1e3aa73569fb37b"), commit.tree);
     try std.testing.expectEqualStrings("Gregory Mullen", commit.author.name);
     try std.testing.expectEqualStrings("github@gr.ht", commit.author.email);
     try std.testing.expectEqual(1747760721, commit.author.timestamp);
@@ -186,7 +192,7 @@ test "fuzz" {
     try std.testing.fuzz(Context{}, Context.testOne, .{});
 }
 
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");
 const Repo = @import("Repo.zig");
 const Tree = @import("tree.zig");
 const Actor = @import("actor.zig");

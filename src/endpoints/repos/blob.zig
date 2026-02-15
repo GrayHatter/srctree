@@ -24,7 +24,7 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
 
     if (rd.verb != null and rd.ref != null and rd.verb.? == .ref and isHash(rd.ref.?)) {
         if (rd.ref.?.len != 40) return error.InvalidURI;
-        const sha: Git.SHA = .init(rd.ref.?);
+        const sha: Git.Sha = .init(rd.ref.?);
         switch (repo.objects.load(sha, frame.alloc, frame.io) catch return error.InvalidURI) {
             .commit => |c| return treeOrBlobAtRef(frame, rd, &repo, c),
             else => return error.DataInvalid,

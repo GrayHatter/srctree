@@ -1,5 +1,5 @@
 name: []const u8,
-sha: SHA,
+sha: Sha,
 
 pub fn toCommit(self: Branch, repo: *const Repo, a: Allocator, io: std.Io) !Commit {
     switch (try repo.objects.load(self.sha, a, io)) {
@@ -14,7 +14,7 @@ pub fn raze(self: Branch, a: Allocator) void {
 
 pub const Repo = @import("Repo.zig");
 pub const Commit = @import("Commit.zig");
-pub const SHA = @import("SHA.zig");
+pub const Sha = @import("Sha.zig");
 pub const Branch = @import("Branch.zig");
 
 const std = @import("std");

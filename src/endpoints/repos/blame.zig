@@ -28,7 +28,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     actions.cwd = new;
     defer if (!repo.bare) actions.cwd.?.close(f.io);
     const ref: ?Git.Ref = if (rd.ref) |r|
-        if (Git.SHA.initCheck(r)) |sha|
+        if (Git.Sha.initCheck(r)) |sha|
             Git.Ref{ .sha = sha }
         else |_|
             null
@@ -105,21 +105,21 @@ fn wrapLineNumbersBlame(
     const now: i64 = Io.Clock.real.now(io).toSeconds();
     const b_lines = try a.alloc(S.BlameHtml.BlameLines, blames.len);
     const shas = try a.alloc([8]u8, blames.len);
-    var prev_sha: SHA = .{ .bin = @splat(0xff) };
+    var prev_sha: Sha = .sha1_ff;
     for (blames, b_lines, shas, 0..) |src, *blame_line, *sha, i| {
         const skip = src.sha.eql(prev_sha);
         if (!skip) prev_sha = src.sha;
         const bcommit = map.get(src.sha) orelse unreachable;
         const email = if (!include_email) "" else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.email }}) catch unreachable;
-        sha.* = src.sha.hex()[0..8].*;
-        const parent_sha: ?Git.SHA = if (bcommit.parent) |bp| .init(bp) else null;
+        sha.* = src.sha.text().sha1[0..8].*;
+        const parent_sha: ?Git.Sha = if (bcommit.parent) |bp| .init(bp) else null;
         blame_line.* = .{
             .num = i + 1,
             .line = src.line,
             .repo_name = repo_name,
             .sha = sha,
             .blame_parent = if (parent_sha) |psha|
-                .{ .href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, psha.hex(), path }) }
+                .{ .href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, psha.text().sha1, path }) }
             else
                 null,
             .time_style = style_blocks[bcommit.age_block],
@@ -144,11 +144,11 @@ const BlameCommit = struct {
 };
 
 const BlameLine = struct {
-    sha: SHA,
+    sha: Sha,
     line: []const u8,
 };
 
-const BlameMap = ArrayHashMap(SHA, BlameCommit);
+const BlameMap = ArrayHashMap(Sha, BlameCommit);
 
 fn parseBlame(a: Allocator, blame_txt: []const u8) !struct { BlameMap, []BlameLine } {
     var map: BlameMap = .{};
@@ -253,7 +253,7 @@ const RouteData = repos_.RouteData;
 const Humanize = @import("../../humanize.zig");
 const repos = @import("../../repos.zig");
 const Git = @import("../../git.zig");
-const SHA = Git.SHA;
+const Sha = Git.Sha;
 const Highlight = @import("../../syntax-highlight.zig");
 
 const verse = @import("verse");

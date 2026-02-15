@@ -13,7 +13,8 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     const branch_count = repo.refs.len;
     const commit_slug = std.mem.trim(u8, c.title[0..@min(c.title.len, 50)], " \n");
     const commit_time = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(c.committer.timestamp, now)});
-    const commit_hex = c.sha.hex()[0..40];
+    const commit_text = c.sha.text();
+    const commit_hex = commit_text.slice();
     const commit_hex_short = commit_hex[0..8];
 
     const path: ?[]const u8 = if (rd.path) |p| p.buffer else null;
@@ -38,8 +39,9 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         for (files.blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
+                    const sha_text = ch.sha.text();
                     const commit_title = try allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = ch.title }});
-                    const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, ch.sha.hex()[0..8] });
+                    const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, sha_text.slice()[0..8] });
                     const ctime = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(ch.timestamp, now)});
                     const href: []const u8 = if (obj.isFile())
                         try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{ prefix, path orelse "", obj.name })

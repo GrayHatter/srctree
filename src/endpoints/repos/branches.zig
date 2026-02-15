@@ -15,7 +15,7 @@ pub fn list(frame: *Frame) Router.Error!void {
     for (repo_branches, branches) |branch, *html| {
         html.* = .{
             .name = branch.name,
-            .sha = try branch.sha.hexAlloc(frame.alloc),
+            .sha = try branch.sha.textAlloc(frame.alloc),
         };
     }
 

@@ -522,7 +522,7 @@ fn resolveLineRefRepo(
     const cmt = try repo.headCommit(a, io);
     var files: Git.Tree = try cmt.loadTree(repo, a, io);
     var itr = splitScalar(u8, filename, '/');
-    const blob_sha: Git.SHA = root: while (itr.next()) |dirname| {
+    const blob_sha: Git.Sha = root: while (itr.next()) |dirname| {
         for (files.blobs) |obj| {
             if (eql(u8, obj.name, dirname)) {
                 if (obj.isFile()) {
@@ -864,7 +864,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     const curl_hint: S.DeltaDiffHtml.CurlHint = .{
         .repo_name = rd.name,
         .diff_idx = delta_index,
-        .base_ref = if (head_commit) |ref| ref.hex()[0..8] else "base_commit",
+        .base_ref = if (head_commit) |ref| ref.text().sha1[0..8] else "base_commit",
         .head_ref = "&lt;HEAD&gt;",
         .host = f.request.host orelse "127.0.0.1",
     };
@@ -879,7 +879,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 std.debug.print("Unable to generate patch {any}\n", .{err});
             }
             const cmt = repo.headCommit(f.alloc, f.io) catch return error.ServerFault;
-            if (eql(u8, &cmt.sha.hex(), &diff.applies_hash)) {
+            if (eql(u8, &cmt.sha.text().sha1, &diff.applies_hash)) {
                 applies = diff.applies;
             } else {
                 var agent = repo.getAgent(f.alloc);
@@ -891,7 +891,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                     diff.applies = false;
                 }
 
-                @memcpy(diff.applies_hash[0..40], cmt.sha.hex()[0..40]);
+                @memcpy(diff.applies_hash[0..40], cmt.sha.text().sha1[0..40]);
                 diff.commit(f.io) catch return error.ServerFault;
             }
         }

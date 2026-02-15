@@ -1,6 +1,6 @@
 pack: []u8,
 idx: []u8,
-
+format: enum { sha1, sha256 } = .sha1,
 pack_header: *Header = undefined,
 idx_header: *IdxHeader = undefined,
 objnames: []u8 = undefined,
@@ -45,8 +45,8 @@ pub const PackedObject = struct {
 
 /// assumes name ownership
 pub fn init(dir: Io.Dir, name: []const u8, io: Io) !Pack {
-    std.debug.assert(name.len <= 45);
-    var filename: [50]u8 = undefined;
+    if (name.len > 70) return error.UnsupportedPackFormat;
+    var filename: [100]u8 = undefined;
     const ifd = try dir.openFile(io, try bufPrint(&filename, "{s}.idx", .{name}), .{});
     defer ifd.close(io);
     const pfd = try dir.openFile(io, try bufPrint(&filename, "{s}.pack", .{name}), .{});
@@ -54,6 +54,7 @@ pub fn init(dir: Io.Dir, name: []const u8, io: Io) !Pack {
     var pack = Pack{
         .pack = try mmap(pfd, io),
         .idx = try mmap(ifd, io),
+        .format = if (name.len < 60) .sha1 else .sha256,
     };
     try pack.prepare();
     return pack;
@@ -75,12 +76,13 @@ fn prepare(self: *Pack) !void {
 }
 
 fn prepareIdx(self: *Pack) !void {
+    const width: usize = if (self.format == .sha1) 20 else 32;
     self.idx_header = @ptrCast(@alignCast(self.idx.ptr));
     const count = @byteSwap(self.idx_header.fanout[255]);
-    self.objnames = self.idx[258 * 4 ..][0 .. 20 * count];
-    self.crc.ptr = @ptrCast(@alignCast(self.idx[258 * 4 + 20 * count ..].ptr));
+    self.objnames = self.idx[258 * 4 ..][0 .. width * count];
+    self.crc.ptr = @ptrCast(@alignCast(self.idx[258 * 4 + width * count ..].ptr));
     self.crc.len = count;
-    self.offsets.ptr = @ptrCast(@alignCast(self.idx[258 * 4 + 24 * count ..].ptr));
+    self.offsets.ptr = @ptrCast(@alignCast(self.idx[258 * 4 + (width + 4) * count ..].ptr));
     self.offsets.len = count;
 
     self.hugeoffsets = null;
@@ -118,15 +120,27 @@ fn orderSha(lhs: []const u8, rhs: []const u8) std.math.Order {
     return .eq;
 }
 
-pub fn contains(self: Pack, sha: SHA) !?u32 {
-    std.debug.assert(sha.len <= 20);
-    const shabin = sha.bin[0..sha.len];
+pub fn contains(pack: Pack, sha: Sha) !?u32 {
+    switch (sha.hash) {
+        .sha1 => return pack.containsWidth(20, sha),
+        .sha256 => return pack.containsWidth(32, sha),
+        .partial => unreachable, // .{ &sh.bytes, sh.len },
+    }
+}
+
+pub fn containsWidth(self: Pack, width: comptime_int, sha: Sha) !?u32 {
+    const shabin: [width]u8 = switch (width) {
+        20 => sha.hash.sha1,
+        32 => sha.hash.sha256, // TODO check pack format :/
+        else => comptime unreachable,
+        //.partial => |sh| .{ &sh.bytes, sh.len },
+    };
     const count: usize = self.fanOutCount(shabin[0]);
     if (count == 0) return null;
 
     const start: usize = if (shabin[0] > 0) self.fanOut(shabin[0] - 1) else 0;
 
-    const objnames_ptr: [*][20]u8 = @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]);
+    const objnames_ptr: [*][width]u8 = @ptrCast(self.objnames[start * width ..][0 .. count * width]);
     const objnames = objnames_ptr[0..count];
 
     var left: usize = 0;
@@ -137,7 +151,7 @@ pub fn contains(self: Pack, sha: SHA) !?u32 {
     while (left < right) {
         const mid = left + (right - left) / 2;
 
-        switch (orderSha(shabin, objnames[mid][0..sha.len])) {
+        switch (orderSha(&shabin, objnames[mid][0..width])) {
             .eq => {
                 found = mid;
                 break;
@@ -148,10 +162,10 @@ pub fn contains(self: Pack, sha: SHA) !?u32 {
     }
 
     if (found) |f| {
-        if (objnames.len > f + 1 and eql(u8, shabin, objnames[f + 1][0..sha.len])) {
+        if (objnames.len > f + 1 and eql(u8, &shabin, objnames[f + 1][0..width])) {
             return error.AmbiguousRef;
         }
-        if (f > 1 and eql(u8, shabin, objnames[f - 1][0..sha.len])) {
+        if (f > 1 and eql(u8, &shabin, objnames[f - 1][0..width])) {
             return error.AmbiguousRef;
         }
         return @byteSwap(self.offsets[f + start]);
@@ -160,8 +174,9 @@ pub fn contains(self: Pack, sha: SHA) !?u32 {
     return null;
 }
 
-pub fn expandPrefix(self: Pack, partial_sha: SHA) !?SHA {
-    const partial: []const u8 = partial_sha.bin[0..partial_sha.len];
+pub fn expandPrefix(self: Pack, partial_sha: Sha.Partial) !?Sha {
+    const len: usize = @divFloor(partial_sha.len, 2);
+    const partial: []const u8 = partial_sha.bytes[0..len];
     const count: usize = self.fanOutCount(partial[0]);
     if (count == 0) return null;
 
@@ -177,7 +192,7 @@ pub fn expandPrefix(self: Pack, partial_sha: SHA) !?SHA {
     while (left < right) {
         const mid = left + (right - left) / 2;
 
-        switch (orderSha(partial, objnames[mid][0..partial.len])) {
+        switch (orderSha(partial, objnames[mid][0..len])) {
             .eq => {
                 found = mid;
                 break;
@@ -194,7 +209,7 @@ pub fn expandPrefix(self: Pack, partial_sha: SHA) !?SHA {
         if (f > 1 and startsWith(u8, &objnames[f - 1], partial)) {
             return error.AmbiguousRef;
         }
-        return SHA.init(objnames[f][0..20]);
+        return Sha.init(objnames[f][0..20]);
     }
 
     return null;
@@ -278,7 +293,7 @@ fn deltaInst(reader: *Reader, writer: *Writer, base: []const u8) !usize {
 
 fn loadRefDelta(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
     var buf: [20]u8 = (try reader.takeArray(20)).*;
-    const sha = SHA.init(buf[0..]);
+    const sha = Sha.init(buf[0..]);
 
     const basefree: []u8, const basedata: []const u8, const basetype: PackedObjectTypes =
         switch (objs.loadObjectOrDelta(sha, a, io) catch return error.ObjectMissing) {
@@ -345,7 +360,7 @@ pub fn loadData(self: Pack, offset: usize, objs: *const Objects, a: Allocator, i
     };
 }
 
-pub fn resolveObject(self: Pack, sha: SHA, offset: usize, objs: *const Objects, a: Allocator, io: Io) !Objects.Any {
+pub fn resolveObject(self: Pack, sha: Sha, offset: usize, objs: *const Objects, a: Allocator, io: Io) !Objects.Any {
     const resolved = try self.loadData(offset, objs, a, io);
     errdefer a.free(resolved.data);
 
@@ -371,7 +386,7 @@ pub const Error = Reader.Error || error{
     ObjectMissing,
 };
 
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");
 const Objects = @import("Objects.zig");
 
 const system = @import("../system.zig");

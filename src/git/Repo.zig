@@ -112,7 +112,7 @@ pub fn findRemote(self: Repo, name: []const u8) ?Remote {
     return null;
 }
 
-pub fn loadBlob(repo: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
+pub fn loadBlob(repo: Repo, sha: Sha, a: Allocator, io: Io) !Blob {
     return switch (try repo.objects.load(sha, a, io)) {
         .blob => |b| b,
         else => error.NotABlob,
@@ -136,20 +136,23 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
         std.debug.assert(reader.interface.end == 40);
         try list.append(a, Ref{ .branch = .{
             .name = try a.dupe(u8, file.name),
-            .sha = SHA.init(&buf),
+            .sha = Sha.init(&buf),
         } });
     }
-    var buf: [2048]u8 = undefined;
-    if (self.dir.readFile(io, "packed-refs", &buf)) |b| {
-        var p_itr = splitScalar(u8, b, '\n');
-        _ = p_itr.next();
-        while (p_itr.next()) |line| {
-            if (std.mem.indexOf(u8, line, "refs/heads")) |_| {
+    if (self.dir.openFile(io, "packed-refs", .{})) |*fd| {
+        defer fd.close(io);
+        var buf: [2048]u8 = undefined;
+        var r = fd.reader(io, &buf);
+        while (r.interface.takeSentinel('\n')) |line| {
+            if (find(u8, line, " refs/heads")) |i| {
                 try list.append(a, Ref{ .branch = .{
-                    .name = try a.dupe(u8, line[52..]),
-                    .sha = SHA.init(line[0..40]),
+                    .name = try a.dupe(u8, line[i + 12 ..]),
+                    .sha = Sha.init(line[0..i]),
                 } });
             }
+        } else |e| switch (e) {
+            error.EndOfStream => {},
+            else => return e,
         }
     } else |err| switch (err) {
         error.FileNotFound => {},
@@ -159,7 +162,7 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
 }
 
 /// TODO write the real function that goes here
-pub fn ref(self: Repo, str: []const u8) !SHA {
+pub fn ref(self: Repo, str: []const u8) !Sha {
     const target = cutPrefix(u8, str, "refs/heads/") orelse str;
     for (self.refs) |r| {
         switch (r) {
@@ -172,7 +175,7 @@ pub fn ref(self: Repo, str: []const u8) !SHA {
     return error.RefMissing;
 }
 
-pub fn resolve(self: Repo, r: Ref) !SHA {
+pub fn resolve(self: Repo, r: Ref) !Sha {
     switch (r) {
         .tag => unreachable,
         .branch => |b| return try self.ref(b.name),
@@ -194,13 +197,13 @@ pub fn HEAD(self: *Repo, a: Allocator, io: Io) !Ref {
     if (std.mem.eql(u8, head[0..5], "ref: ")) {
         self.head = Ref{
             .branch = Branch{
-                .sha = self.ref(head[16 .. head.len - 1]) catch SHA.init(&[_]u8{0} ** 20),
+                .sha = self.ref(head[16 .. head.len - 1]) catch Sha.init(&[_]u8{0} ** 20),
                 .name = try a.dupe(u8, head[5 .. head.len - 1]),
             },
         };
     } else if (head.len == 41 and head[40] == '\n') {
         self.head = Ref{
-            .sha = SHA.init(head[0..40]), // We don't want that \n char
+            .sha = Sha.init(head[0..40]), // We don't want that \n char
         };
     } else {
         std.debug.print("unexpected HEAD {s}\n", .{head});
@@ -283,14 +286,14 @@ fn loadBranches(self: *Repo, a: Allocator, io: Io) !void {
         _ = try self.dir.readFile(io, fname, &shabuf);
         try list.append(a, .{
             .name = try a.dupe(u8, file.name),
-            .sha = SHA.init(shabuf[0..40]),
+            .sha = Sha.init(shabuf[0..40]),
         });
     }
     self.branches = try list.toOwnedSlice(a);
 }
 
-pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
-    if (sha.len < 20) {
+pub fn commit(self: *const Repo, sha: Sha, a: Allocator, io: Io) !Commit {
+    if (sha.hash == .partial) {
         const full_sha = try self.objects.resolveSha(sha, io) orelse sha; //unreachable;
         return switch (try self.objects.load(full_sha, a, io)) {
             .commit => |c| {
@@ -307,24 +310,24 @@ pub fn commit(self: *const Repo, sha: SHA, a: Allocator, io: Io) !Commit {
 }
 
 pub fn headCommit(self: *const Repo, a: Allocator, io: Io) !Commit {
-    const resolv: SHA = try self.headSha(io);
+    const resolv: Sha = try self.headSha(io);
     return try self.commit(resolv, a, io);
 }
 
-pub fn headSha(self: *const Repo, io: Io) !SHA {
+pub fn headSha(self: *const Repo, io: Io) !Sha {
     var f = try self.dir.openFile(io, "HEAD", .{});
     defer f.close(io);
     var buff: [0xFF]u8 = undefined;
 
     var reader = f.reader(io, &buff);
     const head = try reader.interface.takeDelimiter('\n') orelse {
-        log.err("Head SHA failed '{s}'\n", .{reader.interface.buffered()});
+        log.err("Head Sha failed '{s}'\n", .{reader.interface.buffered()});
         return error.RefParseFailed;
     };
 
     if (startsWith(u8, head, "ref: ")) {
         return self.ref(head[16..]) catch {
-            log.err("Head SHA failed '{s}'\n", .{head[16..]});
+            log.err("Head Sha failed '{s}'\n", .{head[16..]});
             return error.RefParseFailed;
         };
     } else if (head.len == 40) {
@@ -335,7 +338,7 @@ pub fn headSha(self: *const Repo, io: Io) !SHA {
     }
 }
 
-pub fn blob(self: Repo, sha: SHA, a: Allocator, io: Io) !Blob {
+pub fn blob(self: Repo, sha: Sha, a: Allocator, io: Io) !Blob {
     return try self.loadBlob(sha, a, io);
 }
 
@@ -430,7 +433,7 @@ const Objects = @import("Objects.zig");
 const Object = Objects.Any;
 const Ref = @import("ref.zig").Ref;
 const Remote = @import("remote.zig");
-const SHA = @import("SHA.zig");
+const Sha = @import("Sha.zig");
 const Tag = @import("Tag.zig");
 const Tree = @import("tree.zig");
 
