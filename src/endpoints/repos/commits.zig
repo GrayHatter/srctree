@@ -50,7 +50,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         std.debug.print("unable to find commit, trying expensive fallback\n", .{});
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(f.alloc, f.io) catch return error.Unknown;
-        while (!std.mem.startsWith(u8, fallback.sha.text().sha1[0..], sha)) {
+        while (!std.mem.startsWith(u8, fallback.sha.text().sha1[0..], sha)) { // FIXME
             fallback = fallback.toParent(0, &repo, f.alloc, f.io) catch return f.sendDefaultErrorPage(.not_found);
         }
         break :cmt fallback;
@@ -80,7 +80,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const diffstat = patch.patchStat();
 
     var messages: []S.CommentThreadHtml.Messages = &.{};
-    if (CommitMap.open(repo_name_, current.sha.text().sha1, f.alloc, f.io)) |map| {
+    if (CommitMap.open(repo_name_, current.sha.text().sha1, f.alloc, f.io)) |map| { // FIXME
         switch (map.attach_to) {
             .delta => {
                 var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
@@ -99,7 +99,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const repo_name = try f.alloc.dupe(u8, repo_name_);
     const page_title = try allocPrint(f.alloc, "{f} - [{s}] committed to {s} about {f} - srctree", .{
         abx.Html{ .text = current.title },
-        current.sha.text().sha1[0..10],
+        current.sha.text().sha1[0..10], // FIXME
         repo_name,
         Humanize.unix(current.committer.timestamp, now),
     });
@@ -182,7 +182,7 @@ pub fn commitCtxParents(c: Git.Commit, repo: []const u8, a: Allocator) ![]S.Comm
         if (par_cmt == null) continue;
         par.* = .{
             .repo = repo,
-            .parent_sha_short = try a.dupe(u8, par_cmt.?.text().sha1[0..8]),
+            .parent_sha_short = try a.dupe(u8, par_cmt.?.text().sha1[0..8]), // FIXME
         };
     }
 
@@ -197,7 +197,7 @@ pub fn commitCtx(c: Git.Commit, repo: []const u8, a: Allocator, io: Io) !S.Commi
         error.InvalidMarkdown => w.writer.print("{f}", .{Verse.abx.Html{ .text = c.body }}) catch unreachable,
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };
-    const sha = try a.dupe(u8, c.sha.text().sha1[0..]);
+    const sha = try a.dupe(u8, c.sha.text().sha1[0..]); // FIXME
     return .{
         .author = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.author.name }}) catch unreachable,
         .parents = try commitCtxParents(c, repo, a),
@@ -240,7 +240,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
         .day = try allocPrint(a, "{f}", .{std.fmt.alt(date, .format)}),
         .weekday = date.weekdaySlice(),
         .time = try allocPrint(a, "{f}", .{std.fmt.alt(date, .fmtDay)}),
-        .sha = try allocPrint(a, "{s}", .{c.sha.text().sha1[0..8]}),
+        .sha = try allocPrint(a, "{s}", .{c.sha.text().sha1[0..8]}), // FIXME
     };
 }
 
@@ -347,7 +347,7 @@ pub fn commitsBefore(f: *Frame) Error!void {
 
 fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Git.Sha) Error!void {
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
-    const last_sha: ?[]const u8 = if (sha) |s| s.text().sha1[0..8] else null;
+    const last_sha: ?[]const u8 = if (sha) |*s| s.text().sha1[0..8] else null; // FIXME
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },

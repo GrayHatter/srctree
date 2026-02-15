@@ -76,14 +76,14 @@ pub fn initEmpty(agent: Agent, dir: []const u8, opt: InitEmptyOptions, io: Io) !
 
 pub fn show(agent: Agent, sha: Sha, io: Io) ![]u8 {
     return try agent.exec(
-        &.{ "git", "show", "--histogram", "--diff-merges=1", "-p", sha.text().sha1[0..] },
+        &.{ "git", "show", "--histogram", "--diff-merges=1", "-p", sha.text().sha1[0..] }, // FIXME
         io,
     );
 }
 
 pub fn formatPatch(agent: Agent, sha: Sha, io: Io) ![]u8 {
     return try agent.exec(
-        &.{ "git", "format-patch", "--histogram", "--stdout", sha.text().sha1[0..] },
+        &.{ "git", "format-patch", "--histogram", "--stdout", sha.text().sha1[0..] }, // FIXME
         io,
     );
 }
@@ -112,7 +112,7 @@ pub fn blame(agent: Agent, name: []const u8, ref: ?Ref, io: Io) ![]u8 {
     std.debug.print("Git blame on file {s}\n", .{name});
 
     const argv: []const []const u8 = if (ref) |r| switch (r) {
-        .sha => |s| &.{ "git", "blame", "--porcelain", s.text().sha1[0..40], "--", name },
+        .sha => |s| &.{ "git", "blame", "--porcelain", s.text().sha1[0..40], "--", name }, // FIXME
         inline else => |_, t| {
             std.debug.print("Git blame not implemented for {}\n", .{t});
             return error.NotImplemented;

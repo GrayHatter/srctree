@@ -879,7 +879,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 std.debug.print("Unable to generate patch {any}\n", .{err});
             }
             const cmt = repo.headCommit(f.alloc, f.io) catch return error.ServerFault;
-            if (eql(u8, &cmt.sha.text().sha1, &diff.applies_hash)) {
+            if (eql(u8, &cmt.sha.text().sha1, &diff.applies_hash)) { // FIXME
                 applies = diff.applies;
             } else {
                 var agent = repo.getAgent(f.alloc);

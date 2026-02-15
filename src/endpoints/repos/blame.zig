@@ -111,7 +111,7 @@ fn wrapLineNumbersBlame(
         if (!skip) prev_sha = src.sha;
         const bcommit = map.get(src.sha) orelse unreachable;
         const email = if (!include_email) "" else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.email }}) catch unreachable;
-        sha.* = src.sha.text().sha1[0..8].*;
+        sha.* = src.sha.text().sha1[0..8].*; // FIXME
         const parent_sha: ?Git.Sha = if (bcommit.parent) |bp| .init(bp) else null;
         blame_line.* = .{
             .num = i + 1,
