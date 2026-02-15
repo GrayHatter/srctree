@@ -770,7 +770,6 @@ blob, gist, patch {
 	.codeblock {
 		padding: 0.5em 0.5em 0 0;
 		border: 1px gray solid;
-		border-bottom: 0px;
 		border-top: 0px;
 		code { white-space: pre; }
 	}
