@@ -165,20 +165,48 @@ fn ascii(str: []const u8) bool {
 }
 
 pub fn eql(self: Sha, peer: Sha) bool {
-    if (true) unreachable;
-    //if (self.len != peer.len) return false;
-    //return mem.eql(u8, self.bin[0..self.len], peer.bin[0..self.len]);
-    _ = self;
-    _ = peer;
-    return false;
+    if (@TypeOf(self.hash) != @TypeOf(peer.hash)) return false;
+    switch (self.hash) {
+        .sha1 => return mem.eql(u8, &self.hash.sha1, &peer.hash.sha1),
+        .sha256 => return mem.eql(u8, &self.hash.sha256, &peer.hash.sha256),
+        .partial => if (self.hash.partial.len == peer.hash.partial.len) return mem.eql(
+            u8,
+            self.hash.partial.bytes[0..self.hash.partial.len],
+            peer.hash.partial.bytes[0..self.hash.partial.len],
+        ) else return false,
+    }
 }
 
 pub fn startsWith(self: Sha, peer: Sha) bool {
-    if (true) unreachable;
-    //if (self.len < peer.len) return false;
-    //return mem.eql(u8, self.bin[0..peer.len], peer.bin[0..peer.len]);
-    _ = self;
-    _ = peer;
+    switch (self.hash) {
+        .partial => {
+            if (peer.hash != .partial) return false;
+            if (self.hash.partial.len < peer.hash.partial.len) return false;
+            return mem.startsWith(
+                u8,
+                self.hash.partial.bytes[0..],
+                peer.hash.partial.bytes[0..peer.hash.partial.len],
+            );
+        },
+        .sha1 => switch (peer.hash) {
+            .sha1 => return self.eql(peer),
+            .sha256 => return false,
+            .partial => return mem.startsWith(
+                u8,
+                self.hash.sha1[0..],
+                peer.hash.partial.bytes[0..peer.hash.partial.len],
+            ),
+        },
+        .sha256 => switch (peer.hash) {
+            .sha1 => return false,
+            .sha256 => return self.eql(peer),
+            .partial => return mem.startsWith(
+                u8,
+                self.hash.sha256[0..],
+                peer.hash.partial.bytes[0..peer.hash.partial.len],
+            ),
+        },
+    }
     return false;
 }
 
