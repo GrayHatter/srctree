@@ -181,11 +181,9 @@ test "pack contains" {
         if (try pack.contains(sha)) |_| break;
     } else try std.testing.expect(false); // full sha
 
-    if (true) return error.SkipZigTest; // TODO
     const half_sha: Sha = .initPartial("7d4786ded56e1ee6cfe7");
     for (repo.objects.packs) |pack| {
-        if (try pack.contains(half_sha)) |_|
-            break;
+        if (try pack.contains(half_sha)) |_| break;
     } else try std.testing.expect(false); // half sha
 
     const err = repo.objects.packs[0].contains(Sha.initPartial("7d"));

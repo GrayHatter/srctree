@@ -76,7 +76,13 @@ fn prepare(self: *Pack) !void {
 }
 
 fn prepareIdx(self: *Pack) !void {
-    const width: usize = if (self.format == .sha1) 20 else 32;
+    return if (self.format == .sha1)
+        self.prepareIdxWidth(20)
+    else
+        self.prepareIdxWidth(32);
+}
+
+fn prepareIdxWidth(self: *Pack, comptime width: u8) !void {
     self.idx_header = @ptrCast(@alignCast(self.idx.ptr));
     const count = @byteSwap(self.idx_header.fanout[255]);
     self.objnames = self.idx[258 * 4 ..][0 .. width * count];
@@ -113,10 +119,8 @@ pub fn fanOutCount(self: Pack, i: u8) u32 {
 }
 
 fn orderSha(lhs: []const u8, rhs: []const u8) std.math.Order {
-    for (lhs, rhs) |l, r| {
-        if (l > r) return .gt;
-        if (l < r) return .lt;
-    }
+    for (0..@min(lhs.len, rhs.len)) |i|
+        if (lhs[i] != rhs[i]) return if (lhs[i] < rhs[i]) .lt else .gt;
     return .eq;
 }
 
@@ -124,16 +128,18 @@ pub fn contains(pack: Pack, sha: Sha) !?u32 {
     switch (sha.hash) {
         .sha1 => return pack.containsWidth(20, sha),
         .sha256 => return pack.containsWidth(32, sha),
-        .partial => unreachable, // .{ &sh.bytes, sh.len },
+        .partial => if (pack.format == .sha1)
+            return pack.containsWidth(20, sha)
+        else
+            return pack.containsWidth(32, sha),
     }
 }
 
-pub fn containsWidth(self: Pack, width: comptime_int, sha: Sha) !?u32 {
-    const shabin: [width]u8 = switch (width) {
-        20 => sha.hash.sha1,
-        32 => sha.hash.sha256, // TODO check pack format :/
-        else => comptime unreachable,
-        //.partial => |sh| .{ &sh.bytes, sh.len },
+pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) !?u32 {
+    const shabin: []const u8 = switch (sha.hash) {
+        .sha1 => &sha.hash.sha1,
+        .sha256 => &sha.hash.sha256,
+        .partial => sha.hash.partial.bytes[0..@divFloor(sha.hash.partial.len, 2)],
     };
     const count: usize = self.fanOutCount(shabin[0]);
     if (count == 0) return null;
@@ -151,7 +157,7 @@ pub fn containsWidth(self: Pack, width: comptime_int, sha: Sha) !?u32 {
     while (left < right) {
         const mid = left + (right - left) / 2;
 
-        switch (orderSha(&shabin, objnames[mid][0..width])) {
+        switch (orderSha(shabin, objnames[mid][0..width])) {
             .eq => {
                 found = mid;
                 break;
@@ -162,10 +168,10 @@ pub fn containsWidth(self: Pack, width: comptime_int, sha: Sha) !?u32 {
     }
 
     if (found) |f| {
-        if (objnames.len > f + 1 and eql(u8, &shabin, objnames[f + 1][0..width])) {
+        if (objnames.len > f + 1 and startsWith(u8, objnames[f + 1][0..width], shabin)) {
             return error.AmbiguousRef;
         }
-        if (f > 1 and eql(u8, &shabin, objnames[f - 1][0..width])) {
+        if (f > 0 and startsWith(u8, objnames[f - 1][0..width], shabin)) {
             return error.AmbiguousRef;
         }
         return @byteSwap(self.offsets[f + start]);

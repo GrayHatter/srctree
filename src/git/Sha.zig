@@ -68,9 +68,10 @@ pub const Text = union(enum) {
                 _ = bufPrint(&t, "{x}", .{bin[0..]}) catch unreachable;
                 return .{ .sha256 = t };
             },
-            .partial => {
-                unreachable; // TODO
-
+            .partial => |bin| {
+                var t: Text.Sha1 = @splat('0');
+                _ = bufPrint(&t, "{x}", .{bin.bytes[0..bin.len]}) catch unreachable;
+                return .{ .sha1 = t };
             },
         }
     }
@@ -83,26 +84,41 @@ pub const sha1_ff: Sha = .{ .hash = .{ .sha1 = @splat(0xff) } };
 pub const sha2_ff: Sha = .{ .hash = .{ .sha256 = @splat(0xff) } };
 
 pub fn init(sha: []const u8) Sha {
-    if (sha.len == 20) {
-        return .{ .hash = .{ .sha1 = sha[0..20].* } };
-    } else if (sha.len == 32) {
-        return .{ .hash = .{ .sha256 = sha[0..32].* } };
-    } else if (sha.len == 40) {
-        return .{ .hash = .fromText(.{ .sha1 = sha[0..40].* }) };
-    } else if (sha.len == 64) {
-        return .{ .hash = .fromText(.{ .sha256 = sha[0..64].* }) };
-    } else {
-        std.debug.print("sha init failed {} '{s}'\n", .{ sha.len, sha });
-        unreachable;
-    }
+    return switch (sha.len) {
+        20, 40 => init1(sha),
+        32, 64 => init256(sha),
+        else => initPartial(sha),
+    };
+}
+
+pub fn init1(sha: []const u8) Sha {
+    return switch (sha.len) {
+        20 => .{ .hash = .{ .sha1 = sha[0..20].* } },
+        40 => .{ .hash = .fromText(.{ .sha1 = sha[0..40].* }) },
+        else => unreachable,
+    };
+}
+
+pub fn init256(sha: []const u8) Sha {
+    return switch (sha.len) {
+        32 => .{ .hash = .{ .sha256 = sha[0..32].* } },
+        64 => .{ .hash = .fromText(.{ .sha256 = sha[0..64].* }) },
+        else => unreachable,
+    };
 }
 
 /// TODO return error, and validate it's actually hex
 pub fn initPartial(sha: []const u8) Sha {
-    var buf: Hash.Sha1 = @splat('f');
-    for (buf[0..sha.len], sha[0..]) |*dst, src| dst.* = src;
-    unreachable;
-    //return .{ .partial = .fromHex(.{ buf) };
+    std.debug.assert(sha.len < 40);
+    var txt: Text.Sha256 = @splat('0');
+    @memcpy(txt[0..sha.len], sha);
+    const bin: Hash = .fromText(.{ .sha256 = txt });
+    return .{ .hash = .{
+        .partial = .{
+            .bytes = bin.sha256[0..31].*,
+            .len = @intCast(sha.len),
+        },
+    } };
 }
 
 pub fn initCheck(sha: []const u8) !Sha {
@@ -172,6 +188,63 @@ pub fn formatHex(sha: Sha, w: *std.Io.Writer) !void {
 
 pub fn formatBin(sha: Sha, w: *std.Io.Writer) !void {
     return try w.print("{any}", .{sha.bin[0..sha.len]});
+}
+
+test init {
+    const sha = Sha.init("7d4786ded56e1ee6cfe72c7986218e234961d03c");
+    try std.testing.expectEqualDeep(Sha{
+        .hash = .{
+            .sha1 = .{
+                0x7d, 0x47, 0x86, 0xde, 0xd5, 0x6e, 0x1e, 0xe6,
+                0xcf, 0xe7, 0x2c, 0x79, 0x86, 0x21, 0x8e, 0x23,
+                0x49, 0x61, 0xd0, 0x3c,
+            },
+        },
+    }, sha);
+
+    const sha256 = Sha.init("a3a36b2bcc01d330131aecd87a714fcf83e22f5315d0ef8cd0b4914403f9939b");
+    try std.testing.expectEqualDeep(Sha{
+        .hash = .{
+            .sha256 = .{
+                0xa3, 0xa3, 0x6b, 0x2b, 0xcc, 0x01, 0xd3, 0x30,
+                0x13, 0x1a, 0xec, 0xd8, 0x7a, 0x71, 0x4f, 0xcf,
+                0x83, 0xe2, 0x2f, 0x53, 0x15, 0xd0, 0xef, 0x8c,
+                0xd0, 0xb4, 0x91, 0x44, 0x03, 0xf9, 0x93, 0x9b,
+            },
+        },
+    }, sha256);
+}
+
+test initPartial {
+    const half_sha: Sha = .initPartial("7d4786ded56e1ee6cfe7");
+    try std.testing.expectEqualDeep(Sha{
+        .hash = .{
+            .partial = .{
+                .bytes = .{
+                    0x7d, 0x47, 0x86, 0xde, 0xd5, 0x6e, 0x1e, 0xe6, 0xcf, 0xe7,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00,
+                },
+                .len = 20,
+            },
+        },
+    }, half_sha);
+
+    const baby_sha = Sha.initPartial("7d");
+    try std.testing.expectEqualDeep(Sha{
+        .hash = .{
+            .partial = .{
+                .bytes = .{
+                    0x7d, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00,
+                },
+                .len = 2,
+            },
+        },
+    }, baby_sha);
 }
 
 test "hex tranlations" {
