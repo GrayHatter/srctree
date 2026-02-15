@@ -51,8 +51,8 @@ pub const Text = union(enum) {
 
     pub fn slice(t: *const Text) []const u8 {
         return switch (t.*) {
-            .sha1 => |sh| sh[0..40],
-            .sha256 => |sh| sh[0..64],
+            .sha1 => t.sha1[0..40],
+            .sha256 => t.sha256[0..64],
         };
     }
 
