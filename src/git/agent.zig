@@ -64,8 +64,14 @@ pub fn forkRemote(agent: Agent, uri: []const u8, local_dir: []const u8, io: Io) 
     );
 }
 
-pub fn initRepo(agent: Agent, dir: []const u8, opt: struct { bare: bool = true }, io: Io) ![]u8 {
-    return try agent.exec(&.{ "git", "init", if (opt.bare) "--bare" else "", dir }, io);
+pub const InitEmptyOptions = struct { bare: bool = true };
+pub fn initEmpty(agent: Agent, dir: []const u8, opt: InitEmptyOptions, io: Io) ![]u8 {
+    const bare = if (opt.bare) "--bare" else "";
+    return try agent.exec(&.{
+        "git", "init",
+        "-b", "main", // suppress the pre git v3 warning
+        bare, dir,
+    }, io);
 }
 
 pub fn show(agent: Agent, sha: Sha, io: Io) ![]u8 {

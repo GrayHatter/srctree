@@ -62,7 +62,7 @@ pub fn init(d: Dir, io: Io) Error!Repo {
 /// Dir name must be relative (probably)
 pub fn createNew(chdir: Io.Dir, dir_name: []const u8, a: Allocator, io: Io) !Repo {
     var agent = Agent{ .alloc = a, .cwd = chdir };
-    a.free(try agent.initRepo(dir_name, .{}, io));
+    a.free(try agent.initEmpty(dir_name, .{}, io));
     var dir = try chdir.openDir(io, dir_name, .{});
     errdefer dir.close(io);
     return init(dir, io);
