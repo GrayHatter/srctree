@@ -80,6 +80,7 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
         switch (ua.agent) {
             .bot => |bot| switch (bot.name) {
                 .googlebot => return null,
+                .bingbot => return null,
                 .unknown => {
                     if (std.mem.indexOf(u8, fr.request.user_agent.?.string, "SearchBot/1.0") == null) return null;
                     log.err("Dropping malicious traffic", .{});
