@@ -65,10 +65,8 @@ pub const Namespace = struct {
     }
 
     pub fn format(ns: Namespace, w: *Writer) !void {
-        try w.print("[{s}]\n", .{ns.name});
-        for (ns.settings) |setting| {
+        for (ns.settings) |setting|
             try w.print("    {f}\n", .{setting});
-        }
     }
 
     pub fn raze(ns: Namespace, a: Allocator) void {
@@ -181,7 +179,7 @@ pub fn Config(BaseT: type) type {
 
         pub fn format(self: Self, w: *Writer) !void {
             for (self.ini.ns) |ns| {
-                try w.print("{f}", .{ns});
+                try w.print("[{s}]\n{f}", .{ ns.name, ns });
             }
         }
     };
