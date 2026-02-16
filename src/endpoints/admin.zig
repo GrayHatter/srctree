@@ -54,13 +54,15 @@ pub fn settings(f: *Frame) Router.Error!void {
     try f.requireValidUser();
     const blocks: []S.AdminView.Settings.ConfigBlocks = try f.alloc.alloc(
         S.AdminView.Settings.ConfigBlocks,
-        global_config.ctx.ns.len,
+        global_config.ini.ns.len,
     );
-    for (global_config.ctx.ns, blocks) |ns, *block| {
+    for (global_config.ini.ns, blocks) |ns, *block| {
+        var w: Writer.Allocating = try .initCapacity(f.alloc, 256);
+        try w.writer.print("{f}\n", .{ns});
         block.* = .{
             .config_name = ns.name,
-            .config_text = ns.block,
-            .count = mem.count(u8, ns.block, "\n") + 2,
+            .config_text = w.writer.buffered(),
+            .count = mem.countScalar(u8, w.writer.buffered(), '\n') + 2,
         };
     }
     const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
@@ -222,6 +224,7 @@ const git = @import("../git.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
+const Writer = Io.Writer;
 const allocPrint = std.fmt.allocPrint;
 const mem = std.mem;
 const verse = @import("verse");

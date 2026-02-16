@@ -83,7 +83,7 @@ pub const SrcConfig = Ini.Config(struct {
     };
 });
 
-pub var global_config: SrcConfig = .{ .config = .empty, .ctx = .empty };
+pub var global_config: SrcConfig = .{ .config = .empty, .ini = .empty };
 
 const Auth = @import("Auth.zig");
 
@@ -123,13 +123,17 @@ pub fn main(mini: std.process.Init.Minimal) !void {
         cfg_file = try cwd.openFile(io, "./config.ini", .{});
     }
 
-    global_config = SrcConfig.fromFile(a, io, cfg_file.?) catch |e| switch (e) {
-        //error.FileNotFound => Ini.Config.empty(),
-        else => return e,
-    };
+    var cfg_data: []u8 = &.{};
+    defer a.free(cfg_data);
+    if (cfg_file) |*cf| {
+        const len = try cf.length(io);
+        cfg_data = try a.alloc(u8, len);
+        var config_reader = cf.reader(io, cfg_data);
+        global_config = try SrcConfig.init(&config_reader.interface, a);
+    }
     defer global_config.raze(a);
 
-    if (global_config.ctx.get("owner")) |ns| {
+    if (global_config.ini.get("owner")) |ns| {
         if (ns.get("email")) |email| {
             log.debug("{s}", .{email});
         }

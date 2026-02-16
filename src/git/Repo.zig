@@ -81,18 +81,17 @@ pub fn loadData(self: *Repo, a: Allocator, io: Io) !void {
 fn loadConfig(self: *Repo, a: Allocator, io: Io) !void {
     const file = try self.dir.openFile(io, "config", .{});
     defer file.close(io);
-    const stat = try file.stat(io);
-    self.config_data = try a.alloc(u8, stat.size);
+    const len = try file.length(io);
+    self.config_data = try a.alloc(u8, len);
     var reader = file.reader(io, self.config_data.?);
-    try reader.interface.fill(stat.size);
-    self.config = try .init(a, self.config_data.?);
+    self.config = try .init(&reader.interface, a);
 }
 
 fn loadRemotes(cfg: Ini.Config(void), a: Allocator) ![]Remote {
     var list: ArrayList(Remote) = .{};
     errdefer list.clearAndFree(a);
-    for (0..cfg.ctx.ns.len) |i| {
-        const ns = cfg.ctx.filter("remote", i) orelse break;
+    for (0..cfg.ini.ns.len) |i| {
+        const ns = cfg.ini.filter("remote", i) orelse break;
         try list.append(a, .{
             .name = try a.dupe(u8, std.mem.trim(u8, ns.name[6..], "' \t\n\"")),
             .url = if (ns.get("url")) |url| try a.dupe(u8, url) else null,

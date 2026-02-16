@@ -6,41 +6,44 @@ const Setting = struct {
     fn init(str: []const u8) Setting {
         if (findScalar(u8, str, '=')) |i| {
             return .{
-                .name = trim(u8, str[0..i], " \n\t"),
-                .val = trim(u8, str[i + 1 ..], " \n\t"),
+                .name = trim(u8, str[0..i], " \t"),
+                .val = trim(u8, str[i + 1 ..], " \t"),
             };
         }
         unreachable;
+    }
+
+    pub fn format(setting: Setting, w: *Writer) !void {
+        try w.print("{s} = {s}", .{ setting.name, setting.val });
     }
 };
 
 pub const Namespace = struct {
     name: []const u8,
     settings: []const Setting,
-    block: []const u8,
 
     /// Name must outlive the Namespace
-    pub fn init(a: Allocator, name: []const u8, itr: *ScalarIter) !Namespace {
+    pub fn init(name: []const u8, r: *Reader, a: Allocator) !Namespace {
         var list: ArrayList(Setting) = .{};
         errdefer list.deinit(a);
 
-        const ns_start = itr.index.?;
-
-        while (itr.next()) |next| {
-            const line = trim(u8, next, " \n\t");
+        while (r.takeSentinel('\n')) |wide| {
+            const line = trim(u8, wide, " \t");
             if (line.len > 3 and line[0] != '#' and find(u8, line, "=") != null) {
                 try list.append(a, .init(line));
             }
-            if (itr.peek()) |peekW| {
+            if (r.peekSentinel('\n')) |peekW| {
                 const peek = trim(u8, peekW, " \t");
                 if (peek.len > 0 and peek[0] == '[') break;
-            }
+            } else |_| break;
+        } else |e| switch (e) {
+            error.EndOfStream => {},
+            else => return e,
         }
 
         return .{
             .name = name[1 .. name.len - 1],
             .settings = try list.toOwnedSlice(a),
-            .block = itr.buffer[ns_start .. itr.index orelse itr.buffer.len],
         };
     }
 
@@ -61,6 +64,13 @@ pub const Namespace = struct {
         } else return null;
     }
 
+    pub fn format(ns: Namespace, w: *Writer) !void {
+        try w.print("[{s}]\n", .{ns.name});
+        for (ns.settings) |setting| {
+            try w.print("    {f}\n", .{setting});
+        }
+    }
+
     pub fn raze(ns: Namespace, a: Allocator) void {
         a.free(ns.settings);
     }
@@ -69,7 +79,7 @@ pub const Namespace = struct {
 pub fn Config(BaseT: type) type {
     return struct {
         config: Base,
-        ctx: IniData,
+        ini: IniData,
 
         pub const Self = @This();
 
@@ -77,17 +87,12 @@ pub fn Config(BaseT: type) type {
 
         pub const IniData = struct {
             ns: []Namespace,
-            data: []const u8,
-            owned: ?[]const u8 = null,
 
-            pub const empty: IniData = .{
-                .ns = &.{},
-                .data = &.{},
-            };
+            pub const empty: IniData = .{ .ns = &.{} };
 
-            pub fn filter(ctx: IniData, prefix: []const u8, index: usize) ?Namespace {
+            pub fn filter(ini: IniData, prefix: []const u8, index: usize) ?Namespace {
                 var remaining = index;
-                for (ctx.ns) |ns| {
+                for (ini.ns) |ns| {
                     if (startsWith(u8, ns.name, prefix)) {
                         if (remaining == 0) return ns;
                         remaining -= 1;
@@ -95,8 +100,8 @@ pub fn Config(BaseT: type) type {
                 } else return null;
             }
 
-            pub fn get(ctx: IniData, name: []const u8) ?Namespace {
-                for (ctx.ns) |ns| {
+            pub fn get(ini: IniData, name: []const u8) ?Namespace {
+                for (ini.ns) |ns| {
                     if (eql(u8, ns.name, name)) {
                         return ns;
                     }
@@ -104,10 +109,10 @@ pub fn Config(BaseT: type) type {
                 return null;
             }
 
-            fn buildStruct(ctx: IniData, T: type, name: []const u8) !?T {
+            fn buildStruct(ini: IniData, T: type, name: []const u8) !?T {
                 if (T == void) return {};
                 var namespace: T = undefined;
-                const ns = ctx.get(name) orelse return null;
+                const ns = ini.get(name) orelse return null;
                 inline for (@typeInfo(T).@"struct".fields) |s| {
                     @field(namespace, s.name) = switch (s.type) {
                         bool => ns.getBool(s.name) orelse s.defaultValue() orelse return error.SettingMissing,
@@ -136,51 +141,48 @@ pub fn Config(BaseT: type) type {
             return base;
         }
 
-        pub fn raze(self: Self, a: Allocator) void {
-            for (self.ctx.ns) |ns| ns.raze(a);
-            a.free(self.ctx.ns);
-            if (self.ctx.owned) |owned| a.free(owned);
-        }
-
-        /// `data` must outlive returned object
-        pub fn init(a: Allocator, data: []const u8) !Self {
-            var itr = splitScalar(u8, data, '\n');
-
+        pub fn init(r: *Reader, a: Allocator) !Self {
             var list: ArrayList(Namespace) = .{};
             errdefer {
                 for (list.items) |itm| itm.raze(a);
                 list.deinit(a);
             }
 
-            while (itr.next()) |wide| {
-                const line = trim(u8, wide, " \n\t");
+            while (r.takeSentinel('\n')) |wide| {
+                const line = trim(u8, wide, " \t");
                 if (line.len == 0) continue;
 
                 if (line[0] == '[' and line[line.len - 1] == ']') {
-                    try list.append(a, try .init(a, line, &itr));
+                    try list.append(a, try .init(line, r, a));
                 }
+            } else |e| switch (e) {
+                error.EndOfStream => {},
+                else => return e,
             }
 
-            const ctx: IniData = .{
+            const ini: IniData = .{
                 .ns = try list.toOwnedSlice(a),
-                .data = data,
-                .owned = null,
             };
 
             return .{
-                .config = try makeBase(ctx),
-                .ctx = ctx,
+                .config = try makeBase(ini),
+                .ini = ini,
             };
         }
 
-        pub fn fromFile(a: Allocator, io: std.Io, file: std.Io.File) !Self {
-            var r_b: [2048]u8 = undefined;
-            var reader = file.reader(io, &r_b);
-            const data = try reader.interface.allocRemaining(a, .limited(0x8000));
+        pub fn raze(self: Self, a: Allocator) void {
+            for (self.ini.ns) |ns| ns.raze(a);
+            a.free(self.ini.ns);
+        }
 
-            var self: Self = try init(a, data);
-            self.ctx.owned = data;
-            return self;
+        pub fn save(self: Self, w: *Writer) !void {
+            try w.print("{f}\n", .{self});
+        }
+
+        pub fn format(self: Self, w: *Writer) !void {
+            for (self.ini.ns) |ns| {
+                try w.print("{f}", .{ns});
+            }
         }
     };
 }
@@ -190,19 +192,19 @@ test "default" {
 
     const expected: Config(void) = .{
         .config = {},
-        .ctx = .{
+        .ini = .{
             .ns = @constCast(&[1]Namespace{.{
                 .name = "one",
                 .settings = @constCast(&[1]Setting{
                     .{ .name = "left", .val = "right" },
                 }),
-                .block = @constCast("left = right"),
             }}),
-            .data = @constCast("[one]\nleft = right"),
         },
     };
 
-    const vtest = try Config(void).init(a, "[one]\nleft = right");
+    var r: Reader = .fixed("[one]\nleft = right\n");
+
+    const vtest = try Config(void).init(&r, a);
     defer vtest.raze(a);
 
     try std.testing.expectEqualDeep(expected, vtest);
@@ -229,9 +231,10 @@ test "getBool" {
     const Cfg = Config(struct {});
 
     const a = std.testing.allocator;
-    const c = try Cfg.init(a, data);
+    var r: Reader = .fixed(data);
+    const c = try Cfg.init(&r, a);
     defer c.raze(a);
-    const ns = c.ctx.get("test data").?;
+    const ns = c.ini.get("test data").?;
 
     try std.testing.expectEqual(true, ns.getBool("first").?);
     try std.testing.expectEqual(true, ns.getBool("second").?);
@@ -259,33 +262,43 @@ test "commented" {
 
     const expected: Config(void) = .{
         .config = {},
-        .ctx = .{
+        .ini = .{
             .ns = @constCast(&[1]Namespace{.{
                 .name = "open",
                 .settings = @constCast(&[2]Setting{
                     .{ .name = "left", .val = "right" },
                     .{ .name = "this", .val = "works" },
                 }),
-                .block = @constCast(vut[7..]),
             }}),
-            .data = @constCast(vut),
         },
     };
 
-    const vtest = try Config(void).init(a, vut);
+    var r: Reader = .fixed(vut);
+
+    const vtest = try Config(void).init(&r, a);
     defer vtest.raze(a);
 
     try std.testing.expectEqualDeep(expected, vtest);
+
+    var w: Writer.Allocating = try .initCapacity(a, 256);
+    defer w.deinit();
+    try w.writer.print("{f}", .{vtest});
+    try std.testing.expectEqualStrings(
+        \\[open]
+        \\    left = right
+        \\    this = works
+        \\
+    , w.writer.buffered());
 }
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Reader = std.Io.Reader;
+const Writer = std.Io.Writer;
 const ArrayList = std.ArrayList;
-const ScalarIter = std.mem.SplitIterator(u8, .scalar);
 const eql = std.mem.eql;
 const eqlCaseless = std.ascii.eqlIgnoreCase;
 const find = std.mem.find;
 const findScalar = std.mem.findScalar;
-const splitScalar = std.mem.splitScalar;
 const startsWith = std.mem.startsWith;
 const trim = std.mem.trim;
