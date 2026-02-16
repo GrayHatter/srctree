@@ -16,7 +16,8 @@ const SearchReq = struct {
 
 fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
-    var repo = (Repos.open(rd.name, .public, f.io) catch return error.Unknown) orelse return error.Unrouteable;
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.Unrouteable;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
 
     const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
@@ -258,7 +259,7 @@ const findScalarPos = std.mem.findScalarPos;
 const countScalar = std.mem.countScalar;
 const log = std.log.scoped(.repo_search);
 
-const Repos = @import("../../repos.zig");
+const repos = @import("../../repos.zig");
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.RouteData;
 const git = @import("../../git.zig");

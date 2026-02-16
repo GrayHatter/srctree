@@ -2,7 +2,8 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
     const rd = RouteData.init(frame.uri) orelse return error.Unrouteable;
     _ = frame.uri.next();
 
-    var repo = (repos.open(rd.name, .public, frame.io) catch return error.Unknown) orelse return error.Unrouteable;
+    const vis: repos.Visibility.Select = if (frame.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, frame.io) catch return error.Unknown) orelse return error.Unrouteable;
     repo.loadData(frame.alloc, frame.io) catch return error.Unknown;
     defer repo.raze(frame.alloc, frame.io);
 

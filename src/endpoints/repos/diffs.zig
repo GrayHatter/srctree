@@ -90,7 +90,8 @@ fn pendingNew(f: *Frame) Error!void {
     var desc: ?[]const u8 = null;
 
     const routing_data = RouteData.init(f.uri) orelse return error.Unrouteable;
-    var repo = (repos.open(routing_data.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(routing_data.name, vis, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
 
@@ -836,7 +837,8 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     if (updatePatchView(f)) |_| return f.redirect(f.request.uri, .see_other) catch unreachable;
     const patch_view_mode = updateFetchPatchView(f) catch .inlined;
 
-    var repo = (repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
 

@@ -172,7 +172,8 @@ fn view(f: *verse.Frame) Error!void {
     const delta_id = f.uri.next().?;
     const idx = isHex(delta_id) orelse return error.Unrouteable;
 
-    var repo = (repos.open(rd.name, .public, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
     defer repo.raze(f.alloc, f.io);
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch return error.Unrouteable;
 

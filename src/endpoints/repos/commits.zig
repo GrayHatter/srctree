@@ -158,7 +158,8 @@ pub fn viewCommit(f: *Frame) Error!void {
     const sha = rd.ref orelse return error.Unrouteable;
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
 
-    var repo = (repos.open(rd.name, .public, f.io) catch return error.ServerFault) orelse
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
@@ -313,7 +314,8 @@ pub fn commitList(f: *Frame) Error!void {
     //    }
     //} else {}
 
-    var repo = (repos.open(rd.name, .public, f.io) catch return error.ServerFault) orelse
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
@@ -331,7 +333,8 @@ pub fn commitsBefore(f: *Frame) Error!void {
 
     std.debug.assert(std.mem.eql(u8, "after", f.uri.next().?));
 
-    var repo = (repos.open(rd.name, .public) catch return error.ServerFault) orelse
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
     repo.loadData(f.alloc) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);

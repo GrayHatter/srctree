@@ -88,8 +88,8 @@ pub const RouteData = struct {
         };
     }
 
-    pub fn exists(self: RouteData, io: Io) bool {
-        return repos.exists(self.name, .public, io);
+    pub fn exists(self: RouteData, vis: repos.Visibility.Select, io: Io) bool {
+        return repos.exists(self.name, vis, io);
     }
 
     pub fn repoHeader(rd: RouteData, host: []const u8) !S.BaseRepoHeaderHtml {
@@ -116,7 +116,8 @@ pub const RouteData = struct {
 
 pub fn navButtons(f: *Frame) ![2]S.NavButtons {
     const rd = RouteData.init(f.uri) orelse return error.InvalidURI;
-    if (!rd.exists(f.io)) return error.InvalidURI;
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    if (!rd.exists(vis, f.io)) return error.InvalidURI;
     var i_count: usize = 0;
     var d_count: usize = 0;
     var itr: Delta.RepoIterator = .init(rd.name, f.io);
@@ -184,8 +185,9 @@ pub fn updateFetchPatchView(f: *Frame) error{Unspecified}!PatchViewMode {
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     const rd = RouteData.init(f.uri) orelse return list;
 
-    if (rd.exists(f.io)) {
-        if (repos.open(rd.name, .public, f.io)) |repo_| b: {
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    if (rd.exists(vis, f.io)) {
+        if (repos.open(rd.name, vis, f.io)) |repo_| b: {
             var repo = repo_ orelse break :b;
             if (repo.loadData(f.alloc, f.io)) {
                 defer repo.raze(f.alloc, f.io);
@@ -352,7 +354,8 @@ fn list(f: *Frame) Router.Error!void {
     const udata = f.request.data.query.validate(RepoSortReq) catch return error.DataInvalid;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
-    var repo_iter = repos.allRepoIterator(.public, f.io) catch return error.Unknown;
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo_iter = repos.allRepoIterator(vis, f.io) catch return error.Unknown;
     var current_repos: ArrayList(Git.Repo) = .{};
     while (repo_iter.next(f.io) catch return error.Unknown) |rpo_| {
         var rpo = rpo_;

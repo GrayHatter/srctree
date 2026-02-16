@@ -5,7 +5,8 @@ const NetworkPage = template.PageData("network.html");
 pub fn index(ctx: *Frame) Error!void {
     var dom: *DOM = .create(ctx.alloc);
 
-    var repo_iter = Repos.allRepoIterator(.public, ctx.io) catch return error.Unknown;
+    const vis: repos.Visibility.Select = if (ctx.user) |_| .all else .public_only;
+    var repo_iter = repos.allRepoIterator(vis, ctx.io) catch return error.Unknown;
     while (repo_iter.next(ctx.io) catch return error.Unknown) |repoC| {
         var repo = repoC;
         repo.loadData(ctx.alloc, ctx.io) catch |err| {
@@ -47,6 +48,6 @@ const html = template.html;
 const DOM = html.DOM;
 
 const Error = verse.Router.Error;
-const Repos = @import("../repos.zig");
+const repos = @import("../repos.zig");
 const Ini = @import("../ini.zig");
 const Git = @import("../git.zig");

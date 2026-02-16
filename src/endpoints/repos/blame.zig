@@ -17,7 +17,8 @@ pub fn blame(f: *Frame) Router.Error!void {
     std.debug.assert(rd.verb.? == .blame);
     const blame_file = (rd.path orelse return error.InvalidURI).rest();
 
-    var repo = (repos.open(rd.name, .public, f.io) catch return error.Unknown) orelse return error.Unrouteable;
+    const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.Unrouteable;
     // TODO be more specific
     //repo.loadRemotes() catch {};
     repo.loadData(f.alloc, f.io) catch {}; // This is a safe optional because it's only used to get upstream

@@ -25,47 +25,63 @@ pub const Visibility = enum {
     private,
     secret,
 
-    pub fn isVisible(v: Visibility, target: Visibility) bool {
-        return switch (target) {
-            .public => v == .public,
-            .unlisted => v == .public or v == .unlisted,
-            .private => v != .secret,
-            .secret => true,
+    pub const len = @typeInfo(Visibility).@"enum".fields.len;
+
+    pub const Select = struct {
+        pub const public_only: Select = .{ .public = true };
+        pub const unlisted_only: Select = .{ .unlisted = true };
+        pub const private_only: Select = .{ .private = true };
+        pub const secret_only: Select = .{ .secret = true };
+        pub const all: Select = .{ .public = true, .unlisted = true, .private = true, .secret = true };
+        pub const default: Select = .{ .public = true };
+
+        public: bool = false,
+        unlisted: bool = false,
+        private: bool = false,
+        secret: bool = false,
+    };
+
+    pub fn isVisible(v: Visibility, target: Select) bool {
+        return switch (v) {
+            .public => target.public,
+            .unlisted => target.unlisted,
+            .private => target.private,
+            .secret => target.secret,
         };
     }
 
-    pub const len = @typeInfo(Visibility).@"enum".fields.len;
-};
-
-/// public, but use with caution, might cause side channel leakage
-pub fn visibility(name: []const u8) Visibility {
-    if (global_config.repos) |crepos| {
-        if (crepos.@"private-repos") |hr| {
-            // if you actually use null, I hate you!
-            var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
-            while (repo_itr.next()) |r| {
-                if (eql(u8, name, r))
-                    return .private;
-            }
-        } else if (crepos.@"unlisted-repos") |hr| {
-            // if you actually use null, I hate you!
-            var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
-            while (repo_itr.next()) |r| {
-                if (eql(u8, name, r))
-                    return .unlisted;
+    /// public, but use with caution, might cause side channel leakage
+    pub fn fromConfig(name: []const u8) Visibility {
+        if (global_config.repos) |crepos| {
+            if (crepos.@"private-repos") |hr| {
+                // if you actually use null, I hate you!
+                var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
+                while (repo_itr.next()) |r| {
+                    if (eql(u8, name, r))
+                        return .private;
+                }
+            } else if (crepos.@"unlisted-repos") |hr| {
+                // if you actually use null, I hate you!
+                var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
+                while (repo_itr.next()) |r| {
+                    if (eql(u8, name, r))
+                        return .unlisted;
+                }
             }
         }
+        return .public;
     }
-    return .public;
-}
+};
+const Vis = Visibility;
 
 /// public, but use with caution, might cause side channel leakage
 pub fn isHidden(name: []const u8) bool {
-    return visibility(name) != .public;
+    return Vis.fromConfig(name) != .public;
 }
 
-pub fn exists(name: []const u8, vis: Visibility, io: Io) bool {
-    var dir = dirs.directory(vis, io) catch return false;
+pub fn exists(name: []const u8, vis: Visibility.Select, io: Io) bool {
+    // TODO skips non-public dirs
+    var dir = dirs.directory(.public, io) catch return false;
     defer dir.close(io);
     var itr = dir.iterate();
     while (itr.next(io) catch return false) |file| {
@@ -74,23 +90,17 @@ pub fn exists(name: []const u8, vis: Visibility, io: Io) bool {
             // lol, crap, there's a side channel leak no matter where I put
             // this... given near zero thought I've decided this is the better
             // option
-            if (!visibility(name).isVisible(vis)) return false;
+            if (!Vis.fromConfig(name).isVisible(vis)) return false;
             return true;
         }
     }
     return false;
 }
 
-//pub fn open(name: []const u8, vis: Visability) !?Git.Repo {
-//    if (isHiddenVis(name, vis)) return null;
-//    return openAny(name);
-//}
-//
-//pub fn openAny(name: []const u8) !?Git.Repo {
-
-pub fn open(name: []const u8, vis: Visibility, io: Io) !?Git.Repo {
-    if (!visibility(name).isVisible(vis)) return null;
-    var root = try dirs.directory(vis, io);
+pub fn open(name: []const u8, vis: Vis.Select, io: Io) !?Git.Repo {
+    if (!Vis.fromConfig(name).isVisible(vis)) return null;
+    // TODO fromConfig may return the wrong dir
+    var root = try dirs.directory(Vis.fromConfig(name), io);
     defer root.close(io);
     const dir = root.openDir(io, name, .{}) catch |err| switch (err) {
         error.FileNotFound => return null,
@@ -118,7 +128,7 @@ pub fn allNames(a: Allocator, io: Io) !ArrayList([]u8) {
 pub const RepoIterator = struct {
     dir: Io.Dir,
     itr: Io.Dir.Iterator,
-    vis: Visibility,
+    vis: Visibility.Select,
     /// only valid until the following call to next()
     current_name: ?[]const u8 = null,
 
@@ -126,7 +136,7 @@ pub const RepoIterator = struct {
         while (try ri.itr.next(io)) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
-            if (!visibility(file.name).isVisible(ri.vis)) continue;
+            if (!Vis.fromConfig(file.name).isVisible(ri.vis)) continue;
             const rdir = ri.dir.openDir(io, file.name, .{}) catch continue;
             ri.current_name = file.name;
             return try Git.Repo.init(rdir, io);
@@ -137,8 +147,9 @@ pub const RepoIterator = struct {
     }
 };
 
-pub fn allRepoIterator(vis: Visibility, io: Io) !RepoIterator {
-    const dir = try dirs.directory(vis, io);
+pub fn allRepoIterator(vis: Visibility.Select, io: Io) !RepoIterator {
+    // TODO
+    const dir = try dirs.directory(.public, io);
     return .{
         .dir = dir,
         .itr = dir.iterate(),
@@ -329,11 +340,8 @@ pub const Agent = struct {
                     if (skipRepo(skips, rname)) continue;
 
                 log.debug("starting update for {s}", .{rname});
-                var repo: Git.Repo = open(rname, .public, a.io) catch {
+                var repo: Git.Repo = open(rname, .all, a.io) catch {
                     log.warn("unable to load public repo {s}", .{rname});
-                    continue;
-                } orelse open(rname, .private, a.io) catch {
-                    log.warn("unable to load private repo {s}", .{rname});
                     continue;
                 } orelse {
                     log.warn("unable to find repo {s}", .{rname});
