@@ -179,7 +179,7 @@ pub fn Config(BaseT: type) type {
 
         pub fn format(self: Self, w: *Writer) !void {
             for (self.ini.ns) |ns| {
-                try w.print("[{s}]\n{f}", .{ ns.name, ns });
+                try w.print("[{s}]\n{f}\n", .{ ns.name, ns });
             }
         }
     };
@@ -256,18 +256,33 @@ test "commented" {
         \\    # long_comment = still_ignored
         \\ this = works
         \\ # but not this
+        \\[closed]
+        \\another     = one
+        \\another    =  two
+        \\another   =   three
+        \\
     ;
 
     const expected: Config(void) = .{
         .config = {},
         .ini = .{
-            .ns = @constCast(&[1]Namespace{.{
-                .name = "open",
-                .settings = @constCast(&[2]Setting{
-                    .{ .name = "left", .val = "right" },
-                    .{ .name = "this", .val = "works" },
-                }),
-            }}),
+            .ns = @constCast(&[2]Namespace{
+                .{
+                    .name = "open",
+                    .settings = @constCast(&[2]Setting{
+                        .{ .name = "left", .val = "right" },
+                        .{ .name = "this", .val = "works" },
+                    }),
+                },
+                .{
+                    .name = "closed",
+                    .settings = @constCast(&[3]Setting{
+                        .{ .name = "another", .val = "one" },
+                        .{ .name = "another", .val = "two" },
+                        .{ .name = "another", .val = "three" },
+                    }),
+                },
+            }),
         },
     };
 
@@ -285,6 +300,12 @@ test "commented" {
         \\[open]
         \\    left = right
         \\    this = works
+        \\
+        \\[closed]
+        \\    another = one
+        \\    another = two
+        \\    another = three
+        \\
         \\
     , w.writer.buffered());
 }
