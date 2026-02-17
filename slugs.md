@@ -12,3 +12,4 @@ large diffs are rendered by default
 response times best measured in microseconds
 you're not required to give feedback to srctree
 -77, +77; is not considered "large"
+git; but distributed
