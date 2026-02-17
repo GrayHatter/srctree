@@ -7,11 +7,11 @@
     <Build BodyHeader _body_header.html />
     <content class="mw">
       <Buttons ornull />
-      <repos>
+      <repolist>
       <For RepoList>
-        <repo>
+      <repo class="<RepoClass ornull/>">
           <bar>
-          <name><a href="<Uri>" style="<NameStyle ornull/>"><Name></a></name>
+          <name><a href="<Uri>"><Name></a></name>
             <With Tag><a href="<Uri>" title="<Title>" class="tag muted"><Tag></a></With>
           </bar>
           <desc>
@@ -24,7 +24,7 @@
           </desc><last></last>
         </repo>
       </For>
-      </repos>
+      </repolist>
     </content>
   </body>
 </html>

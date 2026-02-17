@@ -325,17 +325,15 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
         };
     }
 
-    var name_style: ?[]const u8 = "color: #999";
+    var repo_class: ?[]const u8 = "lowlight";
     if (repo.config) |cfg| {
         if (cfg.ini.get("srctree")) |srctree| {
-            if (srctree.getBool("pinned") orelse false) {
-                name_style = null;
-            }
+            if (srctree.getBool("pinned") orelse false) repo_class = null;
         }
     }
     return .{
         .name = name,
-        .name_style = name_style,
+        .repo_class = repo_class,
         .uri = try allocPrint(a, "/repo/{s}", .{name}),
         .desc = desc,
         .upstream_blk = if (upstream) |u| .{ .link = u } else null,

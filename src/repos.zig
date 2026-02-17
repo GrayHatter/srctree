@@ -100,7 +100,8 @@ pub fn exists(name: []const u8, vis: Visibility.Select, io: Io) bool {
 pub fn open(name: []const u8, vis: Vis.Select, io: Io) !?Git.Repo {
     if (!Vis.fromConfig(name).isVisible(vis)) return null;
     // TODO fromConfig may return the wrong dir
-    var root = try dirs.directory(Vis.fromConfig(name), io);
+    //var root = try dirs.directory(Vis.fromConfig(name), io);
+    var root = try dirs.directory(.public, io);
     defer root.close(io);
     const dir = root.openDir(io, name, .{}) catch |err| switch (err) {
         error.FileNotFound => return null,
