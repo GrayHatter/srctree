@@ -33,8 +33,6 @@ pub const Ref = @import("git/ref.zig").Ref;
 ///
 /// Warning only has support for sha currently
 pub fn commitish(rev: []const u8) bool {
-    if (rev.len < 4 or rev.len > 40) return false;
-
     for (rev) |c| switch (c) {
         'a'...'f' => continue,
         'A'...'F' => continue,

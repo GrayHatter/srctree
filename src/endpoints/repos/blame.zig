@@ -112,7 +112,7 @@ fn wrapLineNumbersBlame(
         if (!skip) prev_sha = src.sha;
         const bcommit = map.get(src.sha) orelse unreachable;
         const email = if (!include_email) "" else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.email }}) catch unreachable;
-        sha.* = src.sha.text().sha1[0..8].*; // FIXME
+        sha.* = src.sha.text().slice()[0..8].*; // FIXME
         const parent_sha: ?Git.Sha = if (bcommit.parent) |bp| .init(bp) else null;
         blame_line.* = .{
             .num = i + 1,
@@ -120,7 +120,7 @@ fn wrapLineNumbersBlame(
             .repo_name = repo_name,
             .sha = sha,
             .blame_parent = if (parent_sha) |psha|
-                .{ .href = try allocPrint(a, "/repo/{s}/ref/{s}/blame/{s}", .{ repo_name, psha.text().sha1, path }) }
+                .{ .href = try allocPrint(a, "/repo/{s}/ref/{f}/blame/{s}", .{ repo_name, std.fmt.alt(psha, .fmtHex), path }) }
             else
                 null,
             .time_style = style_blocks[bcommit.age_block],

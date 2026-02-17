@@ -34,7 +34,7 @@ fn findFileSha(objs: Objects, sha: *Sha, io: Io) !Io.File {
     defer dir.close(io);
     var itr = dir.iterate();
     while (itr.next(io) catch null) |file| {
-        if (startsWith(u8, file.name, sha.text().sha1[2..])) {
+        if (startsWith(u8, file.name, sha.text().slice()[2..])) {
             return try dir.openFile(io, file.name, .{});
         }
     }

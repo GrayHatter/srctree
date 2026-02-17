@@ -129,13 +129,12 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
         const fname: []u8 = try bufPrint(&f_b, "./refs/heads/{s}", .{file.name});
         var f = try self.dir.openFile(io, fname, .{});
         defer f.close(io);
-        var buf: [40]u8 = undefined;
+        // surely enough for sha-50 right?
+        var buf: [256]u8 = undefined;
         var reader = f.reader(io, &buf);
-        reader.interface.fill(40) catch continue;
-        std.debug.assert(reader.interface.end == 40);
         try list.append(a, Ref{ .branch = .{
             .name = try a.dupe(u8, file.name),
-            .sha = Sha.init(&buf),
+            .sha = .init(try reader.interface.takeDelimiter('\n') orelse continue),
         } });
     }
     if (self.dir.openFile(io, "packed-refs", .{})) |*fd| {

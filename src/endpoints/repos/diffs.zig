@@ -866,7 +866,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     const curl_hint: S.DeltaDiffHtml.CurlHint = .{
         .repo_name = rd.name,
         .diff_idx = delta_index,
-        .base_ref = if (head_commit) |ref| ref.text().sha1[0..8] else "base_commit",
+        .base_ref = if (head_commit) |ref| ref.text().slice()[0..8] else "base_commit",
         .head_ref = "&lt;HEAD&gt;",
         .host = f.request.host orelse "127.0.0.1",
     };
@@ -881,7 +881,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 std.debug.print("Unable to generate patch {any}\n", .{err});
             }
             const cmt = repo.headCommit(f.alloc, f.io) catch return error.ServerFault;
-            if (eql(u8, &cmt.sha.text().sha1, &diff.applies_hash)) { // FIXME
+            if (cmt.sha.eql(.init(diff.applies_hash))) {
                 applies = diff.applies;
             } else {
                 var agent = repo.getAgent(f.alloc);
@@ -893,7 +893,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                     diff.applies = false;
                 }
 
-                @memcpy(diff.applies_hash[0..40], cmt.sha.text().sha1[0..40]);
+                diff.applies_hash = head_commit.?.text().slice();
                 diff.commit(f.io) catch return error.ServerFault;
             }
         }

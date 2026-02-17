@@ -86,7 +86,7 @@ const Journal = struct {
         const until = j.scribe_until;
 
         while (true) {
-            if (lseen.contains(commit.sha.hash.sha1[0..])) break;
+            if (lseen.contains(commit.sha.hash.bytes())) break;
             const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
             if (commit_time < until) break;
             if (eql(u8, j.email, commit.author.email)) {
@@ -138,11 +138,11 @@ const Journal = struct {
         if (!repo_gop.found_existing) {
             repo_gop.key_ptr.* = try cached_emails.allocator.dupe(u8, jrepo.name);
             @memset(&heatmap.hits, 0);
-            heatmap.shatext = .zeros;
+            heatmap.sha = .zeros;
         }
 
-        if (!eql(u8, heatmap.shatext.sha1[0..], commit.sha.text().sha1[0..])) {
-            heatmap.shatext = commit.sha.text();
+        if (!commit.sha.eql(heatmap.sha)) {
+            heatmap.sha = commit.sha;
             @memset(&heatmap.hits, 0);
             try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until, a, io);
         }
@@ -167,8 +167,8 @@ const Journal = struct {
                 return;
             }
 
-            if (jrepo.bufset.contains(commit.sha.hash.sha1[0..])) return;
-            jrepo.bufset.insert(commit.sha.hash.sha1[0..]) catch unreachable;
+            if (jrepo.bufset.contains(commit.sha.hash.bytes())) return;
+            jrepo.bufset.insert(commit.sha.hash.bytes()) catch unreachable;
 
             if (eql(u8, j.email, commit.author.email)) {
                 const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
@@ -326,7 +326,7 @@ const Scribe = struct {
         sha: Git.Sha,
 
         pub fn toTemplate(self: Commit, a: Allocator) !S.UserCommitsHtml.Months.JournalRows {
-            const shahex = try a.dupe(u8, self.sha.text().sha1[0..]);
+            const shahex = try a.dupe(u8, self.sha.text().slice());
 
             const continuation = "...";
             const title_max = 80;
@@ -372,7 +372,7 @@ const Scribe = struct {
 };
 
 pub const HeatMap = struct {
-    shatext: Git.Sha.Text,
+    sha: Git.Sha,
     hits: HeatMapArray,
 };
 

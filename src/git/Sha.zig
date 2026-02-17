@@ -37,6 +37,30 @@ pub const Hash = union(enum) {
             },
         }
     }
+
+    pub fn bytes(h: *const Hash) []const u8 {
+        return switch (h.*) {
+            .sha1 => h.sha1[0..],
+            .sha256 => h.sha256[0..],
+            .partial => h.partial.bytes[0..h.partial.bytes.len],
+        };
+    }
+
+    pub fn fmtHex(h: Hash, w: *std.Io.Writer) !void {
+        switch (h) {
+            .sha1 => try w.print("{x}", .{h.sha1}),
+            .sha256 => try w.print("{x}", .{h.sha256}),
+            .partial => try w.print("{x}", .{h.partial.bytes[0..h.partial.bytes.len]}),
+        }
+    }
+
+    pub fn format(t: Hash, w: *std.Io.Writer) !void {
+        switch (t) {
+            .sha1 => try w.print("{s}", .{t.sha1}),
+            .sha256 => try w.print("{s}", .{t.sha256}),
+            .partial => unreachable,
+        }
+    }
 };
 
 pub const Text = union(enum) {
@@ -73,6 +97,13 @@ pub const Text = union(enum) {
                 _ = bufPrint(&t, "{x}", .{bin.bytes[0..bin.len]}) catch unreachable;
                 return .{ .sha1 = t };
             },
+        }
+    }
+
+    pub fn format(t: Text, w: *std.Io.Writer) !void {
+        switch (t) {
+            .sha1 => try w.print("{s}", .{t.sha1}),
+            .sha256 => try w.print("{s}", .{t.sha256}),
         }
     }
 };
@@ -165,7 +196,7 @@ fn ascii(str: []const u8) bool {
 }
 
 pub fn eql(self: Sha, peer: Sha) bool {
-    if (@TypeOf(self.hash) != @TypeOf(peer.hash)) return false;
+    if (std.meta.activeTag(self.hash) != std.meta.activeTag(peer.hash)) return false;
     switch (self.hash) {
         .sha1 => return mem.eql(u8, &self.hash.sha1, &peer.hash.sha1),
         .sha256 => return mem.eql(u8, &self.hash.sha256, &peer.hash.sha256),
@@ -210,12 +241,12 @@ pub fn startsWith(self: Sha, peer: Sha) bool {
     return false;
 }
 
-pub fn formatHex(sha: Sha, w: *std.Io.Writer) !void {
-    return try w.print("{x}", .{sha.bin[0..sha.len]});
+pub fn fmtHex(sha: Sha, w: *std.Io.Writer) !void {
+    return try w.print("{f}", .{std.fmt.alt(sha.hash, .fmtHex)});
 }
 
-pub fn formatBin(sha: Sha, w: *std.Io.Writer) !void {
-    return try w.print("{any}", .{sha.bin[0..sha.len]});
+pub fn fmtBin(sha: Sha, w: *std.Io.Writer) !void {
+    return try w.print("{f}", .{sha.hash});
 }
 
 test init {
