@@ -25,9 +25,7 @@ a {
 		padding: 3px 14px;
 		border: 2px outset gray;
 		border-bottom-color: #4e0029;
-		&:hover, &.active {
-			border-bottom: #880046 solid 2px;
-		}
+		&:hover, &.active { border-bottom: #880046 solid 2px; }
 	}
 }
 
@@ -44,11 +42,8 @@ div {
 }
 
 h1,h2,h3 { margin: 0 }
-
 summary { display: block }
-details:open > summary.hide {
-	display: none;
-}
+details:open > summary.hide { display: none; }
 
 .repo-header, .branch-header, .tag-header {
 	display: flex;
@@ -79,7 +74,6 @@ details:open > summary.hide {
 		background: #333;
 		white-space: pre;
 	}
-
 }
 
 .act-btns {
@@ -180,7 +174,6 @@ button {
 	border-radius: 3px;
 	font-family: 'Titillium Web', sans-serif;
 	padding: 0.25em 1em;
-
 	&:hover, &.active { border-bottom: #880046 solid 2px; }
 	&.red { color: red; }
 }
@@ -244,9 +237,7 @@ ln {
 		color: #fff8;
 		margin: 0 0.5em 0 0;
 	}
-	&:target {
-		background-color: #222;
-	}
+	&:target { background-color: #222; }
 }
 
 repolist {
@@ -317,18 +308,12 @@ repolist {
 				color: #777; 
 				&:visited { color: #777; }
 			}
-			bar {
-
-				background: #272727;
-			}
+			bar { background: #272727; }
 			desc {
 				color: #999; 
 				background-image: linear-gradient(#222 92%, #320021 100%);
 				border-bottom: #320021 solid 1px;
-				.updated { 
-					color: #888; 
-
-				}
+				.updated { color: #888; }
 			}
 		}
 	}
@@ -354,7 +339,6 @@ repo {
 			}
 		}
 	}
-
 }
 
 readme {
@@ -414,8 +398,6 @@ readme {
 	span.file > a::before { content: "📄"; padding-right: 8px;}
 }
 
-
-
 search {
 	font-family: 'Titillium Web', sans-serif;
 	margin: 0 2.5%;
@@ -438,7 +420,6 @@ searchresults {
 		display: block;
 		margin: 1rem 0;
 		text-align:left;
-
 		filename {
 			display: block;
 			background: #404040;
@@ -669,9 +650,7 @@ form.pretty {
 	}
 	input, textarea {
 		border-bottom: 0px solid gray;
-		&:last-of-type {
-			border-bottom: 1px solid gray;
-		}
+		&:last-of-type { border-bottom: 1px solid gray; }
 	}
 	button {
 		margin: 0 0.5em;
@@ -923,7 +902,6 @@ blob, gist, patch {
 	}
 }
 
-
 .flex-month {
 	display: block;
 	margin: 2rem 0 1rem;
@@ -936,7 +914,6 @@ blob, gist, patch {
 		text-align: left;
 		width: 100%;
 	}
-
 }
 
 .blame-age-0 {  background-color: #ff5555aa;}
@@ -976,7 +953,6 @@ blob, gist, patch {
 		}
 	}
 }
-
 .admin-actions {
 	display: inline-block;
 	min-width: 12rem;
@@ -1003,7 +979,6 @@ blob, gist, patch {
 	height: 50vh;
 	min-width: 30rem;
 }
-
 .verse-stats-line {
 	td:nth-child(7), td:nth-child(8) { text-align: right; }
 	td:nth-child(9) { padding-left: 1.5rem; }
@@ -1014,7 +989,6 @@ blob, gist, patch {
 		color: #888;
 	}
 }
-
 pre { line-height: 125%; }
 td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
 span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
@@ -1100,8 +1074,6 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 .vi { color: #83a598 } /* Name.Variable.Instance */
 .vm { color: #83a598 } /* Name.Variable.Magic */
 .il { color: #d3869b } /* Literal.Number.Integer.Long */
-
-
 /* Titillium Licence /static/OFL.txt */
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 300; src: url(/static/TitilliumWeb-LightItalic.ttf) format('truetype'); }
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 400; src: url(/static/TitilliumWeb-Italic.ttf) format('truetype'); }
