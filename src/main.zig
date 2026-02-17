@@ -46,7 +46,7 @@ const Options = struct {
     source_path: []const u8,
 };
 
-pub const SrcConfig = Ini.Config(struct {
+pub const SrcConfig = struct {
     owner: ?struct {
         email: ?[]const u8,
         tz: ?[]const u8,
@@ -75,15 +75,16 @@ pub const SrcConfig = Ini.Config(struct {
         @"skip-repos": ?[]const u8 = null,
     };
 
-    pub const empty: SrcConfig.Base = .{
+    pub const empty: SrcConfig = .{
         .owner = null,
         .agent = null,
         .server = null,
         .repos = null,
     };
-});
+};
 
-pub var global_config: SrcConfig = .{ .config = .empty, .ini = .empty };
+pub var global_config: SrcConfig = .empty;
+pub var config_ini: Ini.Config(SrcConfig) = .{ .ini = .empty };
 
 const Auth = @import("Auth.zig");
 
@@ -129,12 +130,13 @@ pub fn main(mini: std.process.Init.Minimal) !void {
         const len = try cf.length(io);
         cfg_data = try a.alloc(u8, len);
         var config_reader = cf.reader(io, cfg_data);
-        global_config = try SrcConfig.init(&config_reader.interface, a);
+        config_ini = try Ini.Config(SrcConfig).init(&config_reader.interface, a);
+        global_config = try config_ini.resolve();
     }
-    defer global_config.raze(a);
+    defer config_ini.raze(a);
 
-    if (global_config.ini.get("owner")) |ns| {
-        if (ns.get("email")) |email| {
+    if (global_config.owner) |owner| {
+        if (owner.email) |email| {
             log.debug("{s}", .{email});
         }
     }
@@ -145,7 +147,7 @@ pub fn main(mini: std.process.Init.Minimal) !void {
     const cache = Cache.init(a);
     defer cache.raze();
 
-    if (global_config.config.server) |srv| {
+    if (global_config.server) |srv| {
         if (srv.remove_on_start) {
             comptime std.debug.assert(builtin.zig_version.order(.{ .major = 0, .minor = 16, .patch = 0 }) == .lt);
             Io.Dir.cwd().deleteFile(io, "./srctree.sock") catch |err| switch (err) {
@@ -156,16 +158,16 @@ pub fn main(mini: std.process.Init.Minimal) !void {
     }
 
     var agent: Repos.Agent = .init(.{
-        .enabled = global_config.config.agent.?.enabled,
+        .enabled = global_config.agent.?.enabled,
         .upstream = .{
-            .push = global_config.config.agent.?.upstream_push,
-            .pull = global_config.config.agent.?.upstream_pull,
+            .push = global_config.agent.?.upstream_push,
+            .pull = global_config.agent.?.upstream_pull,
         },
         .downstream = .{
-            .push = global_config.config.agent.?.downstream_push,
-            .pull = global_config.config.agent.?.downstream_pull,
+            .push = global_config.agent.?.downstream_push,
+            .pull = global_config.agent.?.downstream_pull,
         },
-        .skips = global_config.config.agent.?.@"skip-repos",
+        .skips = global_config.agent.?.@"skip-repos",
     }, io);
     try agent.startThread();
     defer agent.joinThread();
@@ -179,7 +181,7 @@ pub fn main(mini: std.process.Init.Minimal) !void {
         .base = auth.provider(),
     };
 
-    if (global_config.config.server) |srvcfg| {
+    if (global_config.server) |srvcfg| {
         if (srvcfg.sock) |sock| {
             std.debug.print("sock: {s}\n", .{sock});
         }

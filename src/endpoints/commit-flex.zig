@@ -600,7 +600,7 @@ const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
 const repos = @import("../repos.zig");
 
-const global_config = &@import("../main.zig").global_config.config;
+const global_config = &@import("../main.zig").global_config;
 
 const Verse = @import("verse");
 const abx = Verse.abx;

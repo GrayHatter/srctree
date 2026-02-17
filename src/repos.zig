@@ -395,4 +395,4 @@ const parseInt = std.fmt.parseInt;
 
 const Git = @import("git.zig");
 const SrcConfig = @import("main.zig").SrcConfig;
-const global_config = &@import("main.zig").global_config.config;
+const global_config = &@import("main.zig").global_config;

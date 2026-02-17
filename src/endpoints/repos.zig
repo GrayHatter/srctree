@@ -192,7 +192,7 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
             if (repo.loadData(f.alloc, f.io)) {
                 defer repo.raze(f.alloc, f.io);
                 if (repo.findRemote("upstream")) |_| {
-                    if (repo.config.?.ini.get("srctree")) |s| if (s.getBool("pinned")) |p| if (p) break :b;
+                    if (repo.config.?.srctree) |s| if (s.pinned) |p| if (p) break :b;
                     f.headers.addCustom(f.alloc, "X-Robots-Tag", "none") catch {};
                 }
             } else |_| {}
@@ -243,18 +243,12 @@ fn commitSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
 
 fn sortPinned(l: Git.Repo, r: Git.Repo) ?bool {
     const left_pinned: bool = if (l.config) |cfg|
-        if (cfg.ini.get("srctree")) |srctree|
-            srctree.getBool("pinned") orelse false
-        else
-            false
+        if (cfg.srctree) |srctree| srctree.pinned orelse false else false
     else
         false;
 
     const right_pinned: bool = if (r.config) |cfg|
-        if (cfg.ini.get("srctree")) |srctree|
-            srctree.getBool("pinned") orelse false
-        else
-            false
+        if (cfg.srctree) |srctree| srctree.pinned orelse false else false
     else
         false;
 
@@ -327,8 +321,8 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
 
     var repo_class: ?[]const u8 = "lowlight";
     if (repo.config) |cfg| {
-        if (cfg.ini.get("srctree")) |srctree| {
-            if (srctree.getBool("pinned") orelse false) repo_class = null;
+        if (cfg.srctree) |srctree| {
+            if (srctree.pinned orelse false) repo_class = null;
         }
     }
     return .{

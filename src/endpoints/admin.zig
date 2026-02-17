@@ -54,9 +54,9 @@ pub fn settings(f: *Frame) Router.Error!void {
     try f.requireValidUser();
     const blocks: []S.AdminView.Settings.ConfigBlocks = try f.alloc.alloc(
         S.AdminView.Settings.ConfigBlocks,
-        global_config.ini.ns.len,
+        config_ini.ini.ns.len,
     );
-    for (global_config.ini.ns, blocks) |ns, *block| {
+    for (config_ini.ini.ns, blocks) |ns, *block| {
         var w: Writer.Allocating = try .initCapacity(f.alloc, 256);
         try w.writer.print("{f}\n", .{ns});
         block.* = .{
@@ -237,4 +237,4 @@ const DOM = HTML.DOM;
 const Error = Route.Error;
 const Router = verse.Router;
 const RequestData = verse.RequestData.RequestData;
-const global_config = &@import("../main.zig").global_config;
+const config_ini = &@import("../main.zig").config_ini;

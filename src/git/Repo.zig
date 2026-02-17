@@ -8,9 +8,8 @@ head: ?Ref = null,
 tags: ?[]Tag = null,
 branches: ?[]Branch = null,
 remotes: ?[]Remote = null,
-config: ?Ini.Config(void) = null,
-config_data: ?[]u8 = null,
-
+config: ?Ini.Config(Config).Base = null,
+config_ini: ?Ini.Config(Config) = null,
 repo_name: ?[]const u8 = null,
 
 const Repo = @This();
@@ -35,6 +34,27 @@ pub const Error = error{
     NoSpaceLeft,
     NotImplemented,
     EndOfStream,
+};
+
+pub const Config = struct {
+    core: ?Core,
+    extensions: ?Extensions,
+    srctree: ?SrcTree,
+
+    pub const Core = struct {
+        repositoryformatversion: ?isize,
+        filemode: ?bool,
+        bare: ?bool,
+        logallrefupdates: ?bool,
+    };
+
+    pub const Extensions = struct {
+        objectformat: ?[]const u8,
+    };
+
+    pub const SrcTree = struct {
+        pinned: ?bool,
+    };
 };
 
 /// on success d becomes owned by the returned Repo and will be closed on
@@ -74,7 +94,7 @@ pub fn loadData(self: *Repo, a: Allocator, io: Io) !void {
     try self.loadRefs(a, io);
     try self.loadTags(a, io);
     try self.loadBranches(a, io);
-    self.remotes = try loadRemotes(self.config.?, a);
+    self.remotes = try loadRemotes(self.config_ini.?, a);
     _ = try self.HEAD(a, io);
 }
 
@@ -82,12 +102,14 @@ fn loadConfig(self: *Repo, a: Allocator, io: Io) !void {
     const file = try self.dir.openFile(io, "config", .{});
     defer file.close(io);
     const len = try file.length(io);
-    self.config_data = try a.alloc(u8, len);
-    var reader = file.reader(io, self.config_data.?);
-    self.config = try .init(&reader.interface, a);
+    const buffer = try a.alloc(u8, len);
+    var reader = file.reader(io, buffer);
+    self.config_ini = try .init(&reader.interface, a);
+    self.config_ini.?.ptr = buffer;
+    self.config = try self.config_ini.?.resolve();
 }
 
-fn loadRemotes(cfg: Ini.Config(void), a: Allocator) ![]Remote {
+fn loadRemotes(cfg: Ini.Config(Config), a: Allocator) ![]Remote {
     var list: ArrayList(Remote) = .{};
     errdefer list.clearAndFree(a);
     for (0..cfg.ini.ns.len) |i| {
@@ -356,11 +378,9 @@ pub fn description(self: Repo, a: Allocator, io: Io) ![]u8 {
 
 pub fn raze(self: *Repo, a: Allocator, io: Io) void {
     self.dir.close(io);
-    if (self.config) |cfg| {
+    if (self.config_ini) |cfg| {
+        a.free(cfg.ptr);
         cfg.raze(a);
-    }
-    if (self.config_data) |cd| {
-        a.free(cd);
     }
 
     self.objects.raze(a, io);

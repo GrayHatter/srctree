@@ -54,6 +54,13 @@ pub const Namespace = struct {
         return null;
     }
 
+    pub fn getInt(self: Namespace, name: []const u8) ?isize {
+        const set: []const u8 = self.get(name) orelse return null;
+        if (std.fmt.parseInt(isize, set, 0)) |int| {
+            return int;
+        } else |_| return null;
+    }
+
     pub fn getBool(self: Namespace, name: []const u8) ?bool {
         const set: []const u8 = self.get(name) orelse return null;
         if (set.len > 5) return null;
@@ -76,8 +83,9 @@ pub const Namespace = struct {
 
 pub fn Config(BaseT: type) type {
     return struct {
-        config: Base,
         ini: IniData,
+        /// Bonus ptr to ini data. Managed by callers, not referenced nor freed
+        ptr: []u8 = &.{},
 
         pub const Self = @This();
 
@@ -107,36 +115,41 @@ pub fn Config(BaseT: type) type {
                 return null;
             }
 
-            fn buildStruct(ini: IniData, T: type, name: []const u8) !?T {
-                if (T == void) return {};
-                var namespace: T = undefined;
+            fn buildStruct(ini: IniData, Type: type, name: []const u8) !?Type {
+                if (Type == void) return {};
+                var namespace: Type = undefined;
                 const ns = ini.get(name) orelse return null;
-                inline for (@typeInfo(T).@"struct".fields) |s| {
+                inline for (@typeInfo(Type).@"struct".fields) |s| {
                     @field(namespace, s.name) = switch (s.type) {
                         bool => ns.getBool(s.name) orelse s.defaultValue() orelse return error.SettingMissing,
                         ?bool => ns.getBool(s.name),
+                        ?isize => ns.getInt(s.name),
                         []const u8 => ns.get(s.name) orelse return error.SettingMissing,
                         ?[]const u8 => ns.get(s.name),
-                        else => @compileError("not implemented"),
+                        else => @compileError("not implemented " ++ s.name),
                     };
                 }
                 return namespace;
             }
         };
 
-        fn makeBase(self: IniData) !Base {
-            if (Base == void) return {};
-            var base: Base = undefined;
-            inline for (@typeInfo(Base).@"struct".fields) |f| {
+        pub fn makeBase(self: *const Self, Type: type) !Type {
+            if (Type == void) return {};
+            var base: Type = undefined;
+            inline for (@typeInfo(Type).@"struct".fields) |f| {
                 if (f.type == []const u8) comptime unreachable; // Root variable not yet supported
                 @field(base, f.name) = switch (@typeInfo(f.type)) {
-                    .@"struct" => try self.buildStruct(f.type, f.name) orelse return error.NamespaceMissing,
-                    .optional => self.buildStruct(@typeInfo(f.type).optional.child, f.name) catch null,
-                    else => @compileError("not implemented"),
+                    .@"struct" => try self.ini.buildStruct(f.type, f.name) orelse return error.NamespaceMissing,
+                    .optional => self.ini.buildStruct(@typeInfo(f.type).optional.child, f.name) catch null,
+                    else => @compileError("not implemented " ++ f.name),
                 };
             }
 
             return base;
+        }
+
+        pub fn resolve(self: *const Self) !Base {
+            return try self.makeBase(Base);
         }
 
         pub fn init(r: *Reader, a: Allocator) !Self {
@@ -158,13 +171,8 @@ pub fn Config(BaseT: type) type {
                 else => return e,
             }
 
-            const ini: IniData = .{
-                .ns = try list.toOwnedSlice(a),
-            };
-
             return .{
-                .config = try makeBase(ini),
-                .ini = ini,
+                .ini = .{ .ns = try list.toOwnedSlice(a) },
             };
         }
 
@@ -189,7 +197,6 @@ test "default" {
     const a = std.testing.allocator;
 
     const expected: Config(void) = .{
-        .config = {},
         .ini = .{
             .ns = @constCast(&[1]Namespace{.{
                 .name = "one",
@@ -264,7 +271,6 @@ test "commented" {
     ;
 
     const expected: Config(void) = .{
-        .config = {},
         .ini = .{
             .ns = @constCast(&[2]Namespace{
                 .{
