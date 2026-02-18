@@ -180,7 +180,7 @@ pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) !?u32 {
     return null;
 }
 
-pub fn expandPrefix(self: Pack, partial_sha: Sha.Partial) !?Sha {
+pub fn expandPrefix(self: Pack, partial_sha: Sha.Partial) error{AmbiguousRef}!?Sha {
     const len: usize = @divFloor(partial_sha.len, 2);
     const partial: []const u8 = partial_sha.bytes[0..len];
     const count: usize = self.fanOutCount(partial[0]);

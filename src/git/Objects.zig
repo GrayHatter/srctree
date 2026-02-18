@@ -25,16 +25,21 @@ pub fn raze(objs: Objects, a: Allocator, io: Io) void {
 fn findFileSha(objs: Objects, sha: *Sha, io: Io) !Io.File {
     // TODO error on ambiguous ref
     var fb = [_]u8{0} ** 2048;
-    const objdir = try bufPrint(&fb, "./{x}", .{switch (sha.hash) {
-        .sha1 => |sh| sh[0..1],
-        .sha256 => |sh| sh[0..1],
-        .partial => return error.NotImplemented,
-    }});
+    const byte: u8 = switch (sha.hash) {
+        .sha1 => |sh| sh[0],
+        .sha256 => |sh| sh[0],
+        .partial => |pt| pt.bytes[0],
+    };
+
+    const objdir = try bufPrint(&fb, "./{x}", .{byte});
     const dir = try objs.dir.openDir(io, objdir, .{ .iterate = true });
     defer dir.close(io);
     var itr = dir.iterate();
+    const text = try bufPrint(&fb, "{f}", .{std.fmt.alt(sha.*, .fmtHex)});
+
     while (itr.next(io) catch null) |file| {
-        if (startsWith(u8, file.name, sha.text().slice()[2..])) {
+        if (startsWith(u8, file.name, text[2..])) {
+            sha.* = .init(try bufPrint(&fb, "{x}{s}", .{ byte, file.name[0..] }));
             return try dir.openFile(io, file.name, .{});
         }
     }
@@ -124,7 +129,7 @@ pub fn load(objs: Objects, sha: Sha, a: Allocator, io: Io) !Any {
     return try objs.loadFromPacks(sha, a, io) orelse try objs.loadFile(sha, a, io);
 }
 
-pub fn resolveSha(objs: Objects, sha: Sha, io: Io) !?Sha {
+pub fn resolveSha(objs: Objects, sha: Sha, io: Io) !Sha {
     if (sha.hash != .partial) return sha;
     if (sha.hash.partial.len < 6) return error.TooShort; // not supported
 
@@ -135,15 +140,15 @@ pub fn resolveSha(objs: Objects, sha: Sha, io: Io) !?Sha {
             return s;
         }
     }
-    var nsha = sha;
 
+    var nsha = sha;
     var file = objs.findFileSha(&nsha, io) catch |err| switch (err) {
-        error.FileNotFound => return null,
+        error.FileNotFound => return error.ShaNotFound,
         else => return err,
     };
     file.close(io);
 
-    return null;
+    return nsha;
 }
 
 test "read pack" {

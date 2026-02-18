@@ -50,7 +50,7 @@ pub const Hash = union(enum) {
         switch (h) {
             .sha1 => try w.print("{x}", .{h.sha1}),
             .sha256 => try w.print("{x}", .{h.sha256}),
-            .partial => try w.print("{x}", .{h.partial.bytes[0..h.partial.bytes.len]}),
+            .partial => try w.print("{x}", .{h.partial.bytes[0..@divFloor(h.partial.len, 2)]}),
         }
     }
 
@@ -94,7 +94,7 @@ pub const Text = union(enum) {
             },
             .partial => |bin| {
                 var t: Text.Sha1 = @splat('0');
-                _ = bufPrint(&t, "{x}", .{bin.bytes[0..bin.len]}) catch unreachable;
+                _ = bufPrint(&t, "{x}", .{bin.bytes[0..@divFloor(bin.len, 2)]}) catch unreachable;
                 return .{ .sha1 = t };
             },
         }
