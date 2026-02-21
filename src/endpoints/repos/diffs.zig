@@ -308,7 +308,6 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
     patch.parse(a) catch |err| {
         if (std.mem.indexOf(u8, patch.blob, "\nMerge: ") == null) {
             std.debug.print("err: {any}\n", .{err});
-            //std.debug.print("'''\n{s}\n'''\n", .{patch.blob});
             return err;
         } else {
             std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
@@ -323,11 +322,9 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
         const body = diff.changes orelse continue;
 
         const dstat = patch.patchStat();
-        const stat = try allocPrint(
-            a,
-            "added: {}, removed: {}, total {}",
-            .{ dstat.additions, dstat.deletions, dstat.total },
-        );
+        const stat = try allocPrint(a, "added: {}, removed: {}, total {}", .{
+            dstat.additions, dstat.deletions, dstat.total,
+        });
         //<div class="<DClass />"><ln num="<Num type="usize" />" id="LL<Num type="usize" />" href="#LL<Num type="usize" />"><Line /></ln></div>
         const name = if (diff.filename) |name| try allocPrint(a, "{s}", .{name}) else switch (diff.header.change) {
             .deletion => "File Was Deleted",
@@ -347,31 +344,23 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
             for (split.left) |left| try lines_left.append(a, switch (left) {
                 .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
                 .add => unreachable,
-                .del => |del| try allocPrint(
-                    a,
-                    "<div class=\"del\"><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
-                    .{ del.number, del.text },
-                ),
-                .ctx => |ctx| try allocPrint(
-                    a,
-                    "<div><ln num=\"{0d}\" id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
-                    .{ ctx.number, ctx.text },
-                ),
+                .del => |del| try allocPrint(a,
+                    \\<div class="del"><ln num="{0d}" id="LL{0d}">{1s}</ln></div>
+                , .{ del.number, del.text }),
+                .ctx => |ctx| try allocPrint(a,
+                    \\<div><ln num="{0d}" id="LL{0d}">{1s}</ln></div>
+                , .{ ctx.number, ctx.text }),
                 .nul => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
             for (split.right) |right| try lines_right.append(a, switch (right) {
                 .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
-                .add => |add| try allocPrint(
-                    a,
-                    "<div class=\"add\"><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
-                    .{ add.number, add.text },
-                ),
+                .add => |add| try allocPrint(a,
+                    \\<div class="add"><ln num="{0d}" id="RL{0d}">{1s}</ln></div>
+                , .{ add.number, add.text }),
                 .del => unreachable,
-                .ctx => |ctx| try allocPrint(
-                    a,
-                    "<div><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
-                    .{ ctx.number_right, ctx.text },
-                ),
+                .ctx => |ctx| try allocPrint(a,
+                    \\<div><ln num="{0d}" id="RL{0d}">{1s}</ln></div>
+                , .{ ctx.number_right, ctx.text }),
                 .nul => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
             });
             file.*.patch_split = .{
@@ -383,32 +372,22 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
             for (patch_lines) |line| {
                 try lines.append(a, switch (line) {
                     .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
-                    .ctx => |ctx| try allocPrint(
-                        a,
-                        "<div><ln num=\"{0d}\" href=\"#L{1d}\"></ln><ln num=\"{1d}\" id=\"L{1d}\" href=\"#L{1d}\">{2s}</ln></div>",
-                        .{ ctx.number, ctx.number_right, ctx.text },
-                    ),
-                    .del => |del| try allocPrint(
-                        a,
-                        "<div class=\"del\"><ln num=\"{0d}\" href=\"#LL{0d}\"></ln><ln id=\"LL{0d}\" href=\"#LL{0d}\">{1s}</ln></div>",
-                        .{ del.number, del.text },
-                    ),
-                    .add => |add| try allocPrint(
-                        a,
-                        "<div class=\"add\"><ln href=\"#RL{0d}\"></ln><ln num=\"{0d}\" id=\"RL{0d}\" href=\"#RL{0d}\">{1s}</ln></div>",
-                        .{ add.number_right, add.text },
-                    ),
+                    .ctx => |ctx| try allocPrint(a,
+                        \\<div><ln num="{0d}" id="#L{1d}"></ln><ln num="{1d}" id="L{1d}">{2s}</ln></div>
+                    , .{ ctx.number, ctx.number_right, ctx.text }),
+                    .del => |del| try allocPrint(a,
+                        \\<div class="del"><ln num="{0d}" id="#LL{0d}"></ln><ln id="LL{0d}">{1s}</ln></div>
+                    , .{ del.number, del.text }),
+                    .add => |add| try allocPrint(a,
+                        \\<div class="add"><ln id="#RL{0d}"></ln><ln num="{0d}" id="RL{0d}">{1s}</ln></div>
+                    , .{ add.number_right, add.text }),
                     .nul => unreachable,
                 });
             }
-            file.patch_inline = .{
-                .diff_lines = try lines.toOwnedSlice(a),
-            };
+            file.patch_inline = .{ .diff_lines = try lines.toOwnedSlice(a) };
         }
     }
-    return .{
-        .files = files,
-    };
+    return .{ .files = files };
 }
 
 const ParsedHeader = struct {

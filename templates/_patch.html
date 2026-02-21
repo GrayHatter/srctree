@@ -21,3 +21,8 @@
         </details>
         </patch>
       </For>
+      <script defer>
+        document.querySelectorAll("ln").forEach((elm) => {
+          if (elm.id != '') { elm.addEventListener("click", (e) => { window.location.hash = e.target.id } )
+        } });
+      </script>

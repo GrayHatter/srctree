@@ -227,7 +227,7 @@ code {
 
 ln {
 	white-space: pre;
-	display: inline-block;
+	display: table-cell;
 	&:before {
 		content: attr(num);
 		width: 3em;
@@ -237,7 +237,7 @@ ln {
 		color: #fff8;
 		margin: 0 0.5em 0 0;
 	}
-	&:target { background-color: #222; }
+	&:target { background-color: #222; width: 100%; }
 }
 
 repolist {
@@ -251,9 +251,9 @@ repolist {
 		max-width: 480px;
 		width: 30%;
 		margin: 0 auto 10px 0.5%;
-		a { 
+		a {
 			display: block;
-			color: #ffffeb; 
+			color: #ffffeb;
 			&:visited {color: #ffffeb; }
 			&.tag {
 				float: right;
@@ -282,7 +282,7 @@ repolist {
 		}
 		desc {
 			display: block;
-			color: #ffffeb; 
+			color: #ffffeb;
 			background-image: linear-gradient(#222 92%, #4e0029 100%);
 			margin-bottom: 20px;
 			padding: 8px;
@@ -303,14 +303,14 @@ repolist {
 			.updated:only-child { margin: 0 }
 		}
 		&.lowlight {
-			a { 
+			a {
 				display: block;
-				color: #777; 
+				color: #777;
 				&:visited { color: #777; }
 			}
 			bar { background: #272727; }
 			desc {
-				color: #999; 
+				color: #999;
 				background-image: linear-gradient(#222 92%, #320021 100%);
 				border-bottom: #320021 solid 1px;
 				.updated { color: #888; }
