@@ -8,8 +8,15 @@ pub fn list(frame: *Frame) Router.Error!void {
     repo.loadData(frame.alloc, frame.io) catch return error.Unknown;
     defer repo.raze(frame.alloc, frame.io);
 
-    const repo_branches = repo.branches orelse return error.InvalidURI;
     // leaks a lot
+    var all_branches: std.ArrayList(Git.Branch) = .{};
+    try all_branches.appendSlice(frame.alloc, repo.branches orelse return error.InvalidURI);
+    try all_branches.appendSlice(
+        frame.alloc,
+        repo.loadBranchesFrom("refs/remotes/upstream", frame.alloc, frame.io) catch return error.ServerFault,
+    );
+    var repo_branches = try all_branches.toOwnedSlice(frame.alloc);
+
     std.sort.heap(Git.Branch, repo_branches, SortCtx.init(&repo, frame.alloc, frame.io), sort);
 
     const branches: []S.BranchesHtml.RepoBranches = try frame.alloc.alloc(S.BranchesHtml.RepoBranches, repo_branches.len);

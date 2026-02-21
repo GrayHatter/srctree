@@ -294,23 +294,50 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
     if (tags.items.len > 0) self.tags = try tags.toOwnedSlice(a);
 }
 
-fn loadBranches(self: *Repo, a: Allocator, io: Io) !void {
-    var dir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
+pub fn loadBranchesFrom(self: *Repo, prefix: []const u8, a: Allocator, io: Io) ![]Branch {
+    var dir = try self.dir.openDir(io, prefix, .{ .iterate = true });
     defer dir.close(io);
     var list: ArrayList(Branch) = .{};
     var itr = dir.iterate();
     while (try itr.next(io)) |file| {
         if (file.kind != .file) continue;
         var fnbuf: [2048]u8 = undefined;
-        const fname = try bufPrint(&fnbuf, "refs/heads/{s}", .{file.name});
+        const fname = try bufPrint(&fnbuf, "{s}/{s}", .{ prefix, file.name });
         var shabuf: [41]u8 = undefined;
         _ = try self.dir.readFile(io, fname, &shabuf);
+        if (startsWith(u8, shabuf[0..], "ref: ")) continue;
         try list.append(a, .{
             .name = try a.dupe(u8, file.name),
             .sha = Sha.init(shabuf[0..40]),
         });
     }
-    self.branches = try list.toOwnedSlice(a);
+
+    if (self.dir.openFile(io, "packed-refs", .{})) |*fd| {
+        defer fd.close(io);
+        var buf: [2048]u8 = undefined;
+        var r = fd.reader(io, &buf);
+        while (r.interface.takeSentinel('\n')) |line| {
+            if (find(u8, line, prefix)) |i| {
+                const idx = i + prefix.len + 1;
+                try list.append(a, .{
+                    .name = try a.dupe(u8, line[idx..]),
+                    .sha = Sha.init(line[0 .. i - 1]),
+                });
+            }
+        } else |e| switch (e) {
+            error.EndOfStream => {},
+            else => return e,
+        }
+    } else |err| switch (err) {
+        error.FileNotFound => {},
+        else => std.debug.print("unable to read packed ref {}\n", .{err}),
+    }
+
+    return try list.toOwnedSlice(a);
+}
+
+fn loadBranches(r: *Repo, a: Allocator, io: Io) !void {
+    r.branches = try r.loadBranchesFrom("refs/heads", a, io);
 }
 
 pub fn commit(self: *const Repo, sha: Sha, a: Allocator, io: Io) !Commit {
