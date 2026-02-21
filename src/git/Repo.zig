@@ -346,11 +346,14 @@ pub fn headSha(self: *const Repo, io: Io) !Sha {
         return error.RefParseFailed;
     };
 
-    if (startsWith(u8, head, "ref: ")) {
-        return self.ref(head[16..]) catch {
-            log.err("Head Sha failed '{s}'\n", .{head[16..]});
+    if (cutPrefix(u8, head, "ref: refs/heads/")) |branch| {
+        return self.ref(branch) catch {
+            log.err("Head Sha failed '{s}'", .{branch});
             return error.RefParseFailed;
         };
+    } else if (cutPrefix(u8, head, "ref: refs/")) |bonus_branch| {
+        log.err("Bonus branch not implemented yet '{s}'", .{bonus_branch});
+        return error.NotImplemented;
     } else if (head.len == 40) {
         return .init(head[0..40]);
     } else {

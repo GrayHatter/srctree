@@ -173,10 +173,29 @@ fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.BlobHtml.NumberedLines {
 }
 
 const NewRepoPage = verse.template.PageData("repo-new.html");
-fn newRepo(ctx: *Frame) Router.Error!void {
-    ctx.status = .ok;
+fn newRepo(f: *Frame) Router.Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+    f.status = .ok;
 
-    return error.NotImplemented;
+    //const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
+    //    .href = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+    //} else null;
+    const meta_title = try allocPrint(f.alloc, "Brand new repo {s} on srctree", .{rd.name});
+    var page: NewRepoPage = .init(.{
+        .meta_head = .{
+            .title = meta_title,
+            .open_graph = .{ .title = rd.name, .desc = "" },
+        },
+        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .repo_header = .{
+            .repo_name = rd.name,
+            .description = "",
+            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
+            .upstream = null,
+            .blame = null,
+        },
+    });
+    try f.sendPage(&page);
 }
 
 const treeEndpoint = @import("tree.zig").tree;
