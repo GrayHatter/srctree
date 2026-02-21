@@ -227,7 +227,7 @@ code {
 
 ln {
 	white-space: pre;
-	display: table-cell;
+	display: inline-block;
 	&:before {
 		content: attr(num);
 		width: 3em;
@@ -237,7 +237,17 @@ ln {
 		color: #fff8;
 		margin: 0 0.5em 0 0;
 	}
-	&:target { background-color: #222; width: 100%; }
+	&:target { background-color: #222;  }
+}
+
+patch {
+	ln {
+		display: table-cell;
+		&:before {
+			display: inline-block;
+		}
+		&:target { background-color: #222; width: 100%; }
+	}
 }
 
 repolist {
