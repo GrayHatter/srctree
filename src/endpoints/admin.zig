@@ -125,11 +125,25 @@ const Repo = struct {
             return error.Abuse;
         }
 
-        std.debug.print("creating {s}\n", .{repo_req.repo_name});
         var buf: [2048]u8 = undefined;
-        const dir_name = try std.fmt.bufPrint(&buf, "repos/{s}", .{repo_req.repo_name});
+        std.debug.print("creating {s}\n", .{repo_req.repo_name});
+        if (Io.Dir.cwd().openDir(f.io, "repos", .{})) |repo_dir| {
+            defer repo_dir.close(f.io);
+            const dir_name = try bufPrint(&buf, "repos/{s}", .{repo_req.repo_name});
+            if (repo_dir.openDir(f.io, dir_name, .{})) |existing| {
+                existing.close(f.io);
+                return error.Unknown;
+            } else |err| switch (err) {
+                error.FileNotFound => {},
+                else => unreachable,
+            }
+            var agent = git.Agent{ .alloc = f.alloc, .cwd = repo_dir };
 
-        if (Io.Dir.cwd().openDir(f.io, dir_name, .{})) |_| return error.Unknown else |_| {}
+            _ = agent.initEmpty(repo_req.repo_name, .{ .bare = true }, f.io) catch |err| {
+                log.err("Unable to create repo {s} because {}", .{ repo_req.repo_name, err });
+                return error.ServerFault;
+            };
+        } else |_| {}
 
         const redirect_uri = try std.fmt.bufPrint(&buf, "/repo/{s}", .{repo_req.repo_name});
         return f.redirect(redirect_uri, .see_other) catch unreachable;
@@ -222,10 +236,12 @@ const Repo = struct {
 const git = @import("../git.zig");
 
 const std = @import("std");
+const log = std.log.scoped(.srctree_admin);
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Writer = Io.Writer;
 const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
 const mem = std.mem;
 const verse = @import("verse");
 const Frame = verse.Frame;
