@@ -54,7 +54,7 @@ pub const Config = struct {
 
     pub const SrcTree = struct {
         pinned: ?bool,
-        heatmap_excluded: ?bool,
+        heatmapexcluded: ?bool,
     };
 };
 

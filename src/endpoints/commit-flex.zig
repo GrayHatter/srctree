@@ -448,7 +448,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
             continue;
         };
         errdefer repo.raze(ctx.alloc, ctx.io);
-        if (repo.config.?.srctree) |st| if (st.heatmap_excluded orelse false) {
+        if (repo.config.?.srctree) |st| if (st.heatmapexcluded orelse false) {
             repo.raze(ctx.alloc, ctx.io);
             continue;
         };
