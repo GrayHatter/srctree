@@ -101,11 +101,12 @@ fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) !Any {
     }
     return error.InvalidObject;
 }
+
 fn loadFromPacks(objs: Objects, sha: Sha, a: Allocator, io: Io) !?Any {
     for (objs.packs) |pack| {
         const offset = try pack.contains(sha) orelse continue;
         const fullsha = switch (sha.hash) {
-            .partial => |p| try pack.expandPrefix(p) orelse unreachable,
+            .partial => |p| try pack.expandPrefix(p),
             else => sha,
         };
         return try pack.resolveObject(fullsha, offset, &objs, a, io);
@@ -133,13 +134,12 @@ pub fn resolveSha(objs: Objects, sha: Sha, io: Io) !Sha {
     if (sha.hash != .partial) return sha;
     if (sha.hash.partial.len < 6) return error.TooShort; // not supported
 
-    for (objs.packs) |pack| {
-        if (pack.expandPrefix(sha.hash.partial) catch |err| switch (err) {
-            error.AmbiguousRef => return error.AmbiguousRef,
-        }) |s| {
-            return s;
-        }
-    }
+    for (objs.packs) |pack| if (pack.expandPrefix(sha.hash.partial)) |expanded| {
+        return expanded;
+    } else |err| switch (err) {
+        error.ShaNotFound => continue,
+        error.AmbiguousRef => return error.AmbiguousRef,
+    };
 
     var nsha = sha;
     var file = objs.findFileSha(&nsha, io) catch |err| switch (err) {

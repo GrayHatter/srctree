@@ -170,8 +170,7 @@ pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) !?u32 {
     if (found) |f| {
         if (objnames.len > f + 1 and startsWith(u8, objnames[f + 1][0..width], shabin)) {
             return error.AmbiguousRef;
-        }
-        if (f > 0 and startsWith(u8, objnames[f - 1][0..width], shabin)) {
+        } else if (f > 0 and startsWith(u8, objnames[f - 1][0..width], shabin)) {
             return error.AmbiguousRef;
         }
         return @byteSwap(self.offsets[f + start]);
@@ -180,15 +179,22 @@ pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) !?u32 {
     return null;
 }
 
-pub fn expandPrefix(self: Pack, partial_sha: Sha.Partial) error{AmbiguousRef}!?Sha {
+pub fn expandPrefix(pack: Pack, partial_sha: Sha.Partial) error{ AmbiguousRef, ShaNotFound }!Sha {
+    return switch (pack.format) {
+        .sha1 => return pack.expandPrefixWidth(20, partial_sha),
+        .sha256 => return pack.expandPrefixWidth(32, partial_sha),
+    };
+}
+
+pub fn expandPrefixWidth(self: Pack, width: comptime_int, partial_sha: Sha.Partial) error{ AmbiguousRef, ShaNotFound }!Sha {
     const len: usize = @divFloor(partial_sha.len, 2);
     const partial: []const u8 = partial_sha.bytes[0..len];
     const count: usize = self.fanOutCount(partial[0]);
-    if (count == 0) return null;
+    if (count == 0) return error.ShaNotFound;
 
     const start: usize = if (partial[0] > 0) self.fanOut(partial[0] - 1) else 0;
 
-    const objnames_ptr: [*][20]u8 = @ptrCast(self.objnames[start * 20 ..][0 .. count * 20]);
+    const objnames_ptr: [*][width]u8 = @ptrCast(self.objnames[start * width ..][0 .. count * width]);
     const objnames = objnames_ptr[0..count];
 
     var left: usize = 0;
@@ -197,8 +203,7 @@ pub fn expandPrefix(self: Pack, partial_sha: Sha.Partial) error{AmbiguousRef}!?S
 
     while (left < right) {
         const mid = left + (right - left) / 2;
-
-        switch (orderSha(partial, objnames[mid][0..len])) {
+        switch (orderSha(partial, &objnames[mid])) {
             .eq => {
                 found = mid;
                 break;
@@ -211,14 +216,13 @@ pub fn expandPrefix(self: Pack, partial_sha: Sha.Partial) error{AmbiguousRef}!?S
     if (found) |f| {
         if (objnames.len > f + 1 and startsWith(u8, &objnames[f + 1], partial)) {
             return error.AmbiguousRef;
-        }
-        if (f > 1 and startsWith(u8, &objnames[f - 1], partial)) {
+        } else if (f > 0 and startsWith(u8, &objnames[f - 1], partial)) {
             return error.AmbiguousRef;
         }
-        return Sha.init(objnames[f][0..20]);
+        return .init(&objnames[f]);
     }
 
-    return null;
+    return error.ShaNotFound;
 }
 
 pub fn getReaderOffset(self: Pack, offset: u32) !Reader {

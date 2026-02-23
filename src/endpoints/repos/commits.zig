@@ -51,7 +51,10 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         // TODO return 404
         var fallback: Git.Commit = repo.headCommit(f.alloc, f.io) catch return error.Unknown;
         while (!fallback.sha.startsWith(.init(sha))) {
-            fallback = fallback.toParent(0, &repo, f.alloc, f.io) catch return f.sendDefaultErrorPage(.not_found);
+            fallback = fallback.toParent(0, &repo, f.alloc, f.io) catch |err2| {
+                log.err("fallback to parent failed {}", .{err2});
+                return f.sendDefaultErrorPage(.not_found);
+            };
         }
         break :cmt fallback;
     };
@@ -159,12 +162,14 @@ pub fn viewCommit(f: *Frame) Error!void {
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.Unrouteable;
 
     const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse {
+        log.err("Repo doesn't exist? {s}", .{rd.name});
         return f.sendDefaultErrorPage(.not_found);
+    };
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
-    if (std.mem.endsWith(u8, sha, ".patch")) {
+    if (endsWith(u8, sha, ".patch")) {
         return viewAsPatch(f, sha, repo);
     } else {
         return commitHtml(f, sha, rd.name, repo);
@@ -404,3 +409,4 @@ const delta_shared = @import("../delta.zig");
 const Types = @import("../../types.zig");
 const CommitMap = Types.CommitMap;
 const Delta = Types.Delta;
+const log = std.log.scoped(.srctree_commits);
