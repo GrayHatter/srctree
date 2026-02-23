@@ -8,15 +8,13 @@
           </header>
           </summary>
           <changes>
-            <With PatchInline>
-              <Split DiffLines />
-            </With>
-            <With PatchSplit>
-            <div class="split">
-              <span><Split DiffLinesLeft /></span>
-              <span><Split DiffLinesRight /></span>
-            </div>
-            </With>
+            <Switch PatchView>
+              <Case Inlined><DiffLines /></Case>
+              <Case Split><div class="split">
+              <span><DiffLinesLeft /></span>
+              <span><DiffLinesRight /></span>
+            </div></Case>
+            </Switch>
           </changes>
         </details>
         </patch>

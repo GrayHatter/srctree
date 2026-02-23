@@ -318,8 +318,12 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
     const diffs = patch.diffs orelse unreachable;
     const files = try a.alloc(S.PatchHtml.Files, diffs.len);
     errdefer a.free(files);
-    for (diffs, files) |diff, *file| {
+    for (diffs, files, 0..) |diff, *file, file_idx| {
         const body = diff.changes orelse continue;
+
+        var fnum_b: [10]u8 = undefined;
+        var fnum: []const u8 = &.{};
+        if (file_idx > 0) fnum = bufPrint(&fnum_b, "F{d}", .{file_idx}) catch unreachable;
 
         const dstat = patch.patchStat();
         const stat = try allocPrint(a, "added: {}, removed: {}, total {}", .{
@@ -330,62 +334,61 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
             .deletion => "File Was Deleted",
             else => "File Was Added",
         };
+        const patch_lines = try Patch.diffLineHtmlUnified(a, body);
         file.* = .{
             .diff_stat = stat,
             .filename = name,
-            .patch_inline = null,
-            .patch_split = null,
+            .patch_view = patch_view: switch (view_mode) {
+                .split => {
+                    var w_left: Io.Writer.Allocating = try .initCapacity(a, body.len);
+                    var w_right: Io.Writer.Allocating = try .initCapacity(a, body.len);
+                    const split: Patch.Split = try .fromParsed(patch_lines, a);
+                    for (split.left) |left| switch (left) {
+                        .hdr => |hdr| try w_left.writer.print("<div class=\"block\">{s}</div>", .{hdr.text}),
+                        .add => unreachable,
+                        .del => |del| try w_left.writer.print(
+                            \\<ln num="{0d}" id="{2s}LL{0d}" class="del">{1s}</ln>
+                        , .{ del.number, del.text, fnum }),
+                        .ctx => |ctx| try w_left.writer.print(
+                            \\<ln num="{0d}" id="{2s}LL{0d}">{1s}</ln>
+                        , .{ ctx.number, ctx.text, fnum }),
+                        .nul => try w_left.writer.print("<div class=\"nul\"></div>", .{}),
+                    };
+                    for (split.right) |right| switch (right) {
+                        .hdr => |hdr| try w_right.writer.print("<div class=\"block\">{s}</div>", .{hdr.text}),
+                        .add => |add| try w_right.writer.print(
+                            \\<ln num="{0d}" id="{2s}RL{0d}" class="add">{1s}</ln>
+                        , .{ add.number, add.text, fnum }),
+                        .del => unreachable,
+                        .ctx => |ctx| try w_right.writer.print(
+                            \\<ln num="{0d}" id="{2s}RL{0d}">{1s}</ln>
+                        , .{ ctx.number_right, ctx.text, fnum }),
+                        .nul => try w_right.writer.print("<div class=\"nul\"></div>", .{}),
+                    };
+                    break :patch_view .{ .split = .{
+                        .diff_lines_left = try w_left.toOwnedSlice(),
+                        .diff_lines_right = try w_right.toOwnedSlice(),
+                    } };
+                },
+                .inlined => {
+                    var w: Io.Writer.Allocating = try .initCapacity(a, body.len * 2);
+                    for (patch_lines) |line| switch (line) {
+                        .hdr => |hdr| try w.writer.print("<div class=\"block\">{s}</div>", .{hdr.text}),
+                        .ctx => |ctx| try w.writer.print(
+                            \\<ln id="{3s}L{1d}" num="{0d}"><lnex num="{1d}">{2s}</lnex></ln>
+                        , .{ ctx.number, ctx.number_right, ctx.text, fnum }),
+                        .del => |del| try w.writer.print(
+                            \\<ln id="{2s}LL{0d}" num="{0d}" class="del"><lnex class="del">{1s}</lnex></ln>
+                        , .{ del.number, del.text, fnum }),
+                        .add => |add| try w.writer.print(
+                            \\<ln id="{2s}RL{0d}" class="add"><lnex num="{0d}" class="add">{1s}</lnex></ln>
+                        , .{ add.number_right, add.text, fnum }),
+                        .nul => unreachable,
+                    };
+                    break :patch_view .{ .inlined = .{ .diff_lines = try w.toOwnedSlice() } };
+                },
+            },
         };
-        const patch_lines = try Patch.diffLineHtmlUnified(a, body);
-        if (view_mode == .split) {
-            const split: Patch.Split = try .fromParsed(patch_lines, a);
-            var lines_left: ArrayList([]u8) = .{};
-            var lines_right: ArrayList([]u8) = .{};
-            for (split.left) |left| try lines_left.append(a, switch (left) {
-                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
-                .add => unreachable,
-                .del => |del| try allocPrint(a,
-                    \\<div class="del"><ln num="{0d}" id="LL{0d}">{1s}</ln></div>
-                , .{ del.number, del.text }),
-                .ctx => |ctx| try allocPrint(a,
-                    \\<div><ln num="{0d}" id="LL{0d}">{1s}</ln></div>
-                , .{ ctx.number, ctx.text }),
-                .nul => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
-            });
-            for (split.right) |right| try lines_right.append(a, switch (right) {
-                .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
-                .add => |add| try allocPrint(a,
-                    \\<div class="add"><ln num="{0d}" id="RL{0d}">{1s}</ln></div>
-                , .{ add.number, add.text }),
-                .del => unreachable,
-                .ctx => |ctx| try allocPrint(a,
-                    \\<div><ln num="{0d}" id="RL{0d}">{1s}</ln></div>
-                , .{ ctx.number_right, ctx.text }),
-                .nul => try allocPrint(a, "<div class=\"nul\"></div>", .{}),
-            });
-            file.*.patch_split = .{
-                .diff_lines_left = try lines_left.toOwnedSlice(a),
-                .diff_lines_right = try lines_right.toOwnedSlice(a),
-            };
-        } else {
-            var lines: ArrayList([]u8) = .{};
-            for (patch_lines) |line| {
-                try lines.append(a, switch (line) {
-                    .hdr => |hdr| try allocPrint(a, "<div class=\"block\">{s}</div>", .{hdr.text}),
-                    .ctx => |ctx| try allocPrint(a,
-                        \\<div><ln num="{0d}" id="#L{1d}"></ln><ln num="{1d}" id="L{1d}">{2s}</ln></div>
-                    , .{ ctx.number, ctx.number_right, ctx.text }),
-                    .del => |del| try allocPrint(a,
-                        \\<div class="del"><ln num="{0d}" id="#LL{0d}"></ln><ln id="LL{0d}">{1s}</ln></div>
-                    , .{ del.number, del.text }),
-                    .add => |add| try allocPrint(a,
-                        \\<div class="add"><ln id="#RL{0d}"></ln><ln num="{0d}" id="RL{0d}">{1s}</ln></div>
-                    , .{ add.number_right, add.text }),
-                    .nul => unreachable,
-                });
-            }
-            file.patch_inline = .{ .diff_lines = try lines.toOwnedSlice(a) };
-        }
     }
     return .{ .files = files };
 }

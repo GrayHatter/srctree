@@ -102,14 +102,14 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
 
     var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (!resolve.isFile()) return error.Unknown;
-    const formatted: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
+    const colored_blob: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
         Highlight.highlight(lang, resolve.data.?, f.alloc, f.io) catch return error.ServerFault
     else if (excludedExt(blb.name))
         "This file type is currently unsupported"
     else
         try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = resolve.data.? }});
 
-    const wrapped = try wrapLineNumbers(f.alloc, formatted);
+    const wrapped = try wrapLineNumbers(f.alloc, colored_blob);
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
@@ -138,7 +138,7 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
             .upstream = upstream,
         },
         .filename = blb.name,
-        .numbered_lines = wrapped,
+        .blob_lines = wrapped,
     });
 
     try f.sendPage(&page);
@@ -157,19 +157,20 @@ fn excludedExt(name: []const u8) bool {
     return false;
 }
 
-fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.BlobHtml.NumberedLines {
-    var litr = splitScalar(u8, text, '\n');
-    const count = std.mem.count(u8, text, "\n");
-    const lines = try a.alloc(S.BlobHtml.NumberedLines, count + 1);
-    var i: usize = 0;
-    while (litr.next()) |line| {
-        lines[i] = .{
-            .num = i + 1,
-            .line = line,
-        };
-        i += 1;
+fn wrapLineNumbers(a: Allocator, text: []const u8) ![]u8 {
+    var r: Io.Reader = .fixed(text);
+    var w: Io.Writer.Allocating = try .initCapacity(a, text.len * 2);
+    var number: usize = 0;
+    while (r.takeSentinel('\n')) |line| {
+        number += 1;
+        try w.writer.print(
+            \\<ln num="{0d}" id="L{0d}">{1s}</ln>
+            \\
+        , .{ number, line });
+    } else |err| switch (err) {
+        error.EndOfStream => return try w.toOwnedSlice(),
+        else => unreachable,
     }
-    return lines;
 }
 
 const NewRepoPage = verse.template.PageData("repo-new.html");

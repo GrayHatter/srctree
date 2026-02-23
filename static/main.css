@@ -221,13 +221,13 @@ code {
 				text-align: right;
 			}
 		}
-		ln { display: inline-block; }
 	}
 }
 
 ln {
 	white-space: pre;
 	display: inline-block;
+	width: 100%;
 	&:before {
 		content: attr(num);
 		width: 3em;
@@ -238,15 +238,35 @@ ln {
 		margin: 0 0.5em 0 0;
 	}
 	&:target { background-color: #222;  }
-}
+	&:empty { width: auto; }
 
-patch {
-	ln {
-		display: table-cell;
+	&.del { background: #633 }
+	&.add { background: #353 }
+	&.nul {
+		background: #2228;
+		height: 1em;
+		margin: 0 2px;
+	}
+	&.del:target { background: #a44 }
+	&.add:target { background: #484 }
+	&.nul:target {
+		background: #2228;
+		height: 1em;
+		margin: 0 2px;
+	}
+
+	lnex {
+		white-space: pre;
+		display: inline-block;
 		&:before {
+			content: attr(num);
+			width: 3em;
 			display: inline-block;
+			text-align:center;
+			background: #fff1;
+			color: #fff8;
+			margin: 0 0.5em 0 0;
 		}
-		&:target { background-color: #222; width: 100%; }
 	}
 }
 
@@ -839,13 +859,15 @@ blob, gist, patch {
 		height: 25px;
 		padding: 4px 0 4px 12px;
 	}
+	/*
 	.del { background: #633 }
 	.add { background: #353 }
 	.nul {
-		background: #2228;
-		height: 1em;
-		margin: 0 2px;
+	background: #2228;
+	height: 1em;
+	margin: 0 2px;
 	}
+	 */
 }
 
 .journal {
