@@ -295,7 +295,10 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
 }
 
 pub fn loadBranchesFrom(self: *Repo, prefix: []const u8, a: Allocator, io: Io) ![]Branch {
-    var dir = try self.dir.openDir(io, prefix, .{ .iterate = true });
+    var dir = self.dir.openDir(io, prefix, .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => return error.BranchRefMissing,
+        else => return err,
+    };
     defer dir.close(io);
     var list: ArrayList(Branch) = .{};
     var itr = dir.iterate();
@@ -303,12 +306,16 @@ pub fn loadBranchesFrom(self: *Repo, prefix: []const u8, a: Allocator, io: Io) !
         if (file.kind != .file) continue;
         var fnbuf: [2048]u8 = undefined;
         const fname = try bufPrint(&fnbuf, "{s}/{s}", .{ prefix, file.name });
-        var shabuf: [41]u8 = undefined;
-        _ = try self.dir.readFile(io, fname, &shabuf);
-        if (startsWith(u8, shabuf[0..], "ref: ")) continue;
-        try list.append(a, .{
+        var shabuf: [265]u8 = undefined;
+        const text = try self.dir.readFile(io, fname, &shabuf);
+        if (cutPrefix(u8, text, "ref: ")) |txt| {
+            //TODO append non-commits
+            log.warn("skipped branch ref: {s}", .{txt});
+            continue;
+        }
+        if (findScalar(u8, text, '\n')) |n| try list.append(a, .{
             .name = try a.dupe(u8, file.name),
-            .sha = Sha.init(shabuf[0..40]),
+            .sha = Sha.init(text[0..n]),
         });
     }
 
@@ -501,6 +508,7 @@ const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
 const endsWith = std.mem.endsWith;
 const find = std.mem.find;
+const findScalar = std.mem.findScalar;
 const zlib = std.compress.flate;
 const bufPrint = std.fmt.bufPrint;
 const cutPrefix = std.mem.cutPrefix;

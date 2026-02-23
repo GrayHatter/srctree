@@ -11,10 +11,12 @@ pub fn list(frame: *Frame) Router.Error!void {
     // leaks a lot
     var all_branches: std.ArrayList(Git.Branch) = .{};
     try all_branches.appendSlice(frame.alloc, repo.branches orelse return error.InvalidURI);
-    try all_branches.appendSlice(
-        frame.alloc,
-        repo.loadBranchesFrom("refs/remotes/upstream", frame.alloc, frame.io) catch return error.ServerFault,
-    );
+    if (repo.loadBranchesFrom("refs/remotes/upstream", frame.alloc, frame.io)) |upstream| {
+        try all_branches.appendSlice(frame.alloc, upstream);
+    } else |err| switch (err) {
+        error.BranchRefMissing => {},
+        else => log.err("unable to load upstream branches {}", .{err}),
+    }
     var repo_branches = try all_branches.toOwnedSlice(frame.alloc);
 
     std.sort.heap(Git.Branch, repo_branches, SortCtx.init(&repo, frame.alloc, frame.io), sort);
@@ -79,3 +81,4 @@ const S = verse.template.Structs;
 const PageData = verse.template.PageData;
 const Router = verse.Router;
 const Git = @import("../../git.zig");
+const log = std.log.scoped(.srctree_branches);
