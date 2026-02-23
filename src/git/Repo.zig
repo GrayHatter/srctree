@@ -390,9 +390,11 @@ pub fn headSha(self: *const Repo, io: Io) !Sha {
         return error.NotImplemented;
     } else if (head.len == 40) {
         return .init(head[0..40]);
+    } else if (head.len == 64) {
+        return .init(head[0..64]);
     } else {
-        log.err("unexpected HEAD {s}\n", .{head});
-        unreachable;
+        log.err("unexpected HEAD '{s}'\n", .{head});
+        return error.RefParseFailed;
     }
 }
 
