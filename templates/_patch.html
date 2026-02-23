@@ -23,6 +23,9 @@
       </For>
       <script defer>
         document.querySelectorAll("ln").forEach((elm) => {
-          if (elm.id != '') { elm.addEventListener("click", (e) => { window.location.hash = e.target.id } )
-        } });
+          if (elm.id != '') { elm.addEventListener( "click", (e) => {
+                let s = window.getSelection();
+                if (s.anchorOffset == s.focusOffset) { window.location.hash = elm.id; }
+              }, { passive: true }) }
+        });
       </script>

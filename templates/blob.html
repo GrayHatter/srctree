@@ -9,15 +9,18 @@
         <Build RepoHeader _base_repo_header.html />
       <blob>
         <header><span><Filename /></span></header>
-        <div class="codeblock"><code><For NumberedLines><ln num="<Num type=usize >" id="L<Num type=usize >" href="#L<Num type=usize >"><Line /></ln>
+        <div class="codeblock"><code><For NumberedLines><ln num="<Num type=usize >" id="L<Num type=usize >"><Line /></ln>
 </For></code>
         </div>
       </blob>
     </content>
     <script defer>
-      document.querySelectorAll("ln").forEach((elm) => {
-        if (elm.id != '') { elm.addEventListener("click", (e) => { window.location.hash = e.target.id } )
-      } });
+        document.querySelectorAll("ln").forEach((elm) => {
+          if (elm.id != '') { elm.addEventListener( "click", (e) => {
+                let s = window.getSelection();
+                if (s.anchorOffset == s.focusOffset) { window.location.hash = elm.id; }
+              }, { passive: true }) }
+        });
     </script>
   </body>
 </html>
