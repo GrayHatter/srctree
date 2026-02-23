@@ -18,6 +18,8 @@ pub const DefaultHash = [DefaultHasher.digest_length]u8;
 pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
 pub const Sha1Hex = [40]u8;
 pub const Sha1Bin = [20]u8;
+pub const Sha256Hex = [64]u8;
+pub const Sha256Bin = [32]u8;
 
 pub const Storage = Io.Dir;
 
