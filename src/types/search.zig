@@ -18,12 +18,14 @@ pub const Rule = union(Specifier) {
     };
 
     pub fn parse(str: []const u8) Rule {
+        if (str.len < 2) return .{ .search = .{ .match = &.{}, .inverse = false } };
         var s = str;
-        std.debug.assert(s.len > 2);
         const inverse = str[0] == '-';
         if (inverse) s = s[1..];
 
         if (indexOf(u8, s, ":")) |i| {
+            if (i == 0) return .{ .search = .{ .match = s, .inverse = inverse } };
+
             const string: String = .{ .match = s[i + 1 ..], .inverse = inverse };
 
             const pre: []const u8 = s[0..i];
