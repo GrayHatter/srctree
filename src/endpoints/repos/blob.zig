@@ -23,14 +23,14 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
 
     const cmt = repo.headCommit(frame.alloc, frame.io) catch return newRepo(frame);
 
-    if (rd.verb != null and rd.ref != null and rd.verb.? == .ref and isHash(rd.ref.?)) {
-        if (rd.ref.?.len != 40) return error.InvalidURI;
+    if (rd.verb != null and rd.ref != null and isHash(rd.ref.?)) {
+        std.debug.print("ref '{s}'\n", .{rd.ref.?});
         const sha: Git.Sha = .init(rd.ref.?);
         switch (repo.objects.load(sha, frame.alloc, frame.io) catch return error.InvalidURI) {
             .commit => |c| return treeOrBlobAtRef(frame, rd, &repo, c),
             else => return error.DataInvalid,
         }
-    }
+    } else std.debug.print("no ref {}\n", .{rd});
 
     return treeOrBlobAtRef(frame, rd, &repo, cmt);
 }
@@ -119,7 +119,7 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
     const meta_title = try allocPrint(f.alloc, "{s} - {s} -- srctree", .{ safe_name, rd.name });
     const ext: ?[]const u8 = if (std.mem.findLast(u8, safe_name, ".")) |lst| safe_name[lst + 1 ..] else null;
     const meta_desc = try allocPrint(f.alloc, "{} lines {s}{s}", .{
-        wrapped.len,
+        countScalar(u8, wrapped, '\n'),
         if (ext) |_| " of " else "",
         if (ext) |e| e else "",
     });
@@ -210,6 +210,7 @@ const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
+const countScalar = std.mem.countScalar;
 
 const verse = @import("verse");
 const abx = verse.abx;
