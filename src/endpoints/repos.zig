@@ -24,7 +24,10 @@ pub const routes = [_]Router.Match{
     ROUTE("tree", treeBlob),
 } ++ gitweb.endpoints ++ verse_endpoints_.routes;
 
-pub const RouteData = struct {
+/// Deprecated in favor of `RepoRouter`.
+pub const RouteData = RepoRouter;
+
+pub const RepoRouter = struct {
     name: []const u8,
     verb: ?Verb = null,
     ref: ?[]const u8 = null,
@@ -63,7 +66,7 @@ pub const RouteData = struct {
         }
     };
 
-    pub fn init(uri_itr: verse.Uri.Iterator) ?RouteData {
+    pub fn init(uri_itr: verse.Uri.Iterator) ?RepoRouter {
         var uri = uri_itr;
         uri.reset();
         _ = uri.next() orelse return null;
@@ -88,11 +91,11 @@ pub const RouteData = struct {
         };
     }
 
-    pub fn exists(self: RouteData, vis: repos.Visibility.Select, io: Io) bool {
+    pub fn exists(self: RepoRouter, vis: repos.Visibility.Select, io: Io) bool {
         return repos.exists(self.name, vis, io);
     }
 
-    pub fn repoHeader(rd: RouteData, host: []const u8) !S.BaseRepoHeaderHtml {
+    pub fn repoHeader(rd: RepoRouter, host: []const u8) !S.BaseRepoHeaderHtml {
         _ = rd;
         _ = host;
         unreachable;

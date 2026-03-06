@@ -29,7 +29,7 @@ pub fn list(frame: *Frame) Router.Error!void {
         };
     }
 
-    const upstream: ?S.BranchesHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
+    const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     } else null;
 
@@ -41,8 +41,15 @@ pub fn list(frame: *Frame) Router.Error!void {
     var page = BranchPage.init(.{
         .meta_head = .{ .open_graph = open_graph },
         .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
-        .upstream = upstream,
-        .repo_name = rd.name,
+        .repo_header = .{
+            .repo_name = rd.name,
+            .description = try allocPrint(frame.alloc, "{f}", .{
+                abx.Html{ .text = repo.description(frame.alloc, frame.io) catch "" },
+            }),
+            .blame = null,
+            .git_uri = null,
+            .upstream = upstream,
+        },
         .repo_branches = branches,
     });
 
@@ -76,8 +83,10 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
 const verse = @import("verse");
-const Frame = verse.Frame;
+const T = verse.template;
 const S = verse.template.Structs;
+const abx = verse.abx;
+const Frame = verse.Frame;
 const PageData = verse.template.PageData;
 const Router = verse.Router;
 const Git = @import("../../git.zig");
