@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <Build MetaHead _meta_head.html />
+  </head>
+  <body>
+    <Build BodyHeader _body_header.html />
+    <content class="mw">
+      <Build RepoHeader _base_repo_header.html />
+      <ol>
+        <For Artifacts>
+        <li><Name /> -- <Date /><a href="artifacts/<Href />"><Name /></a></li>
+        </For>
+      </ol>
+    </content>
+  </body>
+</html>

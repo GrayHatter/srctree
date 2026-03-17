@@ -10,6 +10,7 @@ pub const verse_endpoints_ = verse.Endpoints(.{
     @import("repos/issues.zig"),
     @import("repos/diffs.zig"),
     @import("repos/search.zig"),
+    @import("repos/artifacts.zig"),
 });
 
 pub const routes = [_]Router.Match{
@@ -36,6 +37,7 @@ pub const RepoRouter = struct {
     const Path = std.mem.SplitIterator(u8, .scalar);
 
     pub const Verb = enum {
+        artifacts,
         blame,
         blob,
         branches,
