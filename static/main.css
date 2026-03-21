@@ -6,6 +6,7 @@ html {
 	min-height: 100%;
 }
 
+
 body { margin: 0 auto; }
 
 a {
@@ -1021,6 +1022,39 @@ blob, gist, patch {
 		color: #888;
 	}
 }
+
+
+
+@media (prefers-color-scheme: light) {
+	html {
+		background: #dcdcdc;
+		background-image: linear-gradient(0deg, #ffa3a3 0%, #eaeae7 6%);
+		color-scheme: light dark;
+		color: #000;
+		min-height: 100%;
+	}
+	a {
+		color: #000;
+		&:visited { color: #000; }
+		&.btn { background: #bdbdbd; }
+	}
+	textarea, input { background: white; }
+	form.pretty {
+		background: white;
+		button { background: #bdbdbd; }
+		context {
+			background: #bdbdbd;
+			border-bottom: solid 1px #844;
+		}
+	}
+	repo.landing { intro { background: #bdbdbd; } }
+	readme { intro { background: #bdbdbd; } }
+	search { background: #bdbdbd; }
+	span.coderef { background: #bdbdbd; }
+	.repo-header { span.gituri { background: #bdbdbd; } }
+	.muted { color: #696969; }
+}
+
 pre { line-height: 125%; }
 td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
 span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
