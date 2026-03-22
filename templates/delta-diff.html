@@ -8,35 +8,34 @@
     <content>
       <Build RepoHeader _base_repo_header.html />
       <delta class="diff">
+        <With Patch>
+        <diff>
+        <Directive type="enum" name="InlineToggle" text="active" />
+        <div style="width: 100%"><span class="toggle">
+            <a class="<InlineToggle enum="inlined" />" href="?inline=true">inline</a>
+            <a class="<InlineToggle enum="split" />" href="?inline=false">split</a>
+          </span></div>
+        <Build Patch _patch.html />
+        </diff>
+        </With>
+        <With CurlHint><div>
+          <p>Submit changes using curl</p>
+          <span class="coderef" style="padding: 1rem 2rem;">
+            git log -p <BaseRef />..<HeadRef />| curl -F "patch=@-" https://<Host />/repo/<RepoName />/diff/<DiffIdx />
+          </span>
+        </div></With>
+
         <main>
           <name><Title /></name>
           <div class=muted><Status /> | Created <Created /> by <Creator ornull /> | Updated <Updated /></div>
           <desc><Description /></desc>
-        </main>
 
-        <Directive type="enum" name="InlineToggle" text="active" />
-        <div style="width: 100%"><span class="toggle">
-          <a class="<InlineToggle enum="inlined" />" href="?inline=true">inline</a>
-          <a class="<InlineToggle enum="split" />" href="?inline=false">split</a>
-        </span></div>
-        <extra>
-          <With Patch>
-            <diff><Build Patch _patch.html /></diff>
-          </With>
-          <With CurlHint>
-          <div>
-            <p>Submit changes using curl</p>
-            <span class="coderef" style="padding: 1rem 2rem;">
-              git log -p <BaseRef />..<HeadRef />| curl -F "patch=@-" https://<Host />/repo/<RepoName />/diff/<DiffIdx />
-            </span>
-          </div>
-          </With>
           <comments>
             <Build Comments _comment_thread.html />
             <Build CommentBox _comment_box.html />
-              <With PatchWarning><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
+            <With PatchWarning><button type="submit" name="no-apply" class="red">Patch Does Not Apply</button></With>
           </comments>
-        </extra>
+        </main>
       </delta>
     </content>
   </body>

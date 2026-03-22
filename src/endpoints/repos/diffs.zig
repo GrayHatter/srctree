@@ -886,7 +886,10 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
 
     const username = if (f.user) |usr| usr.username.? else "public";
 
-    const patch_data: S.DeltaDiffHtml.Patch = .{ .patch = patch_formatted orelse .{ .files = &.{} } };
+    const patch_data: S.DeltaDiffHtml.Patch = .{
+        .patch = patch_formatted orelse .{ .files = &.{} },
+        .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
+    };
 
     const status: []const u8 = if (delta.state.closed)
         "<span class=closed>closed</span>"
@@ -922,7 +925,6 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
         },
         .patch_warning = if (applies) null else .{},
-        .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     });
 
     try f.sendPage(&page);

@@ -6,31 +6,31 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content>
-    <Build RepoHeader _base_repo_header.html />
+      <Build RepoHeader _base_repo_header.html />
 
-    <delta class="issue">
-      <main>
-        <name><Title /></name>
-        <div class=muted><Status /> | Created <Created /> by <Creator ornull /> | Updated <Updated /></div>
-        <desc><Description /></desc>
-      </main>
+      <delta class="issue">
+        <main>
+          <name><Title /></name>
+          <p>
+            <div class=muted><Status /> | Created <Created /> by <Creator ornull /> | Updated <Updated /></div>
+            <desc><Description /></desc>
+          </p>
+          <comments>
+            <Build Comments _comment_thread.html />
+            <Build CommentBox _comment_box.html />
+          </comments>
+        </main>
 
-      <extra>
-      <comments>
-        <Build Comments _comment_thread.html />
-        <Build CommentBox _comment_box.html />
-      </comments>
         <sidebar>
           Created: <Created /><br>
           Updated: <Updated /><br>
           <With TrackingRemote>
-          Tracking Remote: <br>
-          <span><Url /></span><br>
+            Tracking Remote: <br>
+            <span><Url /></span><br>
           </With>
           Tags: none
         </sidebar>
-      </extra>
-    </delta>
+      </delta>
     </content>
   </body>
 </html>

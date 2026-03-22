@@ -559,10 +559,20 @@ textarea.paste {
 
 delta {
 	margin: 1em 0;
+	display: flex;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	gap: 1em;
+	&.diff { flex-wrap: nowrap; }
+	comments {
+		min-width: 30rem;
+		flex-grow: 30;
+	}
 	main {
 		width: auto;
-		margin: 1em 1%;
+		min-width: 35rem;
 		text-align: left;
+		flex-grow: 4;
 		name {
 			font-family: 'Titillium Web', sans-serif;
 			background: #333;
@@ -579,28 +589,17 @@ delta {
 		}
 		div { padding: 8px; }
 	}
-	diff { flex-grow: 10; }
-	extra {
-		display: flex;
-		justify-content: space-between;
-		flex-wrap: wrap;
+	sidebar {
+		flex-grow: 1;
+		min-width: 18rem;
+		margin: 0;
+		flex-direction: column;
 		gap: 1em;
-		margin: 1em 1%;
-		comments {
-			min-width: 30rem;
-			flex-grow: 30;
-		}
-		sidebar {
-			flex-grow: 3;
-			min-width: 18rem;
-			margin: 0;
-			flex-direction: column;
-			gap: 1em;
-			border: 1px solid gray;
-			border-bottom: 0;
-			padding-bottom: 1em;
-		}
+		border: 1px solid gray;
+		border-bottom: 0;
+		padding-bottom: 1em;
 	}
+	diff { flex-grow: 10; }
 }
 
 .new {
