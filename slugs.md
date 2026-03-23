@@ -14,3 +14,4 @@ you're not required to give feedback to srctree
 -77, +77; is not considered "large"
 git; but distributed
 the github you have at home
+adding sha256 support was easy
