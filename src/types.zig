@@ -1,6 +1,7 @@
 pub const common = @import("types/common.zig");
 pub const search = @import("types/search.zig");
 
+pub const Artifacts = @import("types/Artifacts.zig");
 pub const CI = @import("types/CI.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
@@ -363,6 +364,24 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
             }
         }
     };
+}
+
+test {
+    _ = &common;
+    _ = &search;
+    _ = &Artifacts;
+    _ = &CI;
+    _ = &CommitMap;
+    _ = &Delta;
+    _ = &Diff;
+    _ = &Gist;
+    _ = &Issue;
+    _ = &Message;
+    _ = &Network;
+    _ = &Tags;
+    _ = &Thread;
+    _ = &User;
+    _ = &Viewers;
 }
 
 const std = @import("std");
