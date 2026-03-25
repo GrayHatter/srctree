@@ -1,7 +1,7 @@
 pub const common = @import("types/common.zig");
 pub const search = @import("types/search.zig");
 
-pub const Artifacts = @import("types/Artifacts.zig");
+pub const Artifact = @import("types/Artifact.zig");
 pub const CI = @import("types/CI.zig");
 pub const CommitMap = @import("types/commit-map.zig");
 pub const Delta = @import("types/delta.zig");
@@ -64,6 +64,7 @@ var storage_dir: Storage = undefined;
 pub fn init(dir: Storage, io: Io) !void {
     storage_dir = dir;
     inline for (.{
+        Artifact,
         CI,
         CommitMap,
         Delta,
@@ -369,7 +370,7 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
 test {
     _ = &common;
     _ = &search;
-    _ = &Artifacts;
+    _ = &Artifact;
     _ = &CI;
     _ = &CommitMap;
     _ = &Delta;
