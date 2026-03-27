@@ -37,18 +37,22 @@ pub const RepoRouter = struct {
     const Path = std.mem.SplitIterator(u8, .scalar);
 
     pub const Verb = enum {
+        /// srctree endpoints
         artifacts,
+        diff,
+        diffs,
+        hook,
+        issue,
+        issues,
+        search,
+
+        /// git core endpoints
         blame,
         blob,
         branches,
         commit,
         commits,
-        diff,
-        diffs,
-        issue,
-        issues,
         ref,
-        search,
         tags,
         tree,
 
