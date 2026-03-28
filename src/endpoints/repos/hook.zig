@@ -4,11 +4,20 @@ pub const verse_routes = [_]Router.Match{
     GET("update", update),
 };
 
+const UpdateData = struct {
+    ref: []const u8,
+    oldrev: []const u8,
+    newrev: []const u8,
+};
+
 fn update(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.Unrouteable;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
+
+    const update_data = f.request.data.query.validate(UpdateData) catch return error.DataInvalid;
+    std.debug.print("{}\n", .{update_data});
 }
 
 const std = @import("std");
