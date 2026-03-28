@@ -11,6 +11,7 @@ pub const verse_endpoints_ = verse.Endpoints(.{
     @import("repos/diffs.zig"),
     @import("repos/search.zig"),
     @import("repos/artifacts.zig"),
+    @import("repos/hook.zig"),
 });
 
 pub const routes = [_]Router.Match{
