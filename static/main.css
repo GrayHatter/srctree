@@ -63,7 +63,7 @@ details:open > summary.hide { display: none; }
 	.repo-header-side {
 		margin: auto 0 0.5rem;
 	}
-	span.gituri {
+	div.gituri {
 		display: inline-block;
 		border-top: 1px solid black;
 		border-left: 1px solid black;
@@ -74,6 +74,8 @@ details:open > summary.hide { display: none; }
 		padding: 5px 12px;
 		background: #333;
 		white-space: pre;
+		/* browsers are so dumb */
+		float:left;
 	}
 }
 
