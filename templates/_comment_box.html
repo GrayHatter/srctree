@@ -1,7 +1,7 @@
             <form class="pretty" action="add-comment" method="POST">
               <context>Commenting as <CurrentUsername /></context>
               <textarea name="comment"></textarea>
-              <button type="submit" name="comment">Comment</button>
+              <div style="display: flex; justify-content: flex-end;"><button type="submit" name="comment">Comment</button></div>
               <input type="hidden" name="did" value="<DeltaId />" />
               <input type="hidden" name="diff_id" value="<DiffId default="0" />" />
               <details>

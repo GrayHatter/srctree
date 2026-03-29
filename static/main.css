@@ -21,11 +21,13 @@ a {
 		font-size: 108%;
 		font-weight: 600;
 		background-color: #222;
-		border-radius: 3px;
 		font-family: 'Titillium Web', sans-serif;
 		padding: 3px 14px;
-		border: 2px outset gray;
-		border-bottom-color: #4e0029;
+		border-top: #888 solid 1px;
+		border-right: 1px #444 solid;
+		border-bottom: #444 solid 2px; 
+		border-left: #999 solid 1px;
+		border-radius: 4px;
 		&:hover, &.active { border-bottom: #880046 solid 2px; }
 	}
 }
@@ -89,6 +91,14 @@ details:open > summary.hide { display: none; }
 	color: #bbb;
 	font-family: 'Titillium Web', sans-serif;
 	font-size: 80%;
+}
+
+.ubtn {
+	border: 1px #444 solid;
+	border-top: #888 solid 1px;
+	border-left: #999 solid 1px;
+	border-radius: 5px;
+	padding: 0 5px 0 4px;
 }
 
 .sysmsg {
@@ -173,10 +183,13 @@ button {
 	font-size: 108%;
 	font-weight: 600;
 	background-color: #222;
-	border-bottom-color: #4e0029;
-	border-radius: 3px;
 	font-family: 'Titillium Web', sans-serif;
 	padding: 0.25em 1em;
+	border-top: #888 solid 1px;
+	border-right: 1px #444 solid;
+	border-bottom: #444 solid 2px; 
+	border-left: #999 solid 1px;
+	border-radius: 4px;
 	&:hover, &.active { border-bottom: #880046 solid 2px; }
 	&.red { color: red; }
 }
@@ -564,7 +577,7 @@ delta {
 	display: flex;
 	justify-content: space-between;
 	flex-wrap: wrap;
-	gap: 1em;
+	gap: 0.5em;
 	&.diff { flex-wrap: nowrap; }
 	comments {
 		min-width: 30rem;
@@ -589,7 +602,6 @@ delta {
 			display: block;
 			padding: 8px;
 		}
-		div { padding: 8px; }
 	}
 	sidebar {
 		flex-grow: 1;
