@@ -87,7 +87,14 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         switch (map.attach_to) {
             .delta => {
                 var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
-                messages = try delta_shared.genThreadMessages(&delta, &repo, &patch, f.user != null, f.alloc, f.io);
+                messages = try delta_shared.genThreadMessages(
+                    &delta,
+                    &repo,
+                    &patch,
+                    .{ .edit = f.user != null },
+                    f.alloc,
+                    f.io,
+                );
             },
             else => {},
         }

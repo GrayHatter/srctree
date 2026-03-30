@@ -121,7 +121,7 @@ pub fn genThreadMessages(
     delta: *Delta,
     repo: *const Repo,
     patch: ?*const Patch,
-    include_edit: bool,
+    btns: struct { edit: bool = false },
     a: Allocator,
     io: Io,
 ) ![]Messages {
@@ -135,6 +135,7 @@ pub fn genThreadMessages(
     for (thread.messages.items, messages) |msg, *html| {
         const author = if (msg.author) |athr| try allocPrint(a, "{f}", .{abx.Html{ .text = athr }}) else "";
         const date = try allocPrint(a, "{f}", .{Humanize.unix(msg.updated, now)});
+        const msg_hash = try allocPrint(a, "{x}", .{msg.hash[0..10]});
         switch (msg.kind) {
             .comment => {
                 const systag, const body = try decodeMessage(msg, repo, patch, a, io);
@@ -143,14 +144,8 @@ pub fn genThreadMessages(
                     .date = date,
                     .system_tag = systag,
                     .message = body,
-                    .edit = if (include_edit) .{
-                        .index = delta.index,
-                        .hash = try allocPrint(a, "{x}", .{msg.hash[0..10]}),
-                    } else null,
-                    .direct_reply = .{
-                        .index = delta.index,
-                        .hash = try allocPrint(a, "{x}", .{msg.hash[0..10]}),
-                    },
+                    .edit = if (btns.edit) .{ .index = delta.index, .hash = msg_hash } else null,
+                    .direct_reply = .{ .index = delta.index, .hash = msg_hash },
                     .sub_thread = null,
                 };
             },
