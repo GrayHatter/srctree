@@ -121,6 +121,7 @@ pub fn genThreadMessages(
     delta: *Delta,
     repo: *const Repo,
     patch: ?*const Patch,
+    include_edit: bool,
     a: Allocator,
     io: Io,
 ) ![]Messages {
@@ -142,6 +143,10 @@ pub fn genThreadMessages(
                     .date = date,
                     .system_tag = systag,
                     .message = body,
+                    .edit = if (include_edit) .{
+                        .index = delta.index,
+                        .hash = try allocPrint(a, "{x}", .{msg.hash[0..10]}),
+                    } else null,
                     .direct_reply = .{
                         .index = delta.index,
                         .hash = try allocPrint(a, "{x}", .{msg.hash[0..10]}),
@@ -153,6 +158,7 @@ pub fn genThreadMessages(
                 .author = author,
                 .date = date,
                 .message = msg.message.?,
+                .edit = null,
                 .direct_reply = null,
                 .sub_thread = null,
             },

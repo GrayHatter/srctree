@@ -882,7 +882,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     }
 
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
-    const messages = try delta_shared.genThreadMessages(delta, &repo, if (patch) |*p| p else null, f.alloc, f.io);
+    const messages = try delta_shared.genThreadMessages(delta, &repo, if (patch) |*p| p else null, f.user != null, f.alloc, f.io);
 
     const username = if (f.user) |usr| usr.username.? else "public";
 
