@@ -1,7 +1,12 @@
             <form class="pretty" action="add-comment" method="POST">
               <context>Commenting as <CurrentUsername /></context>
-              <textarea name="comment"></textarea>
-              <div style="display: flex; justify-content: flex-end;"><button type="submit" name="comment">Comment</button></div>
+              <textarea name=comment></textarea>
+              <div style="display: flex; justify-content: flex-end;">
+                <With AdminButtons>
+                <button type=submit name=close value=t>Close</button>
+                </With>
+                <button type=submit name=submit>Comment</button>
+              </div>
               <input type="hidden" name="did" value="<DeltaId />" />
               <input type="hidden" name="diff_id" value="<DiffId default="0" />" />
               <details style="padding-left:8px">

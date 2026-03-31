@@ -15,6 +15,7 @@ const Message = @This();
 pub const Kind = enum(u16) {
     comment,
     diff_update,
+    state_change,
 };
 
 pub const type_prefix = .messages;
@@ -77,6 +78,10 @@ pub fn genHash(msg: *Message) *const DefaultHash {
         .diff_update => {
             h.update(msg.author orelse "");
             // Message is required for diff patch updates
+            h.update(msg.message.?);
+        },
+        .state_change => {
+            h.update(msg.author orelse "");
             h.update(msg.message.?);
         },
     }

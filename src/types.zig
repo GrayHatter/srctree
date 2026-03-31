@@ -236,9 +236,8 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
             var output: T = sub_default;
             while (r.takeDelimiterInclusive('\n')) |line| {
                 if (line.len == 1 and line[0] == '\n') return output;
-
+                const name, const value: []u8 = split(line) orelse continue;
                 inline for (@typeInfo(T).@"struct".fields) |field| {
-                    const name, const value: []u8 = split(line) orelse break;
                     const field_name = if (prefix.len > 0) prefix ++ "." ++ field.name else field.name;
                     if (eql(u8, name, field_name)) switch (field.type) {
                         DefaultHash => if (value.len == 64) {

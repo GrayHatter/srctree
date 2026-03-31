@@ -124,6 +124,20 @@ pub fn addMessage(delta: *Delta, m: Message, a: Allocator, io: Io) !void {
     try delta.commit(io);
 }
 
+pub fn setClosed(delta: *Delta, c: Comment, a: Allocator, io: Io) !void {
+    var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
+    if (c.message.len > 0) {
+        const msg = try thread.addComment(c.author, c.message, a, io);
+        try thread.addMessage(msg, a, io);
+    }
+    var b: [4096]u8 = undefined;
+    const state_msg = try bufPrint(&b, "delta closed by {s}", .{c.author});
+    try thread.addMessage(try .new(.state_change, delta.index, c.author, state_msg, io), a, io);
+    delta.updated = thread.updated;
+    delta.state.closed = true;
+    try delta.commit(io);
+}
+
 pub const CommentsMeta = struct { count: usize, new: bool };
 
 pub fn countComments(delta: Delta, io: Io) CommentsMeta {
@@ -136,9 +150,8 @@ pub fn countComments(delta: Delta, io: Io) CommentsMeta {
             cmtnew = cmtnew or m.updated > ts;
             cmtlen += 1;
         },
-        .diff_update => {
-            cmtnew = cmtnew or m.updated > ts;
-        },
+        .diff_update => cmtnew = cmtnew or m.updated > ts,
+        .state_change => cmtnew = cmtnew or m.updated > ts,
     };
     return .{ .count = cmtlen, .new = cmtnew };
 }
@@ -217,8 +230,9 @@ test Delta {
         \\thread_id: 1
         \\tags_id: 0
         \\state.closed: false
-        \\state.locked: true
+        \\state.draft: false
         \\state.embargoed: false
+        \\state.locked: true
         \\attach: nos
         \\attach_target: 0
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000

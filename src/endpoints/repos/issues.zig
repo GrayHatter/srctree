@@ -10,8 +10,11 @@ pub const routes = [_]Router.Match{
     ROUTE("", list),
     GET("new", new),
     GET("new-remote", newRemote),
+    GET("edit", edit),
+    GET("search", isearch),
     POST("new", newPost),
     POST("new-remote", newRemotePost),
+    POST("edit", editPost),
     POST("add-comment", addComment),
 };
 
@@ -45,6 +48,7 @@ fn new(ctx: *verse.Frame) Error!void {
     if (ctx.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
+
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
@@ -66,6 +70,55 @@ fn newRemote(ctx: *verse.Frame) Error!void {
         .flavor = .{ .remote = .{} },
     });
     try ctx.sendPage(&page);
+}
+
+fn edit(f: *verse.Frame) Error!void {
+    std.debug.print("{s}\n", .{f.uri.next().?});
+    const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
+
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(f) } };
+    if (f.user) |usr| {
+        body_header.nav.nav_auth = usr.username.?;
+    }
+    var page = IssueNewPage.init(.{
+        .meta_head = meta_head,
+        .body_header = body_header,
+        .flavor = .{ .edit = .{
+            .index = "1",
+            .title = "Title",
+            .text_area = "body",
+        } },
+    });
+    try f.sendPage(&page);
+}
+
+fn editPost(f: *verse.Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+    var buf: [2048]u8 = undefined;
+    if (f.request.data.post) |post| {
+        const valid = post.validate(IssueCreateReq) catch return error.DataInvalid;
+        if (valid.remote) |_| return newRemote(f);
+
+        valid.validate() catch |err| switch (err) {
+            error.TitleTooShort => try newPostError(f),
+        };
+
+        var delta = Delta.new(rd.name, valid.title, valid.desc, if (f.user) |usr|
+            usr.username.?
+        else
+            try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
+
+        delta.state.draft = valid.preview orelse false;
+
+        delta.attach = .issue;
+        delta.commit(f.io) catch unreachable;
+
+        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, delta.index });
+        return f.redirect(loc, .see_other) catch unreachable;
+    }
+
+    const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issue/new", .{rd.name});
+    return f.redirect(loc, .see_other) catch unreachable;
 }
 
 const IssueCreateReq = struct {
@@ -101,6 +154,8 @@ fn newPost(f: *verse.Frame) Error!void {
             usr.username.?
         else
             try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
+
+        delta.state.draft = valid.preview orelse false;
 
         delta.attach = .issue;
         delta.commit(f.io) catch unreachable;
@@ -145,6 +200,8 @@ fn newRemotePost(f: *verse.Frame) Error!void {
 const AddCommentReq = struct {
     comment: []const u8,
     did: []const u8,
+    close: ?bool = false,
+    submit: ?bool = false,
 };
 
 fn addComment(f: *verse.Frame) Error!void {
@@ -158,7 +215,11 @@ fn addComment(f: *verse.Frame) Error!void {
         return error.Unknown;
     const username = if (f.user) |usr| usr.username.? else "public";
 
-    _ = delta.addComment(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
+    if (validate.close.?) {
+        _ = delta.setClosed(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
+    } else {
+        _ = delta.addComment(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
+    }
     var buf: [2048]u8 = undefined;
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, did });
     f.redirect(loc, .see_other) catch unreachable;
@@ -204,6 +265,10 @@ fn view(f: *verse.Frame) Error!void {
 
     const status: []const u8 = if (delta.state.closed)
         "<span class=closed>closed</span>"
+    else if (delta.state.locked)
+        "<span class=locked>locked</span>"
+    else if (delta.state.draft)
+        "<span class=draft>draft</span>"
     else
         "<span class=open>open</span>";
 
@@ -225,7 +290,12 @@ fn view(f: *verse.Frame) Error!void {
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .comments = .{ .messages = messages },
-        .comment_box = .{ .current_username = username, .delta_id = delta_id },
+        .comment_box = .{
+            .current_username = username,
+            .delta_id = delta_id,
+            //.admin_buttons = if (f.user != null) .{} else null,
+            .admin_buttons = .{},
+        },
         .tracking_remote = if (delta.attach == .remote)
             .{ .url = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.attach_remote }}) }
         else
@@ -244,18 +314,33 @@ fn view(f: *verse.Frame) Error!void {
     try f.sendPage(&page);
 }
 
-fn list(f: *Frame) Error!void {
+fn searchPage(f: *Frame, str: []const u8) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
-    const rules = try search.genRules("is:issue", f.alloc);
-    var itr = Delta.searchRepo(rd.name, rules.items, f.io);
-    var default_search_buf: [0xFF]u8 = undefined;
-    const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue", .{rd.name});
+    const rules = try search.genRules(str, f.alloc);
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &(repos_ep.navButtons(f) catch unreachable) } };
+    var itr = Delta.searchRepo(rd.name, rules.items, f.io);
+
+    var body_header: S.BodyHeaderHtml = .{
+        .nav = .{ .nav_buttons = &(repos_ep.navButtons(f) catch unreachable) },
+    };
     if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
     f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
 
-    return delta_shared.list(f, Delta.RepoIterator, &itr, def_search);
+    return delta_shared.list(f, Delta.RepoIterator, &itr, str);
+}
+
+fn list(f: *Frame) Error!void {
+    const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
+    var default_search_buf: [0xFF]u8 = undefined;
+    const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue is:open", .{rd.name});
+    return searchPage(f, def_search);
+}
+
+fn isearch(f: *Frame) Error!void {
+    const udata = f.request.data.query.validate(struct { q: []const u8 }) catch return error.DataInvalid;
+    if (udata.q.len == 0) return list(f);
+    std.debug.print("q {s}\n", .{udata.q});
+    return searchPage(f, udata.q);
 }
 
 pub const RemoteForge = enum {

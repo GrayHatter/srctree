@@ -46,7 +46,7 @@ pub fn list(f: *Frame, Itr: type, itr: *search.Iterator(Itr, Delta), search_str:
     var d_list: ArrayList(DeltaList) = .{};
     while (itr.next(f.alloc, f.io)) |deltaC| {
         var d = deltaC;
-        if (d.state.closed) continue;
+        if (d.state.embargoed) continue;
 
         _ = d.loadThread(f.alloc, f.io) catch return error.ServerFault;
         const cmtsmeta = d.countComments(f.io);
@@ -150,6 +150,14 @@ pub fn genThreadMessages(
                 };
             },
             .diff_update => html.* = .{
+                .author = author,
+                .date = date,
+                .message = msg.message.?,
+                .edit = null,
+                .direct_reply = null,
+                .sub_thread = null,
+            },
+            .state_change => html.* = .{
                 .author = author,
                 .date = date,
                 .message = msg.message.?,

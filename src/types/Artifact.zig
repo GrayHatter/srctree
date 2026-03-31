@@ -105,8 +105,9 @@ test Artifact {
         \\repo: srctree
         \\filename: blob.txt
         \\state.closed: false
-        \\state.locked: false
+        \\state.draft: false
         \\state.embargoed: false
+        \\state.locked: false
         \\created: 1744830464
         \\updated: 1744830464
         \\source_commit_hash: 4141414141414141414141414141414141414141414141414141414141414141

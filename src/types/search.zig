@@ -71,8 +71,10 @@ pub fn Iterator(Itr: type, Output: type) type {
 
         fn evalRules(self: Self, target: Output) bool {
             for (self.rules) |rule| {
-                if (!self.eval(rule, target)) return false;
-            } else return true;
+                if (self.eval(rule, target)) continue;
+                return false;
+            }
+            return true;
         }
 
         /// TODO: I think this function might overrun for some inputs
@@ -91,9 +93,11 @@ pub fn Iterator(Itr: type, Output: type) type {
                         // TODO better hack
                         if (target.attach == .remote) return true;
                     } else if (eql(u8, is.match, "open")) {
-                        return !target.state.closed;
+                        return target.state.isOpen();
                     } else if (eql(u8, is.match, "closed")) {
                         return target.state.closed;
+                    } else if (eql(u8, is.match, "draft")) {
+                        return target.state.draft;
                     } else {
                         if (target.attach == .nos) return true;
                     }

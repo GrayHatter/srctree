@@ -17,8 +17,22 @@
               <button name="remote">Reference Remote Issue</button>
             </div>
             <div>
-              <button name="preview">Preview</button>
-              <button name="submit">Submit</button>
+              <button name="preview" value=t>Preview</button>
+              <button name="submit" value=t>Submit</button>
+            </div>
+          </buttons>
+        </form>
+        </Case>
+        <Case Edit>
+        <form class="pretty" action="edit" method="POST">
+          <context>Open New Issue</context>
+          <input name="index" value="<Index />" type=hidden />
+          <input name="title" placeholder="Issue Title" value="<Title />" />
+          <textarea name="desc" placeholder="Additional information about this issue"><TextArea /></textarea>
+          <buttons>
+            <div>
+              <button name="preview" value=t>Preview</button>
+              <button name="submit" value=t>Submit</button>
             </div>
           </buttons>
         </form>
@@ -28,12 +42,8 @@
           <context>Open New Issue</context>
           <input name="uri" placeholder="Remote Issue URL" />
           <buttons>
-            <div>
-              <button name="new">File New Issue</button>
-            </div>
-            <div>
-              <button name="submit">Load</button>
-            </div>
+            <div><button name="new">File New Issue</button></div>
+            <div><button name="submit">Load</button></div>
           </buttons>
         </form>
         </Case>

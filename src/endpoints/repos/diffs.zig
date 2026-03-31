@@ -930,6 +930,8 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             .current_username = username,
             .delta_id = delta_index,
             .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
+            //.admin_buttons = if (f.user != null) .{} else null,
+            .admin_buttons = .{},
         },
         .patch_warning = if (applies) null else .{},
     });

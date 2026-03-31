@@ -147,8 +147,9 @@ test Thread {
         \\created: 1744830464
         \\updated: 1744830464
         \\state.closed: false
-        \\state.locked: false
+        \\state.draft: false
         \\state.embargoed: false
+        \\state.locked: false
         \\delta_hash: 6464646464646464646464646464646464646464646464646464646464646464
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000
         \\

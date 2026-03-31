@@ -20,6 +20,30 @@ fn inbox(ctx: *Frame) Error!void {
 pub fn index(ctx: *Frame) Error!void {
     const udata = ctx.request.data.query.validate(SearchReq) catch return error.DataInvalid;
     const query_str = udata.q orelse "";
+
+    if (cutPrefix(u8, trim(u8, query_str, " "), "repo:")) |repo| {
+        const len: usize = (findScalar(u8, repo, ' ') orelse repo.len) + 1;
+        for (repo[0 .. len - 1]) |c| {
+            switch (c) {
+                'a'...'z', 'A'...'Z', '0'...'9', '.', '-', '_' => continue,
+                else => break,
+            }
+        } else {
+            var str: []const u8 = "";
+            for (repo) |c| {
+                // TODO this comes from the URI so it should be enforced by verse
+                switch (c) {
+                    0...std.ascii.control_code.us => break,
+                    std.ascii.control_code.del => break,
+                    else => continue,
+                }
+            } else str = repo[len..];
+            var buf: [4096]u8 = undefined;
+            const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/search?q={s}", .{ repo[0 .. len - 1], str });
+            ctx.redirect(loc, .found) catch unreachable;
+        }
+    }
+
     return custom(ctx, query_str);
 }
 
@@ -55,6 +79,9 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
 const log = std.log.scoped(.search);
 const splitScalar = std.mem.splitScalar;
+const cutPrefix = std.mem.cutPrefix;
+const trim = std.mem.trim;
+const findScalar = std.mem.findScalar;
 const allocPrint = std.fmt.allocPrint;
 
 const verse = @import("verse");
