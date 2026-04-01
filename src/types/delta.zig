@@ -126,12 +126,11 @@ pub fn addMessage(delta: *Delta, m: Message, a: Allocator, io: Io) !void {
 
 pub fn setClosed(delta: *Delta, c: Comment, a: Allocator, io: Io) !void {
     var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
-    if (c.message.len > 0) {
-        const msg = try thread.addComment(c.author, c.message, a, io);
-        try thread.addMessage(msg, a, io);
-    }
+    if (c.message.len > 0)
+        _ = try thread.addComment(c.author, c.message, a, io);
+
     var b: [4096]u8 = undefined;
-    const state_msg = try bufPrint(&b, "delta closed by {s}", .{c.author});
+    const state_msg = try bufPrint(&b, "closed by {s}", .{c.author});
     try thread.addMessage(try .new(.state_change, delta.index, c.author, state_msg, io), a, io);
     delta.updated = thread.updated;
     delta.state.closed = true;

@@ -898,11 +898,6 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     };
 
-    const status: []const u8 = if (delta.state.closed)
-        "<span class=closed>closed</span>"
-    else
-        "<span class=open>open</span>";
-
     var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
     if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
@@ -921,7 +916,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .curl_hint = if (diffM == null) curl_hint else null,
         .title = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.title }}) catch unreachable,
         .description = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.message }}) catch unreachable,
-        .status = status,
+        .status = delta_shared.status(delta),
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
@@ -930,8 +925,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             .current_username = username,
             .delta_id = delta_index,
             .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
-            //.admin_buttons = if (f.user != null) .{} else null,
-            .admin_buttons = .{},
+            .action_buttons = delta_shared.actionButtons(f, delta)[0..2],
         },
         .patch_warning = if (applies) null else .{},
     });

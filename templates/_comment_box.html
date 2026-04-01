@@ -2,9 +2,7 @@
               <context>Commenting as <CurrentUsername /></context>
               <textarea name=comment></textarea>
               <div style="display: flex; justify-content: flex-end;">
-                <With AdminButtons>
-                <button type=submit name=close value=t>Close</button>
-                </With>
+                <Split ActionButtons />
                 <button type=submit name=submit>Comment</button>
               </div>
               <input type="hidden" name="did" value="<DeltaId />" />

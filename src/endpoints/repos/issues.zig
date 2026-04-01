@@ -202,6 +202,9 @@ const AddCommentReq = struct {
     did: []const u8,
     close: ?bool = false,
     submit: ?bool = false,
+    repoen: ?bool = false,
+    lock: ?bool = false,
+    unlock: ?bool = false,
 };
 
 fn addComment(f: *verse.Frame) Error!void {
@@ -263,15 +266,6 @@ fn view(f: *verse.Frame) Error!void {
         body_header.nav.nav_auth = usr.username.?;
     }
 
-    const status: []const u8 = if (delta.state.closed)
-        "<span class=closed>closed</span>"
-    else if (delta.state.locked)
-        "<span class=locked>locked</span>"
-    else if (delta.state.draft)
-        "<span class=draft>draft</span>"
-    else
-        "<span class=open>open</span>";
-
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     var page = DeltaIssuePage.init(.{
         .meta_head = meta_head,
@@ -286,15 +280,14 @@ fn view(f: *verse.Frame) Error!void {
         .title = allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = delta.title }}) catch unreachable,
         .description = description,
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
-        .status = status,
+        .status = delta_shared.status(&delta),
         .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
         .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
         .comments = .{ .messages = messages },
         .comment_box = .{
             .current_username = username,
             .delta_id = delta_id,
-            //.admin_buttons = if (f.user != null) .{} else null,
-            .admin_buttons = .{},
+            .action_buttons = delta_shared.actionButtons(f, &delta)[0..2],
         },
         .tracking_remote = if (delta.attach == .remote)
             .{ .url = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.attach_remote }}) }

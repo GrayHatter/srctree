@@ -170,6 +170,34 @@ pub fn genThreadMessages(
     return messages;
 }
 
+pub fn status(d: *const Delta) []const u8 {
+    return if (d.state.closed)
+        "<span class=closed>closed</span>"
+    else if (d.state.locked)
+        "<span class=locked>locked</span>"
+    else if (d.state.draft)
+        "<span class=draft>draft</span>"
+    else
+        "<span class=open>open</span>";
+}
+
+pub fn actionButtons(f: *Frame, delta: *const Delta) [2][]const u8 {
+    var buttons: [2][]const u8 = undefined;
+    if (f.user != null) {
+        buttons[0] = if (delta.state.locked)
+            "<button type=submit name=unlock value=t>Unlock</button>\n"
+        else
+            "<button type=submit name=lock value=t>Lock</button>\n";
+    } else buttons[0] = &.{};
+
+    buttons[1] = if (delta.state.closed)
+        "<button type=submit name=reopen value=t>Reopen</button>\n"
+    else
+        "<button type=submit name=close value=t>Close</button>\n";
+
+    return buttons;
+}
+
 const Repos = @import("repos.zig");
 const Types = @import("../types.zig");
 const search = Types.search;

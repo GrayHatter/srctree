@@ -281,6 +281,7 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                     } else if (startsWith(u8, name, field.name)) switch (@typeInfo(field.type)) {
                         .@"struct" => if (enabled_structs.contains(field.type)) {
                             const save = r.seek;
+                            r.seek -|= line.len;
                             @field(output, field.name) = readStruct(field.type, @field(output, field.name), field.name, r);
                             r.seek = save;
                         } else if (comptime type_debugging) log.err("skipped type {s} on {s} (not enabled)", .{
