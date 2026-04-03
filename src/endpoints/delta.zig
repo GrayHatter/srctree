@@ -136,20 +136,18 @@ pub fn genThreadMessages(
         const author = if (msg.author) |athr| try allocPrint(a, "{f}", .{abx.Html{ .text = athr }}) else "";
         const date = try allocPrint(a, "{f}", .{Humanize.unix(msg.updated, now)});
         const msg_hash = try allocPrint(a, "{x}", .{msg.hash[0..10]});
-        switch (msg.kind) {
-            .comment => {
-                const systag, const body = try decodeMessage(msg, repo, patch, a, io);
-                html.* = .{
-                    .author = author,
-                    .date = date,
-                    .system_tag = systag,
-                    .message = body,
-                    .edit = if (btns.edit) .{ .index = delta.index, .hash = msg_hash } else null,
-                    .direct_reply = .{ .index = delta.index, .hash = msg_hash },
-                    .sub_thread = null,
-                };
+        const systag, const body = try decodeMessage(msg, repo, patch, a, io);
+        html.* = switch (msg.kind) {
+            .comment => .{
+                .author = author,
+                .date = date,
+                .system_tag = systag,
+                .message = body,
+                .edit = if (btns.edit) .{ .index = delta.index, .hash = msg_hash } else null,
+                .direct_reply = .{ .index = delta.index, .hash = msg_hash },
+                .sub_thread = null,
             },
-            .diff_update => html.* = .{
+            .diff_update => .{
                 .author = author,
                 .date = date,
                 .message = msg.message.?,
@@ -157,7 +155,8 @@ pub fn genThreadMessages(
                 .direct_reply = null,
                 .sub_thread = null,
             },
-            .state_change => html.* = .{
+            .state_change => .{
+                .class = "system",
                 .author = author,
                 .date = date,
                 .message = msg.message.?,
@@ -165,7 +164,7 @@ pub fn genThreadMessages(
                 .direct_reply = null,
                 .sub_thread = null,
             },
-        }
+        };
     }
     return messages;
 }

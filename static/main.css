@@ -117,6 +117,7 @@ details:open > summary.hide { display: none; }
 	background-color: #343;
 }
 
+
 header {
 	display: flex;
 	justify-content: space-between;
@@ -716,6 +717,25 @@ comment {
 	text-align: left;
 	display: block;
 	margin-bottom: 1em;
+	&.system {
+		context { display: none; }
+		message {
+			border: none;
+			overflow: hidden;
+			text-align: center;
+			&::before, &::after {
+				background-color: #777;
+				content: "";
+				display: inline-block;
+				height: 1px;
+				position: relative;
+				vertical-align: middle;
+				width: 50%;
+			}
+			&::before { right: 0.5em; margin-left: -50%; }
+			&::after { left: 0.5em; margin-right: -50%; }
+		}
+	}
 	context {
 		background: #333;
 		border-radius: 3px 3px 0 0;
