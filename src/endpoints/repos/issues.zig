@@ -197,35 +197,14 @@ fn newRemotePost(f: *verse.Frame) Error!void {
     return f.redirect(loc, .see_other) catch unreachable;
 }
 
-const AddCommentReq = struct {
-    comment: []const u8,
-    did: []const u8,
-    close: ?bool = false,
-    submit: ?bool = false,
-    repoen: ?bool = false,
-    lock: ?bool = false,
-    unlock: ?bool = false,
-};
-
 fn addComment(f: *verse.Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
     const post = f.request.data.post orelse return error.DataMissing;
-    const validate = post.validate(AddCommentReq) catch return error.DataInvalid;
+    const valid = post.validate(delta_shared.AddCommentReq) catch return error.DataInvalid;
 
-    const did: usize = std.fmt.parseInt(usize, validate.did, 16) catch return error.DataInvalid;
+    const did: usize = std.fmt.parseInt(usize, valid.did, 16) catch return error.DataInvalid;
 
-    var delta = Delta.open(rd.name, did, f.alloc, f.io) catch
-        return error.Unknown;
-    const username = if (f.user) |usr| usr.username.? else "public";
-
-    if (validate.close.?) {
-        _ = delta.setClosed(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
-    } else {
-        _ = delta.addComment(.{ .author = username, .message = validate.comment }, f.alloc, f.io) catch {};
-    }
-    var buf: [2048]u8 = undefined;
-    const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/{x}", .{ rd.name, did });
-    f.redirect(loc, .see_other) catch unreachable;
+    _ = try delta_shared.addComment("issues", rd.name, did, valid, f);
     return;
 }
 

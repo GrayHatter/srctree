@@ -2,6 +2,48 @@ const DeltaListHtml = T.PageData("delta-list.html");
 const DeltaList = S.DeltaListHtml.DeltaList;
 const DeltaMeta = S.DeltaListHtml.DeltaList.DeltaMeta;
 
+pub const AddCommentReq = struct {
+    comment: []const u8,
+    did: []const u8,
+    diff_id: []const u8,
+    close: ?bool = false,
+    submit: ?bool = false,
+    repoen: ?bool = false,
+    lock: ?bool = false,
+    unlock: ?bool = false,
+};
+
+pub fn addComment(
+    comptime location: []const u8,
+    repo: []const u8,
+    id: usize,
+    valid: AddCommentReq,
+    f: *Frame,
+) RouterError!?Message {
+    var delta = Delta.open(repo, id, f.alloc, f.io) catch
+        return error.Unknown;
+
+    const user = if (f.user) |usr| usr.username.? else "public";
+    var msg: ?Message = null;
+    if (valid.close.?) {
+        msg = delta.setClosed(
+            .{ .author = user, .message = valid.comment },
+            f.alloc,
+            f.io,
+        ) catch return error.ServerFault;
+    } else {
+        msg = delta.addComment(
+            .{ .author = user, .message = valid.comment },
+            f.alloc,
+            f.io,
+        ) catch return error.ServerFault;
+    }
+    var buf: [2048]u8 = undefined;
+    const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/" ++ location ++ "/{x}", .{ repo, id });
+    f.redirect(loc, .see_other) catch unreachable;
+    return msg;
+}
+
 pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtml.DeltaList {
     const msg = d.message[0..@min(
         d.message.len,

@@ -270,31 +270,20 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
     try ctx.sendPage(&page);
 }
 
-const NewCmtReq = struct {
-    did: []const u8,
-    diff_id: []const u8,
-    comment: []const u8,
-};
-
 fn newComment(f: *Frame) Error!void {
     const rd = RouteData.init(f.uri) orelse return error.Unrouteable;
-    var buf: [2048]u8 = undefined;
-    if (f.request.data.post) |post| {
-        var valid = post.validate(NewCmtReq) catch return error.DataInvalid;
-        const delta_index = isHex(valid.did) orelse return error.Unrouteable;
-        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diff/{x}", .{ rd.name, delta_index });
+    const post = f.request.data.post orelse return error.DataMissing;
+    const valid = post.validate(delta_shared.AddCommentReq) catch return error.DataInvalid;
+    //if (valid.comment.len < 2) return f.redirect(loc, .see_other) catch unreachable;
 
-        if (valid.comment.len < 2) return f.redirect(loc, .see_other) catch unreachable;
+    const did: usize = std.fmt.parseInt(usize, valid.did, 16) catch return error.DataInvalid;
 
-        var delta = Delta.open(rd.name, delta_index, f.alloc, f.io) catch return error.Unknown;
-        const username = if (f.user) |usr| usr.username.? else "public";
-        var msg = delta.addComment(.{ .author = username, .message = valid.comment }, f.alloc, f.io) catch return error.Unknown;
+    if (try delta_shared.addComment("issues", rd.name, did, valid, f)) |msgC| {
+        var msg = msgC;
         msg.extra0 = std.fmt.parseInt(usize, valid.diff_id, 10) catch return error.DataInvalid;
         msg.commit(f.io) catch return error.ServerFault;
-        // TODO record current revision at comment time
-        return f.redirect(loc, .see_other) catch unreachable;
     }
-    return error.Unknown;
+    return;
 }
 
 pub fn directReply(ctx: *Frame) Error!void {
