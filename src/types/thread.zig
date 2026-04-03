@@ -150,6 +150,7 @@ test Thread {
         \\state.draft: false
         \\state.embargoed: false
         \\state.locked: false
+        \\state.removed: false
         \\delta_hash: 6464646464646464646464646464646464646464646464646464646464646464
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000
         \\

@@ -232,6 +232,7 @@ test Delta {
         \\state.draft: false
         \\state.embargoed: false
         \\state.locked: true
+        \\state.removed: false
         \\attach: nos
         \\attach_target: 0
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000

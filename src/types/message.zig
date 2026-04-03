@@ -1,5 +1,5 @@
 hash: DefaultHash,
-state: usize,
+state: State = .default,
 target: usize,
 kind: Kind,
 created: i64 = 0,
@@ -12,6 +12,8 @@ extra0: usize = 0,
 
 const Message = @This();
 
+pub const State = @import("common.zig").State;
+
 pub const Kind = enum(u16) {
     comment,
     diff_update,
@@ -23,7 +25,7 @@ pub const type_version = 0;
 
 const typeio = Types.readerWriter(Message, .{
     .hash = @splat(0),
-    .state = 0,
+    .state = .default,
     .target = undefined,
     .kind = undefined,
 });
@@ -33,7 +35,7 @@ const readerFn = typeio.read;
 pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8, io: Io) !Message {
     var m = Message{
         .hash = @splat(0),
-        .state = 0,
+        .state = .default,
         .kind = kind,
         .target = tid,
         .created = Io.Clock.real.now(io).toSeconds(),
@@ -66,6 +68,7 @@ pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
 pub fn genHash(msg: *Message) *const DefaultHash {
     std.debug.assert(std.mem.eql(u8, msg.hash[0..], &[_]u8{0} ** 32));
     var h = Sha256.init(.{});
+    h.update(asBytes(&msg.state));
     h.update(asBytes(&msg.target));
     h.update(asBytes(&msg.created));
     h.update(asBytes(&msg.updated));
@@ -94,7 +97,7 @@ test "comment" {
     const io = std.testing.io;
     var c = Message{
         .target = 0,
-        .state = 0,
+        .state = .default,
         .kind = .comment,
         .author = "grayhatter",
         .message = "test comment, please ignore",
@@ -103,8 +106,8 @@ test "comment" {
 
     const hash = c.genHash();
     try std.testing.expectEqualSlices(u8, &[_]u8{
-        0x5A, 0x6E, 0x83, 0xD6, 0xDE, 0xC1, 0x97, 0x77, 0x8A, 0x73, 0x79, 0xBB, 0x32, 0x76, 0xDF, 0xF2,
-        0xB3, 0x74, 0xBB, 0x02, 0x19, 0x45, 0xB0, 0x29, 0x44, 0xEF, 0x00, 0xDC, 0x91, 0x62, 0x29, 0x41,
+        0xA0, 0x2D, 0xAB, 0x93, 0x4D, 0x06, 0xAB, 0xDF, 0x94, 0xCB, 0x24, 0xC9, 0x8D, 0x07, 0xB1, 0xA0,
+        0xC0, 0x2B, 0x12, 0xBE, 0xF3, 0x92, 0x23, 0x49, 0xC5, 0x34, 0x26, 0x9D, 0x0E, 0x34, 0x0A, 0x6E,
     }, hash);
 
     var tempdir = std.testing.tmpDir(.{});
@@ -114,7 +117,7 @@ test "comment" {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{hash});
     try std.testing.expectEqualStrings(
-        "5a6e83d6dec197778a7379bb3276dff2b374bb021945b02944ef00dc91622941.message",
+        "a02dab934d06abdf94cb24c98d07b1a0c02b12bef3922349c534269d0e340a6e.message",
         filename,
     );
 
@@ -130,8 +133,12 @@ test "comment" {
 
     const expected =
         \\# messages/0
-        \\hash: 5a6e83d6dec197778a7379bb3276dff2b374bb021945b02944ef00dc91622941
-        \\state: 0
+        \\hash: a02dab934d06abdf94cb24c98d07b1a0c02b12bef3922349c534269d0e340a6e
+        \\state.closed: false
+        \\state.draft: false
+        \\state.embargoed: false
+        \\state.locked: false
+        \\state.removed: false
         \\target: 0
         \\kind: comment
         \\created: 0
@@ -169,8 +176,12 @@ test Message {
 
     const v0_text =
         \\# messages/0
-        \\hash: ec491fbb9d29b35270925653168a308e1d978fda0397d3993eb15990a1fcb80e
-        \\state: 0
+        \\hash: 0cd7f83061495c5f82703d436a18d8d7545fd64d1c8d5c109539c216f72b7859
+        \\state.closed: false
+        \\state.draft: false
+        \\state.embargoed: false
+        \\state.locked: false
+        \\state.removed: false
         \\target: 0
         \\kind: comment
         \\created: 1744830464
