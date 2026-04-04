@@ -4,6 +4,7 @@ html {
 	color-scheme: light dark;
 	color: #FFFFEB;
 	min-height: 100%;
+	scroll-behavior: smooth;
 }
 
 
@@ -245,6 +246,7 @@ ln {
 	white-space: pre;
 	display: inline-block;
 	width: 100%;
+	scroll-margin-top: 120px;
 	&:before {
 		content: attr(num);
 		width: 3em;

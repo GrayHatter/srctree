@@ -23,7 +23,11 @@
         document.querySelectorAll("ln").forEach((elm) => {
           if (elm.id != '') { elm.addEventListener( "click", (e) => {
                 let s = window.getSelection();
-                if (s.anchorOffset == s.focusOffset) { window.location.hash = elm.id; }
+                const elm_y = elm.getBoundingClientRect().y;
+                const in_view = elm_y < (window.innerHeight * 3 / 4) && elm_y > 0;
+                if (in_view) { elm.style.cssText = `scroll-margin-top: ${elm_y}px`; }
+                const not_selecting = s.anchorOffset == s.focusOffset;
+                if (not_selecting) { window.location.hash = elm.id; }
               }, { passive: true }) }
         });
       </script>
