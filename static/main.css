@@ -1105,20 +1105,15 @@ blob, gist, patch {
 		}
 	}
 
-	commit { 
-		& > top { background: #a89984; }
-		data { background: #d6d4ce; }
-	}
+	commit { & > top { background: #a89984; } data { background: #d6d4ce; } }
 	blob, gist, patch {
 		header { span { background: #bdbdbd; } }
-		changes { 
+		changes {  
+			& div.block{ background: #85a4ff; color: #3c3836; }
+			background: #bdbdbd;
 			span {
-				background: #bdbdbd;
 				div.nul{ background: #5e5e5e; }
-				div.block{
-					background: #85a4ff;
-					color: #3c3836;
-				}
+				div.block{ background: #85a4ff; color: #3c3836; }
 			}
 			ln { 
 				&.del { background: #a66 }
