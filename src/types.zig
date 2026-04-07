@@ -64,21 +64,13 @@ var storage_dir: Storage = undefined;
 pub fn init(dir: Storage, io: Io) !void {
     storage_dir = dir;
     inline for (.{
-        Artifact,
-        CI,
-        CommitMap,
-        Delta,
-        Diff,
-        Gist,
-        Issue,
-        Message,
-        Network,
-        Thread,
-        User,
-        Viewers,
+        Artifact, CI,      CommitMap, Delta,  Diff, Gist,
+        Issue,    Message, Network,   Thread, User, Viewers,
     }) |inc| {
         if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
-            try inc.initType(try dir.createDirPathOpen(io, inc.TYPE_PREFIX, .{ .open_options = .{ .iterate = true } }));
+            try inc.initType(try dir.createDirPathOpen(io, inc.TYPE_PREFIX, .{
+                .open_options = .{ .iterate = true },
+            }));
         }
     }
 }
@@ -88,7 +80,9 @@ pub fn raze(io: Io) void {
 }
 
 pub fn iterableDir(comptime type_name: @EnumLiteral(), io: Io) !Io.Dir {
-    return try storage_dir.createDirPathOpen(io, @tagName(type_name), .{ .open_options = .{ .iterate = true } });
+    return try storage_dir.createDirPathOpen(io, @tagName(type_name), .{
+        .open_options = .{ .iterate = true },
+    });
 }
 
 pub fn loadDataAlloc(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) ![]u8 {
@@ -309,7 +303,10 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
         }
 
         fn writeStruct(T: type, t: *const T, comptime name: []const u8, w: *Writer) error{WriteFailed}!void {
-            inline for (@typeInfo(T).@"struct".fields) |field| {
+            all: inline for (@typeInfo(T).@"struct".fields) |field| {
+                if (comptime @hasDecl(BaseType, "type_skip_fields")) inline for (BaseType.type_skip_fields) |skip| {
+                    if (comptime eql(u8, skip, field.name)) continue :all;
+                };
                 if (name.len > 0) try w.writeAll(name ++ ".");
 
                 switch (field.type) {

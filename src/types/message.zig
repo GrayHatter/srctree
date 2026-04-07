@@ -6,9 +6,11 @@ created: i64 = 0,
 updated: i64 = 0,
 src_tz: i32 = 0,
 author: ?[]const u8 = null,
-message: ?[]const u8 = null,
+//sub_thread: usize = 0,
 // TODO stabilize or replace this hack
 extra0: usize = 0,
+// Processed internally
+message: ?[]const u8 = null,
 
 const Message = @This();
 
@@ -22,6 +24,7 @@ pub const Kind = enum(u16) {
 
 pub const type_prefix = .messages;
 pub const type_version = 0;
+pub const type_skip_fields: [1][]const u8 = .{"message"};
 
 const typeio = Types.readerWriter(Message, .{
     .hash = @splat(0),
@@ -58,11 +61,19 @@ pub fn commit(msg: Message, io: Io) !void {
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
     try writerFn(&msg, &fd_writer.interface);
+    try fd_writer.interface.writeAll(msg.message orelse "");
+    try fd_writer.interface.flush();
 }
 
 pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
     var reader = try Types.loadDataHashId(.message, hash, a, io);
-    return readerFn(&reader);
+    var msg = readerFn(&reader);
+
+    if (find(u8, reader.buffer, "\n\n")) |start| {
+        msg.message = reader.buffer[start + 2 ..];
+    }
+
+    return msg;
 }
 
 pub fn genHash(msg: *Message) *const DefaultHash {
@@ -128,6 +139,7 @@ test "comment" {
         var writer = file.writer(io, &w_b);
         try writerFn(&c, &writer.interface);
     }
+
     var reader = try Types.loadDataReader(.message, filename, a, io);
     defer a.free(reader.buffer);
 
@@ -145,7 +157,6 @@ test "comment" {
         \\updated: 0
         \\src_tz: 0
         \\author: grayhatter
-        \\message: test comment, please ignore
         \\extra0: 0
         \\
         \\
@@ -170,9 +181,16 @@ test Message {
     // required to overwrite the timestamp
     c.hash = @splat(0);
     _ = c.genHash();
+    try c.commit(io);
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
     try writerFn(&c, &writer.writer);
+
+    var b: [4086]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&b);
+    const aa = fba.allocator();
+    const new_ut = try Message.open(c.hash, aa, io);
+    try std.testing.expectEqualDeep(c, new_ut);
 
     const v0_text =
         \\# messages/0
@@ -188,13 +206,12 @@ test Message {
         \\updated: 1744830464
         \\src_tz: 0
         \\author: author
-        \\message: message
         \\extra0: 0
         \\
-        \\
+        \\message
     ;
 
-    try std.testing.expectEqualStrings(v0_text, writer.written());
+    try std.testing.expectEqualStrings(v0_text, b[0..v0_text.len]);
 }
 
 const std = @import("std");
@@ -206,6 +223,7 @@ const Sha256 = std.crypto.hash.sha2.Sha256;
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const asBytes = std.mem.asBytes;
+const find = std.mem.find;
 const DefaultHash = Types.DefaultHash;
 
 const Humanize = @import("../humanize.zig");
