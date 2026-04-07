@@ -1120,15 +1120,20 @@ blob, gist, patch {
 				&.add { background: #686 }
 				&.del:target { background: #b88 }
 				&.add:target { background: #898 }
-				&.nul:target {
-					background: #2228;
-					height: 1em;
-					margin: 0 2px;
-				}
-
+				&.nul:target { background: #2228; height: 1em; margin: 0 2px; }
 			}
 		}
 	}
+	delta > main > name { 
+		background: #a89984; 
+		color: #3c3836;
+		border-radius: 3px 3px 0 0; border-top: 1px solid #737373;
+		border-left: 1px solid #737373;
+		border-bottom: 0;
+		border-right: 1px #444 solid;
+	} 
+	comment { context { background: #a89984; color: #3c3836; } }
+
 }
 
 
