@@ -69,10 +69,11 @@ pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
     var reader = try Types.loadDataHashId(.message, hash, a, io);
     var msg = readerFn(&reader);
 
-    if (find(u8, reader.buffer, "\n\n")) |start| {
-        msg.message = reader.buffer[start + 2 ..];
+    if (msg.message == null or msg.message.?.len == 0) {
+        if (find(u8, reader.buffer, "\n\n")) |start| {
+            msg.message = reader.buffer[start + 2 ..];
+        }
     }
-
     return msg;
 }
 
