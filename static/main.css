@@ -31,6 +31,13 @@ a {
 		border-radius: 4px;
 		&:hover, &.active { border-bottom: #880046 solid 2px; }
 	}
+	&.bare-link {
+		color:#6cf;
+		&:visited {
+			color: #dbbbff;
+		}
+
+	}
 }
 
 div {

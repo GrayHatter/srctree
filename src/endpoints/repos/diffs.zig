@@ -712,14 +712,32 @@ test fileLineRef {
     );
 }
 
-const TrnsCmt = struct { bool, []u8 };
-pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, a: Allocator, io: Io) !TrnsCmt {
-    var message_lines: ArrayList([]const u8) = .{};
-    defer message_lines.clearAndFree(a);
+fn toBareLink(str: []const u8, w: *Writer) !void {
+    try w.print("<a class=\"bare-link\" href=\"{s}\">{f}</a>", .{ str, abx.Html{ .text = str } });
+}
+
+pub fn simpleComment(line: []const u8, writer: *Writer, io: Io) !void {
+    _ = io;
+    if (find(u8, line, "https://")) |link| {
+        try writer.print("{f}", .{abx.Html{ .text = line[0..link] }});
+        if (findScalarPos(u8, line, link, ' ')) |end| {
+            if (toBareLink(line[link..end], writer)) {} else |_| {
+                try writer.print("{f}", .{abx.Html{ .text = line[link..end] }});
+            }
+            try writer.print("{f}", .{abx.Html{ .text = line[end..] }});
+        } else {
+            try writer.print("{f}", .{abx.Html{ .text = line[link..] }});
+        }
+    } else {
+        try writer.print("{f}", .{abx.Html{ .text = line }});
+    }
+}
+
+pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo, writer: *Writer, a: Allocator, io: Io) !bool {
     var found_ref = false;
     var itr = splitScalar(u8, comment, '\n');
     const diffs: []Patch.Diff = patch.diffs orelse &.{};
-    while (itr.next()) |line_| {
+    while (itr.next()) |line_| : (writer.writeAll("<br>\n") catch unreachable) {
         const line = std.mem.trim(u8, line_, "\r ");
         for (diffs) |*diff| {
             const filename = diff.filename orelse continue;
@@ -731,37 +749,36 @@ pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo
                     // default to
                     if (try resolveLineRefDiff(line, filename, diff, line_ref, filepos, a, io)) |code| {
                         found_ref = true;
-                        try message_lines.appendSlice(a, code);
+                        try writer.writeVecAll(code);
                         var end: usize = h;
                         while (end < line.len and !isWhitespace(line[end])) {
                             end += 1;
                         }
                         if (end < line.len)
-                            try message_lines.append(a, try allocPrint(a, "{f}", .{
+                            try writer.print("{f}", .{
                                 abx.Html{ .text = line[end..] },
-                            }));
+                            });
                     } else if (resolveLineRefRepo(line, filename, repo, line_ref, a, io) catch |err| switch (err) {
                         error.LineNotFound => null,
                         else => return err,
                     }) |code| {
                         found_ref = true;
-                        try message_lines.appendSlice(a, code);
+                        try writer.writeVecAll(code);
                     } else {
-                        try message_lines.append(a, try allocPrint(
-                            a,
+                        try writer.print(
                             "<span title=\"line not found in this diff\">{f}</span>",
                             .{abx.Html{ .text = line }},
-                        ));
+                        );
                     }
                     break;
                 }
             }
         } else {
-            try message_lines.append(a, try allocPrint(a, "{f}", .{abx.Html{ .text = line }}));
+            try simpleComment(line, writer, io);
         }
     }
 
-    return .{ found_ref, try std.mem.join(a, "<br />\n", message_lines.items) };
+    return found_ref;
 }
 
 const DiffViewPage = Template.PageData("delta-diff.html");
@@ -956,6 +973,7 @@ fn list(f: *Frame) Error!void {
 
 const std = @import("std");
 const Io = std.Io;
+const Writer = Io.Writer;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const allocPrint = std.fmt.allocPrint;

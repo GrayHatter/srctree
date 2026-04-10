@@ -149,11 +149,21 @@ fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Alloc
             },
             .current => {},
         }
-        const found, comment_body = diffs_ep.translateComment(msg.message.?, comment_patch, repo, a, io) catch
+        var w: Io.Writer.Allocating = .init(a);
+        const writer = &w.writer;
+        const found = diffs_ep.translateComment(msg.message.?, comment_patch, repo, writer, a, io) catch
             return error.ServerFault;
         if (!found) systag = null;
+        comment_body = try w.toOwnedSlice();
     } else {
-        comment_body = try allocPrint(a, "{f}", .{abx.Html{ .text = msg.message orelse "[Empty Message]" }});
+        var w: Io.Writer.Allocating = .init(a);
+        const writer = &w.writer;
+        _ = diffs_ep.translateComment(msg.message.?, .{ .diffs = &.{}, .blob = &.{} }, repo, writer, a, io) catch
+            return error.ServerFault;
+        comment_body = try w.toOwnedSlice();
+        //comment_body = try allocPrint(a, "{f}", .{abx.Html{
+        //    .text = msg.message orelse "[Empty Message]",
+        //}});
     }
     return .{ systag, comment_body };
 }
