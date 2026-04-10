@@ -753,8 +753,8 @@ pub fn translateComment(comment: []const u8, patch: Patch, repo: *const Git.Repo
                             .{abx.Html{ .text = line }},
                         ));
                     }
+                    break;
                 }
-                break;
             }
         } else {
             try message_lines.append(a, try allocPrint(a, "{f}", .{abx.Html{ .text = line }}));
