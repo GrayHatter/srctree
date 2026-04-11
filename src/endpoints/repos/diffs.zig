@@ -726,7 +726,7 @@ pub fn simpleComment(line: []const u8, writer: *Writer, io: Io) !void {
             }
             try writer.print("{f}", .{abx.Html{ .text = line[end..] }});
         } else {
-            try writer.print("{f}", .{abx.Html{ .text = line[link..] }});
+            try toBareLink(line, writer);
         }
     } else {
         try writer.print("{f}", .{abx.Html{ .text = line }});
