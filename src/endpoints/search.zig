@@ -37,7 +37,7 @@ pub fn index(ctx: *Frame) Error!void {
                     std.ascii.control_code.del => break,
                     else => continue,
                 }
-            } else str = repo[len..];
+            } else str = repo[len - 1 ..];
             var buf: [4096]u8 = undefined;
             const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/search?q={s}", .{ repo[0 .. len - 1], str });
             ctx.redirect(loc, .found) catch unreachable;
