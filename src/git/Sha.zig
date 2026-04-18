@@ -38,12 +38,18 @@ pub const Hash = union(enum) {
         }
     }
 
+    /// returns the valid bytes held by `Hash`
     pub fn bytes(h: *const Hash) []const u8 {
         return switch (h.*) {
             .sha1 => h.sha1[0..],
             .sha256 => h.sha256[0..],
             .partial => h.partial.bytes[0..h.partial.bytes.len],
         };
+    }
+
+    pub fn dupeStr(h: Hash, a: Allocator) ![]u8 {
+        const t: Text = .fromBin(h);
+        return try t.dupe(a);
     }
 
     pub fn fmtHex(h: Hash, w: *std.Io.Writer) !void {
@@ -98,6 +104,10 @@ pub const Text = union(enum) {
                 return .{ .sha1 = t };
             },
         }
+    }
+
+    pub fn dupe(t: Text, a: Allocator) ![]u8 {
+        return try a.dupe(u8, t.slice());
     }
 
     pub fn format(t: Text, w: *std.Io.Writer) !void {
