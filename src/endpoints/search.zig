@@ -48,7 +48,7 @@ pub fn index(ctx: *Frame) Error!void {
 }
 
 pub fn genRules(search_str: []const u8, a: Allocator) !ArrayList(Tsearch.Rule) {
-    var rules: ArrayList(Tsearch.Rule) = .{};
+    var rules: ArrayList(Tsearch.Rule) = .empty;
     {
         var itr = splitScalar(u8, search_str, ' ');
         while (itr.next()) |r_line| {

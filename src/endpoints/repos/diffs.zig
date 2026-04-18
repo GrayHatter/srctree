@@ -107,17 +107,17 @@ fn pendingNew(f: *Frame) Error!void {
             const network_remotes = try f.alloc.alloc(S.DiffNewHtml.PatchNetwork.Remotes, remotes.len);
             for (remotes, network_remotes) |src, *dst| {
                 dst.* = .{
-                    .value = src.name,
-                    .name = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(src, .formatDiff)}),
+                    .value = .abx(src.name),
+                    .name = .abx(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(src, .formatDiff)})),
                 };
             }
 
             patch_network = .{
                 .remotes = network_remotes,
                 .branches = &.{
-                    .{ .value = "main", .name = "main" },
-                    .{ .value = "develop", .name = "develop" },
-                    .{ .value = "master", .name = "master" },
+                    .{ .value = .safe("main"), .name = .safe("main") },
+                    .{ .value = .safe("develop"), .name = .safe("develop") },
+                    .{ .value = .safe("master"), .name = .safe("master") },
                 },
             };
         } else if (udata.patch_uri) |_| {
@@ -256,8 +256,8 @@ fn createError(ctx: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!v
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(ctx) } },
         .err = switch (err) {
-            .remote_error => |str| .{ .error_string = "Unable to fetch patch from remote (" ++ str ++ ")" },
-            else => .{ .error_string = "error" },
+            .remote_error => |str| .{ .error_string = .safe("Unable to fetch patch from remote (" ++ str ++ ")") },
+            else => .{ .error_string = .safe("error") },
         },
         .title = try std.fmt.allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = udata.title }}),
         .desc = try std.fmt.allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = udata.desc }}),
@@ -325,8 +325,8 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
         };
         const patch_lines = try Patch.diffLineHtmlUnified(a, body);
         file.* = .{
-            .diff_stat = stat,
-            .filename = name,
+            .diff_stat = .safe(stat),
+            .filename = .abx(name),
             .patch_view = patch_view: switch (view_mode) {
                 .split => {
                     var w_left: Io.Writer.Allocating = try .initCapacity(a, body.len);
@@ -489,7 +489,7 @@ fn resolveLineRefRepo(
     a: Allocator,
     io: Io,
 ) !?[][]const u8 {
-    var found_lines: ArrayList([]const u8) = .{};
+    var found_lines: ArrayList([]const u8) = .empty;
 
     const cmt = try repo.headCommit(a, io);
     var files: Git.Tree = try cmt.loadTree(repo, a, io);
@@ -557,7 +557,7 @@ fn resolveLineRefDiff(
         '-' => false,
         else => null,
     };
-    var found_lines: ArrayList([]const u8) = .{};
+    var found_lines: ArrayList([]const u8) = .empty;
     const blocks = try diff.blocksAlloc(a);
     for (blocks) |block| {
         const change = try parseBlockHeader(block);
@@ -852,11 +852,11 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
 
     var patch: ?Patch = null;
     const curl_hint: S.DeltaDiffHtml.CurlHint = .{
-        .repo_name = rd.name,
-        .diff_idx = delta_index,
-        .base_ref = if (head_commit) |ref| ref.text().slice()[0..8] else "base_commit",
-        .head_ref = "&lt;HEAD&gt;",
-        .host = f.request.host orelse "127.0.0.1",
+        .repo_name = .abx(rd.name),
+        .diff_idx = .abx(delta_index),
+        .base_ref = .abx(if (head_commit) |ref| ref.text().slice()[0..8] else "base_commit"),
+        .head_ref = .abx("<HEAD>"),
+        .host = .safe(f.request.host orelse "127.0.0.1"),
     };
     var applies: bool = false;
     if (diffM) |*diff| {
@@ -912,24 +912,24 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
         .repo_header = .{
-            .repo_name = rd.name,
-            .description = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = repo.description(f.alloc, f.io) catch "" }}),
+            .repo_name = .abx(rd.name),
+            .description = .abx(repo.description(f.alloc, f.io) catch ""),
             .blame = null,
             .git_uri = null,
             .upstream = null,
         },
         .patch = patch_data,
         .curl_hint = if (diffM == null) curl_hint else null,
-        .title = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.title }}) catch unreachable,
-        .description = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.message }}) catch unreachable,
-        .status = delta_shared.status(delta),
-        .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
-        .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
+        .title = .abx(delta.title),
+        .description = .abx(delta.message),
+        .status = .safe(delta_shared.status(delta)),
+        .created = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)})),
+        .updated = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)})),
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
         .comments = .{ .messages = messages },
         .comment_box = .{
-            .current_username = username,
-            .delta_id = delta_index,
+            .current_username = .abx(username),
+            .delta_id = .safe(delta_index),
             .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
             .action_buttons = delta_shared.actionButtons(f, delta)[0..2],
         },

@@ -18,16 +18,21 @@ fn list(f: *Frame) Router.Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } },
         .repo_header = .{
-            .repo_name = rd.name,
-            .description = try allocPrint(f.alloc, "{f}", .{
+            .repo_name = .abx(rd.name),
+            // TODO FIXME
+            .description = .safe(try allocPrint(f.alloc, "{f}", .{
                 abx.Html{ .text = repo.description(f.alloc, f.io) catch "" },
-            }),
+            })),
             .blame = null,
             .git_uri = null,
             .upstream = null,
         },
         .artifacts = &.{
-            .{ .name = "name", .date = "date", .href = "href" },
+            .{
+                .name = .safe("name"),
+                .date = .safe("date"),
+                .href = .abx("href"),
+            },
         },
     });
 

@@ -40,10 +40,8 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } },
         .repo_header = .{
-            .repo_name = rd.name,
-            .description = try allocPrint(f.alloc, "{f}", .{
-                abx.Html{ .text = repo.description(f.alloc, f.io) catch "" },
-            }),
+            .repo_name = .abx(rd.name),
+            .description = .abx(try f.alloc.dupe(u8, repo.description(f.alloc, f.io) catch "")),
             .blame = null,
             .git_uri = null,
             .upstream = null,
@@ -67,7 +65,7 @@ fn repoSearchDeep(f: *Frame) Router.Error!void {
 
 fn searchCommits(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io: Io) ![]S.SearchHtml.Commits {
     var limit: u32 = limited;
-    var commits: ArrayList(Hit.Commit) = .{};
+    var commits: ArrayList(Hit.Commit) = .empty;
     defer commits.deinit(a);
     var commit = try repo.headCommit(a, io);
 
@@ -136,7 +134,7 @@ fn searchTree(
 
 fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io: Io) ![]S.SearchHtml.Files {
     var limit: u32 = limited;
-    var files: ArrayList(Hit.File) = .{};
+    var files: ArrayList(Hit.File) = .empty;
     defer files.deinit(a);
     var commit = try repo.headCommit(a, io);
     var tree: git.Tree = try commit.loadTree(repo, a, io);
@@ -172,7 +170,11 @@ fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io:
             });
             line_number += 1;
         }
-        hits.appendAssumeCapacity(.{ .filename = hit.path, .line = hit.line + 1, .code = writer.written() });
+        hits.appendAssumeCapacity(.{
+            .filename = .abx(hit.path),
+            .line = hit.line + 1,
+            .code = .safe(writer.written()),
+        });
     }
 
     return try hits.toOwnedSlice(a);
@@ -181,7 +183,7 @@ fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io:
 const Exclude = struct {
     list: ArrayList([]const u8),
 
-    pub const new: Exclude = .{ .list = .{} };
+    pub const new: Exclude = .{ .list = .empty };
 
     fn excluded(e: *Exclude, path: []const u8) bool {
         for (e.list.items, 0..) |ex, i| {

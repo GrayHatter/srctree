@@ -60,23 +60,22 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtm
     };
 
     const meta: ?DeltaMeta = switch (d.attach) {
-        .issue => .{ .repo = d.repo, .flavor = "issue" },
-        .diff => .{ .repo = d.repo, .flavor = "diff" },
-        .remote => rmt: {
-            break :rmt .{ .repo = d.repo, .flavor = try allocPrint(a, "Tracking remote issue from {f}", .{
+        .issue => .{ .repo = .abx(d.repo), .flavor = .safe("issue") },
+        .diff => .{ .repo = .abx(d.repo), .flavor = .safe("diff") },
+        .remote => .{
+            .repo = .abx(d.repo),
+            .flavor = .safe(try allocPrint(a, "Tracking remote issue from {f}", .{
                 abx.Html{ .text = d.attach_remote },
-            }) };
+            })),
         },
         else => null,
     };
 
     // TODO implement seen
     return .{
-        .index = try allocPrint(a, "{x}", .{d.index}),
-        .uri_base = uri,
-        .title = try allocPrint(a, "{f}", .{
-            abx.Html{ .text = if (d.title.len == 0) "[No Title]" else d.title },
-        }),
+        .index = .safe(try allocPrint(a, "{x}", .{d.index})),
+        .uri_base = .abx(uri),
+        .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
         .comment_new = if (comments.new) " new" else "",
         .comment_count = comments.count,
         .desc = if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }}),
@@ -85,7 +84,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtm
 }
 
 pub fn list(f: *Frame, Itr: type, itr: *search.Iterator(Itr, Delta), search_str: []const u8) RouterError!void {
-    var d_list: ArrayList(DeltaList) = .{};
+    var d_list: ArrayList(DeltaList) = .empty;
     while (itr.next(f.alloc, f.io)) |deltaC| {
         var d = deltaC;
         if (d.state.embargoed) continue;
@@ -116,6 +115,7 @@ const MsgData = struct {
     []const u8, // comment body
 };
 
+/// TODO prove safe
 fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Allocator, io: Io) !MsgData {
     var systag: ?[]const u8 = null;
     var comment_body: []const u8 = "";
@@ -178,40 +178,39 @@ pub fn genThreadMessages(
     io: Io,
 ) ![]Messages {
     const now: i64 = Io.Clock.real.now(io).toSeconds();
-    var thread = delta.loadThread(a, io) catch |err| {
+    const thread = delta.loadThread(a, io) catch |err| {
         log.err("Unable to load comments for thread {} {}", .{ delta.index, err });
         return error.ServerFault;
     };
     if (thread.messages.items.len == 0) return &.{};
     const messages = try a.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
     for (thread.messages.items, messages) |msg, *html| {
-        const author = if (msg.author) |athr| try allocPrint(a, "{f}", .{abx.Html{ .text = athr }}) else "";
         const date = try allocPrint(a, "{f}", .{Humanize.unix(msg.updated, now)});
         const msg_hash = try allocPrint(a, "{x}", .{msg.hash[0..10]});
         const systag, const body = try decodeMessage(msg, repo, patch, a, io);
         html.* = switch (msg.kind) {
             .comment => .{
-                .author = author,
-                .date = date,
+                .author = .abx(try a.dupe(u8, msg.author orelse "[no offer]")),
+                .date = .safe(date),
                 .system_tag = systag,
-                .message = body,
-                .edit = if (btns.edit) .{ .index = delta.index, .hash = msg_hash } else null,
-                .direct_reply = .{ .index = delta.index, .hash = msg_hash },
+                .message = .safe(body),
+                .edit = if (btns.edit) .{ .index = delta.index, .hash = .safe(msg_hash) } else null,
+                .direct_reply = .{ .index = delta.index, .hash = .safe(msg_hash) },
                 .sub_thread = null,
             },
             .diff_update => .{
-                .author = author,
-                .date = date,
-                .message = msg.message.?,
+                .author = .abx(try a.dupe(u8, msg.author orelse "[no offer]")),
+                .date = .safe(date),
+                .message = .abx(msg.message.?),
                 .edit = null,
                 .direct_reply = null,
                 .sub_thread = null,
             },
             .state_change => .{
                 .class = "system",
-                .author = author,
-                .date = date,
-                .message = msg.message.?,
+                .author = .abx(try a.dupe(u8, msg.author orelse "[no offer]")),
+                .date = .safe(date),
+                .message = .abx(msg.message.?),
                 .edit = null,
                 .direct_reply = null,
                 .sub_thread = null,

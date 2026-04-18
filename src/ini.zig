@@ -24,7 +24,7 @@ pub const Namespace = struct {
 
     /// Name must outlive the Namespace
     pub fn init(name: []const u8, r: *Reader, a: Allocator) !Namespace {
-        var list: ArrayList(Setting) = .{};
+        var list: ArrayList(Setting) = .empty;
         errdefer list.deinit(a);
 
         while (r.takeSentinel('\n')) |wide| {
@@ -153,7 +153,7 @@ pub fn Config(BaseT: type) type {
         }
 
         pub fn init(r: *Reader, a: Allocator) !Self {
-            var list: ArrayList(Namespace) = .{};
+            var list: ArrayList(Namespace) = .empty;
             errdefer {
                 for (list.items) |itm| itm.raze(a);
                 list.deinit(a);

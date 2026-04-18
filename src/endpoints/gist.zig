@@ -98,7 +98,7 @@ fn wrapLineNumbers(a: Allocator, text: []const u8) ![]S.GistHtml.GistFiles.Numbe
     while (litr.next()) |line| {
         lines[i] = .{
             .num = i + 1,
-            .line = line,
+            .line = .safe(line),
         };
         i += 1;
     }
@@ -125,7 +125,7 @@ fn toTemplate(files: []const Gist.File, a: Allocator, io: Io) ![]S.GistHtml.Gist
         const wrapped = try wrapLineNumbers(a, formatted);
 
         o.* = .{
-            .file_name = file_name,
+            .file_name = .abx(file_name),
             .numbered_lines = wrapped,
         };
     }

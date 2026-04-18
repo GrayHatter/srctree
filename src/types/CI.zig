@@ -7,7 +7,7 @@ result: Result = .unknown,
 thread_id: usize = 0,
 commit_hash: Hash = @splat(0),
 
-steps: ArrayList(Step) = .{},
+steps: ArrayList(Step) = .empty,
 
 pub const CI = @This();
 pub const Hash = Types.Sha1Bin;

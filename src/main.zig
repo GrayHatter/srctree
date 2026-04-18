@@ -88,14 +88,12 @@ pub var config_ini: Ini.Config(SrcConfig) = .{ .ini = .empty };
 
 const Auth = @import("Auth.zig");
 
-pub fn main(mini: std.process.Init.Minimal) !void {
-    var gpa = std.heap.GeneralPurposeAllocator(.{ .stack_trace_frames = 12 }){};
-    defer _ = gpa.deinit();
-    const a = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const a = init.gpa;
 
     var runmode: verse.Server.RunModes = .zwsgi;
 
-    var args = mini.args.iterate();
+    var args = init.minimal.args.iterate();
     arg0 = args.next() orelse "srctree";
     while (args.next()) |arg| {
         if (std.mem.eql(u8, arg, "-h") or
@@ -114,7 +112,7 @@ pub fn main(mini: std.process.Init.Minimal) !void {
     }
 
     // *SIGH*, I love zig master :/
-    var threaded: std.Io.Threaded = .init(a, .{ .environ = mini.environ });
+    var threaded: std.Io.Threaded = .init(a, .{ .environ = init.minimal.environ });
     const io = threaded.io();
     const cwd = std.Io.Dir.cwd();
 
@@ -149,7 +147,6 @@ pub fn main(mini: std.process.Init.Minimal) !void {
 
     if (global_config.server) |srv| {
         if (srv.remove_on_start) {
-            comptime std.debug.assert(builtin.zig_version.order(.{ .major = 0, .minor = 16, .patch = 0 }) == .lt);
             Io.Dir.cwd().deleteFile(io, "./srctree.sock") catch |err| switch (err) {
                 error.FileNotFound => {},
                 else => return err,
@@ -196,9 +193,10 @@ pub fn main(mini: std.process.Init.Minimal) !void {
         .threads = 4,
         .stats = .{ .auth_mode = .sensitive },
     }) catch {
-        if (@errorReturnTrace()) |trace| {
-            std.debug.dumpStackTrace(trace);
-        }
+        // TODO FIXME
+        //if (@errorReturnTrace()) |trace| {
+        //    std.debug.dumpStackTrace(trace);
+        //}
         std.process.exit(1);
     };
     agent.enabled = false;
@@ -212,6 +210,7 @@ const Thread = std.Thread;
 const Io = std.Io;
 const Server = verse.Server;
 const log = std.log;
+pub const Abx = verse.abx;
 
 const Database = @import("database.zig");
 const Repos = @import("repos.zig");

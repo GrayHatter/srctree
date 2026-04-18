@@ -38,7 +38,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     const git_blame = actions.blame(blame_file, ref, f.io) catch return error.InvalidURI;
 
     const map, const lines = parseBlame(f.alloc, git_blame) catch return error.Unknown;
-    var source_lines: ArrayList(u8) = .{};
+    var source_lines: ArrayList(u8) = .empty;
     for (lines) |line| {
         try source_lines.appendSlice(f.alloc, line.line);
         try source_lines.append(f.alloc, '\n');
@@ -73,15 +73,15 @@ pub fn blame(f: *Frame) Router.Error!void {
     const wrapped_blames = try wrapLineNumbersBlame(f.alloc, f.io, lines, map, rd.name, file_name, show_emails);
 
     const upstream: ?S.BlameHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
-        .filename = file_name,
-        .uri_filename = rd.path.?.buffer,
-        .repo_name = rd.name,
+        .filename = .abx(file_name),
+        .uri_filename = .abx(rd.path.?.buffer),
+        .repo_name = .abx(rd.name),
         .upstream = upstream,
         .blame_lines = wrapped_blames,
     });
@@ -116,17 +116,17 @@ fn wrapLineNumbersBlame(
         const parent_sha: ?Git.Sha = if (bcommit.parent) |bp| .init(bp) else null;
         blame_line.* = .{
             .num = i + 1,
-            .line = src.line,
-            .repo_name = repo_name,
-            .sha = sha,
+            .line = .safe(src.line),
+            .repo_name = .abx(repo_name),
+            .sha = .safe(sha),
             .blame_parent = if (parent_sha) |psha|
-                .{ .href = try allocPrint(a, "/repo/{s}/ref/{f}/blame/{s}", .{ repo_name, std.fmt.alt(psha, .fmtHex), path }) }
+                .{ .href = .abx(try allocPrint(a, "/repo/{s}/ref/{f}/blame/{s}", .{ repo_name, std.fmt.alt(psha, .fmtHex), path })) }
             else
                 null,
             .time_style = style_blocks[bcommit.age_block],
             .author_email = .{
                 .author = if (skip) null else allocPrint(a, "{f}", .{abx.Html{ .text = bcommit.author.name }}) catch unreachable,
-                .email = email,
+                .email = .abx(email),
             },
             .m_sha = if (skip) null else sha,
             .time = if (skip) null else try Humanize.unix(bcommit.author.timestamp, now).printAlloc(a),
@@ -152,7 +152,7 @@ const BlameLine = struct {
 const BlameMap = ArrayHashMap(Sha, BlameCommit);
 
 fn parseBlame(a: Allocator, blame_txt: []const u8) !struct { BlameMap, []BlameLine } {
-    var map: BlameMap = .{};
+    var map: BlameMap = .empty;
     const count = std.mem.count(u8, blame_txt, "\n\t");
     const lines = try a.alloc(BlameLine, count);
     var in_lines = std.mem.splitScalar(u8, blame_txt, '\n');

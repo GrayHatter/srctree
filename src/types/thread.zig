@@ -5,7 +5,7 @@ state: State = .default,
 delta_hash: Types.DefaultHash = @splat(0),
 hash: Types.DefaultHash = @splat(0),
 
-messages: ArrayList(Message) = .{},
+messages: ArrayList(Message) = .empty,
 
 const Thread = @This();
 

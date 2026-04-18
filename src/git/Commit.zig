@@ -179,8 +179,9 @@ test "parse commit" {
 
 test "fuzz" {
     const Context = struct {
-        fn testOne(context: @This(), input: []const u8) anyerror!void {
+        fn testOne(context: @This(), smth: *std.testing.Smith) anyerror!void {
             _ = context;
+            const input = smth.value([40]u8);
             if (input.len < 20) return;
             if (init(.init(input[0..20]), input[20..])) |_| {
                 try std.testing.expect(false);

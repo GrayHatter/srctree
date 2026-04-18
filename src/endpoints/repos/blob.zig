@@ -112,7 +112,7 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
     const wrapped = try wrapLineNumbers(f.alloc, colored_blob);
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     const safe_name = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blb.name }});
@@ -131,13 +131,14 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
         },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
-            .repo_name = rd.name,
-            .description = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = repo.description(f.alloc, f.io) catch "" }}),
-            .blame = .{ .repo_name = rd.name, .filename = path.buffer },
-            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
+            .repo_name = .abx(rd.name),
+            // TODO FIXME
+            .description = .safe(try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = repo.description(f.alloc, f.io) catch "" }})),
+            .blame = .{ .repo_name = .abx(rd.name), .filename = .abx(path.buffer) },
+            .git_uri = .{ .host = .safe("srctree.gr.ht"), .repo_name = .abx(rd.name) },
             .upstream = upstream,
         },
-        .filename = blb.name,
+        .filename = .abx(blb.name),
         .blob_lines = wrapped,
     });
 
@@ -189,9 +190,12 @@ fn newRepo(f: *Frame) Router.Error!void {
         },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
-            .repo_name = rd.name,
-            .description = "",
-            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
+            .repo_name = .abx(rd.name),
+            .description = .safe(""),
+            .git_uri = .{
+                .host = .safe("srctree.gr.ht"),
+                .repo_name = .abx(rd.name),
+            },
             .upstream = null,
             .blame = null,
         },

@@ -30,7 +30,7 @@ pub fn index(ctx: *Frame) Error!void {
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
-        .netlist = try dom.render(ctx.alloc, .compact),
+        .netlist = .safe(try dom.render(ctx.alloc, .compact)),
     });
 
     try ctx.sendPage(&page);

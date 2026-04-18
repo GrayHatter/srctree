@@ -15,6 +15,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
         .@"template-path" = b.path("templates"),
         .ua_validation = true,
+        .@"require-abx" = true,
     });
 
     // Set up verse

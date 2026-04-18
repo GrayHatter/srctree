@@ -26,12 +26,12 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
 
     const dot_dot: ?S.TreeHtml.DotDot = if (path) |p| .{
         // TODO fix
-        .href = try allocPrint(ctx.alloc, "{s}/tree/{s}", .{ prefix, p }),
+        .href = .abx(try allocPrint(ctx.alloc, "{s}/tree/{s}", .{ prefix, p })),
     } else null;
 
-    var list_trees: ArrayList(S.TreeHtml.Trees) = .{};
-    var list_files: ArrayList(S.TreeHtml.Files) = .{};
-    var list_hidden: ArrayList(S.TreeHtml.Hidden.HiddenFiles) = .{};
+    var list_trees: ArrayList(S.TreeHtml.Trees) = .empty;
+    var list_files: ArrayList(S.TreeHtml.Files) = .empty;
+    var list_hidden: ArrayList(S.TreeHtml.Hidden.HiddenFiles) = .empty;
 
     if (path) |p| try files.pushPath(ctx.alloc, p);
     if (files.changedSetFrom(repo, c.sha, ctx.alloc, ctx.io)) |changed| {
@@ -49,28 +49,28 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                         try allocPrint(ctx.alloc, "{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name });
                     if (ch.name.len > 0 and ch.name[0] == '.') {
                         try list_hidden.append(ctx.alloc, .{
-                            .name = ch.name,
-                            .href = href,
-                            .commit_title = commit_title,
-                            .commit_href = chref,
-                            .commit_time = ctime,
-                            .class = if (obj.isFile()) "tree" else "blob",
+                            .name = .abx(ch.name),
+                            .href = .abx(href),
+                            .commit_title = .safe(commit_title),
+                            .commit_href = .safe(chref),
+                            .commit_time = .safe(ctime),
+                            .class = .safe(if (obj.isFile()) "tree" else "blob"),
                         });
                     } else if (obj.isFile()) {
                         try list_files.append(ctx.alloc, .{
-                            .name = ch.name,
-                            .href = href,
-                            .commit_title = commit_title,
-                            .commit_href = chref,
-                            .commit_time = ctime,
+                            .name = .abx(ch.name),
+                            .href = .abx(href),
+                            .commit_title = .safe(commit_title),
+                            .commit_href = .safe(chref),
+                            .commit_time = .safe(ctime),
                         });
                     } else {
                         try list_trees.append(ctx.alloc, .{
-                            .name = ch.name,
-                            .href = href,
-                            .commit_title = commit_title,
-                            .commit_href = chref,
-                            .commit_time = ctime,
+                            .name = .abx(ch.name),
+                            .href = .abx(href),
+                            .commit_title = .safe(commit_title),
+                            .commit_href = .safe(chref),
+                            .commit_time = .safe(ctime),
                         });
                     }
                     break;
@@ -103,25 +103,25 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+        .href = .abx(try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     var page = TreePage.init(.{
         .meta_head = .{ .title = page_title, .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
-            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = rd.name },
-            .description = open_graph.desc,
-            .repo_name = rd.name,
+            .git_uri = .{ .host = .safe("srctree.gr.ht"), .repo_name = .abx(rd.name) },
+            .description = .abx(open_graph.desc),
+            .repo_name = .abx(rd.name),
             .upstream = upstream,
             .blame = null,
         },
-        .repo_name = rd.name,
+        .repo_name = .abx(rd.name),
         .readme = readme,
-        .commit_slug = commit_slug,
-        .commit_time_human = commit_time,
+        .commit_slug = .abx(commit_slug),
+        .commit_time_human = .safe(commit_time),
         //.commit_hex = commit_hex,
-        .commit_hex_short = commit_hex_short,
+        .commit_hex_short = .abx(commit_hex_short),
         .dot_dot = dot_dot,
         .branch_count = branch_count,
         .trees = list_trees.items,

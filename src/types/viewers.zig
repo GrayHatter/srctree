@@ -23,7 +23,7 @@ pub const View = struct {
 pub const type_prefix = .viewers;
 pub const type_version: usize = 0;
 
-const typeio = Types.readerWriter(Viewers, .{ .src = @splat(0), .viewers = .{}, .time = 0 });
+const typeio = Types.readerWriter(Viewers, .{ .src = @splat(0), .viewers = .empty, .time = 0 });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 const Index = Types.Index(type_prefix);

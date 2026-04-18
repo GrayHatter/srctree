@@ -203,13 +203,13 @@ const Repo = struct {
         std.debug.print("repo uri {s}\n", .{new_repo_name});
         // TODO sanitize requested repo name
         const dir = Io.Dir.cwd().openDir(f.io, "repos", .{}) catch |err| {
-            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
+            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = .safe(@errorName(err)) } };
             return try f.sendPage(&page);
         };
 
         var agent = git.Agent{ .alloc = f.alloc, .cwd = dir };
         agent.forkRemote(clone_req.repo_uri, new_repo_name, f.io) catch |err| {
-            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = @errorName(err) } };
+            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = .safe(@errorName(err)) } };
             return try f.sendPage(&page);
         };
 

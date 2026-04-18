@@ -240,7 +240,7 @@ pub const Translate = struct {
         for (indent) |c| assert(c == ' ');
         try dst.writeAll("<ul>\n");
         while (r.peekSentinel('\n') catch null) |until_prefix| {
-            var until = cutPrefix(u8, until_prefix, indent) orelse {
+            const until = cutPrefix(u8, until_prefix, indent) orelse {
                 try dst.writeAll("</ul>");
                 return error.Indent;
             };

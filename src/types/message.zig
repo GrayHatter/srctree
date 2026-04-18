@@ -141,7 +141,7 @@ test "comment" {
         try writerFn(&c, &writer.interface);
     }
 
-    var reader = try Types.loadDataReader(.message, filename, a, io);
+    const reader = try Types.loadDataReader(.message, filename, a, io);
     defer a.free(reader.buffer);
 
     const expected =

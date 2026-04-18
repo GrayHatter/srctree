@@ -35,14 +35,14 @@ const Journal = struct {
         j.* = .{
             .email = try a.dupe(u8, email),
             .today = today,
-            .repos = .{},
+            .repos = .empty,
             .heatmap_until = until,
             .scribe_until = (DateTime.fromEpoch(today - DAY * scribe_size)).timestamp,
             .hits = @splat(0),
             .total_count = 0,
             .streak = 0,
             .streak_last = null,
-            .scribe = .{},
+            .scribe = .empty,
         };
 
         return j;
@@ -64,7 +64,7 @@ const Journal = struct {
             .name = try a.dupe(u8, name),
             .repo = repo,
             .bufset = .init(a),
-            .commits = .{},
+            .commits = .empty,
         });
     }
 
@@ -338,19 +338,19 @@ const Scribe = struct {
             }
 
             return .{
-                .repo = self.repo,
+                .repo = .abx(self.repo),
                 .body = self.body,
-                .title = title,
+                .title = .abx(title),
                 .cmt_line_src = .{
-                    .pre = "in ",
-                    .link_root = "/repo/",
-                    .link_target = self.repo,
-                    .name = self.repo,
+                    .pre = .safe("in "),
+                    .link_root = .safe("/repo/"),
+                    .link_target = .abx(self.repo),
+                    .name = .abx(self.repo),
                 },
-                .day = try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtYMD)}),
-                .weekday = self.date.weekdaySlice(),
-                .time = try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtTime)}),
-                .sha = shahex[0..8],
+                .day = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtYMD)})),
+                .weekday = .safe(self.date.weekdaySlice()),
+                .time = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtTime)})),
+                .sha = .safe(shahex[0..8]),
             };
         }
     };
@@ -408,7 +408,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var nowish = DateTime.now(ctx.io);
     var email: []const u8 = "";
     var tz_offset: ?i17 = null;
-    var reqd = ctx.request.data.query.validate(CommitFlexReq) catch CommitFlexReq{ .user = null };
+    const reqd = ctx.request.data.query.validate(CommitFlexReq) catch CommitFlexReq{ .user = null };
 
     if (reqd.user) |u| {
         email = u;
@@ -492,7 +492,7 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
                     committed_today = false;
                 }
             }
-            m.class = if (date_is_future)
+            m.class = .safe(if (date_is_future)
                 " day-hide"
             else switch (count) {
                 0 => "",
@@ -502,13 +502,13 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
                 4 => " day-commits day-pwr-4",
                 5 => " day-commits day-pwr-5",
                 else => " day-commits day-pwr-max",
-            };
+            });
 
-            m.title = try std.fmt.allocPrint(
+            m.title = .safe(try std.fmt.allocPrint(
                 ctx.alloc,
                 "{} commits on {f}",
                 .{ journal.hits[day_idx], date.timeTruncate() },
-            );
+            ));
         }
     }
 
@@ -526,10 +526,10 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     var scribe_blocks = try ArrayList(S.UserCommitsHtml.Months).initCapacity(ctx.alloc, 6);
 
     const DefaultBlocks = struct {
-        todays: ArrayList(JournalRows) = .{},
-        yesterdays: ArrayList(JournalRows) = .{},
-        last_weeks: ArrayList(JournalRows) = .{},
-        last_months: ArrayList(JournalRows) = .{},
+        todays: ArrayList(JournalRows) = .empty,
+        yesterdays: ArrayList(JournalRows) = .empty,
+        last_weeks: ArrayList(JournalRows) = .empty,
+        last_months: ArrayList(JournalRows) = .empty,
     };
 
     {
@@ -554,25 +554,25 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
         }
 
         scribe_blocks.appendAssumeCapacity(.{
-            .group = "Today",
+            .group = .safe("Today"),
             .lead = try allocPrint(ctx.alloc, "{} commits today", .{blocks.todays.items.len}),
             .journal_rows = blocks.todays.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
-            .group = "Yesterday",
+            .group = .safe("Yesterday"),
             .lead = try allocPrint(ctx.alloc, "{} commits yesterday", .{blocks.yesterdays.items.len}),
             .journal_rows = blocks.yesterdays.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
-            .group = "Last Week",
+            .group = .safe("Last Week"),
             .lead = try allocPrint(ctx.alloc, "{} commits last week", .{blocks.last_weeks.items.len}),
             .journal_rows = blocks.last_weeks.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
-            .group = "Last Month",
+            .group = .safe("Last Month"),
             .lead = try allocPrint(ctx.alloc, "{} commits last month", .{blocks.last_months.items.len}),
             .journal_rows = blocks.last_months.items,
         });
@@ -581,10 +581,10 @@ pub fn commitFlex(ctx: *Verse.Frame) Error!void {
     const page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
-        .total_hits = try allocPrint(ctx.alloc, "{}", .{tcount}),
+        .total_hits = .safe(try allocPrint(ctx.alloc, "{}", .{tcount})),
         .flex_weeks = flex_weeks,
-        .checked_repos = try allocPrint(ctx.alloc, "{}", .{repo_count}),
-        .current_streak = current_streak,
+        .checked_repos = .safe(try allocPrint(ctx.alloc, "{}", .{repo_count})),
+        .current_streak = .safe(current_streak),
         .months = scribe_blocks.items,
     });
 

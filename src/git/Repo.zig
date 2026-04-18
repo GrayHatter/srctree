@@ -111,7 +111,7 @@ fn loadConfig(self: *Repo, a: Allocator, io: Io) !void {
 }
 
 fn loadRemotes(cfg: Ini.Config(Config), a: Allocator) ![]Remote {
-    var list: ArrayList(Remote) = .{};
+    var list: ArrayList(Remote) = .empty;
     errdefer list.clearAndFree(a);
     for (0..cfg.ini.ns.len) |i| {
         const ns = cfg.ini.filter("remote", i) orelse break;
@@ -142,7 +142,7 @@ pub fn loadBlob(repo: Repo, sha: Sha, a: Allocator, io: Io) !Blob {
 }
 
 pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
-    var list: std.ArrayList(Ref) = .{};
+    var list: std.ArrayList(Ref) = .empty;
     var ndir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
     defer ndir.close(io);
     var itr = ndir.iterate();
@@ -300,7 +300,7 @@ pub fn loadBranchesFrom(self: *Repo, prefix: []const u8, a: Allocator, io: Io) !
         else => return err,
     };
     defer dir.close(io);
-    var list: ArrayList(Branch) = .{};
+    var list: ArrayList(Branch) = .empty;
     var itr = dir.iterate();
     while (try itr.next(io)) |file| {
         if (file.kind != .file) continue;

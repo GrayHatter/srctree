@@ -143,7 +143,11 @@ fn builder(fr: *Frame, call: BuildFn) void {
         }
     } else |_| {}
 
-    const btns = [1]S.NavButtons{.{ .name = "inbox", .extra = inbox_count, .url = "/inbox" }};
+    const btns = [1]S.NavButtons{.{
+        .name = .safe("inbox"),
+        .extra = inbox_count,
+        .url = .safe("/inbox"),
+    }};
     var bh: S.BodyHeaderHtml = (fr.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
         .nav_auth = "Error",
         .nav_buttons = &btns,
@@ -161,9 +165,9 @@ fn builder(fr: *Frame, call: BuildFn) void {
         error.WriteFailed => std.debug.print("Unexpected WriteFailure\n", .{}),
         error.Unrouteable => {
             std.debug.print("Unrouteable", .{});
-            if (@errorReturnTrace()) |trace| {
-                std.debug.dumpStackTrace(trace);
-            }
+            //if (@errorReturnTrace()) |trace| {
+            //    std.debug.dumpStackTrace(trace);
+            //}
         },
         error.NotImplemented, error.Unknown => {
             std.debug.print("Unexpected error '{}'\n", .{err});

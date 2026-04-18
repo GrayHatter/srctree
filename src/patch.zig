@@ -101,7 +101,7 @@ fn fetch(uri: []const u8, a: Allocator, io: Io) ![]u8 {
     var client = std.http.Client{ .allocator = a, .io = io };
     //defer client.deinit();
 
-    var response: std.ArrayList(u8) = .{};
+    var response: std.ArrayList(u8) = .empty;
     defer response.deinit(a);
     const request = client.fetch(.{
         .location = .{ .url = uri },
@@ -160,7 +160,7 @@ test lineNumberFromHeader {
 pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]Diff.Line {
     const clean = allocPrint(a, "{f}", .{abx.Html{ .text = diff }}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
-    var lines: ArrayList(Diff.Line) = .{};
+    var lines: ArrayList(Diff.Line) = .empty;
     var litr = splitScalar(u8, clean, '\n');
     var hdr: Diff.Line.Header = .{ .left = 0, .right = 0 };
     var linenum_l: u32 = 0;

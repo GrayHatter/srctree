@@ -112,7 +112,7 @@ pub fn open(name: []const u8, vis: Vis.Select, io: Io) !?Git.Repo {
 }
 
 pub fn allNames(a: Allocator, io: Io) !ArrayList([]u8) {
-    var list: std.ArrayList([]u8) = .{};
+    var list: std.ArrayList([]u8) = .empty;
 
     var dir_set = try dirs.directory(.public, io);
     defer dir_set.close(io);

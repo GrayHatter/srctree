@@ -84,9 +84,9 @@ fn edit(f: *verse.Frame) Error!void {
         .meta_head = meta_head,
         .body_header = body_header,
         .flavor = .{ .edit = .{
-            .index = "1",
-            .title = "Title",
-            .text_area = "body",
+            .index = .safe("1"),
+            .title = .safe("Title"),
+            .text_area = .safe("body"),
         } },
     });
     try f.sendPage(&page);
@@ -250,37 +250,37 @@ fn view(f: *verse.Frame) Error!void {
         .meta_head = meta_head,
         .body_header = body_header,
         .repo_header = .{
-            .repo_name = rd.name,
-            .description = "",
+            .repo_name = .abx(rd.name),
+            .description = .safe(""),
             .blame = null,
             .git_uri = null,
             .upstream = null,
         },
-        .title = allocPrint(f.alloc, "{f}", .{verse.abx.Html{ .text = delta.title }}) catch unreachable,
-        .description = description,
+        .title = .abx(delta.title),
+        .description = .safe(description),
         .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
-        .status = delta_shared.status(&delta),
-        .created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)}),
-        .updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)}),
+        .status = .safe(delta_shared.status(&delta)),
+        .created = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)})),
+        .updated = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)})),
         .comments = .{ .messages = messages },
         .comment_box = .{
-            .current_username = username,
-            .delta_id = delta_id,
+            .current_username = .abx(username),
+            .delta_id = .abx(delta_id),
             .action_buttons = delta_shared.actionButtons(f, &delta)[0..2],
         },
         .tracking_remote = if (delta.attach == .remote)
-            .{ .url = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = delta.attach_remote }}) }
+            .{ .url = .abx(delta.attach_remote) }
         else
             null,
     });
     // required because linux will validate data.[slice].ptr and zig likes to
     // pretend that setting .ptr = undefined when .len == 0
-    if (page.data.title.len == 0) {
-        page.data.title = "[No Title]";
+    if (page.data.title.text.len == 0) {
+        page.data.title = .safe("[No Title]");
     }
 
-    if (page.data.description.len == 0) {
-        page.data.description = "<span class=\"muted\">No description provided</span>";
+    if (page.data.description.text.len == 0 and page.data.description.text_cleaned.len == 0) {
+        page.data.description = .safe("<span class=\"muted\">No description provided</span>");
     }
 
     try f.sendPage(&page);

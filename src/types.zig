@@ -53,7 +53,7 @@ pub fn VarString(comptime size: usize) type {
 
 const enabled_structs: struct {
     types: []const type,
-    pub fn contains(es: @This(), t: type) bool {
+    pub fn contains(comptime es: @This(), t: type) bool {
         inline for (es.types) |enable| if (enable == t) return true;
         return false;
     }

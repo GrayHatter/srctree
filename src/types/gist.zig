@@ -198,7 +198,7 @@ test {
 
     var buf: [69]u8 = undefined;
     const filename = try bufPrint(&buf, "{x}.gist", .{&gist.hash});
-    var reader = try Types.loadDataReader(.gist, filename, a, io);
+    const reader = try Types.loadDataReader(.gist, filename, a, io);
     defer a.free(reader.buffer);
 
     try std.testing.expectEqualStrings(v0_text, reader.buffer);

@@ -143,14 +143,14 @@ pub fn navButtons(f: *Frame) ![2]S.NavButtons {
 
     const btns = [2]S.NavButtons{
         .{
-            .name = "issues",
+            .name = .safe("issues"),
             .extra = i_count,
-            .url = try allocPrint(f.alloc, "/repo/{s}/issues/", .{rd.name}),
+            .url = .abx(try allocPrint(f.alloc, "/repo/{s}/issues/", .{rd.name})),
         },
         .{
-            .name = "diffs",
+            .name = .safe("diffs"),
             .extra = d_count,
-            .url = try allocPrint(f.alloc, "/repo/{s}/diffs/", .{rd.name}),
+            .url = .abx(try allocPrint(f.alloc, "/repo/{s}/diffs/", .{rd.name})),
         },
     };
 
@@ -324,9 +324,11 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
 
     if (repo.tags) |rtags| {
         tag = .{
-            .tag = try a.dupe(u8, rtags[0].name),
-            .title = try allocPrint(a, "created {f}", .{Humanize.unix(rtags[0].tagger.timestamp, now)}),
-            .uri = try allocPrint(a, "/repo/{s}/tags", .{name}),
+            .tag = .abx(try a.dupe(u8, rtags[0].name)),
+            .title = .safe(try allocPrint(a, "created {f}", .{
+                Humanize.unix(rtags[0].tagger.timestamp, now),
+            })),
+            .uri = .abx(try allocPrint(a, "/repo/{s}/tags", .{name})),
         };
     }
 
@@ -337,12 +339,12 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
         }
     }
     return .{
-        .name = name,
+        .name = .abx(name),
         .repo_class = repo_class,
-        .uri = try allocPrint(a, "/repo/{s}", .{name}),
+        .uri = .safe(try allocPrint(a, "/repo/{s}", .{name})),
         .desc = desc,
-        .upstream_blk = if (upstream) |u| .{ .link = u } else null,
-        .updated = updated,
+        .upstream_blk = if (upstream) |u| .{ .link = .safe(u) } else null,
+        .updated = .safe(updated),
         .tag = tag,
     };
 }
@@ -359,7 +361,7 @@ fn list(f: *Frame) Router.Error!void {
 
     const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo_iter = repos.allRepoIterator(vis, f.io) catch return error.Unknown;
-    var current_repos: ArrayList(Git.Repo) = .{};
+    var current_repos: ArrayList(Git.Repo) = .empty;
     while (repo_iter.next(f.io) catch return error.Unknown) |rpo_| {
         var rpo = rpo_;
         rpo.loadData(f.alloc, f.io) catch |err| {

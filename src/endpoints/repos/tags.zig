@@ -14,12 +14,12 @@ pub fn list(frame: *Frame) Router.Error!void {
         std.sort.heap(Git.Tag, rtags, {}, sort);
 
         for (rtags, tstack) |tag, *html_| {
-            html_.name = tag.name;
+            html_.name = .abx(tag.name);
         }
     }
 
     const upstream: ?S.RepoTagsHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+        .href = .abx(try allocPrint(frame.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     var page = TagPage.init(.{
@@ -27,7 +27,7 @@ pub fn list(frame: *Frame) Router.Error!void {
         .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
         .upstream = upstream,
         .tags = tstack,
-        .repo_name = rd.name,
+        .repo_name = .abx(rd.name),
     });
 
     try frame.sendPage(&page);

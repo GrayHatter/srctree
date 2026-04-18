@@ -38,7 +38,7 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]Template.Context {
     return try patch.diffsVerseSlice(a);
 }
 
-fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo) Error!void {
+fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     if (!Git.commitish(sha)) {
         std.debug.print("Abuse ''{s}''\n", .{sha});
@@ -83,10 +83,10 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const diffstat = patch.patchStat();
 
     var messages: []S.CommentThreadHtml.Messages = &.{};
-    if (CommitMap.open(repo_name_, current.sha, f.alloc, f.io)) |map| {
+    if (CommitMap.open(repo_name, current.sha, f.alloc, f.io)) |map| {
         switch (map.attach_to) {
             .delta => {
-                var delta = Delta.open(repo_name_, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
+                var delta = Delta.open(repo_name, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
                 messages = try delta_shared.genThreadMessages(
                     &delta,
                     &repo,
@@ -103,10 +103,9 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
     const patch_view_mode = updateFetchPatchView(f) catch .inlined;
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
-    const repo_name = try f.alloc.dupe(u8, repo_name_);
     const page_title = try allocPrint(f.alloc, "{f} - [{s}] committed to {s} about {f} - srctree", .{
         abx.Html{ .text = current.title },
         current.sha.text().slice()[0..10],
@@ -125,11 +124,9 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name_: []const u8, repo: Git.Repo
         .meta_head = .{ .title = page_title, .open_graph = .{ .title = og_title, .desc = og_desc } },
         .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
         .repo_header = .{
-            .repo_name = repo_name_,
-            .description = try allocPrint(f.alloc, "{f}", .{
-                abx.Html{ .text = repo.description(f.alloc, f.io) catch "" },
-            }),
-            .git_uri = .{ .host = "srctree.gr.ht", .repo_name = repo_name_ },
+            .repo_name = .abx(repo_name),
+            .description = .abx(repo.description(f.alloc, f.io) catch ""),
+            .git_uri = .{ .host = .safe("srctree.gr.ht"), .repo_name = .abx(repo_name) },
             .upstream = upstream,
             .blame = null,
         },
@@ -194,8 +191,8 @@ pub fn commitCtxParents(c: Git.Commit, repo: []const u8, a: Allocator) ![]S.Comm
         // TODO leaks on err
         if (par_cmt == null) continue;
         par.* = .{
-            .repo = repo,
-            .parent_sha_short = try a.dupe(u8, par_cmt.?.text().slice()),
+            .repo = .abx(repo),
+            .parent_sha_short = .safe(try par_cmt.?.text().dupe(a)),
         };
     }
 
@@ -212,12 +209,12 @@ pub fn commitCtx(c: Git.Commit, repo: []const u8, a: Allocator, io: Io) !S.Commi
     };
     const sha = try a.dupe(u8, c.sha.text().slice());
     return .{
-        .author = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.author.name }}) catch unreachable,
+        .author = .abx(c.author.name),
         .parents = try commitCtxParents(c, repo, a),
-        .repo = repo,
-        .sha = sha,
-        .sha_short = sha[0..8],
-        .title = allocPrint(a, "{f}", .{Verse.abx.Html{ .text = c.title }}) catch unreachable,
+        .repo = .abx(repo),
+        .sha = .safe(sha),
+        .sha_short = .safe(sha[0..8]),
+        .title = .abx(c.title),
         .body = w.written(),
     };
 }
@@ -241,19 +238,19 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
     const email = if (!include_email) "" else try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.author.email, ws) }});
 
     return .{
-        .repo = repo_name,
+        .repo = .abx(repo_name),
         .body = if (c.body.len > 0) try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.body, ws) }}) else null,
-        .title = try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.title, ws) }}),
+        .title = .abx(trim(u8, c.title, ws)),
         .cmt_line_src = .{
-            .pre = "by ",
-            .link_root = "/user?user=",
-            .link_target = email,
-            .name = try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.author.name, ws) }}),
+            .pre = .safe("by "),
+            .link_root = .safe("/user?user="),
+            .link_target = .abx(email),
+            .name = .abx(trim(u8, c.author.name, ws)),
         },
-        .day = try allocPrint(a, "{f}", .{std.fmt.alt(date, .format)}),
-        .weekday = date.weekdaySlice(),
-        .time = try allocPrint(a, "{f}", .{std.fmt.alt(date, .fmtDay)}),
-        .sha = try allocPrint(a, "{f}", .{std.fmt.alt(c.sha, .fmtHex)}),
+        .day = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(date, .format)})),
+        .weekday = .safe(date.weekdaySlice()),
+        .time = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(date, .fmtDay)})),
+        .sha = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(c.sha, .fmtHex)})),
     };
 }
 
@@ -369,8 +366,8 @@ fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: 
 
         .commit_list = list,
         .after_commits = if (sha) |_| .{
-            .repo_name = repo_name,
-            .sha = sha_text.slice(),
+            .repo_name = .abx(repo_name),
+            .sha = .safe(sha_text.slice()),
         } else null,
     });
 
