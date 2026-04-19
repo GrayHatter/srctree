@@ -91,4 +91,28 @@ pub fn build(b: *std.Build) void {
     //if (b.args) |args| {
     //    send_email.addArgs(args);
     //}
+
+    const smtp = b.addExecutable(.{
+        .name = "smtp",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/smtp.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+        .use_llvm = use_llvm,
+        .use_lld = use_llvm,
+    });
+    b.installArtifact(smtp);
+
+    const smtp_test = b.addTest(.{
+        .root_module = smtp.root_module,
+    });
+    const run_smtp_test = b.addRunArtifact(smtp_test);
+    test_step.dependOn(&run_smtp_test.step);
+
+    const run_smtp = b.addRunArtifact(smtp);
+    run_smtp.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run_smtp.addArgs(args);
+    const run_smtp_step = b.step("smtp", "run smtp debug client");
+    run_smtp_step.dependOn(&run_smtp.step);
 }
