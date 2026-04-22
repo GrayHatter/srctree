@@ -4,10 +4,11 @@ pub const Client = struct {
     stream: net.Stream,
 
     reader: net.Stream.Reader,
-    read_bytes: [std.crypto.tls.Client.min_buffer_len * 4]u8 = undefined,
+    read_bytes: [tls.Client.min_buffer_len * 4]u8 = undefined,
     writer: net.Stream.Writer,
+    write_bytes: [tls.Client.min_buffer_len * 4]u8 = undefined,
     tls: ?Tls = null,
-    tls_buffer: [std.crypto.tls.Client.min_buffer_len * 2]u8 = undefined,
+    tls_buffer: [tls.Client.min_buffer_len * 2]u8 = undefined,
 
     pub const Answer = struct {
         continues: bool,
@@ -22,9 +23,9 @@ pub const Client = struct {
 
         pub const Config = struct {
             host: []const u8,
-            entropy: *const [std.crypto.tls.Client.Options.entropy_len]u8,
-            w_b: *[std.crypto.tls.Client.min_buffer_len]u8,
-            r_b: *[std.crypto.tls.Client.min_buffer_len]u8,
+            entropy: *const [tls.Client.Options.entropy_len]u8,
+            w_b: *[tls.Client.min_buffer_len]u8,
+            r_b: *[tls.Client.min_buffer_len]u8,
             now: Io.Timestamp,
         };
 
@@ -66,40 +67,14 @@ pub const Client = struct {
     }
 
     fn helloWrite(c: *Client) !void {
-        const r = c.getReader();
+        //const r = c.getReader();
         try c.write("EHLO ", "local.srctree.gr.ht");
         try c.flush();
-        try r.fillMore();
+        //try r.fillMore();
         while (try c.takeAnswer()) |ans| {
             if (!ans.continues) break;
         }
-
-        try c.write("MAIL FROM:", "<srctree@evilcorp.ltd>");
-        try c.flush();
-        while (try c.takeAnswer()) |ans| {
-            if (ans.code == .@"530") return error.TlsRequired;
-            if (!ans.continues) break;
-        }
-
-        try c.write("RCPT TO:", "<srctree-admin@gr.ht>");
-        try c.flush();
-        while (try c.takeAnswer()) |ans| {
-            if (!ans.continues) break;
-        }
-
-        try c.write("DATA", "");
-        try c.flush();
-        while (try c.takeAnswer()) |ans| {
-            if (!ans.continues) break;
-        }
-
-        try c.message();
-
-        while (try c.takeAnswer()) |ans| {
-            if (!ans.continues) break;
-        }
-
-        try c.write("QUIT", "");
+        try c.write("", "NOOP");
         try c.flush();
         while (try c.takeAnswer()) |ans| {
             if (!ans.continues) break;
@@ -108,26 +83,34 @@ pub const Client = struct {
 
     pub fn hello(c: *Client, io: Io) !void {
         c.reader = c.stream.reader(io, &c.read_bytes);
-        c.writer = c.stream.writer(io, &.{});
+        c.writer = c.stream.writer(io, &c.write_bytes);
         _ = (try c.takeAnswer()) orelse return error.IntroHeaderMissing;
 
-        c.helloWrite() catch |e| switch (e) {
-            error.TlsRequired => {
-                try c.write("", "STARTTLS");
-                try c.startTls(io);
-                try c.flush();
-                c.helloWrite() catch unreachable;
-            },
-            else => unreachable,
-        };
+        try c.helloWrite();
+        try c.write("", "STARTTLS");
+        try c.flush();
+        while (try c.takeAnswer()) |ans| {
+            if (!ans.continues) break;
+        }
+        try c.startTls(io);
+        try c.helloWrite();
+        try c.sendMessage(.simple(
+            "<srctree-admin@gr.ht>",
+            "<srctree@evilcorp.ltd>",
+            "subject",
+            "msg",
+        ));
     }
 
-    fn message(c: *Client) !void {
+    fn message(c: *Client, envelope: Envelope) !void {
+        _ = envelope;
         try c.write("",
-            \\From: "Saf Trustmenton" <srctree@evilcorp.ltd>
+            //\\From: "Saf Trustmenton" <srctree@evilcorp.ltd>
+            \\From: "Smrt Sorsadmen" <srctree-admin@gr.ht>
         );
         try c.write("",
-            \\To: "Smrt Sorsadmen" <srctree-admin@gr.ht>
+            //\\To: "Smrt Sorsadmen" <srctree-admin@gr.ht>
+            \\To: "Saf Trustmenton" <srctree@evilcorp.ltd>
         );
         try c.write("Date: Thu, 5 Nov 2026 04:32:44 -0000", "");
         try c.write("Subject: New feature idea for srctree", "");
@@ -145,19 +128,42 @@ pub const Client = struct {
         try c.flush();
     }
 
-    pub fn sendMessage(_: *Client, msg: []const u8) !void {
-        _ = msg;
+    pub fn sendMessage(c: *Client, msg: Message) !void {
+        std.debug.assert(msg.mailbox.from.len > 5);
+        try c.write("MAIL FROM:", msg.mailbox.from);
+        try c.flush();
+        while (try c.takeAnswer()) |ans| {
+            if (ans.code == .@"530") return error.TlsRequired;
+            if (!ans.continues) break;
+        }
+
+        std.debug.assert(msg.mailbox.to.len > 0);
+        for (msg.mailbox.to) |to| {
+            std.debug.assert(to.len > 5);
+            try c.write("RCPT TO:", to);
+            try c.flush();
+            while (try c.takeAnswer()) |ans| if (!ans.continues) break;
+        }
+
+        try c.write("DATA", "");
+        try c.flush();
+        while (try c.takeAnswer()) |ans| if (!ans.continues) break;
+        try c.message(msg.envelope);
+        while (try c.takeAnswer()) |ans| if (!ans.continues) break;
+        try c.write("QUIT", "");
+        try c.flush();
+        while (try c.takeAnswer()) |ans| if (!ans.continues) break;
     }
 
     fn flush(c: *Client) !void {
-        if (c.tls) |tls| try tls.writer.flush();
+        if (c.tls) |*t| try t.client.writer.flush();
         try c.writer.interface.flush();
     }
 
     fn write(c: *Client, verb: []const u8, noun: []const u8) !void {
         std.debug.print("write: '{s}{s}\n", .{ verb, noun });
-        if (c.tls) |*tls| {
-            try tls.client.writer.print("{s}{s}\r\n", .{ verb, noun });
+        if (c.tls) |*t| {
+            try t.client.writer.print("{s}{s}\r\n", .{ verb, noun });
         } else try c.writer.interface.print("{s}{s}\r\n", .{ verb, noun });
     }
 
@@ -358,34 +364,59 @@ pub const Code = enum(u16) {
 
 pub const Mailbox = struct {
     from: []const u8,
-    to: []const []const u8 = &.{},
+    to: []const []const u8,
+
+    pub fn mb(from: []const u8, to: []const u8) !Envelope {
+        return .{
+            .from = from,
+            .to = &.{to},
+        };
+    }
 };
 
 pub const Envelope = struct {
-    headers: Headers,
-    message: []const u8,
-
-    pub const Headers = struct {
-        from: ?Header,
-        to: ?Header,
-        date: ?Header,
-        subject: ?Header,
-        extra: []const Header = &.{},
-    };
+    from: ?Header,
+    to: ?Header,
+    date: ?Header,
+    subject: ?Header,
+    extra: []const Header = &.{},
+    msg: []const u8,
 
     pub const Header = []const u8;
+
+    pub fn simple(from: []const u8, to: []const u8, subject: []const u8, msg: []const u8) Envelope {
+        return .{
+            .from = from,
+            .to = to,
+            .date = null, // FIXME
+            .subject = subject,
+            .msg = msg,
+        };
+    }
 };
 
 pub const Message = struct {
     mailbox: Mailbox,
-    data: Envelope,
+    envelope: Envelope,
+
+    pub fn simple(from: []const u8, to: []const u8, subject: []const u8, msg: []const u8) Message {
+        return .{
+            .mailbox = .{ .from = from, .to = &.{to} },
+            .envelope = .{
+                .from = from,
+                .to = to,
+                .date = null, // FIXME
+                .subject = subject,
+                .msg = msg,
+            },
+        };
+    }
 };
 
 pub fn main(init: std.process.Init) !void {
     var client: Client = try .init("gr.ht", .{
         .ip4 = .{
             .bytes = .{ 127, 0, 0, 1 },
-            //.port = 465,
             .port = 587,
         },
     }, init.io);
@@ -403,6 +434,7 @@ test {
 }
 
 const std = @import("std");
+const tls = std.crypto.tls;
 const Io = std.Io;
 const net = Io.net;
 const findScalar = std.mem.findScalar;
