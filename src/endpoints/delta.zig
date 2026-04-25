@@ -8,7 +8,7 @@ pub const AddCommentReq = struct {
     diff_id: []const u8,
     close: ?bool = false,
     submit: ?bool = false,
-    repoen: ?bool = false,
+    reopen: ?bool = false,
     lock: ?bool = false,
     unlock: ?bool = false,
 };
@@ -25,7 +25,13 @@ pub fn addComment(
 
     const user = if (f.user) |usr| usr.username.? else "public";
     var msg: ?Message = null;
-    if (valid.close.?) {
+    if (valid.reopen.?) {
+        msg = delta.setOpen(
+            .{ .author = user, .message = valid.comment },
+            f.alloc,
+            f.io,
+        ) catch return error.ServerFault;
+    } else if (valid.close.?) {
         msg = delta.setClosed(
             .{ .author = user, .message = valid.comment },
             f.alloc,

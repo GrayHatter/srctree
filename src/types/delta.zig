@@ -124,18 +124,29 @@ pub fn addMessage(delta: *Delta, m: Message, a: Allocator, io: Io) !void {
     try delta.commit(io);
 }
 
-pub fn setClosed(delta: *Delta, c: Comment, a: Allocator, io: Io) !?Message {
+fn setCommon(delta: *Delta, comptime fmt: []const u8, c: Comment, a: Allocator, io: Io) !?Message {
     var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
     var m: ?Message = null;
     if (c.message.len > 0)
         m = try thread.addComment(c.author, c.message, a, io);
 
     var b: [4096]u8 = undefined;
-    const state_msg = try bufPrint(&b, "closed by {s}", .{c.author});
+    const state_msg = try bufPrint(&b, fmt ++ " by {s}", .{c.author});
     try thread.addMessage(try .new(.state_change, delta.index, c.author, state_msg, io), a, io);
     delta.updated = thread.updated;
-    delta.state.closed = true;
     try delta.commit(io);
+    return m;
+}
+
+pub fn setClosed(delta: *Delta, c: Comment, a: Allocator, io: Io) !?Message {
+    delta.state.closed = true;
+    const m = try delta.setCommon("closed", c, a, io);
+    return m;
+}
+
+pub fn setOpen(delta: *Delta, c: Comment, a: Allocator, io: Io) !?Message {
+    delta.state.closed = false;
+    const m = try delta.setCommon("opened", c, a, io);
     return m;
 }
 
