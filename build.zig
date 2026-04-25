@@ -18,8 +18,14 @@ pub fn build(b: *std.Build) void {
         .@"require-abx" = true,
     });
 
+    const smtp = b.dependency("smtp", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
     // Set up verse
-    const verse_module = verse.module("verse");
+    const mod_verse = verse.module("verse");
+    const mod_smtp = smtp.module("smtp");
 
     // srctree
     const exe = b.addExecutable(.{
@@ -34,7 +40,8 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
     exe.root_module.addOptions("config", options);
-    exe.root_module.addImport("verse", verse_module);
+    exe.root_module.addImport("verse", mod_verse);
+    exe.root_module.addImport("smtp", mod_smtp);
 
     // build run
     const run_cmd = b.addRunArtifact(exe);
@@ -56,7 +63,7 @@ pub fn build(b: *std.Build) void {
         .use_lld = use_llvm,
     });
     unit_tests.root_module.addOptions("config", options);
-    unit_tests.root_module.addImport("verse", verse_module);
+    unit_tests.root_module.addImport("verse", mod_verse);
     const run_unit_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
@@ -91,28 +98,4 @@ pub fn build(b: *std.Build) void {
     //if (b.args) |args| {
     //    send_email.addArgs(args);
     //}
-
-    const smtp = b.addExecutable(.{
-        .name = "smtp",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/smtp.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-        .use_llvm = use_llvm,
-        .use_lld = use_llvm,
-    });
-    b.installArtifact(smtp);
-
-    const smtp_test = b.addTest(.{
-        .root_module = smtp.root_module,
-    });
-    const run_smtp_test = b.addRunArtifact(smtp_test);
-    test_step.dependOn(&run_smtp_test.step);
-
-    const run_smtp = b.addRunArtifact(smtp);
-    run_smtp.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_smtp.addArgs(args);
-    const run_smtp_step = b.step("smtp", "run smtp debug client");
-    run_smtp_step.dependOn(&run_smtp.step);
 }

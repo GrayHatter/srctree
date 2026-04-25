@@ -1,7 +1,7 @@
 .{
     .name = .srctree,
     .version = "0.0.0",
-    .minimum_zig_version = "0.16.0-dev.2535+b5bd49460",
+    .minimum_zig_version = "0.16.0",
     .fingerprint = 0x4eee355ffa6e50b7,
     .dependencies = .{
         .verse = .{
@@ -10,6 +10,10 @@
             //    // implementation is currently broken so an alt is provided
             .url = "git+https://github.com/GrayHatter/verse.git#eb7c5081cec0697df2026191216c81a612fcb7a6",
             .hash = "verse-0.0.4-B0Iw6yDJBQBdkTObUjRhX8C48pEvWbwWP7je5uFsh__a",
+        },
+        .smtp = .{
+            .url = "git+https://srctree.gr.ht:444/repos/smtp#8c041199d9398c74fe076423b3590321ccafbb6e",
+            .hash = "smtp-0.0.0-dev-8TnzDn1SAAAd3_NSaG8CeGnZUlIVVqKFTkKhtK3SPVpB",
         },
     },
 

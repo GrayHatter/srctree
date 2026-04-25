@@ -143,7 +143,10 @@ fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Alloc
                 comment_patch.parse(a) catch {
                     return .{
                         "<div class=\"sysmsg red\">Unable to parse invalid patch.</div>\n",
-                        try allocPrint(a, "{f}", .{abx.Html{ .text = msg.message orelse "[Empty Message]" }}),
+                        try allocPrint(a, "{f}", .{abx.Html{ .text = if (msg.message.len > 0)
+                            msg.message
+                        else
+                            "[Empty Message]" }}),
                     };
                 };
             },
@@ -151,14 +154,14 @@ fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Alloc
         }
         var w: Io.Writer.Allocating = .init(a);
         const writer = &w.writer;
-        const found = diffs_ep.translateComment(msg.message.?, comment_patch, repo, writer, a, io) catch
+        const found = diffs_ep.translateComment(msg.message, comment_patch, repo, writer, a, io) catch
             return error.ServerFault;
         if (!found) systag = null;
         comment_body = try w.toOwnedSlice();
     } else {
         var w: Io.Writer.Allocating = .init(a);
         const writer = &w.writer;
-        _ = diffs_ep.translateComment(msg.message.?, .{ .diffs = &.{}, .blob = &.{} }, repo, writer, a, io) catch
+        _ = diffs_ep.translateComment(msg.message, .{ .diffs = &.{}, .blob = &.{} }, repo, writer, a, io) catch
             return error.ServerFault;
         comment_body = try w.toOwnedSlice();
         //comment_body = try allocPrint(a, "{f}", .{abx.Html{
@@ -190,18 +193,18 @@ pub fn genThreadMessages(
         const systag, const body = try decodeMessage(msg, repo, patch, a, io);
         html.* = switch (msg.kind) {
             .comment => .{
-                .author = .abx(try a.dupe(u8, msg.author orelse "[no offer]")),
+                .author = .abx(try a.dupe(u8, msg.author orelse "[no author]")),
                 .date = .safe(date),
                 .system_tag = systag,
                 .message = .safe(body),
                 .edit = if (btns.edit) .{ .index = delta.index, .hash = .safe(msg_hash) } else null,
-                .direct_reply = .{ .index = delta.index, .hash = .safe(msg_hash) },
+                .direct_reply = null, // .{ .index = delta.index, .hash = .safe(msg_hash) },
                 .sub_thread = null,
             },
             .diff_update => .{
                 .author = .abx(try a.dupe(u8, msg.author orelse "[no offer]")),
                 .date = .safe(date),
-                .message = .abx(msg.message.?),
+                .message = .abx(msg.message),
                 .edit = null,
                 .direct_reply = null,
                 .sub_thread = null,
@@ -210,7 +213,7 @@ pub fn genThreadMessages(
                 .class = "system",
                 .author = .abx(try a.dupe(u8, msg.author orelse "[no offer]")),
                 .date = .safe(date),
-                .message = .abx(msg.message.?),
+                .message = .abx(msg.message),
                 .edit = null,
                 .direct_reply = null,
                 .sub_thread = null,

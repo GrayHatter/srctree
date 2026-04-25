@@ -10,7 +10,7 @@ author: ?[]const u8 = null,
 // TODO stabilize or replace this hack
 extra0: usize = 0,
 // Processed internally
-message: ?[]const u8 = null,
+message: []const u8,
 
 const Message = @This();
 
@@ -31,6 +31,7 @@ const typeio = Types.readerWriter(Message, .{
     .state = .default,
     .target = undefined,
     .kind = undefined,
+    .message = &.{},
 });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
@@ -61,7 +62,7 @@ pub fn commit(msg: Message, io: Io) !void {
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
     try writerFn(&msg, &fd_writer.interface);
-    try fd_writer.interface.writeAll(msg.message orelse "");
+    try fd_writer.interface.writeAll(msg.message);
     try fd_writer.interface.flush();
 }
 
@@ -69,7 +70,7 @@ pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
     var reader = try Types.loadDataHashId(.message, hash, a, io);
     var msg = readerFn(&reader);
 
-    if (msg.message == null or msg.message.?.len == 0) {
+    if (msg.message.len == 0) {
         if (find(u8, reader.buffer, "\n\n")) |start| {
             msg.message = reader.buffer[start + 2 ..];
         }
@@ -88,16 +89,16 @@ pub fn genHash(msg: *Message) *const DefaultHash {
     switch (msg.kind) {
         .comment => {
             h.update(msg.author orelse "");
-            h.update(msg.message orelse "");
+            h.update(msg.message);
         },
         .diff_update => {
             h.update(msg.author orelse "");
             // Message is required for diff patch updates
-            h.update(msg.message.?);
+            h.update(msg.message);
         },
         .state_change => {
             h.update(msg.author orelse "");
-            h.update(msg.message.?);
+            h.update(msg.message);
         },
     }
     h.final(&msg.hash);
