@@ -45,14 +45,15 @@ pub fn blame(f: *Frame) Router.Error!void {
     }
 
     const count = map.count();
+    if (count == 0) return error.InvalidURI;
     const tsblocks = f.alloc.alloc(i64, count) catch return error.Unknown;
     for (tsblocks, map.values()) |*dst, src| {
         dst.* = src.committer.timestamp;
     }
     std.mem.sort(i64, tsblocks, {}, intSort);
-    const min: usize = @abs(tsblocks[tsblocks.len - 1]);
+    const min: usize = @abs(tsblocks[tsblocks.len -| 1]);
     const max: usize = @abs(tsblocks[0]);
-    const range = @max(1, (max - min) / (style_blocks.len - 1));
+    const range = @max(1, (max - min) / (style_blocks.len -| 1));
 
     for (map.values()) |*dst| {
         const block = (@abs(dst.committer.timestamp) - min) / range;
