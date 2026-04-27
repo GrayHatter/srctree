@@ -12,8 +12,8 @@
             .hash = "verse-0.0.4-B0Iw6yDJBQBdkTObUjRhX8C48pEvWbwWP7je5uFsh__a",
         },
         .smtp = .{
-            .url = "git+https://srctree.gr.ht:444/repos/smtp#8c041199d9398c74fe076423b3590321ccafbb6e",
-            .hash = "smtp-0.0.0-dev-8TnzDn1SAAAd3_NSaG8CeGnZUlIVVqKFTkKhtK3SPVpB",
+            .url = "git+https://srctree.gr.ht:444/repos/smtp#15a0d5bd7d539a853f60faf564d871716d4062e3",
+            .hash = "smtp-0.0.0-dev-8TnzDkRSAADVv6r7NXXV2hdP2O5v2N6m6al36BRl1xsm",
         },
     },
 

@@ -53,14 +53,14 @@ pub const Visibility = enum {
     /// public, but use with caution, might cause side channel leakage
     pub fn fromConfig(name: []const u8) Visibility {
         if (global_config.repos) |crepos| {
-            if (crepos.@"private-repos") |hr| {
+            if (crepos.private_repos) |hr| {
                 // if you actually use null, I hate you!
                 var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
                 while (repo_itr.next()) |r| {
                     if (eql(u8, name, r))
                         return .private;
                 }
-            } else if (crepos.@"unlisted-repos") |hr| {
+            } else if (crepos.unlisted_repos) |hr| {
                 // if you actually use null, I hate you!
                 var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
                 while (repo_itr.next()) |r| {

@@ -1,0 +1,28 @@
+[owner]
+# email = committer-email@gr.ht
+# tz = -0800
+
+[agent]
+# enabled = false
+# upstream_push = false
+# upstream_pull = false
+# downstream_push = false
+# downstream_pull = false
+# skip_repos = repo-without-remotes
+
+[server]
+# sock = ./srctree.sock
+remove_on_start = true
+
+[repos]
+# dir = repos/
+# private_dir = private-repos/
+# private_repos = private-repo,archived-repo
+# unlisted_repos = unlisted-repo
+
+[notifications]
+# enabled = false
+# Due to a bug in smtp, the email must be in the following format
+# sender = "Name" <notif-sender@gr.ht>
+# Due to a bug in smtp, the email must be in the following format
+# receiver = "Notifer" <email-to@gr.ht>

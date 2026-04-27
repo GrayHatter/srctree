@@ -47,39 +47,53 @@ const Options = struct {
 };
 
 pub const SrcConfig = struct {
-    owner: ?struct {
-        email: ?[]const u8,
-        tz: ?[]const u8,
-    },
+    server: ?SrcConfig.Server,
+    owner: ?Owner,
+    repos: ?SrcConfig.Repos,
     agent: ?Agent,
-    server: ?struct {
+    notifications: ?Notifications,
+
+    pub const Server = struct {
         sock: ?[]const u8,
         remove_on_start: bool = false,
-    },
-    repos: ?struct {
+    };
+
+    pub const Owner = struct {
+        email: ?[]const u8,
+        tz: ?[]const u8,
+    };
+
+    pub const Repos = struct {
         /// Directory of public repos
         dir: ?[]const u8,
         /// Directory of private repos
         private_dir: ?[]const u8,
         /// List of repos that should be hidden
-        @"private-repos": ?[]const u8,
-        @"unlisted-repos": ?[]const u8,
-    },
+        private_repos: ?[]const u8,
+        unlisted_repos: ?[]const u8,
+    };
 
     pub const Agent = struct {
         enabled: bool = false,
+        skip_repos: ?[]const u8 = null,
         upstream_push: bool = false,
         upstream_pull: bool = false,
         downstream_push: bool = false,
         downstream_pull: bool = false,
-        @"skip-repos": ?[]const u8 = null,
+    };
+
+    pub const Notifications = struct {
+        enabled: bool = false,
+        sender: ?[]const u8 = null,
+        receiver: ?[]const u8 = null,
     };
 
     pub const empty: SrcConfig = .{
-        .owner = null,
-        .agent = null,
         .server = null,
+        .owner = null,
         .repos = null,
+        .agent = null,
+        .notifications = null,
     };
 };
 
@@ -164,7 +178,7 @@ pub fn main(init: std.process.Init) !void {
             .push = global_config.agent.?.downstream_push,
             .pull = global_config.agent.?.downstream_pull,
         },
-        .skips = global_config.agent.?.@"skip-repos",
+        .skips = global_config.agent.?.skip_repos,
     }, io);
     try agent.startThread();
     defer agent.joinThread();
