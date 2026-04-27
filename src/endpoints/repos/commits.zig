@@ -106,16 +106,20 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
+    const human_time = Humanize.unix(current.committer.timestamp, now);
+
     const page_title = try allocPrint(f.alloc, "{f} - [{s}] committed to {s} about {f} - srctree", .{
         abx.Html{ .text = current.title },
         current.sha.text().slice()[0..10],
         repo_name,
-        Humanize.unix(current.committer.timestamp, now),
+        human_time,
     });
-    const og_title = try allocPrint(f.alloc, "Commit by {s}: {} file{s} changed +{} -{}", .{
+
+    const og_title = try allocPrint(f.alloc, "Commit by {s}: changed {} file{s} {f} [+{} -{}k", .{
         allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
         diffstat.files,
         if (diffstat.files > 1) "s" else "",
+        human_time,
         diffstat.additions,
         diffstat.deletions,
     });
@@ -235,7 +239,9 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
     const ws = " \t\n";
     const date = Datetime.fromEpoch(c.author.timestamp);
 
-    const email = if (!include_email) "" else try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.author.email, ws) }});
+    const email = if (!include_email) "" else try allocPrint(a, "{f}", .{
+        abx.Html{ .text = trim(u8, c.author.email, ws) },
+    });
 
     return .{
         .repo = .abx(repo_name),
