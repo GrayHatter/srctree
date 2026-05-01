@@ -12,7 +12,11 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
     return Router.router(ctx, &endpoints);
 }
 
-fn gitUploadPack(f: *Frame) Error!void {
+// TODO
+// https://git-scm.com/docs/git-config#Documentation/git-config.txt-receivemaxInputSize
+// https://git-scm.com/docs/git-config#Documentation/git-config.txt-receivedenyDeletes
+
+fn gitEndpoint(f: *Frame) Error!void {
     f.uri.reset();
     _ = f.uri.first();
     const name = f.uri.next() orelse return error.Unknown;
@@ -21,20 +25,22 @@ fn gitUploadPack(f: *Frame) Error!void {
         return error.Abuse;
     }
 
-    var path_buf: [2048]u8 = undefined;
-    const path_tr = std.fmt.bufPrint(&path_buf, "repos/{s}/{s}", .{ name, target }) catch unreachable;
-    log.warn("pathtr {s}", .{path_tr});
+    return gitUploadPack(f, name, target);
+}
+
+fn prepareEnv(f: *Frame) !std.process.Environ.Map {
+    f.uri.reset();
+    _ = f.uri.first();
+    const repo = f.uri.next() orelse return error.Unknown;
+    const target = f.uri.rest();
 
     var map = std.process.Environ.Map.init(f.alloc);
-    defer map.deinit();
+
+    const path_tr = allocPrint(f.alloc, "repos/{s}/{s}", .{ repo, target }) catch unreachable;
+    log.warn("pathtr {s}", .{path_tr});
+
     try map.put("PATH_TRANSLATED", path_tr);
-    var gz_encoding = false;
-    //(if GIT_PROJECT_ROOT is set, otherwise PATH_TRANSLATED)
-    if (f.request.method == .GET) {
-        try map.put("REQUEST_METHOD", "GET");
-    } else {
-        try map.put("REQUEST_METHOD", "POST");
-    }
+    try map.put("REQUEST_METHOD", if (f.request.method == .GET) "GET" else "POST");
     const qstr = f.request.data.query.bytes;
     if (eql(u8, qstr, "service=git-upload-pack")) {
         try map.put("QUERY_STRING", "service=git-upload-pack");
@@ -42,12 +48,28 @@ fn gitUploadPack(f: *Frame) Error!void {
         log.warn("query string '{s}'", .{qstr});
         try map.put("QUERY_STRING", "");
     }
-
     try map.put("REMOTE_USER", "");
     try map.put("REMOTE_ADDR", f.request.remote_addr);
     try map.put("CONTENT_TYPE", "application/x-git-upload-pack-request");
     try map.put("GIT_PROTOCOL", "version=2");
     try map.put("GIT_HTTP_EXPORT_ALL", "true");
+
+    try map.put("SRCTREE_HOST", "srctree.gr.ht");
+    try map.put("SRCTREE_REPO", repo);
+
+    return map;
+}
+
+fn gitReceivePack(f: *Frame) Error!void {
+    var map = try prepareEnv(f);
+    defer map.deinit();
+    return;
+}
+
+fn gitUploadPack(f: *Frame) Error!void {
+    var gz_encoding = false;
+    var map = try prepareEnv(f);
+    defer map.deinit();
 
     switch (f.downstream.gateway) {
         .zwsgi => |z| {
@@ -147,6 +169,7 @@ const Reader = std.Io.Reader;
 const POLL = std.posix.POLL;
 const eql = std.mem.eql;
 const log = std.log.scoped(.gitweb);
+const allocPrint = std.fmt.allocPrint;
 
 const verse = @import("verse");
 const Frame = verse.Frame;
