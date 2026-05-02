@@ -99,7 +99,7 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     }
                 },
             },
-            .browser => {
+            .browser => |bwsr| {
                 const real_ua = ua.validate(fr.request);
                 log.warn("Claims to be a browser\n", .{});
 
@@ -107,6 +107,13 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     real_ua.agent.bot.name == .malicious)) and
                     ua.agent.browser.version != 128)
                 {
+                    log.err("Dropping malicious traffic", .{});
+                    fr.dumpDebugData(.{});
+                    ua.dumpValidation(fr.request);
+                    return Router.defaultResponse(.not_found);
+                }
+
+                if ((bwsr.name == .chrome or bwsr.name == .edge) and bwsr.version <= 137) {
                     log.err("Dropping malicious traffic", .{});
                     fr.dumpDebugData(.{});
                     ua.dumpValidation(fr.request);

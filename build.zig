@@ -14,8 +14,9 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
         .@"template-path" = b.path("templates"),
-        .ua_validation = true,
-        .@"require-abx" = true,
+        .@"ua-validation" = true,
+        .@"abx-required" = true,
+        .@"accept-lang-heat" = "",
     });
 
     const smtp = b.dependency("smtp", .{
