@@ -115,7 +115,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         human_time,
     });
 
-    const og_title = try allocPrint(f.alloc, "Commit by {s}: changed {} file{s} {f} [+{} -{}k", .{
+    const og_title = try allocPrint(f.alloc, "Commit by {s}: changed {} file{s} {f} [+{} -{}]", .{
         allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
         diffstat.files,
         if (diffstat.files > 1) "s" else "",
