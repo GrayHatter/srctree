@@ -26,3 +26,7 @@ remove_on_start = true
 # sender = "Name" <notif-sender@gr.ht>
 # Due to a bug in smtp, the email must be in the following format
 # receiver = "Notifer" <email-to@gr.ht>
+
+[git]
+push_enabled = false
+pull_enabled = true

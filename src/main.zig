@@ -52,6 +52,7 @@ pub const SrcConfig = struct {
     repos: ?SrcConfig.Repos,
     agent: ?Agent,
     notifications: ?Notifications,
+    git: ?Git,
 
     pub const Server = struct {
         sock: ?[]const u8,
@@ -88,12 +89,18 @@ pub const SrcConfig = struct {
         receiver: ?[]const u8 = null,
     };
 
+    pub const Git = struct {
+        push_enabled: bool = false,
+        pull_enabled: bool = true,
+    };
+
     pub const empty: SrcConfig = .{
         .server = null,
         .owner = null,
         .repos = null,
         .agent = null,
         .notifications = null,
+        .git = null,
     };
 };
 

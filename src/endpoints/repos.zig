@@ -61,6 +61,7 @@ pub const RepoRouter = struct {
         info,
         objects,
         @"git-upload-pack",
+        @"git-receive-pack",
 
         pub fn fromSlice(slice: ?[]const u8) ?Verb {
             const s = slice orelse return null;
@@ -198,6 +199,12 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
 
     const vis: repos.Visibility.Select = if (f.user) |_| .all else .public_only;
     if (rd.exists(vis, f.io)) {
+        if (f.request.user_agent) |ua| {
+            if (ua.agent == .script and ua.agent.script.name == .git) {
+                return gitweb.router(f);
+            }
+        }
+
         if (repos.open(rd.name, vis, f.io)) |repo_| b: {
             var repo = repo_ orelse break :b;
             if (repo.loadData(f.alloc, f.io)) {
