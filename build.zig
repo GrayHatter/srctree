@@ -19,10 +19,7 @@ pub fn build(b: *std.Build) void {
         .@"accept-lang-heat" = "",
     });
 
-    const smtp = b.dependency("smtp", .{
-        .target = target,
-        .optimize = optimize,
-    });
+    const smtp = b.dependency("smtp", .{ .target = target, .optimize = optimize });
 
     // Set up verse
     const mod_verse = verse.module("verse");
@@ -99,4 +96,15 @@ pub fn build(b: *std.Build) void {
     //if (b.args) |args| {
     //    send_email.addArgs(args);
     //}
+
+    const hooks = b.addExecutable(.{
+        .name = "srctree-hooks",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/hooks.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.installArtifact(hooks);
+    deploy.dependOn(&hooks.step);
 }
