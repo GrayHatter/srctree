@@ -66,16 +66,6 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_unit_tests.step);
 
-    const deploy = b.step("deploy", "insall exes & static files");
-    const deploy_bin = b.addInstallArtifact(exe, .{});
-    deploy.dependOn(&deploy_bin.step);
-    const static_files = b.addInstallDirectory(.{
-        .source_dir = b.path("static"),
-        .install_dir = .prefix,
-        .install_subdir = "static",
-    });
-    deploy.dependOn(&static_files.step);
-
     // Partner Binaries
     //const maild = b.addExecutable(.{
     //    .name = "srctree-maild",
@@ -106,5 +96,16 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(hooks);
-    deploy.dependOn(&hooks.step);
+
+    const deploy = b.step("deploy", "insall exes & static files");
+    const static_files = b.addInstallDirectory(.{
+        .source_dir = b.path("static"),
+        .install_dir = .prefix,
+        .install_subdir = "static",
+    });
+    const deploy_exe = b.addInstallArtifact(exe, .{});
+    const deploy_hooks = b.addInstallArtifact(hooks, .{});
+    deploy.dependOn(&deploy_exe.step);
+    deploy.dependOn(&deploy_hooks.step);
+    deploy.dependOn(&static_files.step);
 }
