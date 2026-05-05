@@ -202,6 +202,7 @@ const Env = struct {
     }
 
     pub fn raze(env: Env, a: Allocator) void {
+        env.map.deinit(a);
         env.push_options.deinit(a);
     }
 };
