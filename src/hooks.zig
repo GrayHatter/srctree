@@ -20,16 +20,18 @@ pub fn main(init: std.process.Init) !u8 {
         // https://git-scm.com/docs/githooks#post-receive
         postReceive(stdin, &env) catch return 1;
     } else if (endsWith(u8, arg0, "update")) {
-        // https://git-scm.com/docs/githooks#update
-        update(
-            args.next() orelse return 255,
-            args.next() orelse return 255,
-            args.next() orelse return 255,
-            &env,
-        ) catch return 1;
-    } else if (endsWith(u8, arg0, "post-update")) {
-        // https://git-scm.com/docs/githooks#post-update
-        postUpdate(&env) catch return 1;
+        if (endsWith(u8, arg0, "post-update")) {
+            // https://git-scm.com/docs/githooks#post-update
+            postUpdate(&env) catch return 1;
+        } else {
+            // https://git-scm.com/docs/githooks#update
+            update(
+                args.next() orelse return 255,
+                args.next() orelse return 255,
+                args.next() orelse return 255,
+                &env,
+            ) catch return 1;
+        }
     } else if (endsWith(u8, arg0, "proc-receive")) {
         // https://git-scm.com/docs/githooks#proc-receive
         procReceive(&env) catch return 1;
