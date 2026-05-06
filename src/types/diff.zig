@@ -19,10 +19,10 @@ pub const type_version: usize = 1;
 // TODO reimplement as packed struct once supported by Types.readerWriter
 pub const State = enum(usize) {
     nos = 0,
-    // Bool bits
     pending = 1,
     curl = 2,
     pending_curl = 3,
+    diff_repo_branch = 4,
 };
 
 const typeio = Types.readerWriter(Diff, .{
