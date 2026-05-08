@@ -306,6 +306,41 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
+fn svgPoints(repo: *const Git.Repo, arena: Allocator, io: Io) !abx.Html {
+    const width = 52 * "l 100 100 ".len;
+    const b = try arena.alloc(u8, width);
+    errdefer arena.free(b);
+    var w: Writer = .fixed(b);
+
+    var now: Io.Timestamp = .now(io, .real);
+    var heat: [52]u16 = @splat(0);
+
+    var max: isize = 1;
+    var commit: Git.Commit = repo.headCommit(arena, io) catch return .safe("V 46 M 109 46 ");
+
+    for (0..52) |i| {
+        const first = now.addDuration(.fromSeconds(-86400 * 7));
+        defer now = first;
+        const week: *u16 = &heat[heat.len - 1 - i];
+        while (commit.committer.timestamp > first.toSeconds()) {
+            commit = commit.toParent(0, repo, arena, io) catch break;
+            week.* +|= 1;
+        }
+        max = @max(max, week.*);
+    }
+
+    var hob: isize = 0;
+    for (heat) |week| {
+        const adjst: isize = @divTrunc(41 * @as(isize, @intCast(week)), max);
+        if (hob - adjst != 0)
+            w.print("l 2 {} ", .{0 + hob - adjst}) catch unreachable
+        else
+            w.writeAll("h 2 ") catch unreachable;
+        hob = adjst;
+    }
+    return .safe(w.buffered());
+}
+
 fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
     const now = Io.Clock.real.now(io).toSeconds();
     const desc: []const u8 = try allocPrint(a, "{f}", .{
@@ -353,6 +388,7 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
         .upstream_blk = if (upstream) |u| .{ .link = .safe(u) } else null,
         .updated = .safe(updated),
         .tag = tag,
+        .svg_points = try svgPoints(repo, a, io),
     };
 }
 
@@ -423,6 +459,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
+const Writer = Io.Writer;
 const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const log = std.log.scoped(.srctree);
