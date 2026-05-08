@@ -1,17 +1,15 @@
 pub fn main(init: std.process.Init) !u8 {
+    const a = init.arena.allocator();
+    const io = init.io;
     var args = init.minimal.args.iterate();
     const arg0 = args.next() orelse @panic("impressive, how'd you reach this?");
-    std.debug.print("arg0: {s}\n", .{arg0});
-    while (args.next()) |arg| {
-        std.debug.print("arg: {s}\n", .{arg});
-    }
 
     var stdin_f: std.Io.File = .stdin();
     var sin_b: [4096]u8 = undefined;
     var in_reader = stdin_f.reader(init.io, &sin_b);
     const stdin = &in_reader.interface;
 
-    const env: Env = try .init(&init.minimal.environ, init.arena.allocator());
+    const env: Env = try .init(&init.minimal.environ, a);
 
     if (endsWith(u8, arg0, "pre-receive")) {
         // https://git-scm.com/docs/githooks#pre-receives
@@ -25,12 +23,32 @@ pub fn main(init: std.process.Init) !u8 {
             postUpdate(&env) catch return 1;
         } else {
             // https://git-scm.com/docs/githooks#update
-            update(
-                args.next() orelse return 255,
-                args.next() orelse return 255,
-                args.next() orelse return 255,
-                &env,
-            ) catch return 1;
+            const ref = args.next() orelse return 255;
+            const old = args.next() orelse return 255;
+            const new = args.next() orelse return 255;
+            update(ref, old, new, &env, a, io) catch |err| {
+                switch (err) {
+                    error.UnsupportedEnv => {
+                        std.debug.print("error: Server environ not set up correctly\n", .{});
+                        return 1;
+                    },
+                    error.NoSpaceLeft => unreachable,
+                    error.NotImplemented => unreachable,
+                    //error.TargetExists => {
+                    //    std.debug.print("error: Target ref already exists.\n", .{});
+                    //    return 1;
+                    //},
+                    error.MalformedTarget => {
+                        std.debug.print("error: You are unable to push to this ref\n", .{});
+                        return 1;
+                    },
+                    error.FSFault => unreachable,
+                    error.DeltaDoesNotExist, error.DisallowedTarget => {
+                        std.debug.print("error: Destination diff doesn't exist, or push isn't enabled for this repo/branch\n", .{});
+                        return 1;
+                    },
+                }
+            };
         }
     } else if (endsWith(u8, arg0, "proc-receive")) {
         // https://git-scm.com/docs/githooks#proc-receive
@@ -67,7 +85,7 @@ pub fn preReceive(stdin: *Reader, _: *const Env) !void {
         const old = itr.next() orelse return error.InvalidReceiveLine;
         const new = itr.next() orelse return error.InvalidReceiveLine;
         const ref = itr.rest();
-        std.debug.print("line: {s} {s} {s}\n", .{ old, new, ref });
+        if (false) std.debug.print("line: {s} {s} {s}\n", .{ old, new, ref });
     } else |_| return;
 }
 
@@ -80,7 +98,15 @@ pub fn postReceive(stdin: *Reader, _: *const Env) !void {
     } else |_| return;
 }
 
-pub fn update(ref: []const u8, old_oid: []const u8, target_oid: []const u8, env: *const Env) !void {
+pub fn update(
+    ref: []const u8,
+    old_oid: []const u8,
+    target_oid: []const u8,
+    env: *const Env,
+    a: Allocator,
+    io: std.Io,
+) !void {
+    std.debug.print("update {any}\n", .{env});
     // This hook is invoked by git-receive-pack[1] when it reacts to git
     // push and updates reference(s) in its repository. Just before
     // updating the ref on the remote repository, the update hook is
@@ -115,8 +141,21 @@ pub fn update(ref: []const u8, old_oid: []const u8, target_oid: []const u8, env:
     if (false) std.debug.print("{s} {s} {s}\n", .{ ref, old_oid, target_oid });
     switch (env.method) {
         .unknown => return error.UnsupportedEnv,
-        .http => return error.HttpPushDisabled,
         .git => return error.NotImplemented,
+        .http => {
+            if (!eql(u8, old_oid, &@as([32]u8, @splat(0)))) {
+                if (false and true) return error.TargetExists;
+            }
+            if (cutPrefix(u8, ref, "refs/heads/diffs/")) |dif_num| {
+                const idx = std.fmt.parseInt(usize, dif_num, 0) catch return error.MalformedTarget;
+                var delta = Delta.open(env.repo.?, idx, a, io) catch |err| {
+                    return err;
+                };
+                _ = &delta;
+            } else {
+                return error.DisallowedTarget;
+            }
+        },
         .ssh => {},
         .file => {},
     }
@@ -172,16 +211,22 @@ const PushMethod = enum {
 
 const Env = struct {
     map: std.process.Environ.Map,
+    push_options: StringHashMap(void),
     method: PushMethod,
-    push_options: ArrayList([]const u8),
+    host: ?[]const u8,
+    repo: ?[]const u8,
 
     pub fn init(env: *const std.process.Environ, a: Allocator) !Env {
         var map = try env.createMap(a);
         var method: PushMethod = .unknown;
+        const host: ?[]const u8 = map.get("SRCTREE_HOST");
+        const repo: ?[]const u8 = map.get("SRCTREE_REPO");
+
         if (map.contains("SRCTREE_HTTP")) {
             method = .http;
         }
-        var list: ArrayList([]const u8) = .empty;
+
+        var list: StringHashMap(void) = .empty;
         if (map.contains("GIT_PUSH_OPTION_COUNT")) {
             const count = std.fmt.parseInt(usize, map.get("GIT_PUSH_OPTION_COUNT").?, 0) catch return error.BadEnvCount;
             if (count > 0) {
@@ -189,7 +234,7 @@ const Env = struct {
                 for (0..count) |i| {
                     const opt_str = try std.fmt.bufPrint(&b, "GIT_PUSH_OPTION_{}", .{i});
                     const opt = map.get(opt_str) orelse return error.ExpectedEnvMissing;
-                    try list.append(a, opt);
+                    try list.put(a, opt, {});
                 }
             } else {
                 if (method == .http) return error.HttpMissingOption;
@@ -198,8 +243,10 @@ const Env = struct {
 
         return .{
             .map = map,
-            .method = method,
             .push_options = list,
+            .method = method,
+            .repo = repo,
+            .host = host,
         };
     }
 
@@ -213,5 +260,10 @@ const std = @import("std");
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Reader = std.Io.Reader;
+const eql = std.mem.eql;
 const endsWith = std.mem.endsWith;
 const splitScalar = std.mem.splitScalar;
+const cutPrefix = std.mem.cutPrefix;
+const types = @import("types.zig");
+const Delta = types.Delta;
+const StringHashMap = std.StringHashMapUnmanaged;

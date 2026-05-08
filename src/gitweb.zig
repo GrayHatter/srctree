@@ -49,6 +49,7 @@ fn prepareEnv(f: *Frame) !std.process.Environ.Map {
     try map.put("QUERY_STRING", "");
     try map.put("REMOTE_USER", "anon");
 
+    try map.put("SRCTREE_HTTP", "true");
     try map.put("SRCTREE_HOST", "srctree.gr.ht");
     try map.put("SRCTREE_REPO", rd.name);
 
