@@ -1,13 +1,5 @@
-html {
-	color: #3c3836;
-	background: #f9f5d7;
-	background-image: linear-gradient(0deg, #ffa3a3 0%, #eaeae7 6%);
-}
-a {
-	color: #000;
-	&:visited { color: #3c3836; }
-	&.btn { background: #bdbdbd; }
-}
+html { color: #3c3836; background: #f9f5d7; background-image: linear-gradient(0deg, #ffa3a3 0%, #eaeae7 6%); }
+a { color: #000; &:visited { color: #3c3836; } &.btn { background: #bdbdbd; } }
 textarea, input { background: white; }
 form.pretty {
 	background: white;
@@ -18,11 +10,7 @@ repo.landing { intro { background: #bdbdbd; } }
 readme { intro { background: #bdbdbd; } }
 search { background: #bdbdbd; }
 repolist {
-	repo {
-		color: #3c3836;
-		a { &:visited{ color: #3c3836; } }
-		header { background: #fff8; }
-	}
+	repo { color: #3c3836; a { &:visited{ color: #3c3836; } } header { background: #fff8; } }
 	repo.lowlight {
 		color: #3c3836;
 		a { color: #3c3836; &:visited{ color: #3c3836; } }
