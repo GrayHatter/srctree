@@ -1,0 +1,93 @@
+html {
+	color: #3c3836;
+	background: #f9f5d7;
+	background-image: linear-gradient(0deg, #ffa3a3 0%, #eaeae7 6%);
+}
+a {
+	color: #000;
+	&:visited { color: #3c3836; }
+	&.btn { background: #bdbdbd; }
+}
+textarea, input { background: white; }
+form.pretty {
+	background: white;
+	button { background: #bdbdbd; }
+	context { background: #bdbdbd; border-bottom: solid 1px #844; }
+}
+repo.landing { intro { background: #bdbdbd; } }
+readme { intro { background: #bdbdbd; } }
+search { background: #bdbdbd; }
+repolist {
+	repo {
+		color: #3c3836;
+		a { &:visited{ color: #3c3836; } }
+		header { background: #fff8; }
+	}
+	repo.lowlight {
+		color: #3c3836;
+		a { color: #3c3836; &:visited{ color: #3c3836; } }
+		header { background: #4444; }
+	}
+}
+commit { & > top { background: #a89984; } data { background: #d6d4ce; } }
+blob, gist, patch {
+	header { span { background: #bdbdbd; } }
+	changes {
+		& div.block{ background: #85a4ff; color: #3c3836; }
+		background: #bdbdbd;
+		span { div.nul{ background: #5e5e5e; } div.block{ background: #85a4ff; color: #3c3836; } }
+		ln {
+			&.del { background: #a66 }
+			&.add { background: #686 }
+			&.del:target { background: #b88 }
+			&.add:target { background: #898 }
+			&.nul:target { background: #2228; }
+		}
+	}
+}
+delta > main > name {
+	background: #a89984;
+	color: #3c3836;
+	border-top: 1px solid #737373;
+	border-left: 1px solid #737373;
+	border-right: 1px solid #444;
+}
+comment { context { background: #a89984; color: #3c3836; } }
+span.coderef { background: #bdbdbd; }
+.repo-header { div.gituri { background: #d6d4ce; } }
+.muted { color: #696969; }
+.codeblock { background: #bdbdbd;  }
+.toggle {
+	background: #eaeae7;
+	border-top: 1px solid #a6a6a6;
+	border-left: 1px solid #ababab;
+	border-bottom: 1px solid #393939;
+	border-right: 1px solid #4e4e4e;
+	& >a { &.active {
+			background: #c0c0c0;
+			border-top: 1px solid #a6a6a6;
+			border-left: 1px solid #ababab;
+			border-bottom: 1px solid #393939;
+			border-right: 1px solid #4e4e4e;
+	} }
+}
+td.linenos .special { color: #000000; background-color: #ffffc0;}
+span.linenos.special { color: #000000; background-color: #ffffc0;}
+.gd { color: #282828; background-color: #b11300 } .gi { color: #282828; background-color: #406c00 }
+.err { color: #282828; background-color: #b11300 } .hll { background-color: #ebdbb2 }
+.c { color: #928374;} .cp { color: #928374; } .cpf { color: #928374; } .c1 { color: #928374;}
+.esc { color: #4a3c2a } .g { color: #4a3c2a } .k { color: #b11300 } .l { color: #4a3c2a } .n { color: #4a3c2a }
+.o { color: #4a3c2a } .x { color: #4a3c2a } .p { color: #4a3c2a } .ch { color: #928374; } .cm { color: #928374; }
+.ges { color: #4a3c2a; } .gr { color: #b11300 } .gh { color: #ebdbb2; } .go { color: #f2e5bc } .gp { color: #a89984 }
+.gs { color: #4a3c2a; } .gu { color: #ebdbb2; } .gt { color: #b11300 } .kc { color: #b11300 } .kd { color: #b11300 }
+.kn { color: #b11300 } .kp { color: #b11300 } .kr { color: #b11300 } .kt { color: #b11300 } .ld { color: #4a3c2a }
+.m { color: #d3869b } .s { color: #406c00 } .na { color: #fabd2f } .nb { color: #912715 } .nc { color: #8ec07c }
+.no { color: #d3869b } .nd { color: #b11300 } .ni { color: #4a3c2a } .ne { color: #b11300 } .nf { color: #8ec07c }
+.nl { color: #4a3c2a } .nn { color: #8ec07c } .nx { color: #4a3c2a } .py { color: #4a3c2a } .nt { color: #8ec07c }
+.nv { color: #83a598 } .ow { color: #b11300 } .pm { color: #4a3c2a } .w { color: #4a3c2a } .mb { color: #d3869b }
+.mf { color: #d3869b } .mh { color: #d3869b } .mi { color: #d3869b } .mo { color: #d3869b } .sa { color: #406c00 }
+.sb { color: #406c00 } .sc { color: #406c00 } .dl { color: #406c00 } .sd { color: #406c00 } .s2 { color: #406c00 }
+.se { color: #912715 } .sh { color: #406c00 } .si { color: #406c00 } .sx { color: #406c00 } .sr { color: #406c00 }
+.s1 { color: #406c00 } .ss { color: #406c00 } .bp { color: #912715 } .fm { color: #8ec07c } .vc { color: #83a598 }
+.vg { color: #83a598 } .vi { color: #83a598 } .vm { color: #83a598 } .il { color: #d3869b }
+.ge { color: #4a3c2a; } .cs { color: #ebdbb2; } .c-PreProc { color: #8ec07c;}

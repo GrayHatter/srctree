@@ -8,7 +8,7 @@ html {
 }
 
 
-body { margin: 0 auto; }
+body { margin: 0 auto 10rem; }
 
 a {
 	text-decoration: none;
@@ -33,10 +33,7 @@ a {
 	}
 	&.bare-link {
 		color:#6cf;
-		&:visited {
-			color: #dbbbff;
-		}
-
+		&:visited { color: #dbbbff; }
 	}
 }
 
@@ -70,9 +67,7 @@ details:open > summary.hide { display: none; }
 		font-size: 90%;
 		color: #aaa;
 	}
-	.repo-header-side {
-		margin: auto 0 0.5rem;
-	}
+	.repo-header-side { margin: auto 0 0.5rem; }
 	div.gituri {
 		display: inline-block;
 		border-top: 1px solid black;
@@ -115,15 +110,9 @@ details:open > summary.hide { display: none; }
 	border-left: 1px solid #737373;
 	border-right: 1px solid #444;
 }
-.sysmsg.red {
-	background-color: #633;
-}
-.sysmsg.yellow {
-	background-color: #636;
-}
-.sysmsg.green {
-	background-color: #343;
-}
+.sysmsg.red { background-color: #633; }
+.sysmsg.yellow { background-color: #636; }
+.sysmsg.green { background-color: #343; }
 
 
 header {
@@ -146,10 +135,7 @@ header {
 			border-bottom: #4e0029 solid 2px;
 			border-radius: 0 0 2px 2px;
 			&:hover, &.active { border-bottom: #880046 solid 2px; }
-			a {
-				font-size: 108%;
-				padding: 0 1rem;
-			}
+			a { font-size: 108%; padding: 0 1rem; }
 		}
 	}
 }
@@ -299,14 +285,14 @@ ln {
 repolist {
 	display: flex;
 	flex-wrap: wrap;
-	justify-content: flex-start;
+	justify-content: space-between;
+	align-content: stretch;
 	margin: auto;
 	text-align: left;
 	repo {
-		min-width: 320px;
-		max-width: 480px;
-		width: 30%;
-		margin: 0 auto 10px 0.5%;
+		min-width: 20rem;
+		margin: 0 1rem 1rem 0;
+		flex: 3 0 fit-content;
 		a {
 			display: block;
 			color: #ffffeb;
@@ -318,33 +304,22 @@ repolist {
 				font-size: 70%;
 			}
 		}
-		bar {
+		header {
 			display: flex;
 			justify-content: space-between;
 			font-family: 'Titillium Web', sans-serif;
-			background: #333;
-			font-size: 120%;
+			background: #eee1;
+			font-size: 150%;
 			padding: 4px 0 4px 12px;
-			margin: 0;
 			height: 30px;
-			border-radius: 4px 4px 0 0;
-			border: 1px gray solid;
-			border-bottom: 0px;
-			name {
-				display: inline-block;
-				width: 70%;
-				height: 100%;
-			}
 		}
 		desc {
-			display: block;
+			display: flex;
+			justify-content: space-between;
 			color: #ffffeb;
-			background-image: linear-gradient(#222 92%, #4e0029 100%);
-			margin-bottom: 20px;
+			background-image: linear-gradient(#2220 92%, #4e0029 100%);
 			padding: 8px;
-			border: 1px gray solid;
 			min-height: 50px;
-			border-radius: 0 0 3px 8px;
 			border-bottom: #4e0029 solid 1px;
 			p { margin: 0 0 5px; }
 			a { margin: 0 0 5px; }
@@ -360,14 +335,13 @@ repolist {
 		}
 		&.lowlight {
 			a {
-				display: block;
 				color: #777;
 				&:visited { color: #777; }
 			}
-			bar { background: #272727; }
+			header { background: #1118; }
 			desc {
 				color: #999;
-				background-image: linear-gradient(#222 92%, #320021 100%);
+				background-image: linear-gradient(#2220 92%, #320021 100%);
 				border-bottom: #320021 solid 1px;
 				.updated { color: #888; }
 			}
@@ -1027,6 +1001,7 @@ blob, gist, patch {
 		}
 	}
 }
+
 .admin-actions {
 	display: inline-block;
 	min-width: 12rem;
@@ -1063,86 +1038,6 @@ blob, gist, patch {
 		color: #888;
 	}
 }
-
-
-
-@media (prefers-color-scheme: light) {
-	html {
-		color-scheme: light dark;
-		color: #3c3836;
-		background: #f9f5d7;
-		background-image: linear-gradient(0deg, #ffa3a3 0%, #eaeae7 6%);
-		min-height: 100%;
-	}
-	a {
-		color: #000;
-		&:visited { color: #3c3836; }
-		&.btn { background: #bdbdbd; }
-	}
-	textarea, input { background: white; }
-	form.pretty {
-		background: white;
-		button { background: #bdbdbd; }
-		context {
-			background: #bdbdbd;
-			border-bottom: solid 1px #844;
-		}
-	}
-	repo.landing { intro { background: #bdbdbd; } }
-	readme { intro { background: #bdbdbd; } }
-	search { background: #bdbdbd; }
-	span.coderef { background: #bdbdbd; }
-	.repo-header { div.gituri { background: #d6d4ce; } }
-	.muted { color: #696969; }
-	.codeblock { background: #bdbdbd;  }
-	.toggle { 
-		background: #eaeae7; 
-		border-top: 1px solid #a6a6a6;
-		border-left: 1px solid #ababab;
-		border-bottom: 1px solid #393939;
-		border-right: 1px solid #4e4e4e;
-		& >a { 
-			&.active {
-				background: #c0c0c0;
-				border-top: 1px solid #a6a6a6;
-				border-left: 1px solid #ababab;
-				border-bottom: 1px solid #393939;
-				border-right: 1px solid #4e4e4e;
-			}
-		}
-	}
-
-	commit { & > top { background: #a89984; } data { background: #d6d4ce; } }
-	blob, gist, patch {
-		header { span { background: #bdbdbd; } }
-		changes {  
-			& div.block{ background: #85a4ff; color: #3c3836; }
-			background: #bdbdbd;
-			span {
-				div.nul{ background: #5e5e5e; }
-				div.block{ background: #85a4ff; color: #3c3836; }
-			}
-			ln { 
-				&.del { background: #a66 }
-				&.add { background: #686 }
-				&.del:target { background: #b88 }
-				&.add:target { background: #898 }
-				&.nul:target { background: #2228; height: 1em; margin: 0 2px; }
-			}
-		}
-	}
-	delta > main > name { 
-		background: #a89984; 
-		color: #3c3836;
-		border-radius: 3px 3px 0 0; border-top: 1px solid #737373;
-		border-left: 1px solid #737373;
-		border-bottom: 0;
-		border-right: 1px #444 solid;
-	} 
-	comment { context { background: #a89984; color: #3c3836; } }
-
-}
-
 
 pre { line-height: 125%; }
 td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
@@ -1229,99 +1124,6 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 .vi { color: #83a598 } /* Name.Variable.Instance */
 .vm { color: #83a598 } /* Name.Variable.Magic */
 .il { color: #d3869b } /* Literal.Number.Integer.Long */
-
-
-@media (prefers-color-scheme: light) {
-
-	#b21300 // red
-	#406c00 // green
-	color: #a58e78 ; // comment
-
-	td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
-	span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
-	.hll { background-color: #ebdbb2 }
-	.c { color: #928374; font-style: italic } /* Comment */
-	.err { color: #282828; background-color: #b11300 } /* Error */
-	.esc { color: #4a3c2a } /* Escape */
-	.g { color: #4a3c2a } /* Generic */
-	.k { color: #b11300 } /* Keyword */
-	.l { color: #4a3c2a } /* Literal */
-	.n { color: #4a3c2a } /* Name */
-	.o { color: #4a3c2a } /* Operator */
-	.x { color: #4a3c2a } /* Other */
-	.p { color: #4a3c2a } /* Punctuation */
-	.ch { color: #928374; font-style: italic } /* Comment.Hashbang */
-	.cm { color: #928374; font-style: italic } /* Comment.Multiline */
-	.c-PreProc { color: #8ec07c; font-style: italic } /* Comment.PreProc */
-	.cp { color: #928374; font-style: italic } /* Comment.Preproc */
-	.cpf { color: #928374; font-style: italic } /* Comment.PreprocFile */
-	.c1 { color: #928374; font-style: italic } /* Comment.Single */
-	.cs { color: #ebdbb2; font-weight: bold; font-style: italic } /* Comment.Special */
-	.gd { color: #282828; background-color: #b11300 } /* Generic.Deleted */
-	.ge { color: #4a3c2a; font-style: italic } /* Generic.Emph */
-	.ges { color: #4a3c2a; font-weight: bold; font-style: italic } /* Generic.EmphStrong */
-	.gr { color: #b11300 } /* Generic.Error */
-	.gh { color: #ebdbb2; font-weight: bold } /* Generic.Heading */
-	.gi { color: #282828; background-color: #406c00 } /* Generic.Inserted */
-	.go { color: #f2e5bc } /* Generic.Output */
-	.gp { color: #a89984 } /* Generic.Prompt */
-	.gs { color: #4a3c2a; font-weight: bold } /* Generic.Strong */
-	.gu { color: #ebdbb2; text-decoration: underline } /* Generic.Subheading */
-	.gt { color: #b11300 } /* Generic.Traceback */
-	.kc { color: #b11300 } /* Keyword.Constant */
-	.kd { color: #b11300 } /* Keyword.Declaration */
-	.kn { color: #b11300 } /* Keyword.Namespace */
-	.kp { color: #b11300 } /* Keyword.Pseudo */
-	.kr { color: #b11300 } /* Keyword.Reserved */
-	.kt { color: #b11300 } /* Keyword.Type */
-	.ld { color: #4a3c2a } /* Literal.Date */
-	.m { color: #d3869b } /* Literal.Number */
-	.s { color: #406c00 } /* Literal.String */
-	.na { color: #fabd2f } /* Name.Attribute */
-	.nb { color: #912715 } /* Name.Builtin */
-	.nc { color: #8ec07c } /* Name.Class */
-	.no { color: #d3869b } /* Name.Constant */
-	.nd { color: #b11300 } /* Name.Decorator */
-	.ni { color: #4a3c2a } /* Name.Entity */
-	.ne { color: #b11300 } /* Name.Exception */
-	.nf { color: #8ec07c } /* Name.Function */
-	.nl { color: #4a3c2a } /* Name.Label */
-	.nn { color: #8ec07c } /* Name.Namespace */
-	.nx { color: #4a3c2a } /* Name.Other */
-	.py { color: #4a3c2a } /* Name.Property */
-	.nt { color: #8ec07c } /* Name.Tag */
-	.nv { color: #83a598 } /* Name.Variable */
-	.ow { color: #b11300 } /* Operator.Word */
-	.pm { color: #4a3c2a } /* Punctuation.Marker */
-	.w { color: #4a3c2a } /* Text.Whitespace */
-	.mb { color: #d3869b } /* Literal.Number.Bin */
-	.mf { color: #d3869b } /* Literal.Number.Float */
-	.mh { color: #d3869b } /* Literal.Number.Hex */
-	.mi { color: #d3869b } /* Literal.Number.Integer */
-	.mo { color: #d3869b } /* Literal.Number.Oct */
-	.sa { color: #406c00 } /* Literal.String.Affix */
-	.sb { color: #406c00 } /* Literal.String.Backtick */
-	.sc { color: #406c00 } /* Literal.String.Char */
-	.dl { color: #406c00 } /* Literal.String.Delimiter */
-	.sd { color: #406c00 } /* Literal.String.Doc */
-	.s2 { color: #406c00 } /* Literal.String.Double */
-	.se { color: #912715 } /* Literal.String.Escape */
-	.sh { color: #406c00 } /* Literal.String.Heredoc */
-	.si { color: #406c00 } /* Literal.String.Interpol */
-	.sx { color: #406c00 } /* Literal.String.Other */
-	.sr { color: #406c00 } /* Literal.String.Regex */
-	.s1 { color: #406c00 } /* Literal.String.Single */
-	.ss { color: #406c00 } /* Literal.String.Symbol */
-	.bp { color: #912715 } /* Name.Builtin.Pseudo */
-	.fm { color: #8ec07c } /* Name.Function.Magic */
-	.vc { color: #83a598 } /* Name.Variable.Class */
-	.vg { color: #83a598 } /* Name.Variable.Global */
-	.vi { color: #83a598 } /* Name.Variable.Instance */
-	.vm { color: #83a598 } /* Name.Variable.Magic */
-	.il { color: #d3869b } /* Literal.Number.Integer.Long */
-
-
-}
 
 /* Titillium Licence /static/OFL.txt */
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 300; src: url(/static/TitilliumWeb-LightItalic.ttf) format('truetype'); }

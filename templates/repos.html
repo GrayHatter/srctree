@@ -10,22 +10,19 @@
       <repolist>
       <For RepoList>
       <repo class="<RepoClass ornull/>">
-          <bar>
-          <name><a href="<Uri>"><Name></a></name>
-            <With Tag><a href="<Uri>" title="<Title>" class="tag muted"><Tag></a></With>
-          </bar>
+          <header>
+            <name><a href="<Uri />"><Name></a></name>
+            <With Tag><a href="<Uri />" title="<Title />" class="tag muted"><Tag></a></With>
+          </header>
           <desc>
             <Desc ornull />
-            <p class="upstream"><With UpstreamBlk><a href="<Link />"><Link /></a></With>
-            </p>
-            <div class="updated">
-              <span><Updated></span>
-            </div>
-            <svg style="float: right;" width="114" height="50">
+            <With UpstreamBlk><p class="upstream"><a href="<Link />"><Link /></a></p></With>
+            <div class="updated"><span><Updated /></span></div>
+            <svg class="act-graph" width="114" height="50">
               <defs>
                 <linearGradient id="line" x1="0" x2="0" y1="0" y2="1">
                   <stop offset="0%" stop-color="#4444ff"></stop>
-                  <stop stop-color="#0000aa" offset="40%"></stop>
+                  <stop offset="40%" stop-color="#0000aa"></stop>
                   <stop offset="100%" stop-color="#101066"></stop>
                 </linearGradient>
               </defs>
