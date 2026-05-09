@@ -11,12 +11,12 @@ pub fn list(frame: *Frame) Router.Error!void {
     // leaks a lot
     var all_branches: std.ArrayList(Git.Branch) = .empty;
     try all_branches.appendSlice(frame.alloc, repo.branches orelse return error.InvalidURI);
-    if (repo.loadBranchesFrom("refs/remotes/upstream", frame.alloc, frame.io)) |upstream| {
-        try all_branches.appendSlice(frame.alloc, upstream);
-    } else |err| switch (err) {
-        error.BranchRefMissing => {},
-        else => log.err("unable to load upstream branches {}", .{err}),
-    }
+    //if (repo.loadBranchesFrom("refs/remotes/upstream", frame.alloc, frame.io)) |upstream| {
+    //    try all_branches.appendSlice(frame.alloc, upstream);
+    //} else |err| switch (err) {
+    //    error.BranchRefMissing => {},
+    //    else => log.err("unable to load upstream branches {}", .{err}),
+    //}
     const repo_branches = try all_branches.toOwnedSlice(frame.alloc);
 
     std.sort.heap(Git.Branch, repo_branches, SortCtx.init(&repo, frame.alloc, frame.io), sort);

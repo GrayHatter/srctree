@@ -2,6 +2,7 @@ bare: bool,
 dir: Dir,
 objects: Objects,
 refs: []Ref,
+refs_remotes: []Ref,
 current: ?[]u8 = null,
 head: ?Ref = null,
 // Leaks, badly
@@ -19,6 +20,7 @@ pub const default: Repo = .{
     .dir = undefined,
     .objects = undefined,
     .refs = &[0]Ref{},
+    .refs_remotes = &[0]Ref{},
 };
 
 pub const Error = error{
@@ -142,56 +144,15 @@ pub fn loadBlob(repo: Repo, sha: Sha, a: Allocator, io: Io) !Blob {
 }
 
 pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
-    var list: std.ArrayList(Ref) = .empty;
-    if (self.dir.openDir(io, "refs/remotes/upstream", .{ .iterate = true })) |*ndir| {
-        defer ndir.close(io);
-        var itr = ndir.iterate();
-        while (try itr.next(io)) |file| {
-            if (file.kind != .file) continue;
-            var f_b: [2048]u8 = @splat(0);
-            const fname: []u8 = try bufPrint(&f_b, "./refs/remotes/upstream/{s}", .{file.name});
-            var f = self.dir.openFile(io, fname, .{}) catch continue;
-            defer f.close(io);
-            // surely enough for sha-50 right?
-            var buf: [256]u8 = undefined;
-            var reader = f.reader(io, &buf);
-            const sha_txt = try reader.interface.takeDelimiter('\n') orelse continue;
-            // TODO FIXME
-            if (find(u8, sha_txt, "ref: ")) |_| continue;
-            const sha: Sha = .init(sha_txt);
-            try list.append(a, Ref{ .branch = .{
-                .name = try a.dupe(u8, file.name),
-                .sha = sha,
-            } });
-        }
-    } else |_| {}
-
-    // TODO walk refs/
-    var ndir = try self.dir.openDir(io, "refs/heads", .{ .iterate = true });
-    defer ndir.close(io);
-    var itr = ndir.iterate();
-    while (try itr.next(io)) |file| {
-        if (file.kind != .file) continue;
-        var f_b: [2048]u8 = @splat(0);
-        const fname: []u8 = try bufPrint(&f_b, "./refs/heads/{s}", .{file.name});
-        var f = try self.dir.openFile(io, fname, .{});
-        defer f.close(io);
-        // surely enough for sha-50 right?
-        var buf: [256]u8 = undefined;
-        var reader = f.reader(io, &buf);
-        try list.append(a, Ref{ .branch = .{
-            .name = try a.dupe(u8, file.name),
-            .sha = .init(try reader.interface.takeDelimiter('\n') orelse continue),
-        } });
-    }
-
+    var local: std.ArrayList(Ref) = .empty;
+    var remotes: std.ArrayList(Ref) = .empty;
     if (self.dir.openFile(io, "packed-refs", .{})) |*fd| {
         defer fd.close(io);
         var buf: [2048]u8 = undefined;
         var r = fd.reader(io, &buf);
         while (r.interface.takeSentinel('\n')) |line| {
             if (find(u8, line, " refs/heads")) |i| {
-                try list.append(a, Ref{ .branch = .{
+                try local.append(a, Ref{ .branch = .{
                     .name = try a.dupe(u8, line[i + 12 ..]),
                     .sha = Sha.init(line[0..i]),
                 } });
@@ -204,7 +165,40 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
         error.FileNotFound => {},
         else => std.debug.print("unable to read packed ref {}\n", .{err}),
     }
-    self.refs = try list.toOwnedSlice(a);
+
+    if (self.dir.openDir(io, "refs", .{ .iterate = true })) |*ndir| {
+        defer ndir.close(io);
+        var walker = try ndir.walkSelectively(a);
+        defer walker.deinit();
+        while (try walker.next(io)) |next| {
+            try walker.enter(io, next);
+            if (next.kind != .file) continue;
+            var f = next.dir.openFile(io, next.basename, .{}) catch continue;
+            defer f.close(io);
+            // surely enough for sha-50 right?
+            var buf: [256]u8 = undefined;
+            var reader = f.reader(io, &buf);
+            const sha_txt = try reader.interface.takeDelimiter('\n') orelse continue;
+            if (cutPrefix(u8, next.path, "remotes/")) |ref_name| {
+                if (find(u8, sha_txt, "ref: ")) |_| continue;
+                const sha: Sha = .init(sha_txt);
+                try remotes.append(a, Ref{ .branch = .{
+                    .name = try a.dupe(u8, ref_name),
+                    .sha = sha,
+                } });
+            } else if (cutPrefix(u8, next.path, "heads/")) |ref_name| {
+                if (find(u8, sha_txt, "ref: ")) |_| continue;
+                const sha: Sha = .init(sha_txt);
+                try local.append(a, Ref{ .branch = .{
+                    .name = try a.dupe(u8, ref_name),
+                    .sha = sha,
+                } });
+            }
+        }
+    } else |_| {}
+
+    self.refs = try local.toOwnedSlice(a);
+    self.refs_remotes = try remotes.toOwnedSlice(a);
 }
 
 /// TODO write the real function that goes here
@@ -276,7 +270,7 @@ fn loadTags(self: *Repo, a: Allocator, io: Io) !void {
     defer if (pk_refs) |pr| system.munmap(@alignCast(pr));
 
     const count: usize = if (pk_refs) |p| std.mem.count(u8, p, "refs/tags/") else 0;
-    var tags: std.ArrayListUnmanaged(Tag) = try .initCapacity(a, count);
+    var tags: std.ArrayList(Tag) = try .initCapacity(a, count);
     errdefer tags.deinit(a);
 
     if (pk_refs) |pkrefs| {
@@ -462,6 +456,14 @@ pub fn raze(self: *Repo, a: Allocator, io: Io) void {
         else => unreachable,
     };
     a.free(self.refs);
+
+    for (self.refs_remotes) |r| switch (r) {
+        .branch => |b| {
+            a.free(b.name);
+        },
+        else => unreachable,
+    };
+    a.free(self.refs_remotes);
 
     if (self.current) |c| a.free(c);
     if (self.head) |h| switch (h) {
