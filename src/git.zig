@@ -12,7 +12,13 @@ pub const Repo = @import("git/Repo.zig");
 pub const Sha = @import("git/Sha.zig");
 pub const Tag = @import("git/Tag.zig");
 pub const Tree = @import("git/tree.zig");
-pub const Ref = @import("git/ref.zig").Ref;
+
+pub const Ref = union(enum) {
+    tag: Tag,
+    branch: Branch,
+    sha: Sha,
+    missing: void,
+};
 
 /// TODO for commitish
 /// direct

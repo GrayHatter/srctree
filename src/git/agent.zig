@@ -239,5 +239,5 @@ const find = std.mem.find;
 
 const Repo = @import("Repo.zig");
 const Tree = @import("tree.zig");
-const Ref = @import("ref.zig").Ref;
+const Ref = @import("../git.zig").Ref;
 const Sha = @import("Sha.zig");
