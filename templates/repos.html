@@ -12,12 +12,13 @@
       <repo class="<RepoClass ornull/>">
           <header>
             <name><a href="<Uri />"><Name></a></name>
-            <With Tag><a href="<Uri />" title="<Title />" class="tag muted"><Tag></a></With>
+            <span class="muted"><a href="<CommitUri />" title="<Sha />" class="tag"><ShaShort /><Updated /></a></span>
           </header>
           <desc>
             <Desc ornull />
+            <With TagBlk><span class="muted"><Tag /><Updated /></span></With>
             <With UpstreamBlk><p class="upstream"><a href="<Link />"><Link /></a></p></With>
-            <div class="updated"><span><Updated /></span></div>
+            <span></span>
             <svg class="act-graph" width="114" height="50">
               <defs>
                 <linearGradient id="line" x1="0" x2="0" y1="0" y2="1">

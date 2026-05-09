@@ -351,27 +351,23 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
     if (repo.findRemote("upstream")) |remote| {
         upstream = try allocPrint(a, "{f}", .{std.fmt.alt(remote, .formatLink)});
     }
+
+    var sha: Git.Sha = .zeros;
     var updated: []const u8 = "new repo";
     if (repo.headCommit(a, io)) |cmt| {
         defer cmt.raze(a);
+        sha = cmt.sha;
         const committer = cmt.committer;
-        updated = try allocPrint(
-            a,
-            "updated about {f}",
-            .{Humanize.unix(committer.timestamp, now)},
-        );
+        updated = try allocPrint(a, "{f}", .{Humanize.unix(committer.timestamp, now)});
     } else |_| {}
 
-    var tag: ?S.ReposHtml.RepoList.Tag = null;
-
+    var tag: ?S.ReposHtml.RepoList.TagBlk = null;
     if (repo.tags) |rtags| {
         tag = .{
             .tag = .abx(try a.dupe(u8, rtags[0].name)),
-            .title = .safe(try allocPrint(a, "created {f}", .{
-                Humanize.unix(rtags[0].tagger.timestamp, now),
-            })),
-            .uri = .abx(try allocPrint(a, "/repo/{s}/tags", .{name})),
+            .updated = .safe(try allocPrint(a, " about {f}", .{Humanize.unix(rtags[0].tagger.timestamp, now)})),
         };
+        //.abx(try allocPrint(a, "/repo/{s}/tags", .{name})),
     }
 
     var repo_class: ?[]const u8 = "lowlight";
@@ -380,14 +376,20 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
             if (srctree.pinned orelse false) repo_class = null;
         }
     }
+
+    const commit_uri = try allocPrint(a, "/repo/{s}/commit/{f}", .{ name, std.fmt.alt(sha, .fmtHex) });
+    const sha_str = try sha.text().dupe(a);
     return .{
         .name = .abx(name),
         .repo_class = repo_class,
-        .uri = .safe(try allocPrint(a, "/repo/{s}", .{name})),
+        .commit_uri = .safe(commit_uri),
+        .sha = .safe(sha_str),
+        .sha_short = .safe(sha_str[0..10]),
+        .uri = .safe(commit_uri[0 .. 6 + name.len]),
         .desc = desc,
         .upstream_blk = if (upstream) |u| .{ .link = .safe(u) } else null,
         .updated = .safe(updated),
-        .tag = tag,
+        .tag_blk = tag,
         .svg_points = try svgPoints(repo, a, io),
     };
 }

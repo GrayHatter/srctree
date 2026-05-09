@@ -203,19 +203,18 @@ repolist {
 		margin: 0 1rem 1rem 0;
 		flex: 3 0 fit-content;
 		a {
-			display: block;
 			color: #ffffeb;
 			&:visited {color: #ffffeb; }
-			&.tag { float: right; margin: 0.4rem 8px 0 0; white-space: nowrap; font-size: 70%; }
+			&.tag { white-space: nowrap; }
 		}
 		header {
 			display: flex;
 			justify-content: space-between;
 			font-family: 'Titillium Web', sans-serif;
 			background: #eee1;
-			font-size: 150%;
 			padding: 4px 0 4px 12px;
 			height: 30px;
+			name { flex: 1; font-size: 150%; }
 		}
 		desc {
 			display: flex;
