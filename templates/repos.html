@@ -6,32 +6,35 @@
   <body>
     <Build BodyHeader _body_header.html />
     <content class="mw">
+      <Count type="usize" />
       <Buttons ornull />
       <repolist>
       <For RepoList>
       <repo class="<RepoClass ornull/>">
-          <header>
-            <name><a href="<Uri />"><Name></a></name>
-            <span class="muted"><a href="<CommitUri />" title="<Sha />" class="tag"><ShaShort /><Updated /></a></span>
-          </header>
-          <desc>
-            <Desc ornull />
-            <With TagBlk><span class="muted"><Tag /><Updated /></span></With>
-            <With UpstreamBlk><p class="upstream"><a href="<Link />"><Link /></a></p></With>
-            <span></span>
+        <main>
+          <name><a href="<Uri />"><Name /></a><Desc ornull /></name>
+          <extra>
+            <With TagBlk><span class="muted"><Tag /> <Updated /></span></With>
+            <With UpstreamBlk><p class="upstream">Upstream Repo: <a href="<Link />"><Link /></a></p></With>
+          </extra>
+        </main>
+        <graph>
+          <div class="fcol">
             <svg class="act-graph" width="114" height="50">
               <defs>
-                <linearGradient id="line" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stop-color="#4444ff"></stop>
-                  <stop offset="40%" stop-color="#0000aa"></stop>
-                  <stop offset="100%" stop-color="#101066"></stop>
-                </linearGradient>
+              <linearGradient id="line" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stop-color="#4444ff"></stop>
+              <stop offset="40%" stop-color="#0000aa"></stop>
+              <stop offset="100%" stop-color="#101066"></stop>
+              </linearGradient>
               </defs>
               <rect x="0" y="0" height="50" width="114"></rect>
               <path stroke-width="2" stroke="url(#line)" d="M 5 46 v 1 v -1 <SvgPoints />"></path>
             </svg>
-          </desc><last></last>
-        </repo>
+            <span class="muted small">Updated <Updated />: <a href="<CommitUri />" title="<Sha />" class="tag"><ShaShort /></a></span>
+          </div>
+        </graph>
+      </repo>
       </For>
       </repolist>
     </content>

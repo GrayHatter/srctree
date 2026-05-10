@@ -191,6 +191,8 @@ ln {
 		}
 	}
 }
+div.fcol { display:flex; flex-direction: column; text-align: center; }
+svg { margin: 0 0 0 auto; }
 repolist {
 	display: flex;
 	flex-wrap: wrap;
@@ -199,37 +201,31 @@ repolist {
 	margin: auto;
 	text-align: left;
 	repo {
-		min-width: 20rem;
-		margin: 0 1rem 1rem 0;
+		min-width: 36rem;
+		margin: 0 1rem 0.333rem 0;
 		flex: 3 0 fit-content;
+		display: flex;
+		justify-content: space-between;
+		border-bottom: 1px solid gray;
 		a {
 			color: #ffffeb;
 			&:visited {color: #ffffeb; }
 			&.tag { white-space: nowrap; }
 		}
-		header {
+		main {
+			flex: 1;
 			display: flex;
-			justify-content: space-between;
+			flex-direction: column;
 			font-family: 'Titillium Web', sans-serif;
-			background: #eee1;
-			padding: 4px 0 4px 12px;
-			height: 30px;
-			name { flex: 1; font-size: 150%; }
+			name { a { font-size: 150%; margin: 0 1em 0 0; } }
+			extra { display: flex; gap: 1em; margin: 0; }
 		}
-		desc {
-			display: flex;
-			justify-content: space-between;
-			color: #ffffeb;
-			background-image: linear-gradient(#2220 92%, #4e0029 100%);
-			padding: 8px;
-			min-height: 50px;
-			border-bottom: #4e0029 solid 1px;
-			p { margin: 0 0 5px; }
-			a { margin: 0 0 5px; }
+		graph {
+			padding: 0 0.5em;
 			.updated {
 				color: #bbb;
 				font-family: 'Titillium Web', sans-serif;
-				font-size: 80%;
+				font-size: 85%;
 				margin: 6px 0 0;
 				display: flex;
 				justify-content: space-between;
@@ -246,6 +242,7 @@ repolist {
 				.updated { color: #888; }
 			}
 		}
+		.muted.small { font-size: 75%; }
 	}
 }
 repo {
@@ -364,10 +361,9 @@ actionable {
 }
 .upstream {
 	color: #bbb;
-	display: block;
 	font-family: 'Titillium Web', sans-serif;
-	font-size: 90%;
-	margin: 6px 0 0;
+	font-size: 85%;
+	margin: 0;
 }
 li { display: block; list-style: none; }
 commit {

@@ -365,7 +365,7 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
     if (repo.tags) |rtags| {
         tag = .{
             .tag = .abx(try a.dupe(u8, rtags[0].name)),
-            .updated = .safe(try allocPrint(a, " about {f}", .{Humanize.unix(rtags[0].tagger.timestamp, now)})),
+            .updated = .safe(try allocPrint(a, "tagged {f}", .{Humanize.unix(rtags[0].tagger.timestamp, now)})),
         };
         //.abx(try allocPrint(a, "/repo/{s}/tags", .{name})),
     }
@@ -444,6 +444,7 @@ fn list(f: *Frame) Router.Error!void {
     var page = ReposPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .count = repos_compiled.len,
         .buttons = repo_buttons,
         .repo_list = repos_compiled,
     });
