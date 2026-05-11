@@ -325,13 +325,9 @@ pub const Agent = struct {
         const alloc = std.heap.page_allocator;
         var n_array = allNames(alloc, a.io) catch unreachable;
         // TODO drop skipped repos here
-        const names = n_array.toOwnedSlice(alloc) catch unreachable;
+        const names = n_array.toOwnedSlice(alloc) catch @panic("OOM");
         defer alloc.free(names);
-
-        defer {
-            for (names) |n| alloc.free(n);
-            alloc.free(names);
-        }
+        defer for (names) |n| alloc.free(n);
 
         a.io.sleep(.fromSeconds(20), .real) catch return;
         running: while (a.enabled) {
@@ -358,13 +354,13 @@ pub const Agent = struct {
                 if (a.config.upstream.pull) {
                     pullUpstream(rname, &repo, alloc, a.io) catch |err| {
                         log.err("Error ({}) when trying to pull on {s}\n", .{ err, rname });
-                        break :running;
+                        break;
                     };
                 }
                 if (a.config.downstream.push) {
                     pushDownstream(rname, &repo, alloc, a.io) catch |err| {
                         log.err("Error ({}) when trying to push on {s}\n", .{ err, rname });
-                        break :running;
+                        break;
                     };
                 }
             }
