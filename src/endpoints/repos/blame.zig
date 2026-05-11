@@ -24,7 +24,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     repo.loadData(f.alloc, f.io) catch {}; // This is a safe optional because it's only used to get upstream
     defer repo.raze(f.alloc, f.io);
 
-    var actions = repo.getAgent(f.alloc);
+    var actions = repo.agent(f.alloc);
     const new: Io.Dir = if (!repo.bare) repo.dir.openDir(f.io, "..", .{}) catch return error.Unknown else repo.dir;
     actions.cwd = new;
     defer if (!repo.bare) actions.cwd.?.close(f.io);

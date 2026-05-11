@@ -1,6 +1,7 @@
 name: []const u8,
 url: ?[]const u8,
 fetch: ?[]const u8,
+refs: RefMap = .empty,
 
 const Remote = @This();
 
@@ -52,10 +53,12 @@ pub fn formatLink(r: Remote, w: *Writer) !void {
 }
 
 /// Half supported alloc function
-pub fn raze(r: Remote, a: std.mem.Allocator) void {
+pub fn raze(r: *Remote, a: std.mem.Allocator) void {
     a.free(r.name);
     if (r.url) |url| a.free(url);
     if (r.fetch) |fetch| a.free(fetch);
+    for (r.refs.keys()) |key| a.free(key);
+    r.refs.deinit(a);
 }
 
 const std = @import("std");
@@ -64,3 +67,4 @@ const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const endsWith = std.mem.endsWith;
 const indexOf = std.mem.indexOf;
+const RefMap = @import("Repo.zig").RefMap;

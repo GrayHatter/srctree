@@ -10,7 +10,14 @@ pub fn list(frame: *Frame) Router.Error!void {
 
     // leaks a lot
     var all_branches: std.ArrayList(Git.Branch) = .empty;
-    try all_branches.appendSlice(frame.alloc, repo.branches orelse return error.InvalidURI);
+    for (repo.refs.keys(), repo.refs.values()) |name, branch| {
+        switch (branch) {
+            .sha => try all_branches.append(frame.alloc, .{ .name = name, .sha = branch.sha }),
+            .ref => {},
+            .tag => {},
+            .pending => {},
+        }
+    }
     //if (repo.loadBranchesFrom("refs/remotes/upstream", frame.alloc, frame.io)) |upstream| {
     //    try all_branches.appendSlice(frame.alloc, upstream);
     //} else |err| switch (err) {

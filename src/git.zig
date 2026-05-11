@@ -7,17 +7,18 @@ pub const Commit = @import("git/Commit.zig");
 pub const Objects = @import("git/Objects.zig");
 pub const Object = Objects.Any;
 pub const Pack = @import("git/Pack.zig");
-pub const Remote = @import("git/remote.zig");
+pub const Remote = @import("git/Remote.zig");
 pub const Repo = @import("git/Repo.zig");
 pub const Sha = @import("git/Sha.zig");
 pub const Tag = @import("git/Tag.zig");
 pub const Tree = @import("git/tree.zig");
 
 pub const Ref = union(enum) {
-    tag: Tag,
-    branch: Branch,
+    tag: Sha,
+    ref: []const u8,
     sha: Sha,
-    missing: void,
+    pending: void,
+    //missing: void,
 };
 
 /// TODO for commitish
@@ -154,7 +155,7 @@ test "toParent" {
     var repo = try Repo.init(cwd, io);
     defer repo.raze(a, io);
     try repo.loadData(a, io);
-    var commit = try repo.headCommit(a, io);
+    var commit = try repo.HEAD(a, io);
 
     var count: usize = 0;
     while (true) {
@@ -205,7 +206,7 @@ test "commit to tree" {
 
     try repo.loadData(a, io);
 
-    const cmt = try repo.headCommit(a, io);
+    const cmt = try repo.HEAD(a, io);
     defer cmt.raze(a);
     const tree = try cmt.loadTree(&repo, a, io);
     defer tree.raze(a);
@@ -222,7 +223,7 @@ test "blob to commit" {
     try repo.loadData(a, io);
     defer repo.raze(a, io);
 
-    const cmtt = try repo.headCommit(a, io);
+    const cmtt = try repo.HEAD(a, io);
     defer cmtt.raze(a);
 
     const tree = try cmtt.loadTree(&repo, a, io);
@@ -247,7 +248,7 @@ test "considering optimizing blob to commit" {
 
     //try repo.loadPacks(a);
 
-    //const cmtt = try repo.headCommit(a);
+    //const cmtt = try repo.HEAD(a);
     //defer cmtt.raze();
 
     //const tree = try cmtt.loadTree(a);
@@ -258,7 +259,7 @@ test "considering optimizing blob to commit" {
     //}
     //defer a.free(search_list);
 
-    //var par = try repo.headCommit(a);
+    //var par = try repo.HEAD(a);
     //var ptree = try par.loadTree(a);
 
     //var old = par;
@@ -294,7 +295,7 @@ test "considering optimizing blob to commit" {
 
     //par.raze(a);
     //ptree.raze(a);
-    //par = try repo.headCommit(a);
+    //par = try repo.HEAD(a);
     //ptree = try par.loadTree(a);
 
     //var set = std.BufSet.init(a);
@@ -355,7 +356,7 @@ test "ref delta" {
 
     try repo.loadData(a, io);
 
-    const cmtt = try repo.headCommit(a, io);
+    const cmtt = try repo.HEAD(a, io);
     defer cmtt.raze(a);
 
     const tree = try cmtt.loadTree(&repo, a, io);
@@ -394,20 +395,6 @@ test "new repo" {
     defer new_repo.raze(a, io);
 }
 
-test "updated at" {
-    const a = std.testing.allocator;
-    const io = std.testing.io;
-
-    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
-    var repo = try Repo.init(cwd, io);
-    defer repo.raze(a, io);
-
-    try repo.loadData(a, io);
-    const oldest = try repo.updatedAt(a, io);
-    _ = oldest;
-    //std.debug.print("{}\n", .{oldest});
-}
-
 test "list remotes" {
     const a = std.testing.allocator;
     const io = std.testing.io;
@@ -416,10 +403,11 @@ test "list remotes" {
     var repo = try Repo.init(cwd, io);
     try repo.loadData(a, io);
     defer repo.raze(a, io);
-    const remotes = repo.remotes orelse unreachable;
+    const remotes = repo.remotes.values();
     try std.testing.expect(remotes.len >= 2);
-    try std.testing.expectEqualStrings("github", remotes[0].name);
-    try std.testing.expectEqualStrings("gr.ht", remotes[1].name);
+    for (remotes) |r| {
+        if (std.mem.eql(u8, "gr.ht", r.name)) break;
+    } else return error.ExpectedRemoteMissing;
 }
 
 const std = @import("std");

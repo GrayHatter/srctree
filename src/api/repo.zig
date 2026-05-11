@@ -43,11 +43,7 @@ pub fn repo(ctx: *API.verse.Frame) API.Router.Error!void {
     };
     defer gitrepo.raze(ctx.alloc, ctx.io);
 
-    const head = switch (gitrepo.HEAD(ctx.alloc, ctx.io) catch return error.Unknown) {
-        .branch => |b| b.sha,
-        .sha => |s| s,
-        else => return error.NotImplemented,
-    };
+    const head = (gitrepo.HEAD(ctx.alloc, ctx.io) catch return error.Unknown).sha;
 
     return try ctx.sendJSON(.ok, [1]Repo{.{
         .name = req.name,
@@ -80,18 +76,20 @@ pub fn repoBranches(ctx: *API.verse.Frame) API.Router.Error!void {
     };
     defer gitrepo.raze(ctx.alloc, ctx.io);
 
-    const branches = try ctx.alloc.alloc(RepoBranches.Branch, gitrepo.branches.?.len);
-    for (branches, gitrepo.branches.?) |*dst, src| {
-        dst.* = .{
-            .name = src.name,
-            .hash = src.sha.text().sha1, // TODO FIXME
-        };
+    var branches: ArrayList(RepoBranches.Branch) = .empty;
+    for (gitrepo.refs.keys(), gitrepo.refs.values()) |key, branch| {
+        if (std.mem.cutPrefix(u8, key, "heads/")) |name| {
+            try branches.append(ctx.alloc, .{
+                .name = name,
+                .hash = branch.sha.text().sha1, // TODO FIXME
+            });
+        }
     }
 
     return try ctx.sendJSON(.ok, [1]RepoBranches{.{
         .name = req.name,
         .updated = "undefined",
-        .branches = branches[0..],
+        .branches = branches.items[0..],
     }});
 }
 
@@ -115,25 +113,24 @@ pub fn repoTags(ctx: *API.verse.Frame) API.Router.Error!void {
     };
     defer gitrepo.raze(ctx.alloc, ctx.io);
 
-    const repotags = gitrepo.tags orelse return try ctx.sendJSON(.ok, [1]RepoTags{.{
-        .name = req.name,
-        .updated = "undefined",
-        .tags = &.{},
-    }});
-
-    const tstack = try ctx.alloc.alloc([]const u8, repotags.len);
-
-    for (repotags, tstack) |tag, *out| {
-        out.* = tag.name;
+    var tstack: ArrayList([]const u8) = .empty;
+    for (gitrepo.refs.keys()) |ref| {
+        if (std.mem.cutPrefix(u8, ref, "tags/")) |tag| {
+            try tstack.append(ctx.alloc, tag);
+        }
+    }
+    if (tstack.items.len == 0) {
+        return try ctx.sendJSON(.ok, [1]RepoTags{.{ .name = req.name, .updated = "undefined", .tags = &.{} }});
     }
     return try ctx.sendJSON(.ok, [1]RepoTags{.{
         .name = req.name,
         .updated = "undefined",
-        .tags = tstack,
+        .tags = tstack.items,
     }});
 }
 
 const std = @import("std");
+const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 

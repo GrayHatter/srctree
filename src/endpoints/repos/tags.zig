@@ -8,14 +8,18 @@ pub fn list(frame: *Frame) Router.Error!void {
     repo.loadData(frame.alloc, frame.io) catch return error.Unknown;
     defer repo.raze(frame.alloc, frame.io);
 
-    var tstack: []S.RepoTagsHtml.Tags = &.{};
-    if (repo.tags) |rtags| {
-        tstack = try frame.alloc.alloc(S.RepoTagsHtml.Tags, rtags.len);
-        std.sort.heap(Git.Tag, rtags, {}, sort);
-
-        for (rtags, tstack) |tag, *html_| {
-            html_.name = .abx(tag.name);
-        }
+    var tags: std.ArrayList(Git.Tag) = .empty;
+    for (repo.refs.keys(), repo.refs.values()) |tag_name, ref| switch (ref) {
+        .tag => |t| tags.append(frame.alloc, Git.Tag.fromObject(
+            repo.objects.load(t, frame.alloc, frame.io) catch continue,
+            frame.alloc.dupe(u8, tag_name) catch unreachable,
+        ) catch continue) catch unreachable,
+        else => {},
+    };
+    std.sort.heap(Git.Tag, tags.items, {}, sort);
+    var tstack: std.ArrayList(S.RepoTagsHtml.Tags) = .empty;
+    for (tags.items) |tag| {
+        tstack.append(frame.alloc, .{ .name = .abx(tag.name) }) catch unreachable;
     }
 
     const upstream: ?S.RepoTagsHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
@@ -26,7 +30,7 @@ pub fn list(frame: *Frame) Router.Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = frame.response_data.get(S.BodyHeaderHtml).?.*,
         .upstream = upstream,
-        .tags = tstack,
+        .tags = tstack.items,
         .repo_name = .abx(rd.name),
     });
 

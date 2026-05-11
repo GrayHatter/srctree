@@ -64,8 +64,7 @@ pub fn fromSlice(sha: Sha, bblob: []const u8) !Tag {
     return try fullTag(sha, blob);
 }
 
-/// I don't like this implementation, but I can't be arsed... good luck
-/// future me!
+/// I don't like this implementation, but I can't be arsed... good luck future me!
 /// Dear past me... fuck you! dear future me... HA same!
 /// Dear past mes... you both suck!
 pub fn lightTag(sha: Sha, name: []u8, blob: []const u8) !Tag {

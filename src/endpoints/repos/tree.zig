@@ -8,9 +8,9 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
             else => return error.DataInvalid,
         }
     else
-        repo.headCommit(ctx.alloc, ctx.io) catch return error.Unknown;
+        repo.HEAD(ctx.alloc, ctx.io) catch return error.Unknown;
 
-    const branch_count = repo.refs.len;
+    const branch_count = repo.refs.count();
     const commit_slug = std.mem.trim(u8, c.title[0..@min(c.title.len, 50)], " \n");
     const commit_time = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(c.committer.timestamp, now)});
     const commit_text = c.sha.text();

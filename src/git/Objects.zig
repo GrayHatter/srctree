@@ -189,7 +189,7 @@ test "hopefully a delta" {
     try objs.initPacks(a, io);
     defer objs.raze(a, io);
 
-    //var head = try objs.headCommit(a, io);
+    //var head = try objs.HEAD(a, io);
     //defer head.raze();
     //if (false) std.debug.print("{}\n", .{head});
 

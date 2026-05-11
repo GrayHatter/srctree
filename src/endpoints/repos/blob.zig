@@ -21,7 +21,7 @@ pub fn treeBlob(frame: *Frame) Router.Error!void {
     };
     _ = ograph;
 
-    const cmt = repo.headCommit(frame.alloc, frame.io) catch return newRepo(frame);
+    const cmt = repo.HEAD(frame.alloc, frame.io) catch return newRepo(frame);
 
     if (rd.verb != null and rd.ref != null and isHash(rd.ref.?)) {
         std.debug.print("ref '{s}'\n", .{rd.ref.?});

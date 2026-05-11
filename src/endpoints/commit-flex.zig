@@ -82,7 +82,7 @@ const Journal = struct {
 
     fn buildScribe(j: *Journal, jrepo: *JRepo, a: Allocator, io: Io) !void {
         var lseen = std.BufSet.init(a);
-        var commit = try jrepo.repo.headCommit(a, io);
+        var commit = try jrepo.repo.HEAD(a, io);
         const until = j.scribe_until;
 
         while (true) {
@@ -121,7 +121,7 @@ const Journal = struct {
         if (j.email.len < 5) return;
 
         // TODO return empty hits here
-        const commit = jrepo.repo.headCommit(a, io) catch |err| {
+        const commit = jrepo.repo.HEAD(a, io) catch |err| {
             log.warn("Error building commit list on repo {s} because {}", .{ jrepo.name, err });
             return;
         };
@@ -199,7 +199,7 @@ const Journal = struct {
         j.streak_last = now - DAY * 2;
 
         for (j.repos.items) |*repo| {
-            try repo.commits.append(a, repo.repo.headCommit(a, io) catch |err| {
+            try repo.commits.append(a, repo.repo.HEAD(a, io) catch |err| {
                 log.warn("Error building streak list for repo {s} because {}", .{ repo.name, err });
                 repo.commits.clearAndFree(a);
                 continue;

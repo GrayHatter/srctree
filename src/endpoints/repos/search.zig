@@ -67,7 +67,7 @@ fn searchCommits(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, i
     var limit: u32 = limited;
     var commits: ArrayList(Hit.Commit) = .empty;
     defer commits.deinit(a);
-    var commit = try repo.headCommit(a, io);
+    var commit = try repo.HEAD(a, io);
 
     while (limit > 0) : (limit -|= 1) {
         if (find(u8, commit.message, str)) |idx| {
@@ -136,7 +136,7 @@ fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io:
     var limit: u32 = limited;
     var files: ArrayList(Hit.File) = .empty;
     defer files.deinit(a);
-    var commit = try repo.headCommit(a, io);
+    var commit = try repo.HEAD(a, io);
     var tree: git.Tree = try commit.loadTree(repo, a, io);
     var excludes: Exclude = .new;
     try excludes.fromRepo(repo, &tree, a, io);

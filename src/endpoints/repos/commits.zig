@@ -49,7 +49,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
     const current: Git.Commit = repo.commit(.init(sha), f.alloc, f.io) catch |err| cmt: {
         std.debug.print("unable to find commit {}, trying expensive fallback\n", .{err});
         // TODO return 404
-        var fallback: Git.Commit = repo.headCommit(f.alloc, f.io) catch return error.Unknown;
+        var fallback: Git.Commit = repo.HEAD(f.alloc, f.io) catch return error.Unknown;
         while (!fallback.sha.startsWith(.init(sha))) {
             fallback = fallback.toParent(0, &repo, f.alloc, f.io) catch |err2| {
                 log.err("fallback to parent failed {}", .{err2});
@@ -59,7 +59,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         break :cmt fallback;
     };
 
-    var git = repo.getAgent(f.alloc);
+    var git = repo.agent(f.alloc);
     var diff = git.show(current.sha, f.io) catch |err| switch (err) {
         //error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
         else => return error.Unknown,
@@ -145,7 +145,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
 }
 
 pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
-    var acts = repo.getAgent(f.alloc);
+    var acts = repo.agent(f.alloc);
     if (endsWith(u8, sha, ".patch")) {
         var rbuf: [0xff]u8 = undefined;
         const commit_only = sha[0 .. sha.len - 6];
@@ -282,7 +282,7 @@ fn buildListBetween(
     a: Allocator,
     io: Io,
 ) !?Git.Sha {
-    var current: Git.Commit = repo.headCommit(a, io) catch return error.Unknown;
+    var current: Git.Commit = repo.HEAD(a, io) catch return error.Unknown;
     if (right) |r| while (!current.sha.startsWith(r)) {
         current = current.toParent(0, repo, a, io) catch |err| {
             std.debug.print("unable to build commit history {}\n", .{err});

@@ -103,11 +103,10 @@ fn pendingNew(f: *Frame) Error!void {
         if (udata.from_paste) |_| {
             patch_paste = .{};
         } else if (udata.from_network) |_| {
-            const remotes = repo.remotes orelse unreachable;
-            const network_remotes = try f.alloc.alloc(S.DiffNewHtml.PatchNetwork.Remotes, remotes.len);
-            for (remotes, network_remotes) |src, *dst| {
+            const network_remotes = try f.alloc.alloc(S.DiffNewHtml.PatchNetwork.Remotes, repo.remotes.count());
+            for (repo.remotes.keys(), repo.remotes.values(), network_remotes) |name, src, *dst| {
                 dst.* = .{
-                    .value = .abx(src.name),
+                    .value = .abx(name),
                     .name = .abx(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(src, .formatDiff)})),
                 };
             }
@@ -491,7 +490,7 @@ fn resolveLineRefRepo(
 ) !?[][]const u8 {
     var found_lines: ArrayList([]const u8) = .empty;
 
-    const cmt = try repo.headCommit(a, io);
+    const cmt = try repo.HEAD(a, io);
     var files: Git.Tree = try cmt.loadTree(repo, a, io);
     var itr = splitScalar(u8, filename, '/');
     const blob_sha: Git.Sha = root: while (itr.next()) |dirname| {
@@ -830,7 +829,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
 
-    const head_commit = repo.headSha(f.io) catch null;
+    const head_commit: ?Git.Commit = repo.HEAD(f.alloc, f.io) catch null;
 
     var diffM: ?Diff = if (rev) |r|
         Diff.open(r, f.alloc, f.io) catch null
@@ -854,7 +853,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     const curl_hint: S.DeltaDiffHtml.CurlHint = .{
         .repo_name = .abx(rd.name),
         .diff_idx = .abx(delta_index),
-        .base_ref = .abx(if (head_commit) |ref| ref.text().slice()[0..8] else "base_commit"),
+        .base_ref = .abx(if (head_commit) |cmt| cmt.sha.text().slice()[0..8] else "base_commit"),
         .head_ref = .abx("<HEAD>"),
         .host = .safe(f.request.host orelse "127.0.0.1"),
     };
@@ -868,11 +867,11 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             } else |err| {
                 std.debug.print("Unable to generate patch {any}\n", .{err});
             }
-            const cmt = repo.headCommit(f.alloc, f.io) catch return error.ServerFault;
+            const cmt = repo.HEAD(f.alloc, f.io) catch return error.ServerFault;
             if (cmt.sha.eql(.init(diff.applies_hash))) {
                 applies = diff.applies;
             } else {
-                var agent = repo.getAgent(f.alloc);
+                var agent = repo.agent(f.alloc);
                 if (agent.checkPatch(diff.patch.blob, f.io)) |_| {
                     applies = true;
                     diff.applies = true;
@@ -881,7 +880,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                     diff.applies = false;
                 }
 
-                diff.applies_hash = head_commit.?.text().slice();
+                diff.applies_hash = head_commit.?.sha.text().slice();
                 diff.commit(f.io) catch return error.ServerFault;
             }
         }

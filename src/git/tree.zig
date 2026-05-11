@@ -72,7 +72,9 @@ pub fn initOwned(sha: Sha, a: Allocator, body: []const u8, memory: []u8) !Tree {
 }
 
 pub fn changedSet(self: Tree, repo: *const Repo, a: Allocator, io: Io) ![]ChangeSet {
-    return self.changedSetFrom(repo, try repo.headSha(io), a, io);
+    const head = try repo.HEAD(a, io);
+    defer head.raze(a);
+    return self.changedSetFrom(repo, head.sha, a, io);
 }
 
 pub fn changedSetFrom(self: Tree, repo: *const Repo, start_commit: Sha, a: Allocator, io: Io) ![]ChangeSet {
@@ -207,7 +209,7 @@ test "mk sub tree" {
 
     try repo.loadData(a, io);
 
-    const cmtt = try repo.headCommit(a, io);
+    const cmtt = try repo.HEAD(a, io);
     defer cmtt.raze(a);
 
     var tree = try cmtt.loadTree(&repo, a, io);
@@ -235,7 +237,7 @@ test "commit mk sub tree" {
 
     try repo.loadData(a, io);
 
-    const cmtt = try repo.headCommit(a, io);
+    const cmtt = try repo.HEAD(a, io);
     defer cmtt.raze(a);
 
     var tree = try cmtt.loadTree(&repo, a, io);

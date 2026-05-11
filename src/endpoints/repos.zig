@@ -252,9 +252,9 @@ fn repoSorterNew(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
 }
 
 fn commitSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
-    var lc = l.headCommit(ctx.alloc, ctx.io) catch return true;
+    var lc = l.HEAD(ctx.alloc, ctx.io) catch return true;
     defer lc.raze(ctx.alloc);
-    var rc = r.headCommit(ctx.alloc, ctx.io) catch return false;
+    var rc = r.HEAD(ctx.alloc, ctx.io) catch return false;
     defer rc.raze(ctx.alloc);
     return sorter({}, lc.committer.timestr, rc.committer.timestr);
 }
@@ -285,18 +285,36 @@ fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
     if (sortPinned(l, r)) |pinned| return !pinned;
 
     switch (ctx.by) {
-        .commit => {
-            return commitSorter(ctx, l, r);
-        },
+        .commit => return commitSorter(ctx, l, r),
         .tag => {
-            if (l.tags) |lt| {
-                if (r.tags) |rt| {
-                    if (lt.len == 0) return true;
-                    if (rt.len == 0) return false;
-                    if (lt[0].tagger.timestamp == rt[0].tagger.timestamp)
-                        return commitSorter(ctx, l, r);
-                    return lt[0].tagger.timestamp > rt[0].tagger.timestamp;
-                } else return false;
+            var tags_left: std.ArrayList(Git.Tag) = .empty;
+            for (l.refs.keys(), l.refs.values()) |name, ref| switch (ref) {
+                .tag => |t| tags_left.append(ctx.alloc, Git.Tag.fromObject(
+                    l.objects.load(t, ctx.alloc, ctx.io) catch continue,
+                    ctx.alloc.dupe(u8, name) catch unreachable,
+                ) catch continue) catch unreachable,
+                else => {},
+            };
+
+            var tags_right: std.ArrayList(Git.Tag) = .empty;
+            for (r.refs.keys(), r.refs.values()) |name, ref| switch (ref) {
+                .tag => |t| tags_right.append(ctx.alloc, Git.Tag.fromObject(
+                    r.objects.load(t, ctx.alloc, ctx.io) catch continue,
+                    ctx.alloc.dupe(u8, name) catch unreachable,
+                ) catch continue) catch unreachable,
+                else => {},
+            };
+
+            if (tags_left.items.len > 0 or tags_right.items.len > 0) {
+                if (tags_left.items.len == 0) return true;
+                if (tags_right.items.len == 0) return false;
+                std.sort.heap(Git.Tag, tags_left.items, {}, tags.sort);
+                std.sort.heap(Git.Tag, tags_right.items, {}, tags.sort);
+
+                if (tags_left.items[0].tagger.timestamp == tags_right.items[0].tagger.timestamp)
+                    return commitSorter(ctx, l, r);
+                return tags_right.items[0].tagger.timestamp > tags_left.items[0].tagger.timestamp;
+                //} else return false;
             } else return true;
         },
     }
@@ -316,7 +334,7 @@ fn svgPoints(repo: *const Git.Repo, arena: Allocator, io: Io) !abx.Html {
     var heat: [52]u16 = @splat(0);
 
     var max: isize = 1;
-    var commit: Git.Commit = repo.headCommit(arena, io) catch return .safe("V 46 M 109 46 ");
+    var commit: Git.Commit = repo.HEAD(arena, io) catch return .safe("V 46 M 109 46 ");
 
     for (0..52) |i| {
         const first = now.addDuration(.fromSeconds(-86400 * 7));
@@ -354,20 +372,32 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
 
     var sha: Git.Sha = .zeros;
     var updated: []const u8 = "new repo";
-    if (repo.headCommit(a, io)) |cmt| {
+    if (repo.HEAD(a, io)) |cmt| {
         defer cmt.raze(a);
         sha = cmt.sha;
         const committer = cmt.committer;
         updated = try allocPrint(a, "{f}", .{Humanize.unix(committer.timestamp, now)});
     } else |_| {}
 
+    var tag_list: std.ArrayList(Git.Tag) = .empty;
+    for (repo.refs.keys(), repo.refs.values()) |tag_name, ref| switch (ref) {
+        .tag => |t| tag_list.append(a, Git.Tag.fromObject(
+            repo.objects.load(t, a, io) catch continue,
+            a.dupe(u8, tag_name) catch unreachable,
+        ) catch continue) catch unreachable,
+        else => {},
+    };
+
+    std.sort.heap(Git.Tag, tag_list.items, {}, tags.sort);
+
     var tag: ?S.ReposHtml.RepoList.TagBlk = null;
-    if (repo.tags) |rtags| {
+    if (tag_list.items.len > 0) {
         tag = .{
-            .tag = .abx(try a.dupe(u8, rtags[0].name)),
-            .updated = .safe(try allocPrint(a, "tagged {f}", .{Humanize.unix(rtags[0].tagger.timestamp, now)})),
+            .tag = .abx(try a.dupe(u8, tag_list.items[0].name)),
+            .updated = .safe(
+                try allocPrint(a, "tagged {f}", .{Humanize.unix(tag_list.items[0].tagger.timestamp, now)}),
+            ),
         };
-        //.abx(try allocPrint(a, "/repo/{s}/tags", .{name})),
     }
 
     var repo_class: ?[]const u8 = "lowlight";
@@ -415,9 +445,6 @@ fn list(f: *Frame) Router.Error!void {
         };
         rpo.repo_name = f.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
-        if (rpo.tags != null) {
-            std.sort.heap(Git.Tag, rpo.tags.?, {}, tags.sort);
-        }
         try current_repos.append(f.alloc, rpo);
     }
 

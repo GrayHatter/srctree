@@ -266,15 +266,14 @@ pub const Agent = struct {
 
     fn pullUpstream(name: []const u8, repo: *Git.Repo, a: Allocator, io: Io) !void {
         var update = try getUpdated(repo.dir, io);
-        const rhead = try repo.HEAD(a, io);
-        const head: []const u8 = switch (rhead) {
-            .branch => |b| b.name[std.mem.lastIndexOf(u8, b.name, "/") orelse 0 ..][1..],
-            .tag => |t| t.name,
-            else => "main",
+        const ref = repo.refs.get("HEAD") orelse return {};
+        const head = switch (ref) {
+            .ref => |r| r,
+            else => return error.InvalidRepoHead,
         };
 
         if (repo.findRemote("upstream")) |_| {
-            var gitagent = repo.getAgent(a);
+            var gitagent = repo.agent(a);
             if (gitagent.pullUpstream(head, io)) {
                 log.debug("Update Successful on repo {s}", .{name});
             } else |err| switch (err) {
@@ -288,11 +287,12 @@ pub const Agent = struct {
 
     fn pushDownstream(name: []const u8, repo: *Git.Repo, a: Allocator, io: Io) !void {
         var update = try getUpdated(repo.dir, io);
-        const repo_update = repo.updatedAt(a, io) catch 0;
+        //const repo_update = repo.updatedAt(a, io) catch 0;
+        const repo_update = 0;
 
         if (repo_update > update.downstream_push) {
             if (repo.findRemote("downstream")) |_| {
-                var gitagent = repo.getAgent(a);
+                var gitagent = repo.agent(a);
                 const updated = gitagent.pushDownstream(io) catch er: {
                     log.warn("Warning, unable to push to downstream repo {s}", .{name});
                     break :er false;
