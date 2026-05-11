@@ -106,7 +106,7 @@ pub fn update(
     a: Allocator,
     io: std.Io,
 ) !void {
-    std.debug.print("update {any}\n", .{env});
+    std.debug.print("update \n{f}\n", .{env});
     // This hook is invoked by git-receive-pack[1] when it reacts to git
     // push and updates reference(s) in its repository. Just before
     // updating the ref on the remote repository, the update hook is
@@ -211,7 +211,7 @@ const PushMethod = enum {
 
 const Env = struct {
     map: std.process.Environ.Map,
-    push_options: StringHashMap(void),
+    push_options: StringArrayHashMap(void),
     method: PushMethod,
     host: ?[]const u8,
     repo: ?[]const u8,
@@ -224,9 +224,11 @@ const Env = struct {
 
         if (map.contains("SRCTREE_HTTP")) {
             method = .http;
+        } else if (map.contains("SSH_CLIENT")) {
+            method = .ssh;
         }
 
-        var list: StringHashMap(void) = .empty;
+        var list: StringArrayHashMap(void) = .empty;
         if (map.contains("GIT_PUSH_OPTION_COUNT")) {
             const count = std.fmt.parseInt(usize, map.get("GIT_PUSH_OPTION_COUNT").?, 0) catch return error.BadEnvCount;
             if (count > 0) {
@@ -254,6 +256,17 @@ const Env = struct {
         env.map.deinit(a);
         env.push_options.deinit(a);
     }
+
+    pub fn format(env: Env, w: *std.Io.Writer) !void {
+        try w.print("Env:\n", .{});
+        try w.print("Host: '{s}' Repo: '{s}'\n", .{ env.host orelse "null", env.repo orelse "null" });
+        for (env.push_options.keys()) |e| {
+            try w.print("    push-option: '{s}'\n", .{e});
+        }
+        for (env.map.keys(), env.map.values()) |k, v| {
+            try w.print("    map: k:'{s}' v:'{s}'\n", .{ k, v });
+        }
+    }
 };
 
 const std = @import("std");
@@ -266,4 +279,4 @@ const splitScalar = std.mem.splitScalar;
 const cutPrefix = std.mem.cutPrefix;
 const types = @import("types.zig");
 const Delta = types.Delta;
-const StringHashMap = std.StringHashMapUnmanaged;
+const StringArrayHashMap = std.StringArrayHashMapUnmanaged;
