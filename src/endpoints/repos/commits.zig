@@ -106,7 +106,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
-    const human_time = Humanize.unix(current.committer.timestamp, now);
+    const human_time = Humanize.unix(current.author.timestamp, now);
 
     const page_title = try allocPrint(f.alloc, "{f} - [{s}] committed to {s} about {f} - srctree", .{
         abx.Html{ .text = current.title },
