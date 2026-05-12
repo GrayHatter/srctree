@@ -88,6 +88,7 @@ pub fn createNew(chdir: Io.Dir, dir_name: []const u8, a: Allocator, io: Io) !Rep
 
 pub fn loadData(self: *Repo, a: Allocator, io: Io) !void {
     try self.loadConfig(a, io);
+    try self.loadRemotes(a);
     try self.objects.initPacks(a, io);
     try self.loadRefs(a, io);
 }
@@ -103,19 +104,26 @@ fn loadConfig(self: *Repo, a: Allocator, io: Io) !void {
     self.config = try self.config_ini.?.resolve();
 }
 
-fn loadRemotes(cfg: Ini.Config(Config), a: Allocator) ![]Remote {
-    var list: ArrayList(Remote) = .empty;
-    errdefer list.clearAndFree(a);
+fn loadRemotes(repo: *Repo, a: Allocator) !void {
+    const cfg = repo.config_ini orelse unreachable;
     for (0..cfg.ini.ns.len) |i| {
         const ns = cfg.ini.filter("remote", i) orelse break;
-        try list.append(a, .{
-            .name = try a.dupe(u8, std.mem.trim(u8, ns.name[6..], "' \t\n\"")),
-            .url = if (ns.get("url")) |url| try a.dupe(u8, url) else null,
-            .fetch = if (ns.get("fetch")) |fetch| try a.dupe(u8, fetch) else null,
-        });
+        const name = trim(u8, cutPrefix(u8, ns.name, "remote") orelse unreachable, "\"\t ");
+        const gop = try repo.remotes.getOrPut(a, name);
+        if (!gop.found_existing) {
+            gop.key_ptr.* = try a.dupe(u8, name);
+            gop.value_ptr.* = .{
+                .name = gop.key_ptr.*,
+                .url = if (ns.get("url")) |url| try a.dupe(u8, url) else null,
+                .fetch = if (ns.get("fetch")) |fetch| try a.dupe(u8, fetch) else null,
+            };
+        } else {
+            if (gop.value_ptr.url == null)
+                gop.value_ptr.url = if (ns.get("url")) |url| try a.dupe(u8, url) else null;
+            if (gop.value_ptr.fetch == null)
+                gop.value_ptr.fetch = if (ns.get("fetch")) |fetch| try a.dupe(u8, fetch) else null;
+        }
     }
-
-    return try list.toOwnedSlice(a);
 }
 
 pub fn findRemote(self: *const Repo, name: []const u8) ?Remote {
