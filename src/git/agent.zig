@@ -36,7 +36,7 @@ pub fn pushDownstream(agent: Agent, io: Io) !bool {
 
 pub fn forkRemote(agent: Agent, uri: []const u8, local_dir: []const u8, io: Io) !void {
     const child = try agent.execCustom(
-        &.{ "git", "clone", "--bare", "--origin", "upstream", uri, local_dir },
+        &.{ "git", "clone", "--quiet", "--bare", "--origin", "upstream", uri, local_dir },
         io,
     );
     if (child.stderr.len > 0) {
