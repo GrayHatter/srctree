@@ -265,14 +265,14 @@ pub const Agent = struct {
     }
 
     fn pullUpstream(name: []const u8, repo: *Git.Repo, a: Allocator, io: Io) !void {
-        var update = try getUpdated(repo.dir, io);
-        const ref = repo.refs.get("HEAD") orelse return {};
-        const head = switch (ref) {
-            .ref => |r| r,
-            else => return error.InvalidRepoHead,
-        };
-
         if (repo.findRemote("upstream")) |_| {
+            var update = try getUpdated(repo.dir, io);
+            const ref = repo.refs.get("HEAD") orelse return {};
+            const head = switch (ref) {
+                .ref => |r| r,
+                else => return error.InvalidRepoHead,
+            };
+
             var gitagent = repo.agent(a);
             if (gitagent.pullUpstream(head, io)) {
                 log.debug("Update Successful on repo {s}", .{name});
@@ -353,13 +353,13 @@ pub const Agent = struct {
 
                 if (a.config.upstream.pull) {
                     pullUpstream(rname, &repo, alloc, a.io) catch |err| {
-                        log.err("Error ({}) when trying to pull on {s}\n", .{ err, rname });
+                        log.err("Error ({}) when trying to pull on {s}", .{ err, rname });
                         continue;
                     };
                 }
                 if (a.config.downstream.push) {
                     pushDownstream(rname, &repo, alloc, a.io) catch |err| {
-                        log.err("Error ({}) when trying to push on {s}\n", .{ err, rname });
+                        log.err("Error ({}) when trying to push on {s}", .{ err, rname });
                         continue;
                     };
                 }
