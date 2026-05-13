@@ -54,7 +54,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                             .commit_title = .safe(commit_title),
                             .commit_href = .safe(chref),
                             .commit_time = .safe(ctime),
-                            .class = .safe(if (obj.isFile()) "tree" else "blob"),
+                            .class = .safe(if (obj.isFile()) "tree" else "file"),
                         });
                     } else if (obj.isFile()) {
                         try list_files.append(ctx.alloc, .{
