@@ -354,13 +354,13 @@ pub const Agent = struct {
                 if (a.config.upstream.pull) {
                     pullUpstream(rname, &repo, alloc, a.io) catch |err| {
                         log.err("Error ({}) when trying to pull on {s}\n", .{ err, rname });
-                        break;
+                        continue;
                     };
                 }
                 if (a.config.downstream.push) {
                     pushDownstream(rname, &repo, alloc, a.io) catch |err| {
                         log.err("Error ({}) when trying to push on {s}\n", .{ err, rname });
-                        break;
+                        continue;
                     };
                 }
             }
