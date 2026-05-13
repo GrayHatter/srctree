@@ -19,6 +19,15 @@ pub const Ref = union(enum) {
     sha: Sha,
     pending: void,
     //missing: void,
+
+    pub fn resolve(r: Ref, repo: *const Repo) !Sha {
+        return switch (r) {
+            .tag => |t| t,
+            .sha => |s| s,
+            .ref => |ref| try repo.ref(ref),
+            .pending => return error.NotImplemented,
+        };
+    }
 };
 
 /// TODO for commitish

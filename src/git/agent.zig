@@ -6,25 +6,30 @@ const Agent = @This();
 
 const DEBUG_GIT_ACTIONS = false;
 
-pub fn pullUpstream(agent: Agent, branch: []const u8, io: Io) !void {
-    const fetch = try agent.exec(&.{ "git", "fetch", "upstream", "-q" }, io);
+pub fn pullFrom(agent: Agent, remote: []const u8, branch: []const u8, io: Io) !void {
+    const fetch = try agent.exec(&.{ "git", "fetch", remote, "-q" }, io);
     if (fetch.len > 0) log.warn("fetch {s}", .{fetch});
     agent.alloc.free(fetch);
 
-    var buf: [512]u8 = undefined;
-    const up_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
-    const pull = try agent.execCustom(&.{ "git", "merge-base", "--is-ancestor", "HEAD", up_branch }, io);
+    const pull = try agent.execCustom(&.{ "git", "merge-base", "--is-ancestor", "HEAD", branch }, io);
     defer agent.alloc.free(pull.stdout);
     defer agent.alloc.free(pull.stderr);
 
     if (pull.term.exited == 0) {
-        const move = try agent.exec(&.{ "git", "fetch", "upstream", "*:*", "-q" }, io);
+        const move = try agent.exec(&.{ "git", "fetch", remote, "*:*", "-q" }, io);
         agent.alloc.free(move);
         return;
     }
 
-    log.warn("refusing to move head non-ancestor {s}", .{up_branch});
+    log.warn("refusing to move head non-ancestor {s}", .{branch});
     return error.NonAncestor;
+}
+
+pub fn pullUpstream(agent: Agent, branch_ex: []const u8, io: Io) !void {
+    var buf: [512]u8 = undefined;
+    const branch = std.mem.cutPrefix(u8, branch_ex, "heads/") orelse branch_ex;
+    const upstream_branch = try std.fmt.bufPrint(&buf, "upstream/{s}", .{branch});
+    return try agent.pullFrom("upstream", upstream_branch, io);
 }
 
 pub fn pushDownstream(agent: Agent, io: Io) !bool {

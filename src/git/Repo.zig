@@ -221,9 +221,11 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
         const head = buff[0..size];
 
         if (cutPrefix(u8, trimWs(head), "ref: refs/")) |head_str| {
-            if (self.ref(head_str)) |found| {
-                try local.put(a, try a.dupe(u8, "HEAD"), .{ .sha = found });
-            } else |_| try local.put(a, try a.dupe(u8, "HEAD"), .{ .ref = head_str });
+            //if (self.ref(head_str)) |found| {
+            //    try local.put(a, try a.dupe(u8, "HEAD"), .{ .sha = found });
+            //} else |_| try local.put(a, try a.dupe(u8, "HEAD"), .{ .ref = try a.dupe(u8, head_str) });
+            // repo sync agent requires a ref: refs/ to a valid remote HEAD
+            try local.put(a, try a.dupe(u8, "HEAD"), .{ .ref = try a.dupe(u8, head_str) });
         } else {
             try local.put(a, try a.dupe(u8, "HEAD"), .{ .sha = .init(trimWs(head)) });
         }
@@ -254,7 +256,10 @@ pub fn resolve(self: Repo, r: Ref) !Sha {
 
 pub fn HEAD(self: *const Repo, a: Allocator, io: Io) !Commit {
     const sha = self.refs.get("HEAD") orelse return error.CommitInvalid;
-    return self.commit(sha.sha, a, io);
+    switch (sha) {
+        .sha => |s| return self.commit(s, a, io),
+        else => |res| return self.commit(try res.resolve(self), a, io),
+    }
 }
 
 pub fn commit(self: *const Repo, sha: Sha, a: Allocator, io: Io) !Commit {
@@ -302,6 +307,10 @@ pub fn raze(self: *Repo, a: Allocator, io: Io) void {
     self.objects.raze(a, io);
 
     for (self.refs.keys(), self.refs.values()) |key, val| switch (val) {
+        .ref => |r| {
+            a.free(r);
+            a.free(key);
+        },
         else => a.free(key),
     };
     self.refs.deinit(a);
