@@ -855,8 +855,9 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .diff_idx = .abx(delta_index),
         .base_ref = .abx(if (head_commit) |cmt| cmt.sha.text().slice()[0..8] else "base_commit"),
         .head_ref = .abx("<HEAD>"),
-        .host = .safe(f.request.host orelse "127.0.0.1"),
+        .host = .safe(f.request.host.?.valid() catch "127.0.0.1"),
     };
+
     var applies: bool = false;
     if (diffM) |*diff| {
         if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {

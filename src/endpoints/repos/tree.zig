@@ -110,7 +110,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .meta_head = .{ .title = page_title, .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
-            .git_uri = .{ .host = .safe("srctree.gr.ht"), .repo_name = .abx(rd.name) },
+            .git_uri = .{ .host = .safe(try ctx.request.host.?.valid()), .repo_name = .abx(rd.name) },
             .description = .abx(open_graph.desc),
             .repo_name = .abx(rd.name),
             .upstream = upstream,

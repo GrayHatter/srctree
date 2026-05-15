@@ -191,7 +191,10 @@ const Repo = struct {
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
             .active_admin = .repo_clone,
-            .admin_view = .{ .repo_clone = .{ .post_error = null } },
+            .admin_view = .{ .repo_clone = .{
+                .post_error = null,
+                .host = .safe(try (f.request.host orelse return error.DataMissing).valid()),
+            } },
         });
 
         var post = f.request.data.post orelse return error.DataMissing;
@@ -203,19 +206,25 @@ const Repo = struct {
         std.debug.print("repo uri {s}\n", .{new_repo_name});
         // TODO sanitize requested repo name
         const dir = Io.Dir.cwd().openDir(f.io, "repos", .{}) catch |err| {
-            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = .safe(@errorName(err)) } };
+            page.data.admin_view.repo_clone = .{
+                .post_error = .{ .err_str = .safe(@errorName(err)) },
+                .host = .safe(try (f.request.host orelse return error.DataMissing).valid()),
+            };
             return try f.sendPage(&page);
         };
 
         var agent = git.Agent{ .alloc = f.alloc, .cwd = dir };
         agent.forkRemote(clone_req.repo_uri, new_repo_name, f.io) catch |err| {
-            page.data.admin_view.repo_clone = .{ .post_error = .{ .err_str = .safe(@errorName(err)) } };
+            page.data.admin_view.repo_clone = .{
+                .post_error = .{ .err_str = .safe(@errorName(err)) },
+                .host = .safe(try (f.request.host orelse return error.DataMissing).valid()),
+            };
             return try f.sendPage(&page);
         };
 
         // TODO redirect to new repo
         var buf: [2048]u8 = undefined;
-        const redirect_uri = try std.fmt.bufPrint(&buf, "/repo/{s}", .{new_repo_name});
+        const redirect_uri = try bufPrint(&buf, "/repo/{s}", .{new_repo_name});
         return f.redirect(redirect_uri, .see_other) catch unreachable;
     }
 
@@ -227,7 +236,10 @@ const Repo = struct {
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
             .active_admin = .repo_clone,
-            .admin_view = .{ .repo_clone = .{ .post_error = null } },
+            .admin_view = .{ .repo_clone = .{
+                .post_error = null,
+                .host = .safe(try (f.request.host orelse return error.DataMissing).valid()),
+            } },
         });
         try f.sendPage(&page);
     }

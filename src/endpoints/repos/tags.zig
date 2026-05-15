@@ -24,7 +24,7 @@ pub fn list(f: *Frame) Router.Error!void {
 
     //const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse "" };
     const repo_header: S.BaseRepoHeaderHtml = .{
-        .git_uri = .{ .host = .safe("srctree.gr.ht"), .repo_name = .abx(rd.name) },
+        .git_uri = .{ .host = .safe(try (f.request.host orelse return error.DataMissing).valid()), .repo_name = .abx(rd.name) },
         .repo_name = .safe(rd.name),
         .description = .abx(repo.description(f.alloc, f.io) catch ""),
         .upstream = if (repo.findRemote("upstream")) |up| .{

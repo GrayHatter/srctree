@@ -135,7 +135,7 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
             // TODO FIXME
             .description = .safe(try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = repo.description(f.alloc, f.io) catch "" }})),
             .blame = .{ .repo_name = .abx(rd.name), .filename = .abx(path.buffer) },
-            .git_uri = .{ .host = .safe("srctree.gr.ht"), .repo_name = .abx(rd.name) },
+            .git_uri = .{ .host = .safe(try f.request.host.?.valid()), .repo_name = .abx(rd.name) },
             .upstream = upstream,
         },
         .filename = .abx(blb.name),
@@ -192,10 +192,7 @@ fn newRepo(f: *Frame) Router.Error!void {
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .safe(""),
-            .git_uri = .{
-                .host = .safe("srctree.gr.ht"),
-                .repo_name = .abx(rd.name),
-            },
+            .git_uri = .{ .host = .safe(try (f.request.host orelse return error.DataMissing).valid()), .repo_name = .abx(rd.name) },
             .upstream = null,
             .blame = null,
         },

@@ -52,7 +52,7 @@ pub fn list(frame: *Frame) Router.Error!void {
             .repo_name = .abx(rd.name),
             .description = .abx(try frame.alloc.dupe(u8, repo.description(frame.alloc, frame.io) catch "")),
             .blame = null,
-            .git_uri = null,
+            .git_uri = .{ .host = .safe(try frame.request.host.?.valid()), .repo_name = .abx(rd.name) },
             .upstream = upstream,
         },
         .repo_branches = branches,
