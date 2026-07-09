@@ -26,9 +26,7 @@ pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
                 }
             } else return view;
         } else return error.NotFound;
-    } else return new;
-
-    return Router.defaultRouter(ctx, &routes);
+    } else return Router.defaultRouter(ctx, &routes);
 }
 
 const GistPost = struct {
@@ -50,11 +48,11 @@ fn gistPost(frame: *Frame) Error!void {
         const files = try frame.alloc.alloc(S.GistNewHtml.GistFiles, udata.file_name.len + 1);
         for (files[0 .. files.len - 1], udata.file_name, udata.file_blob) |*file, name, blob| {
             file.* = .{
-                .name = try verse.abx.Html.cleanAlloc(frame.alloc, name),
-                .blob = try verse.abx.Html.cleanAlloc(frame.alloc, blob),
+                .name = try .abxAlloc(name, frame.alloc),
+                .blob = try .abxAlloc(blob, frame.alloc),
             };
         }
-        files[files.len - 1] = .{};
+        files[files.len - 1] = .{ .name = .empty, .blob = .empty };
         return edit(frame, files);
     }
 
@@ -68,13 +66,16 @@ fn gistPost(frame: *Frame) Error!void {
         file.* = Gist.File.init(name, fblob) catch return error.DataInvalid;
     }
 
-    const hash_str: [64]u8 = Gist.new(username, files) catch return error.Unknown;
+    const hash_str: [64]u8 = Gist.new(username, files, frame.io) catch return error.Unknown;
 
     return frame.redirect("/gist/" ++ hash_str, .see_other) catch unreachable;
 }
 
 fn new(ctx: *Frame) Error!void {
-    const files = [1]S.GistNewHtml.GistFiles{.{ .name = &.{} }};
+    const files = [1]S.GistNewHtml.GistFiles{.{
+        .blob = .{ .text = &.{} },
+        .name = .{ .text = &.{} },
+    }};
     return edit(ctx, &files);
 }
 
@@ -155,6 +156,11 @@ fn view(vrs: *Frame) Error!void {
     });
 
     return vrs.sendPage(&page);
+}
+
+test {
+    _ = &std.testing.refAllDecls(@This());
+    _ = &gistPost;
 }
 
 const std = @import("std");
