@@ -304,7 +304,7 @@ pub const Translate = struct {
                 '`' => {
                     if (findScalarPos(u8, src, idx + 1, '`')) |end| {
                         try dst.print("<span class=\"coderef\">{f}</span>", .{
-                            abx.Html{ .text = src[idx + 1 .. end] },
+                            Abx.Html{ .text = src[idx + 1 .. end] },
                         });
                         idx = end;
                     }
@@ -338,26 +338,26 @@ pub const Translate = struct {
                             if (findLink(src[idx + imgend ..])) |found| {
                                 const text, const url, const end = found;
                                 const valid_url = validUrl(url) orelse {
-                                    abx.Html.clean(src[idx], dst) catch unreachable;
+                                    Abx.Html.clean(src[idx], dst) catch unreachable;
                                     continue;
                                 };
                                 idx = end + 3;
 
                                 try dst.print("<a href=\"{f}\">{f}</a>", .{
-                                    abx.Html{ .text = valid_url }, abx.Html{ .text = text },
+                                    Abx.Html{ .text = valid_url }, Abx.Html{ .text = text },
                                 });
                             } else idx += imgend;
                         }
                     } else if (findLink(src[idx + 1 ..])) |found| {
                         const text, const url, const end = found;
                         const valid_url = validUrl(url) orelse {
-                            abx.Html.clean(src[idx], dst) catch unreachable;
+                            Abx.Html.clean(src[idx], dst) catch unreachable;
                             continue;
                         };
                         idx = end + 3;
 
                         try dst.print("<a href=\"{f}\">{f}</a>", .{
-                            abx.Html{ .text = valid_url }, abx.Html{ .text = text },
+                            Abx.Html{ .text = valid_url }, Abx.Html{ .text = text },
                         });
                     } else try dst.writeByte('[');
                 },
@@ -366,7 +366,7 @@ pub const Translate = struct {
                         idx +|= try makeImage(src[idx..], dst, true);
                     } else try dst.writeByte('!');
                 },
-                else => abx.Html.clean(src[idx], dst) catch unreachable,
+                else => Abx.Html.clean(src[idx], dst) catch unreachable,
                 '\r' => {},
             }
         }
@@ -376,22 +376,22 @@ pub const Translate = struct {
         if (findLink(src[2..])) |found| {
             const text, const url, const end = found;
             const valid_url = validUrl(url) orelse {
-                abx.Html.clean(src[0], w) catch unreachable;
+                Abx.Html.clean(src[0], w) catch unreachable;
                 return 0;
             };
-            const safe_url = abx.Html{ .text = valid_url };
+            const safe_url = Abx.Html{ .text = valid_url };
             if (auto_link) {
                 try w.print("<a href=\"{f}\"><img src=\"{f}\" title=\"{f}\"></a>", .{
-                    safe_url, safe_url, abx.Html{ .text = text },
+                    safe_url, safe_url, Abx.Html{ .text = text },
                 });
             } else {
                 try w.print("<img src=\"{f}\" title=\"{f}\">", .{
-                    safe_url, abx.Html{ .text = text },
+                    safe_url, Abx.Html{ .text = text },
                 });
             }
             return end + 4;
         }
-        abx.Html.clean(src[0], w) catch unreachable;
+        Abx.Html.clean(src[0], w) catch unreachable;
         return 0;
     }
 
@@ -883,7 +883,7 @@ test "ref link" {
 }
 
 const syntax = @import("../syntax-highlight.zig");
-const abx = @import("verse").Antibiotic;
+const Abx = @import("verse").Antibiotic;
 
 const std = @import("std");
 const Io = std.Io;

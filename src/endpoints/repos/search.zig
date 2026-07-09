@@ -268,7 +268,7 @@ const git = @import("../../git.zig");
 
 const verse = @import("verse");
 const T = verse.template;
-const S = verse.template.Structs;
+const S = T.Structs;
 const abx = verse.Antibiotic;
 const Frame = verse.Frame;
 const Router = verse.Router;
