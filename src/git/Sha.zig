@@ -19,6 +19,14 @@ pub const Hash = union(enum) {
     pub const Sha1 = [20]u8;
     pub const Sha256 = [32]u8;
 
+    pub fn size(h: Hash) usize {
+        return switch (h) {
+            .sha1 => 20,
+            .sha256 => 32,
+            .partial => unreachable,
+        };
+    }
+
     pub fn fromText(t: Text) Hash {
         switch (t) {
             .sha1 => |txt| {
@@ -168,6 +176,10 @@ pub fn initCheck(sha: []const u8) !Sha {
         40 => if (!ascii(sha)) return error.InvalidSha else .init(sha),
         else => error.InvalidSha,
     };
+}
+
+pub fn size(s: Sha) usize {
+    return s.hash.size();
 }
 
 pub fn text(sha: Sha) Text {
