@@ -473,7 +473,8 @@ fn resolveLineRefRepo(
     var files: Git.Tree = try cmt.loadTree(repo, a, io);
     var itr = splitScalar(u8, filename, '/');
     const blob_sha: Git.Sha = root: while (itr.next()) |dirname| {
-        for (files.blobs) |obj| {
+        var fileitr = files.iterate();
+        while (fileitr.next()) |obj| {
             if (eql(u8, obj.name, dirname)) {
                 if (obj.isFile()) {
                     if (itr.peek() != null) return null;

@@ -43,7 +43,7 @@ fn isHash(slice: []const u8) bool {
 }
 
 fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) Router.Error!void {
-    var files: Git.Tree = cmt.loadTree(repo, frame.alloc, frame.io) catch return error.Unknown;
+    var files: Git.Tree.Path = (cmt.loadTree(repo, frame.alloc, frame.io) catch return error.Unknown).withPath(&.{});
     const verb = rd.verb orelse return treeEndpoint(frame, rd, repo, &files);
     var path = rd.path orelse return treeEndpoint(frame, rd, repo, &files);
 
@@ -54,36 +54,23 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commi
                 const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.buffer});
                 return frame.redirect(uri, .permanent_redirect);
             }
-            files = traverseTree(repo, &path, files, frame.alloc, frame.io) catch return error.Unknown;
-            return treeEndpoint(frame, rd, repo, &files);
+            var child = files.descend(path.rest(), repo, frame.alloc, frame.io) catch return error.Unknown;
+            return treeEndpoint(frame, rd, repo, &child);
         },
         else => {},
     }
     return treeEndpoint(frame, rd, repo, &files);
 }
 
-fn traverseTree(repo: *const Git.Repo, uri: *verse.Uri.Iterator, in_tree: Git.Tree, a: Allocator, io: Io) !Git.Tree {
-    const udir = uri.next() orelse return in_tree;
-    if (udir.len == 0) return in_tree;
-    for (in_tree.blobs) |obj| {
-        if (std.mem.eql(u8, udir, obj.name)) {
-            return switch (try repo.objects.load(obj.sha, a, io)) {
-                .tree => |t| try traverseTree(repo, uri, t, a, io),
-                else => return error.NotATree,
-            };
-        }
-    }
-    return error.InvalidURI;
-}
-
 const BlobPage = PageData("blob.html");
 
-fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
+fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree.Path) Router.Error!void {
     var blb: Git.Blob = undefined;
     var files = tree;
     var path = rd.path orelse return error.InvalidURI;
     search: while (path.next()) |bname| {
-        for (files.blobs) |obj| {
+        var itr = files.iterate();
+        while (itr.next()) |obj| {
             if (std.mem.eql(u8, bname, obj.name)) {
                 blb = obj;
                 if (obj.isFile()) {
@@ -91,7 +78,7 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
                     break :search;
                 }
                 files = switch (repo.objects.load(obj.sha, f.alloc, f.io) catch return error.Unknown) {
-                    .tree => |t| t,
+                    .tree => |t| t.withPath(path.rest()),
                     else => return error.Unknown,
                 };
                 continue :search;
@@ -124,20 +111,16 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
     });
 
     var w: Io.Writer.Allocating = .init(f.alloc);
-    for (files.blobs) |b| {
-        if (!b.isFile())
-            try w.writer.print(
-                "<span class=\"tree\"><a href=\"/repo/{s}/tree/{s}/\">{s}</a></span>\n",
-                .{ rd.name, b.name, b.name },
-            );
-    }
-    for (files.blobs) |b| {
-        if (b.isFile())
-            try w.writer.print(
-                "<span class=\"file\"><a href=\"{s}\">{s}</a></span>\n",
-                .{ b.name, b.name },
-            );
-    }
+    var itr = files.iterate();
+    while (itr.next()) |b| if (!b.isFile()) {
+        const tree_str = "<span class=\"tree\"><a href=\"/repo/{s}/tree/{s}/\">{s}</a></span>\n";
+        try w.writer.print(tree_str, .{ rd.name, b.name, b.name });
+    };
+    itr = files.iterate();
+    while (itr.next()) |b| if (b.isFile()) {
+        const blob_str = "<span class=\"file\"><a href=\"{s}\">{s}</a></span>\n";
+        try w.writer.print(blob_str, .{ b.name, b.name });
+    };
 
     var page = BlobPage.init(.{
         .meta_head = .{

@@ -52,7 +52,8 @@ fn update(f: *Frame) Router.Error!void {
     const commit = repo.commit(.init(update_data.newrev), f.alloc, f.io) catch unreachable;
     const tree = commit.loadTree(&repo, f.alloc, f.io) catch unreachable;
     var blb: git.Blob = undefined;
-    for (tree.blobs) |b| {
+    var itr = tree.iterate();
+    while (itr.next()) |b| {
         blb = b;
         if (std.mem.eql(u8, blb.name, "build.zig.zon")) break;
         // TODO add ffs support

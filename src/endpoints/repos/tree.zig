@@ -8,7 +8,7 @@ fn filenameIsHidden(name: []const u8) bool {
         eql(u8, name, "LICENSE.md");
 }
 
-pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
+pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree.Path) Router.Error!void {
     const now: i64 = Io.Clock.real.now(ctx.io).toSeconds();
     const c = if (rd.ref) |ref|
         switch (repo.objects.load(.init(ref), ctx.alloc, ctx.io) catch return error.InvalidURI) {
@@ -25,26 +25,23 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     const commit_hex = commit_text.slice();
     const commit_hex_short = commit_hex[0..8];
 
-    const path: ?[]const u8 = if (rd.path) |p| p.buffer else null;
-
     const prefix = if (rd.ref) |ref|
         try allocPrint(ctx.alloc, "/repo/{s}/ref/{s}", .{ rd.name, ref })
     else
         try allocPrint(ctx.alloc, "/repo/{s}", .{rd.name});
 
-    const dot_dot: ?S.TreeHtml.DotDot = if (path) |p| .{
-        // TODO fix
-        .href = .abx(try allocPrint(ctx.alloc, "{s}/tree/{s}", .{ prefix, p })),
-    } else null;
+    const path: ?[]const u8 = if (rd.path) |p| p.buffer else null;
 
     var list_trees: ArrayList(S.TreeHtml.Trees) = .empty;
     var list_files: ArrayList(S.TreeHtml.Files) = .empty;
     var list_hidden: ArrayList(S.TreeHtml.Hidden.HiddenFiles) = .empty;
 
-    if (path) |p| try files.pushPath(ctx.alloc, p);
-    if (files.changedSetFrom(repo, c.sha, ctx.alloc, ctx.io)) |changed| {
-        std.sort.pdq(Git.Blob, files.blobs, {}, sorter);
-        for (files.blobs) |obj| {
+    var itr = files.iterate();
+    const blobs = try itr.toSlice(ctx.alloc);
+
+    if (files.tree.changedSetFrom(repo, c.sha, ctx.alloc, ctx.io)) |changed| {
+        std.sort.pdq(Git.Blob, blobs, {}, sorter);
+        for (blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
                     const sha_text = ch.sha.text();
@@ -85,12 +82,11 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
             }
         }
     } else |err| switch (err) {
-        error.PathNotFound => {}, //dom.push(html.h3("unable to find this file", null));
         else => return error.ServerFault,
     }
 
     var readme: ?[]const u8 = null;
-    for (files.blobs) |obj| {
+    for (blobs) |obj| {
         if (isReadme(obj.name)) {
             const resolve = repo.blob(obj.sha, ctx.alloc, ctx.io) catch return error.Unknown;
             const readme_html = htmlReadme(resolve.data.?, ctx.alloc, ctx.io) catch unreachable;
@@ -129,7 +125,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .commit_time_human = .safe(commit_time),
         //.commit_hex = commit_hex,
         .commit_hex_short = .abx(commit_hex_short),
-        .dot_dot = dot_dot,
+        .dot_dot = files.path.len > 0,
         .branch_count = branch_count,
         .trees = list_trees.items,
         .files = list_files.items,

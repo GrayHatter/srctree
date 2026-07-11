@@ -85,14 +85,14 @@ fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) !Any {
     var zl: std.compress.flate.Decompress = .init(&reader.interface, .zlib, &z_b);
     const data = try zl.reader.allocRemaining(a, .limited(0xffffff));
     errdefer a.free(data);
-    if (indexOf(u8, data, "\x00")) |i| {
+    if (findScalar(u8, data, 0)) |i| {
         const header = data[0..i];
         _ = header;
         const body = data[i + 1 ..];
         if (startsWith(u8, data, "blob ")) {
             return .{ .blob = .initOwned(sha, @splat(0xff), body, body, data) };
         } else if (startsWith(u8, data, "tree ")) {
-            return .{ .tree = try .initOwned(sha, a, body, data) };
+            return .{ .tree = .{ .sha = sha, .bytes = data[i + 1 ..] } };
         } else if (startsWith(u8, data, "commit ")) {
             return .{ .commit = try .initOwned(sha, body, data) };
         } else if (startsWith(u8, data, "tag ")) {
@@ -230,7 +230,7 @@ const zlib = std.compress.flate;
 const bufPrint = std.fmt.bufPrint;
 const log = std.log.scoped(.git_objects);
 const startsWith = std.mem.startsWith;
-const indexOf = std.mem.indexOf;
+const findScalar = std.mem.findScalar;
 const Sha = @import("Sha.zig");
 const Pack = @import("Pack.zig");
 const Blob = @import("blob.zig");

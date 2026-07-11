@@ -207,6 +207,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
         },
         error.ServerFault => {
             log.err("Server Fault", .{});
+            if (@import("builtin").mode == .Debug) unreachable;
             return fr.sendDefaultErrorPage(.internal_server_error);
         },
         error.OutOfMemory, error.NoSpaceLeft => {

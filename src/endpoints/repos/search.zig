@@ -99,7 +99,8 @@ fn searchTree(
     a: Allocator,
     io: Io,
 ) !void {
-    for (tree.blobs) |obj| {
+    var itr = tree.iterate();
+    while (itr.next()) |obj| {
         if (limit.* == 0) break;
         const path = if (root.len > 0)
             try allocPrint(a, "{s}/{s}", .{ root, obj.name })
@@ -206,7 +207,8 @@ const Exclude = struct {
     }
 
     fn fromRepo(e: *Exclude, repo: *git.Repo, tree: *git.Tree, a: Allocator, io: Io) !void {
-        for (tree.blobs) |obj| {
+        var itr = tree.iterate();
+        while (itr.next()) |obj| {
             if (eql(u8, obj.name, ".gitattributes")) {
                 switch (repo.objects.load(obj.sha, a, io) catch return error.ServerFault) {
                     .tree, .commit, .tag => break,

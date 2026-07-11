@@ -120,13 +120,13 @@ fn gzipEncoded(f: *const Frame) bool {
     return false;
 }
 
-const default_hooks_path = "./zig-out/bin/hooks";
+const default_hooks_path = "./bin/hooks";
 
 fn spawn(f: *const Frame) !std.process.Child {
     var map = try prepareEnv(f);
     defer map.deinit();
 
-    const core_path = "core.hooksPath=";
+    const core_path = "core.hooksPath={s}";
 
     var realpath_b: [2048]u8 = undefined;
     const dir = std.Io.Dir.cwd().openDir(f.io, ".", .{}) catch std.Io.Dir.cwd();
@@ -137,15 +137,15 @@ fn spawn(f: *const Frame) !std.process.Child {
     };
 
     var b: [2048]u8 = undefined;
-    const config = try print(&b, core_path ++ "{s}", .{
+    const config = try print(&b, core_path, .{
         if (len > 0) realpath_b[0..len] else default_hooks_path,
     });
-    log.info("path {s}", .{config});
+    log.info("path '{s}'", .{config});
 
-    const argv: []const []const u8 = if ((Config.global.git orelse Config.Git.default).hooks_disabled)
-        &.{ "git", "http-backend" }
-    else
-        &.{ "git", "-c", config, "http-backend" };
+    const argv: []const []const u8 = if ((Config.global.git orelse Config.Git.default).hooks_disabled) b: {
+        log.warn("hooks bypassed", .{});
+        break :b &.{ "git", "http-backend" };
+    } else &.{ "git", "-c", config, "http-backend" };
 
     return std.process.spawn(f.io, .{
         .argv = argv,
@@ -221,15 +221,41 @@ fn receivePackExternal(f: *Frame) Error!void {
     var r_b: [6400]u8 = undefined; // This is the size seen during debugging
     var stdout_r = stdout.reader(f.io, &r_b);
 
+    const stderr = child.stderr orelse @panic("oops");
+    var err_b: [6400]u8 = undefined; // This is what I saw while debugging
+    var stderr_r = stderr.reader(f.io, &err_b);
+
+    log.err("'''", .{});
+    log.err("'''", .{});
+    log.err("'''", .{});
+    log.err("'''", .{});
+    log.err("'''", .{});
+    log.err("'''", .{});
+    log.err("'''", .{});
     // we just guess and assume it'll return 200 checking would be better
     f.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch
         return debugStderr("unable to start headers", &child, f.io);
 
-    _ = stdout_r.interface.streamRemaining(f.downstream.writer) catch
+    var w: std.Io.Writer.Allocating = try .initCapacity(f.alloc, 64000);
+
+    _ = stderr_r.interface.streamRemaining(&w.writer) catch
+        return debugStderr("unable to stream body", &child, f.io);
+    _ = stdout_r.interface.streamRemaining(&w.writer) catch
         return debugStderr("unable to stream body", &child, f.io);
 
+    _ = f.downstream.writer.writeAll(w.writer.buffered()) catch
+        return debugStderr("unable to stream body", &child, f.io);
+
+    stdout_r.interface.fillMore() catch {};
+    log.err("'''\n{s}\n'''", .{w.writer.buffered()});
+
+    //defer {
+    stderr_r.interface.fillMore() catch {};
+    log.err("'''\n{s}\n'''", .{stderr_r.interface.buffered()});
+    //}
+
     if (child.wait(f.io)) |chld| {
-        log.debug("child {}", .{chld});
+        log.err("child {}", .{chld});
         if (chld.exited != 0) return debugStderr("unable to stream body", &child, f.io);
     } else |err| {
         log.err("Error waiting for child {}", .{err});
@@ -298,7 +324,7 @@ fn debugStderr(comptime msg: []const u8, child: *std.process.Child, io: std.Io) 
             log.err("stderr {s}", .{line});
         }
     }
-    _ = child.wait(io) catch unreachable;
+    //_ = child.wait(io) catch {};
     return error.ServerFault;
 }
 

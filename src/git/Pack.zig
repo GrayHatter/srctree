@@ -310,7 +310,7 @@ fn loadRefDelta(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: All
             .pack => |pk| .{ pk.data, pk.data, pk.header.kind },
             .file => |fdata| switch (fdata) {
                 .blob => |b| .{ b.memory.?, b.data.?, .blob },
-                .tree => |t| .{ t.memory.?, t.blob, .tree },
+                .tree => |t| .{ @constCast(t.bytes), t.bytes, .tree },
                 .commit => |c| .{ c.memory.?, c.body, .commit },
                 .tag => |t| .{ t.memory.?, t.memory.?, .tag },
             },
@@ -376,7 +376,7 @@ pub fn resolveObject(self: Pack, sha: Sha, offset: usize, objs: *const Objects, 
 
     return switch (resolved.header.kind) {
         .blob => .{ .blob = .initOwned(sha, .{ 0, 0, 0, 0, 0, 0 }, resolved.data, resolved.data, resolved.data) },
-        .tree => .{ .tree = try .initOwned(sha, a, resolved.data, resolved.data) },
+        .tree => .{ .tree = .{ .sha = sha, .bytes = resolved.data } },
         .commit => .{ .commit = try .initOwned(sha, resolved.data, resolved.data) },
         .tag => .{ .tag = try .initOwned(sha, resolved.data) },
         else => return error.IncompleteObject,

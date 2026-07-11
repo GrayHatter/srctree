@@ -110,36 +110,15 @@ pub fn loadTree(self: Commit, repo: *const Repo, a: Allocator, io: Io) !Tree {
     };
 }
 
-pub fn mkSubTree(self: Commit, subpath: ?[]const u8, repo: *const Repo, a: Allocator, io: Io) !Tree {
-    const rootpath = subpath orelse return self.loadTree(repo, a, io);
-    if (rootpath.len == 0) return self.loadTree(repo, a, io);
-
-    var itr = std.mem.splitScalar(u8, rootpath, '/');
-    var root = try self.loadTree(repo, a, io);
-    iter: while (itr.next()) |path| {
-        for (root.blobs) |obj| {
-            if (eql(u8, obj.name, path)) {
-                if (itr.rest().len == 0) {
-                    defer root.raze(a);
-                    return try obj.toTree(repo, a, io);
-                }
-                root.raze(a);
-                root = try obj.toTree(repo, a, io);
-                continue :iter;
-            }
-        } else return error.PathNotFound;
-    }
-    return root;
-}
-
 pub fn raze(self: Commit, a: Allocator) void {
     a.free(self.memory.?);
 }
 
 pub fn format(cmt: Commit, out: *Writer) !void {
-    try out.print("Commit{{\ncommit {s}\ntree {s}\n", .{ cmt.sha.hex()[0..], cmt.tree.hex()[0..] });
+    try out.print("Commit{{\ncommit {s}\ntree {s}\n", .{ cmt.sha.slice(10), cmt.tree.slice(10) });
     for (cmt.parent) |par| {
-        if (par) |p| try out.print("parent {s}\n", .{p.hex()[0..10]});
+        if (par == null) break;
+        try out.print("parent {s}\n", .{par.?.slice(10)});
     }
     try out.print("author {f}\ncommiter {f}\n\n{s}\n}}", .{ cmt.author, cmt.committer, cmt.message });
 }
@@ -191,6 +170,10 @@ test "fuzz" {
         }
     };
     try std.testing.fuzz(Context{}, Context.testOne, .{});
+}
+
+test {
+    _ = &std.testing.refAllDecls(@This());
 }
 
 const Sha = @import("Sha.zig");
