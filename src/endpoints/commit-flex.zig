@@ -346,7 +346,7 @@ const Scribe = struct {
         sha: Git.Sha,
 
         pub fn toTemplate(self: Commit, a: Allocator) !S.UserCommitsHtml.Months.JournalRows {
-            const shahex = try a.dupe(u8, self.sha.text().slice());
+            const shahex = try self.sha.text().dupe(a);
 
             const continuation = "...";
             const title_max = 80;

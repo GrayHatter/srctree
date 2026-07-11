@@ -81,18 +81,13 @@ pub const Text = union(enum) {
     sha1: Sha1,
     sha256: Sha256,
 
-    pub const zeros: Text = .{ .sha1 = @splat('0') };
-    pub const zeros265: Text = .{ .sha256 = @splat('0') };
-
     pub const Sha1 = [40]u8;
     pub const Sha256 = [64]u8;
 
-    pub fn slice(t: *const Text) []const u8 {
-        return switch (t.*) {
-            .sha1 => t.sha1[0..40],
-            .sha256 => t.sha256[0..64],
-        };
-    }
+    pub const zeros: Text = .{ .sha1 = @splat('0') };
+    pub const zeros265: Text = .{ .sha256 = @splat('0') };
+
+    pub const max_len: usize = 64;
 
     pub fn fromBin(h: Hash) Text {
         switch (h) {
@@ -114,8 +109,30 @@ pub const Text = union(enum) {
         }
     }
 
+    pub fn slice(t: *const Text) []const u8 {
+        return switch (t.*) {
+            .sha1 => t.sha1[0..],
+            .sha256 => t.sha256[0..],
+        };
+    }
+
     pub fn dupe(t: Text, a: Allocator) ![]u8 {
-        return try a.dupe(u8, t.slice());
+        return try a.dupe(u8, switch (t) {
+            .sha1 => t.sha1[0..],
+            .sha256 => t.sha256[0..],
+        });
+    }
+
+    pub fn width(t: Text) usize {
+        return switch (t) {
+            inline else => |*T| @typeInfo(@TypeOf(T.*)).array.len,
+        };
+    }
+
+    /// Returns number of **ascii** bytes requested (does not convert text to binary)
+    pub fn bytes(t: *const Text, comptime W: usize) *const [W]u8 {
+        std.debug.assert(W < max_len);
+        return t.slice()[0..W];
     }
 
     pub fn format(t: Text, w: *std.Io.Writer) !void {
@@ -269,6 +286,11 @@ pub fn fmtHex(sha: Sha, w: *std.Io.Writer) !void {
 
 pub fn fmtBin(sha: Sha, w: *std.Io.Writer) !void {
     return try w.print("{f}", .{sha.hash});
+}
+
+pub fn slice(sha: Sha, comptime width: usize) *const [width]u8 {
+    comptime std.debug.assert(width < Text.max_len);
+    return sha.text().bytes(width);
 }
 
 test init {
