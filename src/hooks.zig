@@ -13,20 +13,37 @@ pub fn main(init: std.process.Init) !u8 {
     var sout_b: [512]u8 = undefined;
     var out_reader = stdout_f.writer(init.io, &sout_b);
     const stdout = &out_reader.interface;
+    defer stdout.flush() catch {};
 
-    const env: Env = try .init(&init.minimal.environ, a);
+    const env = Env.init(&init.minimal.environ, a) catch |err| {
+        std.debug.print("unable to set up hook env for '{s}' ({})\n", .{ arg0, err });
+        return 4;
+    };
+    const cwd = std.Io.Dir.cwd();
 
-    if (env.datadir) |datadir| try types.init(
-        try std.Io.Dir.cwd().createDirPathOpen(io, datadir, .{ .open_options = .{ .iterate = true } }),
-        io,
-    );
+    if (env.datadir) |datadir| {
+        const dir = cwd.createDirPathOpen(io, datadir, .{ .open_options = .{ .iterate = true } }) catch {
+            std.debug.print("unable to set up hook env\n", .{});
+            return 4;
+        };
+
+        types.init(dir, io) catch {
+            std.debug.print("unable to set up hook types\n", .{});
+            return 4;
+        };
+    } else {
+        //std.debug.print("DataDir unavailable\n", .{});
+        //return 0;
+    }
 
     if (endsWith(u8, arg0, "pre-receive")) {
         // https://git-scm.com/docs/githooks#pre-receives
         preReceive(stdin, &env) catch return 1;
+        return 0;
     } else if (endsWith(u8, arg0, "post-receive")) {
         // https://git-scm.com/docs/githooks#post-receive
         postReceive(stdin, &env) catch return 1;
+        return 0;
     } else if (endsWith(u8, arg0, "update")) {
         if (endsWith(u8, arg0, "post-update")) {
             // https://git-scm.com/docs/githooks#post-update
@@ -60,12 +77,16 @@ pub fn main(init: std.process.Init) !u8 {
                 }
             };
         }
+        return 0;
     } else if (endsWith(u8, arg0, "proc-receive")) {
         // https://git-scm.com/docs/githooks#proc-receive
         procReceive(stdin, stdout, &env, a, io) catch return 1;
+        return 0;
+    } else {
+        std.debug.print("Unable to route hook '{s}'\n", .{arg0});
+        std.debug.print("Unable to route hook '{any}'\n", .{arg0});
+        return 1;
     }
-
-    return 0;
 }
 
 pub fn preReceive(stdin: *Reader, _: *const Env) !void {
@@ -334,7 +355,7 @@ const Env = struct {
             .datadir = datadir,
             .user = user,
             // TODO better authentication
-            .authenticated = user != null and !startsWith(u8, user.?, "anon"),
+            .authenticated = method == .ssh or user != null and !startsWith(u8, user.?, "anon"),
         };
     }
 
