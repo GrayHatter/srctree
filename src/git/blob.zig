@@ -1,8 +1,7 @@
-memory: ?[]u8 = null,
+bytes: []u8,
 sha: Git.Sha,
 mode: [6]u8,
 name: []const u8,
-data: ?[]u8 = null,
 
 const Blob = @This();
 
@@ -11,14 +10,8 @@ pub fn init(sha: Sha, mode: [6]u8, name: []const u8, data: []u8) Blob {
         .sha = sha,
         .mode = mode,
         .name = name,
-        .data = data,
+        .bytes = data,
     };
-}
-
-pub fn initOwned(sha: Sha, mode: [6]u8, name: []const u8, data: []u8, memory: []u8) Blob {
-    var b: Blob = .init(sha, mode, name, data);
-    b.memory = memory;
-    return b;
 }
 
 pub fn isFile(self: Blob) bool {
@@ -41,7 +34,7 @@ pub fn toTree(self: Blob, repo: *const Repo, a: Allocator, io: Io) !Tree {
 }
 
 pub fn raze(self: Blob, a: Allocator) void {
-    if (self.memory) |mem| a.free(mem);
+    a.free(self.bytes);
 }
 
 pub fn format(self: Blob, out: *Io.Writer) !void {

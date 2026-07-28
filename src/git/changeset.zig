@@ -1,14 +1,14 @@
-name: []const u8,
 sha: Sha,
+name: []const u8,
 title: []const u8,
 timestamp: i64,
 
 const ChangeSet = @This();
 
-pub fn init(a: Allocator, name: []const u8, commit: Commit) !ChangeSet {
-    return ChangeSet{
-        .name = try a.dupe(u8, name),
+pub fn init(a: Allocator, name: []const u8, commit: *const Commit) !ChangeSet {
+    return .{
         .sha = commit.sha,
+        .name = try a.dupe(u8, name),
         .title = try a.dupe(u8, trim(u8, commit.title, " \n")),
         .timestamp = commit.committer.timestamp,
     };

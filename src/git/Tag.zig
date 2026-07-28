@@ -6,7 +6,7 @@ tagger: Actor,
 message: []const u8,
 signature: ?[]const u8,
 //TODO raze
-memory: ?[]u8 = null,
+bytes: []u8 = &.{},
 //signature: ?Commit.GPGSig,
 
 const Tag = @This();
@@ -36,14 +36,14 @@ pub fn init(sha: Sha, data: []const u8) !Tag {
 
 pub fn initOwned(sha: Sha, data: []u8) !Tag {
     var tag = try init(sha, data);
-    tag.memory = data;
+    tag.bytes = data;
     return tag;
 }
 
 pub fn fromObject(obj: Object, name: []u8) !Tag {
     return switch (obj) {
-        .tag => |tag| try .fromSlice(tag.sha, tag.memory.?),
-        .commit => |cmt| try .lightTag(cmt.sha, name, cmt.memory orelse cmt.body),
+        .tag => |tag| try .fromSlice(tag.sha, tag.bytes),
+        .commit => |cmt| try .lightTag(cmt.sha, name, cmt.bytes),
         else => error.NotATag,
     };
 }

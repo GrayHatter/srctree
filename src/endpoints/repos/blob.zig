@@ -43,7 +43,7 @@ fn isHash(slice: []const u8) bool {
 }
 
 fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) Router.Error!void {
-    var files: Git.Tree.Path = (cmt.loadTree(repo, frame.alloc, frame.io) catch return error.Unknown).withPath(&.{});
+    var files: Git.Tree = (cmt.loadTree(repo, frame.alloc, frame.io) catch return error.Unknown);
     const verb = rd.verb orelse return treeEndpoint(frame, rd, repo, &files);
     var path = rd.path orelse return treeEndpoint(frame, rd, repo, &files);
 
@@ -54,7 +54,10 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commi
                 const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.buffer});
                 return frame.redirect(uri, .permanent_redirect);
             }
-            var child = files.descend(path.rest(), repo, frame.alloc, frame.io) catch return error.Unknown;
+            var child = files.descend(path.rest(), repo, frame.alloc, frame.io) catch |err| {
+                log.err("unable to descend '{s}' err {}", .{ path.rest(), err });
+                return error.Unknown;
+            };
             return treeEndpoint(frame, rd, repo, &child);
         },
         else => {},
@@ -64,36 +67,21 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commi
 
 const BlobPage = PageData("blob.html");
 
-fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree.Path) Router.Error!void {
-    var blb: Git.Blob = undefined;
-    var files = tree;
+fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
     var path = rd.path orelse return error.InvalidURI;
-    search: while (path.next()) |bname| {
-        var itr = files.iterate();
-        while (itr.next()) |obj| {
-            if (std.mem.eql(u8, bname, obj.name)) {
-                blb = obj;
-                if (obj.isFile()) {
-                    if (path.next() != null) return error.InvalidURI;
-                    break :search;
-                }
-                files = switch (repo.objects.load(obj.sha, f.alloc, f.io) catch return error.Unknown) {
-                    .tree => |t| t.withPath(path.rest()),
-                    else => return error.Unknown,
-                };
-                continue :search;
-            }
-        } else return error.InvalidURI;
-    }
+    var path_itr = std.fs.path.componentIterator(rd.path.?.buffer);
+    const blob_name = path_itr.last().?.name;
+    const blob_path = path_itr.path[0..path_itr.start_index];
+    const blb = tree.descendBlob(path.rest(), repo, f.alloc, f.io) catch unreachable;
 
     var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (!resolve.isFile()) return error.Unknown;
     const colored_blob: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
-        Highlight.highlight(lang, resolve.data.?, f.alloc, f.io) catch return error.ServerFault
+        Highlight.highlight(lang, resolve.bytes, f.alloc, f.io) catch return error.ServerFault
     else if (excludedExt(blb.name))
         "This file type is currently unsupported"
     else
-        try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = resolve.data.? }});
+        try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = resolve.bytes }});
 
     const wrapped = try wrapLineNumbers(f.alloc, colored_blob);
 
@@ -101,7 +89,7 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree.Path) Router.E
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
-    const safe_name = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blb.name }});
+    const safe_name = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blob_name }});
     const meta_title = try allocPrint(f.alloc, "{s} - {s} -- srctree", .{ safe_name, rd.name });
     const ext: ?[]const u8 = if (std.mem.findLast(u8, safe_name, ".")) |lst| safe_name[lst + 1 ..] else null;
     const meta_desc = try allocPrint(f.alloc, "{} lines {s}{s}", .{
@@ -111,15 +99,26 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree.Path) Router.E
     });
 
     var w: Io.Writer.Allocating = .init(f.alloc);
-    var itr = files.iterate();
+    const local_tree = tree.descend(blob_path, repo, f.alloc, f.io) catch unreachable;
+    var itr = local_tree.iterate();
     while (itr.next()) |b| if (!b.isFile()) {
-        const tree_str = "<span class=\"tree\"><a href=\"/repo/{s}/tree/{s}/\">{s}</a></span>\n";
-        try w.writer.print(tree_str, .{ rd.name, b.name, b.name });
+        const tree_str = "<span class=\"tree\"><a href=\"/repo/{s}/tree/{s}{s}/\">{s}</a></span>\n";
+        try w.writer.print(tree_str, .{
+            rd.name,
+            blob_path,
+            b.name,
+            b.name,
+        });
     };
-    itr = files.iterate();
+    itr = local_tree.iterate();
     while (itr.next()) |b| if (b.isFile()) {
-        const blob_str = "<span class=\"file\"><a href=\"{s}\">{s}</a></span>\n";
-        try w.writer.print(blob_str, .{ b.name, b.name });
+        const blob_str = "<span class=\"file\"><a href=\"/repo/{s}/tree/{s}{s}\">{s}</a></span>\n";
+        try w.writer.print(blob_str, .{
+            rd.name,
+            blob_path,
+            b.name,
+            b.name,
+        });
     };
 
     var page = BlobPage.init(.{
@@ -210,6 +209,7 @@ const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;
 const countScalar = std.mem.countScalar;
+const log = std.log.scoped(.endpoint_blob);
 
 const verse = @import("verse");
 const abx = verse.Antibiotic;

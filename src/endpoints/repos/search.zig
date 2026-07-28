@@ -121,13 +121,13 @@ fn searchTree(
             },
             .blob => |b| {
                 std.debug.assert(b.isFile());
-                if (find(u8, b.data.?, search_str)) |idx|
+                if (find(u8, b.bytes, search_str)) |idx|
                     try files.append(a, .{
                         .path = path,
                         .sha = b.sha,
                         .idx = idx,
-                        .line = @truncate(countScalar(u8, b.data.?[0..idx], '\n')),
-                        .code = b.data.?,
+                        .line = @truncate(countScalar(u8, b.bytes[0..idx], '\n')),
+                        .code = b.bytes,
                     });
             },
             .commit, .tag => return error.CorruptedRepo,
@@ -213,7 +213,7 @@ const Exclude = struct {
                 switch (repo.objects.load(obj.sha, a, io) catch return error.ServerFault) {
                     .tree, .commit, .tag => break,
                     .blob => |b| {
-                        var r: Reader = .fixed(b.data.?);
+                        var r: Reader = .fixed(b.bytes);
                         while (r.takeSentinel('\n')) |line| {
                             if (endsWith(u8, line, "linguist-vendored") or endsWith(u8, line, " binary")) {
                                 if (find(u8, line, "/** ")) |idx| {

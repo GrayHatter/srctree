@@ -22,7 +22,7 @@ pub fn raze(objs: Objects, a: Allocator, io: Io) void {
     a.free(objs.packs);
 }
 
-fn findFileSha(objs: Objects, sha: *Sha, io: Io) !Io.File {
+fn findFileSha(objs: Objects, sha: *Sha, io: Io) LoadError!Io.File {
     // TODO error on ambiguous ref
     var fb = [_]u8{0} ** 2048;
     const byte: u8 = switch (sha.hash) {
@@ -31,22 +31,22 @@ fn findFileSha(objs: Objects, sha: *Sha, io: Io) !Io.File {
         .partial => |pt| pt.bytes[0],
     };
 
-    const objdir = try bufPrint(&fb, "./{x}", .{byte});
+    const objdir = bufPrint(&fb, "./{x}", .{byte}) catch unreachable;
     const dir = try objs.dir.openDir(io, objdir, .{ .iterate = true });
     defer dir.close(io);
     var itr = dir.iterate();
-    const text = try bufPrint(&fb, "{f}", .{std.fmt.alt(sha.*, .fmtHex)});
+    const text = bufPrint(&fb, "{f}", .{std.fmt.alt(sha.*, .fmtHex)}) catch unreachable;
 
     while (itr.next(io) catch null) |file| {
         if (startsWith(u8, file.name, text[2..])) {
-            sha.* = .init(try bufPrint(&fb, "{x}{s}", .{ byte, file.name[0..] }));
-            return try dir.openFile(io, file.name, .{});
+            sha.* = .init(bufPrint(&fb, "{x}{s}", .{ byte, file.name[0..] }) catch unreachable);
+            return dir.openFile(io, file.name, .{}) catch return error.OtherFileSys;
         }
     }
     return error.FileNotFound;
 }
 
-fn findFile(objs: Objects, sha: Sha, io: Io) !Io.File {
+fn findFile(objs: Objects, sha: Sha, io: Io) LoadError!Io.File {
     if (sha.hash == .partial and sha.hash.partial.len >= 6) {
         var new_sha = sha;
         return try objs.findFileSha(&new_sha, io);
@@ -57,59 +57,78 @@ fn findFile(objs: Objects, sha: Sha, io: Io) !Io.File {
         .sha256 => |sh| &sh,
     };
     var fb = [_]u8{0} ** 2048;
-    const grouped = try bufPrint(&fb, "./{s}/{s}", .{ text[0..2], text[2..] });
+    const grouped = bufPrint(&fb, "./{s}/{s}", .{ text[0..2], text[2..] }) catch unreachable;
     const file = objs.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
         error.FileNotFound => {
-            const exact = try bufPrint(&fb, "./{s}", .{text[0..]});
+            const exact = bufPrint(&fb, "./{s}", .{text[0..]}) catch unreachable;
             return objs.dir.openFile(io, exact, .{}) catch |err2| switch (err2) {
                 error.FileNotFound => {
                     log.warn("unable to find commit '{s}'", .{text[0..]});
                     return error.ObjectMissing;
                 },
-                else => return err2,
+                else => return error.OtherFileSys,
             };
         },
-        else => return err,
+        else => return error.OtherFileSys,
     };
     return file;
 }
 
-fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) !Any {
+pub const LoadError = error{
+    Ambiguous,
+    OtherFileSys,
+    ObjectInvalid,
+    ObjectMissing,
+    ObjectCorrupt,
+    OutOfMemory,
+    ShaNotFound,
+} || Dir.OpenError;
+
+fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) LoadError!Any {
     var file = try objs.findFile(sha, io);
     defer file.close(io);
-    const stat = try file.stat(io);
+    const stat = file.stat(io) catch return error.OtherFileSys;
     const compressed: []u8 = try a.alloc(u8, stat.size);
     defer a.free(compressed);
     var reader = file.reader(io, compressed);
     var z_b: [zlib.max_window_len * 2]u8 = undefined;
     var zl: std.compress.flate.Decompress = .init(&reader.interface, .zlib, &z_b);
-    const data = try zl.reader.allocRemaining(a, .limited(0xffffff));
-    errdefer a.free(data);
-    if (findScalar(u8, data, 0)) |i| {
-        const header = data[0..i];
-        _ = header;
-        const body = data[i + 1 ..];
-        if (startsWith(u8, data, "blob ")) {
-            return .{ .blob = .initOwned(sha, @splat(0xff), body, body, data) };
-        } else if (startsWith(u8, data, "tree ")) {
-            return .{ .tree = .{ .sha = sha, .bytes = data[i + 1 ..] } };
-        } else if (startsWith(u8, data, "commit ")) {
-            return .{ .commit = try .initOwned(sha, body, data) };
-        } else if (startsWith(u8, data, "tag ")) {
-            return .{ .tag = try .initOwned(sha, body) };
-        }
-    }
-    return error.InvalidObject;
+
+    if (zl.reader.takeSentinel(0)) |take| {
+        const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
+        errdefer a.free(data);
+
+        if (startsWith(u8, take, "blob ")) {
+            return .{ .blob = .init(sha, @splat(0xff), data, data) };
+        } else if (startsWith(u8, take, "tree ")) {
+            return .{ .tree = .{ .sha = sha, .bytes = data } };
+        } else if (startsWith(u8, take, "commit ")) {
+            return .{ .commit = Commit.initOwned(sha, data) catch return error.ObjectCorrupt };
+        } else if (startsWith(u8, take, "tag ")) {
+            return .{ .tag = Tag.initOwned(sha, data) catch return error.ObjectCorrupt };
+        } else return error.ObjectInvalid;
+    } else |_| return error.ObjectInvalid;
 }
 
-fn loadFromPacks(objs: Objects, sha: Sha, a: Allocator, io: Io) !?Any {
+fn loadFromPacks(objs: Objects, sha: Sha, a: Allocator, io: Io) LoadError!?Any {
     for (objs.packs) |pack| {
         const offset = try pack.contains(sha) orelse continue;
         const fullsha = switch (sha.hash) {
             .partial => |p| try pack.expandPrefix(p),
             else => sha,
         };
-        return try pack.resolveObject(fullsha, offset, &objs, a, io);
+        return pack.resolveOffset(fullsha, offset, &objs, a, io) catch |err| return switch (err) {
+            error.OutOfMemory => error.OutOfMemory,
+            error.ObjectCorrupt => return error.ObjectCorrupt,
+            error.ObjectMissing => error.ObjectMissing,
+            error.ObjectInvalid => error.ObjectInvalid,
+            error.DeltaRef, error.DeltaOffset => unreachable,
+            error.PackCorrupt => unreachable,
+            error.EndOfStream => unreachable,
+            error.ReadFailed => unreachable,
+            error.PackRef => unreachable,
+            error.Ambiguous => unreachable,
+        };
     }
     return null;
 }
@@ -138,7 +157,7 @@ pub fn resolveSha(objs: Objects, sha: Sha, io: Io) !Sha {
         return expanded;
     } else |err| switch (err) {
         error.ShaNotFound => continue,
-        error.AmbiguousRef => return error.AmbiguousRef,
+        error.Ambiguous => return error.Ambiguous,
     };
 
     var nsha = sha;
@@ -174,7 +193,7 @@ test "read pack" {
         }
     }
     const obj = try objs.load(Sha.init(lol), a, io);
-    defer a.free(obj.commit.memory.?);
+    defer a.free(obj.commit.bytes);
     try std.testing.expect(obj == .commit);
     if (false) std.debug.print("{}\n", .{obj});
 }

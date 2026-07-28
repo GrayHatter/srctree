@@ -235,9 +235,7 @@ test "pack contains" {
     } else try std.testing.expect(false); // half sha
 
     const err = repo.objects.packs[0].contains(Sha.initPartial("7d"));
-    try std.testing.expectError(error.AmbiguousRef, err);
-
-    //var long_obj = try repo.findObj(a, lol);
+    try std.testing.expectError(error.Ambiguous, err);
 }
 
 test "commit to tree" {

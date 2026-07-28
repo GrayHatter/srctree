@@ -124,7 +124,7 @@ fn orderSha(lhs: []const u8, rhs: []const u8) std.math.Order {
     return .eq;
 }
 
-pub fn contains(pack: Pack, sha: Sha) !?u32 {
+pub fn contains(pack: Pack, sha: Sha) error{Ambiguous}!?u32 {
     switch (sha.hash) {
         .sha1 => return pack.containsWidth(20, sha),
         .sha256 => return pack.containsWidth(32, sha),
@@ -135,7 +135,7 @@ pub fn contains(pack: Pack, sha: Sha) !?u32 {
     }
 }
 
-pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) !?u32 {
+pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) error{Ambiguous}!?u32 {
     const shabin: []const u8 = switch (sha.hash) {
         .sha1 => &sha.hash.sha1,
         .sha256 => &sha.hash.sha256,
@@ -169,9 +169,9 @@ pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) !?u32 {
 
     if (found) |f| {
         if (objnames.len > f + 1 and startsWith(u8, objnames[f + 1][0..width], shabin)) {
-            return error.AmbiguousRef;
+            return error.Ambiguous;
         } else if (f > 0 and startsWith(u8, objnames[f - 1][0..width], shabin)) {
-            return error.AmbiguousRef;
+            return error.Ambiguous;
         }
         return @byteSwap(self.offsets[f + start]);
     }
@@ -179,14 +179,14 @@ pub fn containsWidth(self: Pack, comptime width: u8, sha: Sha) !?u32 {
     return null;
 }
 
-pub fn expandPrefix(pack: Pack, partial_sha: Sha.Partial) error{ AmbiguousRef, ShaNotFound }!Sha {
+pub fn expandPrefix(pack: Pack, partial_sha: Sha.Partial) error{ Ambiguous, ShaNotFound }!Sha {
     return switch (pack.format) {
         .sha1 => return pack.expandPrefixWidth(20, partial_sha),
         .sha256 => return pack.expandPrefixWidth(32, partial_sha),
     };
 }
 
-pub fn expandPrefixWidth(self: Pack, width: comptime_int, partial_sha: Sha.Partial) error{ AmbiguousRef, ShaNotFound }!Sha {
+pub fn expandPrefixWidth(self: Pack, width: comptime_int, partial_sha: Sha.Partial) error{ Ambiguous, ShaNotFound }!Sha {
     const len: usize = @divFloor(partial_sha.len, 2);
     const partial: []const u8 = partial_sha.bytes[0..len];
     const count: usize = self.fanOutCount(partial[0]);
@@ -215,9 +215,9 @@ pub fn expandPrefixWidth(self: Pack, width: comptime_int, partial_sha: Sha.Parti
 
     if (found) |f| {
         if (objnames.len > f + 1 and startsWith(u8, &objnames[f + 1], partial)) {
-            return error.AmbiguousRef;
+            return error.Ambiguous;
         } else if (f > 0 and startsWith(u8, &objnames[f - 1], partial)) {
-            return error.AmbiguousRef;
+            return error.Ambiguous;
         }
         return .init(&objnames[f]);
     }
@@ -301,7 +301,7 @@ fn deltaInst(reader: *Reader, writer: *Writer, base: []const u8) !usize {
     }
 }
 
-fn loadRefDelta(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
+fn loadDeltaRef(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
     var buf: [20]u8 = (try reader.takeArray(20)).*;
     const sha = Sha.init(buf[0..]);
 
@@ -309,10 +309,10 @@ fn loadRefDelta(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: All
         switch (objs.loadObjectOrDelta(sha, a, io) catch return error.ObjectMissing) {
             .pack => |pk| .{ pk.data, pk.data, pk.header.kind },
             .file => |fdata| switch (fdata) {
-                .blob => |b| .{ b.memory.?, b.data.?, .blob },
+                .blob => |b| .{ b.bytes, b.bytes, .blob },
                 .tree => |t| .{ @constCast(t.bytes), t.bytes, .tree },
-                .commit => |c| .{ c.memory.?, c.body, .commit },
-                .tag => |t| .{ t.memory.?, t.memory.?, .tag },
+                .commit => |c| .{ c.bytes, c.body, .commit },
+                .tag => |t| .{ t.bytes, t.bytes, .tag },
             },
         };
     defer a.free(basefree);
@@ -330,7 +330,7 @@ fn loadRefDelta(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: All
     };
 }
 
-fn loadDelta(self: Pack, reader: *Reader, offset: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
+fn loadDeltaOffset(self: Pack, reader: *Reader, offset: usize, objs: *const Objects, a: Allocator, io: Io) Error!PackedObject {
     // fd pos is offset + 2-ish because of the header read
     const srclen = try readVarInt(reader);
 
@@ -360,26 +360,29 @@ pub fn loadData(self: Pack, offset: usize, objs: *const Objects, a: Allocator, i
         .header = h,
         .data = switch (h.kind) {
             .commit, .tree, .blob, .tag => loadBlob(&reader, a, io) catch return error.PackCorrupt,
-            .ofs_delta => return try self.loadDelta(&reader, offset, objs, a, io),
-            .ref_delta => return try self.loadRefDelta(&reader, offset, objs, a, io),
+            .ofs_delta => return try self.loadDeltaOffset(&reader, offset, objs, a, io),
+            .ref_delta => return try self.loadDeltaRef(&reader, offset, objs, a, io),
             .invalid => {
-                std.debug.print("obj type ({}) not implemened\n", .{h.kind});
-                @panic("not implemented");
+                log.err("obj type ({}) not implemenedn", .{h.kind});
+                return error.ObjectInvalid;
             },
         },
     };
 }
 
-pub fn resolveObject(self: Pack, sha: Sha, offset: usize, objs: *const Objects, a: Allocator, io: Io) !Objects.Any {
+pub fn resolveOffset(self: Pack, sha: Sha, offset: usize, objs: *const Objects, a: Allocator, io: Io) !Objects.Any {
     const resolved = try self.loadData(offset, objs, a, io);
     errdefer a.free(resolved.data);
+    if (sha.eql(.empty)) @panic("unreachable");
 
     return switch (resolved.header.kind) {
-        .blob => .{ .blob = .initOwned(sha, .{ 0, 0, 0, 0, 0, 0 }, resolved.data, resolved.data, resolved.data) },
+        .blob => .{ .blob = .init(sha, .{ 0, 0, 0, 0, 0, 0 }, resolved.data, resolved.data) },
         .tree => .{ .tree = .{ .sha = sha, .bytes = resolved.data } },
-        .commit => .{ .commit = try .initOwned(sha, resolved.data, resolved.data) },
-        .tag => .{ .tag = try .initOwned(sha, resolved.data) },
-        else => return error.IncompleteObject,
+        .commit => .{ .commit = Commit.initOwned(sha, resolved.data) catch return error.ObjectCorrupt },
+        .tag => .{ .tag = Tag.initOwned(sha, resolved.data) catch return error.ObjectCorrupt },
+        .invalid => return error.ObjectInvalid,
+        .ofs_delta => return error.DeltaOffset,
+        .ref_delta => return error.DeltaRef,
     };
 }
 
@@ -392,18 +395,22 @@ pub const Error = Reader.Error || error{
     OutOfMemory,
     PackCorrupt,
     PackRef,
-    AmbiguousRef,
+    Ambiguous,
     ObjectMissing,
+    ObjectInvalid,
 };
 
 const Sha = @import("Sha.zig");
 const Objects = @import("Objects.zig");
+const Commit = @import("Commit.zig");
+const Tag = @import("Tag.zig");
 
 const system = @import("../system.zig");
 
 const std = @import("std");
 const Io = std.Io;
 const fs = std.fs;
+const log = std.log.scoped(.git_internals);
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const zlib = std.compress.flate;

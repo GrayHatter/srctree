@@ -221,6 +221,7 @@ const Journal = struct {
                 else => {
                     log.warn("Error building streak list for repo {s} because {}", .{ repo.name, err });
                     repo.commits.clearAndFree(a);
+                    if (debug_mode) unreachable;
                     continue;
                 },
             });
@@ -237,7 +238,7 @@ const Journal = struct {
                 if (repo.next_ts < before_ts - DAY) continue;
 
                 if (j.buildBestStreakRepo(repo, before_ts, a, io) catch |err| {
-                    log.err("unable to build the streak list for repo {s} [error {}]", .{ repo.name, err });
+                    log.err("unable to build the streak list for repo {s} [{}]", .{ repo.name, err });
                     repo.commits.clearAndFree(a);
                     continue;
                 }) {
@@ -647,3 +648,4 @@ const JournalRows = S.UserCommitsHtml.Months.JournalRows;
 
 const Route = verse.Router;
 const Error = Route.Error;
+const debug_mode: bool = @import("builtin").mode == .Debug;

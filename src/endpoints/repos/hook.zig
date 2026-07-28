@@ -62,7 +62,7 @@ fn update(f: *Frame) Router.Error!void {
 
     var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (!resolve.isFile()) return {};
-    const data = try f.alloc.dupeSentinel(u8, resolve.data.?, 0);
+    const data = try f.alloc.dupeSentinel(u8, resolve.bytes, 0);
     var diag: std.zon.parse.Diagnostics = .{};
     if (std.zon.parse.fromSliceAlloc(ZonConf, f.alloc, data, &diag, .{ .ignore_unknown_fields = true })) |zon| {
         if (zon.srctree) |srctree| {

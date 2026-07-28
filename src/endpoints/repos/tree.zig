@@ -8,7 +8,7 @@ fn filenameIsHidden(name: []const u8) bool {
         eql(u8, name, "LICENSE.md");
 }
 
-pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree.Path) Router.Error!void {
+pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     const now: i64 = Io.Clock.real.now(ctx.io).toSeconds();
     const c = if (rd.ref) |ref|
         switch (repo.objects.load(.init(ref), ctx.alloc, ctx.io) catch return error.InvalidURI) {
@@ -39,7 +39,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree.Path) 
     var itr = files.iterate();
     const blobs = try itr.toSlice(ctx.alloc);
 
-    if (files.tree.changedSetFrom(repo, c.sha, ctx.alloc, ctx.io)) |changed| {
+    if (files.changedSetFrom(repo, &c, ctx.alloc, ctx.io)) |changed| {
         std.sort.pdq(Git.Blob, blobs, {}, sorter);
         for (blobs) |obj| {
             for (changed) |ch| {
@@ -89,7 +89,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree.Path) 
     for (blobs) |obj| {
         if (isReadme(obj.name)) {
             const resolve = repo.blob(obj.sha, ctx.alloc, ctx.io) catch return error.Unknown;
-            const readme_html = htmlReadme(resolve.data.?, ctx.alloc, ctx.io) catch unreachable;
+            const readme_html = htmlReadme(resolve.bytes, ctx.alloc, ctx.io) catch unreachable;
             readme = try allocPrint(ctx.alloc, "{f}", .{readme_html[0]});
             break;
         }
@@ -125,7 +125,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree.Path) 
         .commit_time_human = .safe(commit_time),
         //.commit_hex = commit_hex,
         .commit_hex_short = .abx(commit_hex_short),
-        .dot_dot = files.path.len > 0,
+        .dot_dot = files.parent != null,
         .branch_count = branch_count,
         .trees = list_trees.items,
         .files = list_files.items,

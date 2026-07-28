@@ -1,4 +1,4 @@
-memory: ?[]u8 = null,
+bytes: []u8 = &.{},
 sha: Sha,
 tree: Sha,
 /// 9 ought to be enough for anyone... or at least robinli ... at least for a while
@@ -86,9 +86,9 @@ pub fn init(sha: Sha, data: []const u8) !Commit {
     };
 }
 
-pub fn initOwned(sha: Sha, body: []const u8, memory: []u8) !Commit {
-    var commit = try init(sha, body);
-    commit.memory = memory;
+pub fn initOwned(sha: Sha, data: []u8) !Commit {
+    var commit = try init(sha, data);
+    commit.bytes = data;
     return commit;
 }
 
@@ -111,7 +111,7 @@ pub fn loadTree(self: Commit, repo: *const Repo, a: Allocator, io: Io) !Tree {
 }
 
 pub fn raze(self: Commit, a: Allocator) void {
-    a.free(self.memory.?);
+    a.free(self.bytes);
 }
 
 pub fn format(cmt: Commit, out: *Writer) !void {

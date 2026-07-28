@@ -497,7 +497,7 @@ fn resolveLineRefRepo(
         .stride => |s| .{ s.number, s.stride - s.number },
         .tag => return null,
     };
-    while (findScalarPos(u8, file.data.?, @max(end, start) + 1, '\n')) |next| {
+    while (findScalarPos(u8, file.bytes, @max(end, start) + 1, '\n')) |next| {
         if (count > 1) {
             start = next;
         } else if (count == 1) {
@@ -511,7 +511,7 @@ fn resolveLineRefRepo(
         count -|= 1;
     }
     if (count > 1) return error.LineNotFound;
-    const found_line = file.data.?[start..end];
+    const found_line = file.bytes[start..end];
 
     try found_lines.append(a, try highlightLineRef(line, found_line[1..], filename, "", a, io));
     return try found_lines.toOwnedSlice(a);
