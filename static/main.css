@@ -797,6 +797,10 @@ blob, gist, patch {
 	td:nth-child(9) { padding-left: 1.5rem; }
 	&.verse-stats-200 td:nth-child(4) { color: green; }
 	&.verse-stats-500 td:nth-child(4) { color: red; }
+	&.verse-stats-404 {
+		background: #ff808020;
+		td:nth-child(4) { color: red; }
+	}
 	&.verse-bot { background-color: #333; color: #888; }
 }
 pre { line-height: 125%; }
