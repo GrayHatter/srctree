@@ -77,7 +77,10 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
     var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (!resolve.isFile()) return error.Unknown;
     const colored_blob: []const u8 = if (Highlight.Language.guessFromFilename(blb.name)) |lang|
-        Highlight.highlight(lang, resolve.bytes, f.alloc, f.io) catch return error.ServerFault
+        Highlight.highlight(lang, resolve.bytes, f.alloc, f.io) catch |err| B: {
+            log.warn("unable to add syntax highlighting because {}", .{err});
+            break :B resolve.bytes;
+        }
     else if (excludedExt(blb.name))
         "This file type is currently unsupported"
     else

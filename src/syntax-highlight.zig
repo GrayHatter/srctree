@@ -117,7 +117,20 @@ pub fn translateInternal(r: *Reader, w: Writer, lang: Language, a: Allocator) !v
     };
 }
 
-pub fn highlight(lang: Language, text: []const u8, a: Allocator, io: Io) ![]u8 {
+pub const HighlightError = error{
+    AccessDenied,
+    Canceled,
+    EndOfStream,
+    InsufficentResources,
+    InvalidParam,
+    OutOfMemory,
+    ReadFailed,
+    Unexpected,
+    WouldBlock,
+    WriteFailed,
+};
+
+pub fn highlight(lang: Language, text: []const u8, a: Allocator, io: Io) HighlightError![]u8 {
     return switch (lang) {
         .bash,
         .c,
@@ -135,7 +148,52 @@ pub fn highlight(lang: Language, text: []const u8, a: Allocator, io: Io) ![]u8 {
         .txt,
         .vim,
         .zig,
-        => highlightPygmentize(lang, text, a, io),
+        => highlightPygmentize(lang, text, a, io) catch |err| switch (err) {
+            error.EndOfStream => error.EndOfStream,
+            error.Canceled => error.Canceled,
+            error.OutOfMemory => error.OutOfMemory,
+            error.WriteFailed => error.WriteFailed,
+            error.WouldBlock => error.WouldBlock,
+            error.Unexpected => error.Unexpected,
+            error.ReadFailed => error.ReadFailed,
+            error.AntivirusInterference,
+            error.FileLocksUnsupported,
+            error.OperationUnsupported,
+            error.ProcessAlreadyExec,
+            => error.Unexpected,
+            error.PermissionDenied,
+            error.AccessDenied,
+            error.FileSystem,
+            => error.AccessDenied,
+            error.FileTooBig,
+            error.NoSpaceLeft,
+            error.DeviceBusy,
+            error.NoDevice,
+            error.FileBusy,
+            error.ProcessFdQuotaExceeded,
+            error.SystemFdQuotaExceeded,
+            error.SystemResources,
+            error.ResourceLimitReached,
+            => error.InsufficentResources,
+            error.FileNotFound,
+            error.NotDir,
+            error.SymLinkLoop,
+            error.ReadOnlyFileSystem,
+            error.NetworkNotFound,
+            error.NameTooLong,
+            error.BadPathName,
+            error.PipeBusy,
+            error.IsDir,
+            error.UnrecognizedVolume,
+            error.PathAlreadyExists,
+            error.InvalidUserId,
+            error.InvalidProcessGroupId,
+            error.InvalidName,
+            error.InvalidWtf8,
+            error.InvalidExe,
+            error.InvalidBatchScriptArg,
+            => error.InvalidParam,
+        },
         //else => highlightInternal(a, lang, text),
 
     };
@@ -148,7 +206,52 @@ pub fn highlightInternal(a: Allocator, lang: Language, text: []const u8) ![]u8 {
     comptime unreachable;
 }
 
-pub fn highlightPygmentize(lang: Language, text: []const u8, a: Allocator, io: Io) ![]u8 {
+// Duplicated from stdlib processSpawn
+// TODO We can reduce the set of errors we return here
+pub const PygmentizeError = error{
+    WriteFailed,
+    Canceled,
+    SystemResources,
+    IsDir,
+    WouldBlock,
+    AccessDenied,
+    Unexpected,
+    EndOfStream,
+    FileTooBig,
+    NoSpaceLeft,
+    DeviceBusy,
+    PermissionDenied,
+    NoDevice,
+    FileBusy,
+    ProcessFdQuotaExceeded,
+    SystemFdQuotaExceeded,
+    PathAlreadyExists,
+    SymLinkLoop,
+    FileNotFound,
+    NotDir,
+    ReadOnlyFileSystem,
+    NetworkNotFound,
+    NameTooLong,
+    BadPathName,
+    PipeBusy,
+    AntivirusInterference,
+    FileLocksUnsupported,
+    OperationUnsupported,
+    FileSystem,
+    UnrecognizedVolume,
+    ReadFailed,
+    OutOfMemory,
+    InvalidWtf8,
+    InvalidExe,
+    InvalidBatchScriptArg,
+    ResourceLimitReached,
+    InvalidUserId,
+    InvalidProcessGroupId,
+    InvalidName,
+    ProcessAlreadyExec,
+};
+
+pub fn highlightPygmentize(lang: Language, text: []const u8, a: Allocator, io: Io) PygmentizeError![]u8 {
     var child = try std.process.spawn(io, .{
         .argv = &[_][]const u8{ "pygmentize", "-f", "html", "-l", try lang.toString() },
         .expand_arg0 = .no_expand,
