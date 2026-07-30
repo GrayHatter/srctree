@@ -61,17 +61,18 @@ pub fn initAlloc(sha: Sha, body: []const u8, a: Allocator) !Tree {
 }
 
 pub const DescendError = error{
+    CurrentTree,
     InvalidPath,
     InvalidTreeSha,
     NotATree,
-    PathNotFound,
     OutOfMemory,
+    PathNotFound,
 };
 
 // TODO leaks
 pub fn descend(from: *const Tree, path: []const u8, repo: *const Repo, a: Allocator, io: Io) DescendError!Tree {
     var path_itr = componentIterator(path);
-    const first = path_itr.first() orelse return error.InvalidPath;
+    const first = path_itr.first() orelse return error.CurrentTree;
 
     var itr = from.iterate();
     while (itr.next()) |next| {

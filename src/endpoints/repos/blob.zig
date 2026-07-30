@@ -102,7 +102,10 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
     });
 
     var w: Io.Writer.Allocating = .init(f.alloc);
-    const local_tree = tree.descend(blob_path, repo, f.alloc, f.io) catch unreachable;
+    const local_tree = tree.descend(blob_path, repo, f.alloc, f.io) catch |e| switch (e) {
+        error.CurrentTree => tree,
+        else => return error.ServerFault,
+    };
     var itr = local_tree.iterate();
     while (itr.next()) |b| if (!b.isFile()) {
         const tree_str = "<span class=\"tree\"><a href=\"/repo/{s}/tree/{s}{s}/\">{s}</a></span>\n";
