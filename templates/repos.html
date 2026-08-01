@@ -14,6 +14,14 @@
         <main>
           <name><a href="<Uri />"><Name /></a><Desc ornull /></name>
           <extra>
+            <Switch CiStatus>
+            <Case Success><a class="cistatus success" href="">CI:<span>Successful</span></a></Case>
+            <Case Pending><a class="cistatus running" href="">CI:<span>Running</span></a></Case>
+            <Case Failed><a class="cistatus failed" href="">CI:<span>Failed</span></a></Case>
+            <Case Broken><a class="cistatus broken" href="">CI:<span>Broken</span></a></Case>
+            <Case Unknown><a class="cistatus unknown" href="">CI:<span>Unknown</span></a></Case>
+            <Case Disabled><a class="cistatus disabled" href="">CI:<span>Disabled</span></a></Case>
+            </Switch>
             <With TagBlk><span class="muted"><Tag /> <Updated /></span></With>
             <With UpstreamBlk><p class="upstream">Upstream Repo: <a href="<Link />"><Link /></a></p></With>
           </extra>

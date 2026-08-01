@@ -1,10 +1,16 @@
+name: []const u8 = &.{},
 git: Git.Repo,
+ci: RepoCi = .{},
 
 const Repo = @This();
 
 pub const Agent = @import("Repo/Agent.zig");
 
 pub var dirs: repos.Dirs = .{};
+
+pub const RepoCi = struct {
+    enabled: bool = false,
+};
 
 pub fn init(git: Git.Repo) !Repo {
     return .{ .git = git };

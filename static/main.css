@@ -792,6 +792,14 @@ blob, gist, patch {
 }
 .admin-content { display: none; textarea { min-width: 35rem; } }
 .admin-content.active { display: inline-block; background: #a112; height: 50vh; min-width: 30rem; }
+.cistatus {
+	&.success { color: green; }
+	&.pending { color: yellow; }
+	&.failed { color: red; }
+	&.unknown { color: gray; }
+	&.disabled { color: gray; }
+	&.broken { color: red; }
+}
 .verse-stats-line {
 	td:nth-child(7), td:nth-child(8) { text-align: right; }
 	td:nth-child(9) { padding-left: 1.5rem; }

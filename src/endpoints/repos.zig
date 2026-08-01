@@ -427,6 +427,7 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
         .updated = .safe(updated),
         .tag_blk = tag,
         .svg_points = try svgPoints(repo, a, io),
+        .ci_status = .disabled,
     };
 }
 
