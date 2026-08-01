@@ -178,7 +178,7 @@ test {
 
 const Sha = @import("Sha.zig");
 const Repo = @import("Repo.zig");
-const Tree = @import("tree.zig");
+const Tree = @import("Tree.zig");
 const Actor = @import("actor.zig");
 const Objects = @import("Objects.zig");
 

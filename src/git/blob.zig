@@ -50,5 +50,5 @@ const Io = std.Io;
 const Git = @import("../git.zig");
 const Repo = Git.Repo;
 const Object = Git.Object;
-const Tree = @import("tree.zig");
+const Tree = @import("Tree.zig");
 const Sha = @import("Sha.zig");

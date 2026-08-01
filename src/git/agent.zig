@@ -249,6 +249,6 @@ const log = std.log.scoped(.git_agent);
 const find = std.mem.find;
 
 const Repo = @import("Repo.zig");
-const Tree = @import("tree.zig");
+const Tree = @import("Tree.zig");
 const Ref = @import("../git.zig").Ref;
 const Sha = @import("Sha.zig");

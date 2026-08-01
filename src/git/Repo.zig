@@ -372,7 +372,7 @@ const Ref = @import("../git.zig").Ref;
 const Remote = @import("Remote.zig");
 const Sha = @import("Sha.zig");
 const Tag = @import("Tag.zig");
-const Tree = @import("tree.zig");
+const Tree = @import("Tree.zig");
 
 const Ini = @import("../ini.zig");
 const system = @import("../system.zig");

@@ -253,6 +253,6 @@ const findScalar = std.mem.findScalar;
 const Sha = @import("Sha.zig");
 const Pack = @import("Pack.zig");
 const Blob = @import("blob.zig");
-const Tree = @import("tree.zig");
+const Tree = @import("Tree.zig");
 const Commit = @import("Commit.zig");
 const Tag = @import("Tag.zig");

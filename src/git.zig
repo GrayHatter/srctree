@@ -13,7 +13,7 @@ pub const Remote = @import("git/Remote.zig");
 pub const Repo = @import("git/Repo.zig");
 pub const Sha = @import("git/Sha.zig");
 pub const Tag = @import("git/Tag.zig");
-pub const Tree = @import("git/tree.zig");
+pub const Tree = @import("git/Tree.zig");
 
 pub const Ref = union(enum) {
     tag: Sha,
