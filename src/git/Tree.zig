@@ -1,49 +1,19 @@
 sha: Sha,
 bytes: []const u8,
-name: ?[]const u8 = null,
-parent: ?*const Tree = null,
-basepath: ?[]const u8 = null,
+name: ?[]const u8,
+parent: ?*const Tree,
+basepath: ?[]const u8,
 
 const Tree = @This();
 
-pub const Path2 = struct {
-    pub fn init(sha: Sha, blob: []const u8, parent: Sha, path: []const u8, a: Allocator) !Path2 {
-        return .{
-            .tree = .init(sha, a, blob),
-            .parent = parent,
-            .name = try a.dupe(u8, path),
-        };
-    }
-
-    pub fn descend(tree: *const Path2, path: []const u8, repo: *const Repo, a: Allocator, io: Io) DescendError!Path2 {
-        std.debug.assert(path.len > 0);
-
-        var path_itr = componentIterator(path);
-        var root: Path2 = if (repo.objects.load(tree.tree.sha, a, io)) |rt| switch (rt) {
-            .tree => |t| t.withPath(path),
-            else => return error.InvalidTreeSha,
-        } else |_| unreachable;
-
-        iter: while (path_itr.next()) |path_next| {
-            var itr = root.iterate();
-            while (itr.next()) |obj| {
-                if (eql(u8, obj.name, path_next.name)) {
-                    if (path_itr.peekNext() != null) {
-                        defer root.raze(a);
-                        return (obj.toTree(repo, a, io) catch @panic("FIXME")).withPath(path_next.path);
-                    }
-                    root.raze(a);
-                    root = (obj.toTree(repo, a, io) catch @panic("FIXME")).withPath(path_next.path);
-                    continue :iter;
-                }
-            } else return error.PathNotFound;
-        }
-        return root;
-    }
-};
-
-pub fn init(sha: Sha, blob: []const u8) !Tree {
-    return .{ .sha = sha, .bytes = blob };
+pub fn init(sha: Sha, blob: []const u8) Tree {
+    return .{
+        .sha = sha,
+        .bytes = blob,
+        .name = null,
+        .parent = null,
+        .basepath = null,
+    };
 }
 
 pub fn loadSha(sha: Sha, repo: *const Repo, a: Allocator, io: Io) !Tree {
@@ -53,11 +23,6 @@ pub fn loadSha(sha: Sha, repo: *const Repo, a: Allocator, io: Io) !Tree {
         unreachable;
     }
     return new.tree;
-}
-
-pub fn initAlloc(sha: Sha, body: []const u8, a: Allocator) !Tree {
-    const blob = try a.dupe(u8, body);
-    return .{ .sha = sha, .bytes = blob };
 }
 
 pub const DescendError = error{
@@ -89,8 +54,11 @@ pub fn descend(from: *const Tree, path: []const u8, repo: *const Repo, a: Alloca
                         .sha = new.tree.sha,
                         .parent = from,
                         .name = next.name,
+                        .basepath = path_itr.path[0..path_itr.end_index],
                     };
-                    return try tree.descend(path_itr.path[path_itr.start_index..], repo, a, io);
+                    var child = try tree.descend(path_itr.path[path_itr.start_index..], repo, a, io);
+                    child.basepath = path_itr.path[0..path_itr.end_index];
+                    return child;
                 }
 
                 return .{
@@ -98,6 +66,7 @@ pub fn descend(from: *const Tree, path: []const u8, repo: *const Repo, a: Alloca
                     .sha = new.tree.sha,
                     .parent = from,
                     .name = next.name,
+                    .basepath = path_itr.path[0..path_itr.end_index],
                 };
             },
             inline else => |e| e.raze(a),
@@ -128,6 +97,7 @@ pub fn descendBlob(from: *const Tree, path: []const u8, repo: *const Repo, a: Al
                         .sha = new.tree.sha,
                         .parent = from,
                         .name = next.name,
+                        .basepath = path_itr.path[0..path_itr.end_index],
                     };
                     return try tree.descendBlob(path_itr.path[path_itr.start_index..], repo, a, io);
                 }
@@ -287,7 +257,7 @@ test "tree decom" {
     const buf = try a.dupe(u8, b[0..]);
     defer a.free(buf);
     const blob = buf[(find(u8, buf, "\x00") orelse unreachable) + 1 ..];
-    const tree = try Tree.init(Sha.init("5edabf724389ef87fa5a5ddb2ebe6dbd888885ae"), blob);
+    const tree: Tree = .init(.init("5edabf724389ef87fa5a5ddb2ebe6dbd888885ae"), blob);
     defer tree.raze(a);
     var itr = tree.iterate();
     while (itr.next()) |tobj| {
@@ -339,51 +309,72 @@ test "commit mk sub tree" {
     const cmtt = try repo.HEAD(a, io);
     defer cmtt.raze(a);
 
-    var tree = try cmtt.loadTree(&repo, a, io);
+    const tree = try cmtt.loadTree(&repo, a, io);
     defer tree.raze(a);
 
-    var itr = tree.iterate();
-    var blob: Blob = blb: while (itr.next()) |obj| {
-        if (eql(u8, obj.name, "src")) break :blb obj;
-    } else return error.ExpectedBlobMissing;
-    var subtree = try blob.toTree(&repo, a, io);
-    if (false) std.debug.print("{any}\n", .{subtree});
+    {
+        var itr = tree.iterate();
+        var blob: Blob = blb: while (itr.next()) |obj| {
+            if (eql(u8, obj.name, "src")) break :blb obj;
+        } else return error.ExpectedBlobMissing;
+        var subtree = try blob.toTree(&repo, a, io);
+        defer subtree.raze(a);
+    }
 
     var subitr = tree.iterate();
+    var changes: usize = 0;
+    var sha: Sha = .empty;
     while (subitr.next()) |obj| {
-        if (false) std.debug.print("{any}\n", .{obj});
+        std.log.debug("/ {any}", .{obj});
+        if (!sha.eql(obj.sha)) {
+            sha = obj.sha;
+            changes += 1;
+        }
     }
-    defer subtree.raze(a);
+    try std.testing.expect(changes > 8);
+    changes = 0;
 
     {
-        const csubtree = try cmtt.loadTree(&repo, a, io);
-        defer csubtree.raze(a);
-        const subdsnd = try csubtree.descend("src", &repo, a, io);
-        defer subdsnd.raze(a);
-        std.log.debug("{any}\n", .{csubtree});
+        const tree_src = try tree.descend("src", &repo, a, io);
+        defer tree_src.raze(a);
+        var itr = tree_src.iterate();
+        while (itr.next()) |obj| {
+            std.log.debug("src/ {s: <30} {f}", .{ obj.name, obj.sha.text() });
+            if (!sha.eql(obj.sha)) {
+                sha = obj.sha;
+                changes += 1;
+            }
+        }
     }
+    try std.testing.expectEqual(31, changes);
+    changes = 0;
 
     {
-        const csubtree2 = try cmtt.loadTree(&repo, a, io);
-        defer csubtree2.raze(a);
-        const subdsnd2 = try csubtree2.descend("src/endpoints", &repo, a, io);
-        defer subdsnd2.raze(a);
-        std.log.debug("{any}\n", .{subdsnd2});
-        var sub2_itr = subdsnd2.iterate();
-        while (sub2_itr.next()) |obj|
-            std.log.debug("sub2itr {s} {any}\n", .{ obj.name, obj });
-        const changed = try subdsnd2.changedSet(&repo, a, io);
-        var subitr2 = subdsnd2.iterate();
-        var c_idx: usize = 0;
-        while (true) {
-            const o = subitr2.next() orelse break;
-            const c = changed[c_idx];
-            c_idx += 1;
+        const tree_src_endpt = try tree.descend("src/endpoints", &repo, a, io);
+        defer tree_src_endpt.raze(a);
+        var itr = tree_src_endpt.iterate();
+        while (itr.next()) |obj| {
+            std.log.debug("src/endpoints {s: <30} {f}", .{ obj.name, obj.sha.text() });
+            if (!sha.eql(obj.sha)) {
+                sha = obj.sha;
+                changes += 1;
+            }
+        }
+        try std.testing.expectEqual(10, changes);
+        changes = 0;
 
-            if (false) std.debug.print("{s} {s}\n", .{ o.name, c.sha });
+        const changed = try tree_src_endpt.changedSet(&repo, a, io);
+        defer a.free(changed);
+        for (changed) |c| {
+            std.log.debug("src/endpoints {s: <30} {f}", .{ c.name, c.sha.text() });
+            if (!sha.eql(c.sha)) {
+                sha = c.sha;
+                changes += 1;
+            }
             c.raze(a);
         }
-        a.free(changed);
+        try std.testing.expectEqual(10, changes); // 10 is just what it is today
+        changes = 0;
     }
 }
 

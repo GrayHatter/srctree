@@ -101,7 +101,7 @@ fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) LoadError!Any {
         if (startsWith(u8, take, "blob ")) {
             return .{ .blob = .init(sha, @splat(0xff), data, data) };
         } else if (startsWith(u8, take, "tree ")) {
-            return .{ .tree = .{ .sha = sha, .bytes = data } };
+            return .{ .tree = .init(sha, data) };
         } else if (startsWith(u8, take, "commit ")) {
             return .{ .commit = Commit.initOwned(sha, data) catch return error.ObjectCorrupt };
         } else if (startsWith(u8, take, "tag ")) {

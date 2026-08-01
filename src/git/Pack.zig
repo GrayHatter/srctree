@@ -377,7 +377,7 @@ pub fn resolveOffset(self: Pack, sha: Sha, offset: usize, objs: *const Objects, 
 
     return switch (resolved.header.kind) {
         .blob => .{ .blob = .init(sha, .{ 0, 0, 0, 0, 0, 0 }, resolved.data, resolved.data) },
-        .tree => .{ .tree = .{ .sha = sha, .bytes = resolved.data } },
+        .tree => .{ .tree = .init(sha, resolved.data) },
         .commit => .{ .commit = Commit.initOwned(sha, resolved.data) catch return error.ObjectCorrupt },
         .tag => .{ .tag = Tag.initOwned(sha, resolved.data) catch return error.ObjectCorrupt },
         .invalid => return error.ObjectInvalid,

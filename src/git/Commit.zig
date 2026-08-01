@@ -103,11 +103,27 @@ pub fn toParent(self: Commit, idx: u8, repo: *const Repo, a: Allocator, io: Io) 
     return error.NoParent;
 }
 
-pub fn loadTree(self: Commit, repo: *const Repo, a: Allocator, io: Io) !Tree {
-    return switch (try repo.objects.load(self.tree, a, io)) {
+pub fn loadTree(commit: Commit, repo: *const Repo, a: Allocator, io: Io) !Tree {
+    return switch (try repo.objects.load(commit.tree, a, io)) {
         .tree => |t| t,
         else => error.NotATree,
     };
+}
+
+pub fn loadTreeDescend(commit: Commit, baseN: ?[]const u8, repo: *const Repo, a: Allocator, io: Io) !Tree {
+    const base = baseN orelse return commit.loadTree(repo, a, io);
+    switch (try repo.objects.load(commit.tree, a, io)) {
+        .tree => |t| {
+            if (t.descend(base, repo, a, io)) |des| {
+                defer t.raze(a);
+                return des;
+            } else |err| switch (err) {
+                error.CurrentTree => return t,
+                else => return err,
+            }
+        },
+        else => return error.NotATree,
+    }
 }
 
 pub fn raze(self: Commit, a: Allocator) void {
