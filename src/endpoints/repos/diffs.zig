@@ -810,7 +810,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     // TODO remove delta_index
     const rd = RouteData.init(f.uri) orelse return error.ServerFault;
 
-    if (updatePatchView(f)) |_| return f.redirect(f.request.uri, .see_other) catch unreachable;
+    if (updatePatchView(f)) |_| return f.redirect(f.uri.path, .see_other) catch unreachable;
     const patch_view_mode = updateFetchPatchView(f) catch .inlined;
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;

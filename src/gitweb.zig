@@ -45,10 +45,10 @@ fn prepareEnv(f: *const Frame) !std.process.Environ.Map {
         "anon";
 
     var uri = f.uri;
-    uri.reset();
+    uri.index = 0;
     _ = uri.next() orelse return error.InvalidURI;
     _ = uri.next() orelse return error.InvalidURI;
-    const path_tr = try allocPrint(f.alloc, "repos/{s}/{s}", .{ rd.name, uri.rest() });
+    const path_tr = try allocPrint(f.alloc, "repos/{s}/{s}", .{ rd.name, uri.path[uri.index..] });
     errdefer f.alloc.free(path_tr);
     log.warn("pathtr {s}", .{path_tr});
 

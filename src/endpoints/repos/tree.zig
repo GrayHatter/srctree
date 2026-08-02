@@ -30,7 +30,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     else
         try allocPrint(ctx.alloc, "/repo/{s}", .{rd.name});
 
-    const path: ?[]const u8 = if (rd.path) |p| p.buffer else null;
+    const path: ?[]const u8 = if (rd.path) |p| p.path else null;
 
     var list_trees: ArrayList(S.TreeHtml.Trees) = .empty;
     var list_files: ArrayList(S.TreeHtml.Files) = .empty;

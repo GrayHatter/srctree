@@ -15,7 +15,7 @@ const style_blocks: [10][]const u8 = .{
 pub fn blame(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f.uri) orelse return error.ServerFault;
     std.debug.assert(rd.verb.? == .blame);
-    const blame_file = (rd.path orelse return error.InvalidURI).rest();
+    const blame_file = (rd.path orelse return error.InvalidURI).path[rd.path.?.index..];
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;

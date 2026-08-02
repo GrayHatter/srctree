@@ -50,12 +50,12 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commi
     switch (verb) {
         .blob => return blob(frame, rd, repo, files),
         .tree => {
-            if (frame.uri.buffer[frame.uri.buffer.len - 1] != '/') {
-                const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.buffer});
+            if (!frame.uri.isDir()) {
+                const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.path});
                 return frame.redirect(uri, .permanent_redirect);
             }
-            var child = files.descend(path.rest(), repo, frame.alloc, frame.io) catch |err| {
-                log.err("unable to descend '{s}' err {}", .{ path.rest(), err });
+            var child = files.descend(path.path[path.index..], repo, frame.alloc, frame.io) catch |err| {
+                log.err("unable to descend '{s}' err {}", .{ path.path[path.index..], err });
                 return error.Unknown;
             };
             return treeEndpoint(frame, rd, repo, &child);
@@ -69,10 +69,10 @@ const BlobPage = PageData("blob.html");
 
 fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
     var path = rd.path orelse return error.InvalidURI;
-    var path_itr = std.fs.path.componentIterator(rd.path.?.buffer);
+    var path_itr = std.fs.path.componentIterator(path.path);
     const blob_name = path_itr.last().?.name;
     const blob_path = path_itr.path[0..path_itr.start_index];
-    const blb = tree.descendBlob(path.rest(), repo, f.alloc, f.io) catch unreachable;
+    const blb = tree.descendBlob(path.path[path.index..], repo, f.alloc, f.io) catch unreachable;
 
     var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (!resolve.isFile()) return error.Unknown;
@@ -136,7 +136,7 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),
-            .blame = .{ .repo_name = .abx(rd.name), .filename = .abx(path.buffer) },
+            .blame = .{ .repo_name = .safe(rd.name), .filename = .abx(path.path) },
             .git_uri = .{ .host = .safe(try f.request.host.?.valid()), .repo_name = .abx(rd.name) },
             .upstream = upstream,
         },

@@ -33,7 +33,7 @@ pub const Router = struct {
     ref: ?[]const u8 = null,
     path: ?Path = null,
 
-    const Path = std.mem.SplitIterator(u8, .scalar);
+    const Path = verse.Uri;
 
     // TODO delete me
     pub const RoutingError = verse.Router.RoutingError;
@@ -76,9 +76,9 @@ pub const Router = struct {
         }
     };
 
-    pub fn init(uri_itr: verse.Uri.Iterator) ?Router {
+    pub fn init(uri_itr: verse.Uri) ?Router {
         var uri = uri_itr;
-        uri.reset();
+        uri.index = 0;
         _ = uri.next() orelse return null;
         const name = validRepoName(uri.next()) orelse return null;
         var verb: ?Verb = Verb.fromSlice(uri.next()) orelse return .{ .name = name };
@@ -89,9 +89,9 @@ pub const Router = struct {
             .ref => {
                 ref = validRef(uri.next()) orelse return .{ .name = name };
                 verb = if (uri.next()) |n| Verb.fromSlice(n) else null;
-                path = .{ .index = 0, .buffer = uri.rest(), .delimiter = '/' };
+                path = Path.init(uri.path[uri.index..]) catch unreachable;
             },
-            else => path = .{ .index = 0, .buffer = uri.rest(), .delimiter = '/' },
+            else => path = Path.init(uri.path[uri.index..]) catch unreachable,
         }
         return .{
             .name = name,

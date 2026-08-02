@@ -58,7 +58,7 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
     fr.dumpDebugData(.{});
     if (fr.request.user_agent) |*ua| {
         ua.dumpValidation(fr.request);
-        if (eql(u8, fr.request.uri, "/robots.txt")) {
+        if (eql(u8, fr.uri.path, "/robots.txt")) {
             //fr.dumpDebugData(.{});
             //ua.dumpValidation(fr.request);
             return null;
