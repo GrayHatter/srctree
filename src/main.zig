@@ -135,6 +135,7 @@ pub fn main(init: std.process.Init) !void {
     defer cache.raze();
 
     const socket_file = if (SrcConfig.global.server.?.sock) |socket| socket else "./srctree.sock";
+    log.debug("sock: {s}", .{socket_file});
 
     if (SrcConfig.global.server) |srv| {
         if (srv.remove_on_start) {
@@ -169,8 +170,6 @@ pub fn main(init: std.process.Init) !void {
         .base = auth.provider(),
     };
 
-    std.debug.print("sock: {s}\n", .{socket_file});
-
     if (SrcConfig.global.repos) |repo_config| {
         if (repo_config.dir) |public_repo_dir|
             Repos.dirs.public = public_repo_dir;
@@ -188,9 +187,8 @@ pub fn main(init: std.process.Init) !void {
         .threads = 4,
         .stats = .{ .auth_mode = .sensitive },
     }) catch {
-        if (@errorReturnTrace()) |trace| {
+        if (@errorReturnTrace()) |trace|
             std.debug.dumpErrorReturnTrace(trace);
-        }
         std.process.exit(1);
     };
     agent.enabled = false;

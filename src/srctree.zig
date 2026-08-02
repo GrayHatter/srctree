@@ -14,6 +14,7 @@ pub const endpoints = verse.Endpoints(.{
     root,
     verse.stats.Endpoint,
     @import("endpoints/api.zig"),
+    @import("endpoints/auth.zig"),
     @import("endpoints/admin.zig"),
     @import("endpoints/gist.zig"),
     @import("endpoints/network.zig"),

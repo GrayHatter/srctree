@@ -2,6 +2,7 @@ index: usize,
 state: State = .nos,
 created: i64,
 updated: i64,
+number: usize = 0,
 revision: usize = 0,
 base_hash: []const u8 = &.{},
 source_hash: []const u8 = &.{},
@@ -103,15 +104,16 @@ pub fn commit(d: Diff, io: Io) !void {
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
     try writerFn(&d, &fd_writer.interface);
-    try fd_writer.interface.writeAll(d.patch.blob);
+    try fd_writer.interface.writeAll(std.mem.trimStart(u8, d.patch.blob, "\n"));
     try fd_writer.interface.flush();
 }
 
 pub const Revision = enum(usize) {
     first = 0,
-    prev = std.math.maxInt(usize) - 2,
-    current = std.math.maxInt(usize) - 1,
-    last = std.math.maxInt(usize),
+    one = maxInt(usize) - 3,
+    prev = maxInt(usize) - 2,
+    current = maxInt(usize) - 1,
+    last = maxInt(usize),
     _,
 
     pub fn rev(u: usize) Revision {
@@ -124,19 +126,26 @@ pub const Revision = enum(usize) {
     }
 };
 
-pub fn getPatchRev(d: *const Diff, rev: Revision, agent: *const git.Agent, io: Io) !Patch {
-    const src = "HEAD";
-    std.debug.print("revision {}\n", .{rev});
+pub fn patchFromGitRev(
+    d: *const Diff,
+    base_rev: ?[]const u8,
+    diff_rev: Revision,
+    agent: *const git.Agent,
+    io: Io,
+) error{ServerFault}!Patch {
+    const base = base_rev orelse if (d.base_hash.len > 0) d.base_hash else "HEAD";
     var b: [512]u8 = undefined;
-    const target: []const u8 = switch (rev) {
-        .first => print(&b, "{s}..refs/diffs/{d}/rev-0", .{ src, d.index }) catch unreachable,
-        .prev => print(&b, "{s}..refs/diffs/{d}/rev-{d}", .{ src, d.index, d.revision -| 1 }) catch unreachable,
-        .current => print(&b, "{s}..refs/diffs/{d}/head", .{ src, d.index }) catch unreachable,
+    const target: []const u8 = switch (diff_rev) {
+        .first => print(&b, "{s}..refs/diffs/{d}/rev-0", .{ base, d.number }) catch unreachable,
+        .prev => print(&b, "{s}..refs/diffs/{d}/rev-{d}", .{ base, d.number, d.revision -| 1 }) catch unreachable,
+        .current => print(&b, "{s}..refs/diffs/{d}/head", .{ base, d.number }) catch unreachable,
         // TODO find actual last
-        .last => print(&b, "{s}..refs/diffs/{d}/head", .{ src, d.index }) catch unreachable,
-        else => |num| print(&b, "{s}..refs/diffs/{d}/rev-{d}", .{ src, d.index, num }) catch unreachable,
+        .last => print(&b, "{s}..refs/diffs/{d}/head", .{ base, d.number }) catch unreachable,
+        // experimental
+        .one => print(&b, "refs/diffs/{d}/head^..refs/diffs/{d}/head", .{ d.number, d.number }) catch unreachable,
+        else => |num| print(&b, "{s}..refs/diffs/{d}/rev-{d}", .{ base, d.number, num }) catch unreachable,
     };
-    std.debug.print("revision {} {s}\n", .{ rev, target });
+    log.info("revision {} {s}", .{ diff_rev, target });
 
     // TODO verify patch and rev exists
     const blob = agent.formatPatchRange(target, io) catch return error.ServerFault;
@@ -150,9 +159,11 @@ pub fn getPatch(d: *const Diff, agent: *const git.Agent, io: Io) !Patch {
 const std = @import("std");
 const Io = std.Io;
 const Allocator = std.mem.Allocator;
+const log = std.log.scoped(.types_diff);
 const print = std.fmt.bufPrint;
 const allocPrint = std.fmt.allocPrint;
 const find = std.mem.find;
+const maxInt = std.math.maxInt;
 
 const git = @import("../git.zig");
 const Patch = @import("../Patch.zig");

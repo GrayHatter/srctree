@@ -34,7 +34,7 @@ pub fn pullUpstream(agent: Agent, branch_ex: []const u8, io: Io) !void {
 
 pub fn pushDownstream(agent: Agent, io: Io) !bool {
     const push = try agent.exec(&[_][]const u8{ "git", "push", "downstream", "*:*", "--porcelain" }, io);
-    std.debug.print("pushing downstream ->\n{s}\n", .{push});
+    log.warn("pushing downstream ->\n{s}\n", .{push});
     agent.alloc.free(push);
     return true;
 }
@@ -45,7 +45,7 @@ pub fn forkRemote(agent: Agent, uri: []const u8, local_dir: []const u8, io: Io) 
         io,
     );
     if (child.stderr.len > 0) {
-        std.debug.print("git Agent error\nstderr: {s}\n", .{child.stderr});
+        log.warn("git Agent error\nstderr: {s}\n", .{child.stderr});
         if (find(u8, child.stderr, "does not exist")) |_|
             return error.RemoteRepoUnreachable
         else
@@ -63,7 +63,7 @@ pub fn forkRemote(agent: Agent, uri: []const u8, local_dir: []const u8, io: Io) 
     try w.interface.writeAll("    fetch = +refs/heads/*:refs/remotes/upstream/*\n");
     try w.interface.flush();
 
-    if (DEBUG_GIT_ACTIONS) std.debug.print(
+    if (DEBUG_GIT_ACTIONS) log.warn(
         "git action\n{s}\n'''\n{s} \n''' \n{s} \n''' \ngit agent\n{any}\n",
         .{ uri, child.stdout, child.stderr, agent.cwd },
     );
@@ -120,25 +120,24 @@ pub fn checkPatch(agent: Agent, patch: []const u8, io: Io) !?[]u8 {
     }, patch, io);
 
     if (res.term.exited == 0) return null;
-    std.debug.print("git apply error {}\n", .{res.term.exited});
-    std.debug.print("stderr {s}", .{res.stderr});
-    std.debug.print("stdout {s}", .{res.stdout});
+    log.info("git apply error {}", .{res.term.exited});
+    log.info("stderr {s}", .{res.stderr});
+    log.info("stdout {s}", .{res.stdout});
     return error.DoesNotApply;
 }
 
 pub fn blame(agent: Agent, name: []const u8, ref: ?Ref, io: Io) ![]u8 {
-    std.debug.print("Git blame on file {s}\n", .{name});
-
+    log.debug("Git blame on file {s}", .{name});
     const argv: []const []const u8 = if (ref) |r| switch (r) {
         .sha => |s| &.{ "git", "blame", "--porcelain", s.text().slice(), "--", name },
         inline else => |_, t| {
-            std.debug.print("Git blame not implemented for {}\n", .{t});
+            log.warn("Git blame not implemented for {}\n", .{t});
             return error.NotImplemented;
         },
     } else &.{ "git", "blame", "--porcelain", "--", name };
     if (agent.execCustom(argv, io)) |res| {
         if (res.term != .exited or res.term.exited != 0) {
-            std.debug.print("git Agent error\nstderr: {s}\n", .{res.stderr});
+            log.info("git Agent stderr: {s}\n", .{res.stderr});
             agent.alloc.free(res.stderr);
             return error.BlameFailed;
         }
@@ -201,12 +200,11 @@ fn execCustomStdin(agent: Agent, argv: []const []const u8, stdin: []const u8, io
         .term = child.wait(io) catch |err| {
             const errstr =
                 \\git agent error:
-                \\error :: {}
-                \\argv ::
+                \\    error :: {}
+                \\    argv ::
             ;
-            std.debug.print(errstr, .{err});
-            for (argv) |arg| std.debug.print("{s} ", .{arg});
-            std.debug.print("\n", .{});
+            log.warn(errstr, .{err});
+            for (argv) |arg| log.warn("{s}", .{arg});
             return err;
         },
         .stdout = try stdout.toOwnedSlice(),
@@ -221,11 +219,11 @@ fn execCustom(agent: Agent, argv: []const []const u8, io: Io) !ExecResult {
 fn exec(agent: Agent, argv: []const []const u8, io: Io) ![]u8 {
     const child = try agent.execCustom(argv, io);
     if (child.stderr.len > 0) {
-        std.debug.print("git Agent error\nstderr: {s}\n", .{child.stderr});
+        log.warn("git Agent error\nstderr: {s}\n", .{child.stderr});
     }
     defer agent.alloc.free(child.stderr);
 
-    if (DEBUG_GIT_ACTIONS) std.debug.print(
+    log.debug(
         \\git action
         \\{s}
         \\'''

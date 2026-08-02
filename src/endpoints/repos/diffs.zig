@@ -139,7 +139,7 @@ fn updatePatch(f: *Frame) Error!void {
     const idx = isHex(delta_id) orelse return error.InvalidURI;
 
     const post = f.request.data.post orelse return error.DataMissing;
-    std.debug.print("post {any}\n", .{post});
+    log.info("post {any}\n", .{post});
     for (post.items) |itm| std.debug.print("post itm {any}\n", .{itm});
 
     const udata = post.validate(DiffUpdateReq) catch return error.DataInvalid; // TODO return custom text for curl
@@ -274,10 +274,10 @@ pub fn directReply(ctx: *Frame) Error!void {
 pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.PatchHtml {
     patch.parse(a) catch |err| {
         if (find(u8, patch.blob, "\nMerge: ") == null) {
-            std.debug.print("err: {any}\n", .{err});
+            log.err("Unable to parse normal diff -> err: {any}", .{err});
             return err;
         } else {
-            std.debug.print("Unable to parse diff {} (merge commit)\n", .{err});
+            log.err("Unable to parse diff {} (merge commit)", .{err});
             return error.UnableToGeneratePatch;
         }
     };
@@ -798,7 +798,7 @@ fn view(f: *Frame) Error!void {
             return f.redirect(loc, .see_other) catch unreachable;
         },
         else => {
-            std.debug.print("can't redirect attach {s}\n", .{@tagName(delta.attach)});
+            log.err("can't redirect attach {s}\n", .{@tagName(delta.attach)});
             return error.DataInvalid;
         },
     }
@@ -842,18 +842,21 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     var messages: []S.CommentThreadHtml.Messages = &.{};
     var applies: bool = false;
     if (delta.attached(f.alloc, f.io)) |_dif| {
+        log.err("base {any}", .{_dif.diff.base_hash});
         curl_hint = null;
         const diff = _dif.diff;
         var agent = repo.agent(f.alloc);
 
-        var patch = try diff.getPatchRev(if (rev) |r| .rev(r) else .current, &agent, f.io);
+        const revi: Diff.Revision = if (rev) |r| .rev(r) else .current;
+        _ = revi;
+        var patch = try diff.patchFromGitRev(null, .current, &agent, f.io);
 
         if (std.mem.trim(u8, diff.patch.blob, &std.ascii.whitespace).len > 0) {
             patch.revision = rev;
             if (patchStruct(f.alloc, &patch, patch_view_mode)) |phtml| {
                 patch_formatted = phtml;
             } else |err| {
-                std.debug.print("Unable to generate patch {any}\n", .{err});
+                log.warn("Unable to generate patch {any}", .{err});
             }
             const cmt = repo.HEAD(f.alloc, f.io) catch return error.ServerFault;
             // TODO does this always apply? (If from git, it must)
@@ -863,7 +866,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 if (agent.checkPatch(patch.blob, f.io)) |_| {
                     applies = true;
                 } else |err| {
-                    std.debug.print("git apply failed {any}\n", .{err});
+                    log.info("git apply failed {any}\n", .{err});
                     applies = false;
                 }
 
@@ -876,7 +879,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             .edit = f.user != null,
         }, f.alloc, f.io);
     } else |_| {
-        std.debug.print("Unable to find attached patch/diff\n", .{});
+        log.err("Unable to find attached patch/diff", .{});
     }
 
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
@@ -971,6 +974,7 @@ const Io = std.Io;
 const Writer = Io.Writer;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const log = std.log.scoped(.diffs);
 const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;

@@ -58,23 +58,30 @@ pub fn isValid(_: Patch) bool {
     return true; // lol, you thought this did something :D
 }
 
-pub fn parse(self: *Patch, a: Allocator) !void {
+pub const ParseError = error{
+    OutOfMemory,
+    Invalid,
+    Empty,
+};
+
+pub fn parse(self: *Patch, a: Allocator) ParseError!void {
     if (self.diffs != null) return; // Assume successful parsing
     const diff_count = count(u8, self.blob, "\ndiff --git a/") +
         @as(usize, if (startsWith(u8, self.blob, "diff --git a/")) 1 else 0);
-    if (diff_count == 0) return error.PatchInvalid;
+
+    if (diff_count == 0) return error.Empty;
     self.diffs = try a.alloc(Diff, diff_count);
     errdefer {
         a.free(self.diffs.?);
         self.diffs = null;
     }
-    var start: usize = indexOfPos(u8, self.blob, 0, "diff --git a/") orelse {
-        return error.PatchInvalid;
+    var start: usize = findPos(u8, self.blob, 0, "diff --git a/") orelse {
+        return error.Invalid;
     };
     var end: usize = start;
     for (self.diffs.?) |*diff| {
         assert(self.blob[start] != '\n');
-        end = if (indexOfPos(u8, self.blob, start + 1, "\ndiff --git a/")) |s| s + 1 else self.blob.len;
+        end = if (findPos(u8, self.blob, start + 1, "\ndiff --git a/")) |s| s + 1 else self.blob.len;
         diff.* = try Diff.init(self.blob[start..end]);
         start = end;
     }
@@ -254,7 +261,7 @@ const Reader = Io.Reader;
 const count = std.mem.count;
 const startsWith = std.mem.startsWith;
 const assert = std.debug.assert;
-const indexOfPos = std.mem.indexOfPos;
+const findPos = std.mem.findPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
 const findAnyPos = std.mem.findAnyPos;
 const splitScalar = std.mem.splitScalar;
