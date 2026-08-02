@@ -141,7 +141,7 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 
 const API = @import("../api.zig");
-const Git = @import("../git.zig");
+const Git = @import("../../git.zig");
 const Router = API.Router;
 const verse = @import("verse");
 const abx = verse.Antibiotic;

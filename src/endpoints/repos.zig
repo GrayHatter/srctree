@@ -20,7 +20,9 @@ pub const routes = [_]verse.Router.Match{
     ROUTE("ref", treeBlob),
     ROUTE("tags", tags.list),
     ROUTE("tree", treeBlob),
-} ++ gitweb.endpoints ++ verse_endpoints_.routes;
+} ++
+    gitweb.endpoints ++
+    verse_endpoints_.routes;
 
 /// Deprecated in favor of `RepoRouter`.
 pub const RouteData = Router;
