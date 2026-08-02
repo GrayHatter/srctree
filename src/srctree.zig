@@ -19,6 +19,9 @@ pub const verse_routes = [_]Match{
         .{ .name = "Amzn-SearchBot", .allow = false }, //  malicious
         .{ .name = "Amzn-User", .allow = false }, // malicious
 
+        .{ .name = "SleepBot", .allow = false },
+
+        .{ .name = "AppleBot", .allow = true, .extra = "Disallow: /static/*\n" },
         .{ .name = "AhrefsBot", .allow = false }, // selfish
         .{ .name = "dotbot", .allow = false }, // selfish
         .{ .name = "PerplexityBot", .allow = false },
@@ -80,10 +83,12 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
         return dropRequest(fr);
     }
 
+    fr.dumpDebugData(.{});
     if (fr.request.user_agent) |*ua| {
+        ua.dumpValidation(fr.request);
         if (eql(u8, fr.request.uri, "/robots.txt")) {
-            fr.dumpDebugData(.{});
-            ua.dumpValidation(fr.request);
+            //fr.dumpDebugData(.{});
+            //ua.dumpValidation(fr.request);
             return null;
         }
         switch (ua.agent) {
@@ -112,8 +117,8 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         const ia_bot_ua = find(u8, ua_str, ia_ua) == null;
                         if (bot.malicious and !ia_bot_ua) {
                             log.err("Dropping malicious traffic", .{});
-                            fr.dumpDebugData(.{});
-                            ua.dumpValidation(fr.request);
+                            //fr.dumpDebugData(.{});
+                            //ua.dumpValidation(fr.request);
                             return Router.defaultResponse(.forbidden);
                         }
                     },
@@ -138,6 +143,8 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     return dropRequest(fr);
 
                 const bads = [_][]const u8{
+                    \\"Chromium";v="143", "Google Chrome";v="143", "Not_A Brand";v="99"
+                    ,
                     \\"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"
                     ,
                     \\"Not_A Brand";v="8", "Chromium";v=
@@ -156,8 +163,8 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 return dropRequest(fr),
             .script => {},
         }
-        fr.dumpDebugData(.{});
-        ua.dumpValidation(fr.request);
+        //fr.dumpDebugData(.{});
+        //ua.dumpValidation(fr.request);
         return null;
     }
 
