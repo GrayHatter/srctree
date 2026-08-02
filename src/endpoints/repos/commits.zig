@@ -161,7 +161,7 @@ pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
         f.content_type = null;
         f.headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
         try f.sendHeaders(.close);
-        try f.downstream.writer.writeAll(diff);
+        try f.downstream.writer.interface.writeAll(diff);
         return;
     }
     return f.sendDefaultErrorPage(.bad_request);

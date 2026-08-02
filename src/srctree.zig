@@ -97,8 +97,9 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     .googlebot => return null,
                     .bingbot => return null,
                     .unknown => {
-                        if (find(u8, fr.request.user_agent.?.string, "SearchBot/1.0") == null) return null;
-                        return dropRequest(fr);
+                        if (find(u8, ua.string, "SearchBot/1.0")) |_| return dropRequest(fr);
+                        if (find(u8, ua.string, "SleepBot/1.0")) |_| return dropRequest(fr);
+                        return null;
                     },
                     .gptbot,
                     .metaexternalagent,

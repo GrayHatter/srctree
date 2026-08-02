@@ -18,10 +18,10 @@ pub fn index(ctx: *Frame) Error!void {
 
         if (repo.findRemote("upstream")) |remote| {
             if (remote.url) |_| {
-                dom = dom.open(html.h3(null, &html.Attr.class("upstream")));
+                dom = dom.open(html.h3(&.{}, &.{.class("upstream")}));
                 dom.push(html.text("Upstream: "));
                 const purl = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(remote, .formatLink)});
-                dom.push(html.anch(purl, try html.Attr.create(ctx.alloc, "href", purl)));
+                dom.push(html.anch(&.{.text(purl)}, &.{.href(purl)}));
                 dom = dom.close();
             }
         }

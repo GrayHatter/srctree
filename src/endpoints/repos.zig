@@ -10,7 +10,7 @@ pub const verse_endpoints_ = verse.Endpoints(.{
     @import("repos/hook.zig"),
 });
 
-pub const routes = [_]Router.Match{
+pub const routes = [_]verse.Router.Match{
     ROUTE("blame", blame),
     ROUTE("blob", treeBlob),
     ROUTE("branches", branches.list),
@@ -23,15 +23,18 @@ pub const routes = [_]Router.Match{
 } ++ gitweb.endpoints ++ verse_endpoints_.routes;
 
 /// Deprecated in favor of `RepoRouter`.
-pub const RouteData = RepoRouter;
+pub const RouteData = Router;
 
-pub const RepoRouter = struct {
+pub const Router = struct {
     name: []const u8,
     verb: ?Verb = null,
     ref: ?[]const u8 = null,
     path: ?Path = null,
 
     const Path = std.mem.SplitIterator(u8, .scalar);
+
+    // TODO delete me
+    pub const RoutingError = verse.Router.RoutingError;
 
     pub const Verb = enum {
         /// srctree endpoints
@@ -71,7 +74,7 @@ pub const RepoRouter = struct {
         }
     };
 
-    pub fn init(uri_itr: verse.Uri.Iterator) ?RepoRouter {
+    pub fn init(uri_itr: verse.Uri.Iterator) ?Router {
         var uri = uri_itr;
         uri.reset();
         _ = uri.next() orelse return null;
@@ -96,11 +99,11 @@ pub const RepoRouter = struct {
         };
     }
 
-    pub fn exists(self: RepoRouter, vis: Repo.Visibility.Select, io: Io) bool {
+    pub fn exists(self: Router, vis: Repo.Visibility.Select, io: Io) bool {
         return repos.exists(self.name, vis, io);
     }
 
-    pub fn repoHeader(rd: RepoRouter, host: []const u8) !S.BaseRepoHeaderHtml {
+    pub fn repoHeader(rd: Router, host: []const u8) !S.BaseRepoHeaderHtml {
         _ = rd;
         _ = host;
         unreachable;
@@ -201,7 +204,7 @@ fn useGitProto(f: *const Frame) bool {
     return false;
 }
 
-pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
+pub fn router(f: *Frame) Router.RoutingError!verse.Router.BuildFn {
     const rd = RouteData.init(f.uri) orelse return list;
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
@@ -232,7 +235,7 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
 
         if (rd.verb) |verb| {
             return switch (verb) {
-                inline else => |v| Router.targetRouter(f, @tagName(v), &routes),
+                inline else => |v| verse.Router.targetRouter(f, @tagName(v), &routes),
             };
         }
         return treeBlob;
@@ -437,7 +440,7 @@ const RepoSortReq = struct {
     sort: ?[]const u8,
 };
 
-fn list(f: *Frame) Router.Error!void {
+fn list(f: *Frame) verse.Router.Error!void {
     const udata = f.request.data.query.validate(RepoSortReq) catch return error.DataInvalid;
     const tag_sort: bool = if (udata.sort) |srt| if (eql(u8, srt, "tag")) true else false else false;
 
@@ -504,11 +507,10 @@ const log = std.log.scoped(.srctree);
 const verse = @import("verse");
 const abx = verse.Antibiotic;
 const Frame = verse.Frame;
-const Router = verse.Router;
 const PageData = verse.template.PageData;
 const html = verse.template.html;
 const S = verse.template.Structs;
-const ROUTE = Router.ROUTE;
+const ROUTE = verse.Router.ROUTE;
 const Humanize = @import("../humanize.zig");
 const repos = @import("../repos.zig");
 const Repo = @import("../Repo.zig");

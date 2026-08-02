@@ -66,7 +66,7 @@ pub fn main(init: std.process.Init) !void {
     const a = init.gpa;
 
     var options = Options.default();
-    var runmode: verse.Server.RunModes = .zwsgi;
+    var runmode: verse.Server.RunMode = .{ .zwsgi = undefined };
 
     var args = init.minimal.args.iterate();
     arg0 = args.next() orelse "srctree";
@@ -78,9 +78,9 @@ pub fn main(init: std.process.Init) !void {
         {
             usage(!std.mem.eql(u8, arg, "-h"));
         } else if (std.mem.eql(u8, arg, "zwsgi")) {
-            runmode = .zwsgi;
+            runmode = .{ .zwsgi = undefined };
         } else if (std.mem.eql(u8, arg, "http")) {
-            runmode = .http;
+            runmode = .{ .http = undefined };
         } else if (std.mem.eql(u8, arg, "-c")) {
             if (args.next()) |passed_config_file| {
                 options.config_path = passed_config_file;
@@ -172,28 +172,25 @@ pub fn main(init: std.process.Init) !void {
     std.debug.print("sock: {s}\n", .{socket_file});
 
     if (SrcConfig.global.repos) |repo_config| {
-        if (repo_config.dir) |public_repo_dir| {
+        if (repo_config.dir) |public_repo_dir|
             Repos.dirs.public = public_repo_dir;
-        }
-
-        if (repo_config.private_dir) |private_repo_dir| {
+        if (repo_config.private_dir) |private_repo_dir|
             Repos.dirs.private = private_repo_dir;
-        }
     }
 
     Srctree.endpoints.serve(a, .{
-        .mode = if (runmode == .http)
-            .{ .http = .public }
-        else
-            .{ .zwsgi = .{ .file = socket_file, .chmod = 0o777, .stats = true } },
+        .mode = switch (runmode) {
+            .http => .{ .http = .localdevel },
+            .zwsgi => .{ .zwsgi = .{ .file = socket_file, .chmod = 0o777, .stats = true } },
+            else => unreachable,
+        },
         .auth = mtls.provider(),
         .threads = 4,
         .stats = .{ .auth_mode = .sensitive },
     }) catch {
-        // TODO FIXME
-        //if (@errorReturnTrace()) |trace| {
-        //    std.debug.dumpStackTrace(trace);
-        //}
+        if (@errorReturnTrace()) |trace| {
+            std.debug.dumpErrorReturnTrace(trace);
+        }
         std.process.exit(1);
     };
     agent.enabled = false;

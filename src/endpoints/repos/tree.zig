@@ -151,9 +151,9 @@ fn isReadme(name: []const u8) bool {
 fn htmlReadme(readme: []const u8, a: Allocator, io: Io) ![]E {
     var dom: *DOM = .create(a);
 
-    dom = dom.open(html.element("readme", null, null));
-    dom.push(html.element("intro", "README.md", null));
-    dom = dom.open(html.element("code", null, null));
+    dom = dom.open(html.element("readme", &.{}, &.{}));
+    dom.push(html.element("intro", &.{.text("README.md")}, &.{}));
+    dom = dom.open(html.element("code", &.{}, &.{}));
 
     var r: Reader = .fixed(readme);
     var w: Writer.Allocating = try .initCapacity(a, readme.len);

@@ -24,7 +24,11 @@ fn list(f: *Frame) Router.Error!void {
             .git_uri = null,
             .upstream = null,
         },
-        .artifacts = &.{.{ .name = .safe("name"), .date = .safe("date"), .href = .abx("href") }},
+        .artifacts = &.{.{
+            .name = .safe("name"),
+            .date = .safe("date"),
+            .href = .abx("href"),
+        }},
     });
 
     return f.sendPage(&page);
@@ -36,13 +40,10 @@ fn view(f: *Frame) Router.Error!void {
 }
 
 const std = @import("std");
-//const Allocator = std.mem.Allocator;
-//const Io = std.Io;
-//const allocPrint = std.fmt.allocPrint;
 const Repo = @import("../../Repo.zig");
 const repos = @import("../../repos.zig");
 const RepoEndpoint = @import("../repos.zig");
-const RouteData = RepoEndpoint.RepoRouter;
+const RouteData = RepoEndpoint.Router;
 const verse = @import("verse");
 const T = verse.template;
 const Frame = verse.Frame;

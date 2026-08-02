@@ -81,7 +81,7 @@ const std = @import("std");
 const repos = @import("../../repos.zig");
 const Repo = @import("../../Repo.zig");
 const RepoEndpoint = @import("../repos.zig");
-const RouteData = RepoEndpoint.RepoRouter;
+const RouteData = RepoEndpoint.Router;
 const git = @import("../../git.zig");
 
 const verse = @import("verse");

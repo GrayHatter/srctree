@@ -169,7 +169,7 @@ fn receivePack(f: *Frame) Error!void {
 }
 
 fn autoCreateSkel(f: *Frame) Error!void {
-    f.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n" ++
+    f.downstream.writer.interface.writeAll("HTTP/1.1 200 OK\r\n" ++
         "Expires: Fri, 01 Jan 1980 00:00:00 GMT\r\n" ++
         "Pragma: no-cache\r\n" ++
         "Cache-Control: no-cache, max-age=0, must-revalidate\r\n" ++
@@ -177,7 +177,7 @@ fn autoCreateSkel(f: *Frame) Error!void {
         "\r\n") catch
         return log.err("unable to start headers for fake repo", .{});
 
-    try git.protocol.announceFake(.receive, f.downstream.writer);
+    try git.protocol.announceFake(.receive, &f.downstream.writer.interface);
 }
 
 fn receivePackInternal(f: *Frame) Error!void {
@@ -233,7 +233,7 @@ fn receivePackExternal(f: *Frame) Error!void {
     log.err("'''", .{});
     log.err("'''", .{});
     // we just guess and assume it'll return 200 checking would be better
-    f.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch
+    f.downstream.writer.interface.writeAll("HTTP/1.1 200 OK\r\n") catch
         return debugStderr("unable to start headers", &child, f.io);
 
     var w: std.Io.Writer.Allocating = try .initCapacity(f.alloc, 64000);
@@ -243,7 +243,7 @@ fn receivePackExternal(f: *Frame) Error!void {
     _ = stdout_r.interface.streamRemaining(&w.writer) catch
         return debugStderr("unable to stream body", &child, f.io);
 
-    _ = f.downstream.writer.writeAll(w.writer.buffered()) catch
+    _ = f.downstream.writer.interface.writeAll(w.writer.buffered()) catch
         return debugStderr("unable to stream body", &child, f.io);
 
     stdout_r.interface.fillMore() catch {};
@@ -261,7 +261,7 @@ fn receivePackExternal(f: *Frame) Error!void {
         log.err("Error waiting for child {}", .{err});
         return error.ServerFault;
     }
-    f.downstream.writer.flush() catch log.err("final flush failed", .{});
+    f.downstream.writer.interface.flush() catch log.err("final flush failed", .{});
 }
 
 fn uploadPack(f: *Frame) Error!void {
@@ -297,10 +297,10 @@ fn uploadPackExternal(f: *Frame) Error!void {
     var stdout_r = stdout.reader(f.io, &r_b);
 
     // we just guess and assume it'll return 200 checking would be better
-    f.downstream.writer.writeAll("HTTP/1.1 200 OK\r\n") catch
+    f.downstream.writer.interface.writeAll("HTTP/1.1 200 OK\r\n") catch
         return debugStderr("unable to start headers", &child, f.io);
 
-    _ = stdout_r.interface.streamRemaining(f.downstream.writer) catch
+    _ = stdout_r.interface.streamRemaining(&f.downstream.writer.interface) catch
         return debugStderr("unable to stream body", &child, f.io);
 
     if (child.wait(f.io)) |chld| {
@@ -312,7 +312,7 @@ fn uploadPackExternal(f: *Frame) Error!void {
         log.err("Error waiting for child {}", .{err});
         return error.ServerFault;
     }
-    f.downstream.writer.flush() catch log.err("final flush failed", .{});
+    f.downstream.writer.interface.flush() catch log.err("final flush failed", .{});
 }
 
 fn debugStderr(comptime msg: []const u8, child: *std.process.Child, io: std.Io) !void {
