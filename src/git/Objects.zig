@@ -95,18 +95,24 @@ fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) LoadError!Any {
     var zl: std.compress.flate.Decompress = .init(&reader.interface, .zlib, &z_b);
 
     if (zl.reader.takeSentinel(0)) |take| {
-        const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
-        errdefer a.free(data);
-
         if (startsWith(u8, take, "blob ")) {
+            const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
             return .{ .blob = .init(sha, @splat(0xff), data, data) };
         } else if (startsWith(u8, take, "tree ")) {
+            const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
             return .{ .tree = .init(sha, data) };
         } else if (startsWith(u8, take, "commit ")) {
+            const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
+            errdefer a.free(data);
             return .{ .commit = Commit.initOwned(sha, data) catch return error.ObjectCorrupt };
         } else if (startsWith(u8, take, "tag ")) {
+            const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
+            errdefer a.free(data);
             return .{ .tag = Tag.initOwned(sha, data) catch return error.ObjectCorrupt };
-        } else return error.ObjectInvalid;
+        } else {
+            log.info("unknown object type \n{any}", .{take});
+            return error.ObjectInvalid;
+        }
     } else |_| return error.ObjectInvalid;
 }
 

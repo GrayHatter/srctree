@@ -108,7 +108,10 @@ pub fn descendBlob(from: *const Tree, path: []const u8, repo: *const Repo, a: Al
                 return bl;
             },
             inline else => |e| e.raze(a),
-        } else |_| return error.InvalidTreeSha;
+        } else |err| {
+            log.err("blob load failed {} {f}", .{ err, next.sha.text() });
+            return error.InvalidTreeSha;
+        }
     }
     return error.PathNotFound;
 }
@@ -388,6 +391,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
+const log = std.log.scoped(.git_tree);
 const bufPrint = std.fmt.bufPrint;
 const zstd = std.compress.zstd;
 const find = std.mem.find;
