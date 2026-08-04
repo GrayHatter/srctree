@@ -166,9 +166,7 @@ pub fn main(init: std.process.Init) !void {
     const auth_alloc = arena.allocator();
     var auth = Auth.init(auth_alloc, io);
     defer auth.raze();
-    var mtls = verse.auth.MTLS{
-        .base = auth.provider(),
-    };
+    var mtls = Auth.init(auth_alloc, io);
 
     if (SrcConfig.global.repos) |repo_config| {
         if (repo_config.dir) |public_repo_dir|
@@ -183,7 +181,7 @@ pub fn main(init: std.process.Init) !void {
             .zwsgi => .{ .zwsgi = .{ .file = socket_file, .chmod = 0o777, .stats = true } },
             else => unreachable,
         },
-        .auth = mtls.provider(),
+        .auth = &mtls.auth,
         .threads = 4,
         .stats = .{ .auth_mode = .sensitive },
     }) catch {

@@ -48,7 +48,7 @@ fn prepareEnv(f: *const Frame) !std.process.Environ.Map {
     uri.index = 0;
     _ = uri.next() orelse return error.InvalidURI;
     _ = uri.next() orelse return error.InvalidURI;
-    const path_tr = try allocPrint(f.alloc, "repos/{s}/{s}", .{ rd.name, uri.path[uri.index..] });
+    const path_tr = try allocPrint(f.alloc, "repos/{s}/{s}", .{ rd.name, uri.withoutPrefix() orelse "" });
     errdefer f.alloc.free(path_tr);
     log.warn("pathtr {s}", .{path_tr});
 

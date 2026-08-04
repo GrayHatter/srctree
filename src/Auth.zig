@@ -1,3 +1,4 @@
+auth: verse.Auth,
 alloc: Allocator,
 io: Io,
 
@@ -5,6 +6,16 @@ const Auth = @This();
 
 pub fn init(a: Allocator, io: Io) Auth {
     return .{
+        .auth = .{
+            .vtable = &.{
+                .valid = valid,
+                .lookupUser = lookupUser,
+                .authenticate = verse.Auth.MTLS.authenticate,
+                .createSession = null,
+                .getUserCookie = null,
+                .getUserToken = null,
+            },
+        },
         .alloc = a,
         .io = io,
     };
@@ -12,21 +23,8 @@ pub fn init(a: Allocator, io: Io) Auth {
 
 pub fn raze(_: Auth) void {}
 
-pub fn provider(self: *Auth) verse.auth.Provider {
-    return .{
-        .ctx = self,
-        .vtable = .{
-            .authenticate = null,
-            .valid = valid,
-            .createSession = null,
-            .getCookie = null,
-            .lookupUser = lookupUser,
-        },
-    };
-}
-
-pub fn valid(ptr: *const anyopaque, u: *const verse.auth.User) bool {
-    const auth: *const Auth = @ptrCast(@alignCast(ptr));
+pub fn valid(ptr: *const verse.Auth, u: *const verse.Auth.User) bool {
+    const auth: *const Auth = @fieldParentPtr("auth", ptr);
     _ = &auth;
     if (u.username != null and
         u.unique_id != null and
@@ -38,9 +36,9 @@ pub fn valid(ptr: *const anyopaque, u: *const verse.auth.User) bool {
     return false;
 }
 
-pub fn lookupUser(ptr: *anyopaque, user_id: []const u8) !verse.auth.User {
+pub fn lookupUser(ptr: *const verse.Auth, user_id: []const u8) !verse.Auth.User {
     log.debug("lookup user {s}", .{user_id});
-    const auth: *Auth = @ptrCast(@alignCast(ptr));
+    const auth: *const Auth = @fieldParentPtr("auth", ptr);
     const user: *types.User = auth.alloc.create(types.User) catch @panic("OOM");
     user.* = types.User.findMTLSFingerprint(user_id, auth.alloc, auth.io) catch |err| {
         std.debug.print("mtls lookup error {}\n", .{err});
