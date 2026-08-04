@@ -89,9 +89,11 @@ pub const Router = struct {
             .ref => {
                 ref = validRef(uri.next()) orelse return .{ .name = name };
                 verb = if (uri.next()) |n| Verb.fromSlice(n) else null;
-                path = Path.init(uri.path[uri.index..]) catch unreachable;
+                if (uri.withoutPrefix()) |wo| path = Path.init(wo) catch unreachable;
             },
-            else => path = Path.init(uri.path[uri.index..]) catch unreachable,
+            else => if (uri.withoutPrefix()) |wo| {
+                path = Path.init(wo) catch unreachable;
+            },
         }
         return .{
             .name = name,

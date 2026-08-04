@@ -50,7 +50,7 @@ fn treeOrBlobAtRef(frame: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commi
     switch (verb) {
         .blob => return blob(frame, rd, repo, files),
         .tree => {
-            if (!frame.uri.isDir()) {
+            if (frame.uri.isDir()) {
                 const uri = try allocPrint(frame.alloc, "/{s}/", .{frame.uri.path});
                 return frame.redirect(uri, .permanent_redirect);
             }
@@ -72,7 +72,10 @@ fn blob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!
     var path_itr = std.fs.path.componentIterator(path.path);
     const blob_name = path_itr.last().?.name;
     const blob_path = path_itr.path[0..path_itr.start_index];
-    const blb = tree.descendBlob(path.path[path.index..], repo, f.alloc, f.io) catch unreachable;
+    const blb = tree.descendBlob(path.path[path.index..], repo, f.alloc, f.io) catch |err| {
+        log.err("unable to descend to blob {}", .{err});
+        return error.ServerFault;
+    };
 
     var resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (!resolve.isFile()) return error.Unknown;

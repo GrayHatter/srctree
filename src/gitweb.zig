@@ -22,9 +22,9 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
 // https://git-scm.com/docs/git-config#Documentation/git-config.txt-receivedenyDeletes
 
 fn gitHttp(f: *Frame) Error!void {
-    const qstr = f.request.data.query.bytes;
-    const uri = f.uri.next() orelse &.{};
-    log.warn("uri {s}", .{uri});
+    const qstr = f.uri.query orelse &.{};
+    const uri = f.uri.peek() orelse &.{};
+    log.warn("uri {s} '{s}'", .{ uri, qstr });
     if (eql(u8, qstr, "service=git-receive-pack") or eql(u8, uri, "git-receive-pack"))
         return receivePack(f);
 
