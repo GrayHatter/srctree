@@ -297,6 +297,7 @@ readme {
 .treelist {
 	padding: 0 8px 8px;
 	font-family: "Ubuntu Mono", monospace, sans-serif;
+	min-width: 8rem;
 	span.tree, span.file {
 		border-top: 1px solid gray;
 		margin: auto;
