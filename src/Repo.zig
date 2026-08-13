@@ -23,10 +23,95 @@ pub fn raze(r: *Repo, a: Allocator, io: Io) void {
     r.git.raze(a, io);
 }
 
-pub const SortCtx = struct {
+pub const Sort = struct {
     alloc: Allocator,
     io: Io,
-    by: enum { commit, tag } = .commit,
+    by: By = .commit,
+
+    pub const By = enum { commit, tag };
+
+    pub fn sort(list: *ArrayList(Repo), a: Allocator, io: Io, by: By) void {
+        std.sort.heap(Repo, list.items, Sort{ .alloc = a, .io = io, .by = by }, Sort.lessThan);
+    }
+
+    // TODO deep invert this logic
+    pub fn lessThan(ctx: Sort, l: Repo, r: Repo) bool {
+        if (byPinned(l, r)) |pinned| return !pinned;
+
+        switch (ctx.by) {
+            .commit => return commitSorter(ctx, l, r),
+            .tag => {
+                var tags_left: std.ArrayList(Git.Tag) = .empty;
+                for (l.git.refs.map.keys(), l.git.refs.map.values()) |name, ref| switch (ref) {
+                    .tag => tags_left.append(ctx.alloc, Git.Tag.fromObject(
+                        l.git.objects.load(ref.resolve(&l.git) catch continue, ctx.alloc, ctx.io) catch continue,
+                        ctx.alloc.dupe(u8, name) catch unreachable,
+                    ) catch continue) catch unreachable,
+                    else => {},
+                };
+
+                var tags_right: std.ArrayList(Git.Tag) = .empty;
+                for (r.git.refs.map.keys(), r.git.refs.map.values()) |name, ref| switch (ref) {
+                    .tag => tags_right.append(ctx.alloc, Git.Tag.fromObject(
+                        r.git.objects.load(ref.resolve(&r.git) catch continue, ctx.alloc, ctx.io) catch continue,
+                        ctx.alloc.dupe(u8, name) catch unreachable,
+                    ) catch continue) catch unreachable,
+                    else => {},
+                };
+
+                if (tags_left.items.len > 0 or tags_right.items.len > 0) {
+                    if (tags_left.items.len == 0) return true;
+                    if (tags_right.items.len == 0) return false;
+                    std.sort.heap(Git.Tag, tags_left.items, {}, tags.sort);
+                    std.sort.heap(Git.Tag, tags_right.items, {}, tags.sort);
+
+                    if (tags_left.items[0].tagger.timestamp == tags_right.items[0].tagger.timestamp)
+                        return commitSorter(ctx, l, r);
+                    return tags_right.items[0].tagger.timestamp > tags_left.items[0].tagger.timestamp;
+                    //} else return false;
+                } else return true;
+            },
+        }
+    }
+
+    fn byPinned(l: Repo, r: Repo) ?bool {
+        const left_pinned: bool = if (l.git.config) |cfg|
+            if (cfg.srctree) |srctree| srctree.pinned orelse false else false
+        else
+            false;
+
+        const right_pinned: bool = if (r.git.config) |cfg|
+            if (cfg.srctree) |srctree| srctree.pinned orelse false else false
+        else
+            false;
+
+        if (left_pinned == right_pinned) {
+            return null;
+        } else if (left_pinned) {
+            return true;
+        } else if (right_pinned) {
+            return false;
+        }
+        return null;
+    }
+
+    pub fn notLessThan(ctx: Sort, l: Repo, r: Repo) bool {
+        return !lessThan(ctx, l, r);
+    }
+
+    fn commitSorter(ctx: Sort, l: Repo, r: Repo) bool {
+        var lc = l.git.HEAD(ctx.alloc, ctx.io) catch return true;
+        defer lc.raze(ctx.alloc);
+        var rc = r.git.HEAD(ctx.alloc, ctx.io) catch return false;
+        defer rc.raze(ctx.alloc);
+        return sorter({}, lc.committer.timestr, rc.committer.timestr);
+    }
+
+    fn sorter(_: void, l: []const u8, r: []const u8) bool {
+        return std.mem.lessThan(u8, l, r);
+    }
+
+    const tags = @import("endpoints/repos/tags.zig");
 };
 
 pub const Visibility = enum {
