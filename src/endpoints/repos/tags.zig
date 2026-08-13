@@ -16,7 +16,8 @@ pub fn list(f: *Frame) Router.Error!void {
         ) catch continue) catch unreachable,
         else => {},
     };
-    std.sort.heap(Git.Tag, tags.items, {}, sort);
+
+    Git.Tag.sort(&tags);
     var tstack: std.ArrayList(S.RepoTagsHtml.Tags) = .empty;
     for (tags.items) |tag| {
         tstack.append(f.alloc, .{ .name = .abx(tag.name) }) catch unreachable;
@@ -41,10 +42,6 @@ pub fn list(f: *Frame) Router.Error!void {
     });
 
     try f.sendPage(&page);
-}
-
-pub fn sort(_: void, l: Git.Tag, r: Git.Tag) bool {
-    return l.tagger.timestamp >= r.tagger.timestamp;
 }
 
 const repos_ = @import("../repos.zig");

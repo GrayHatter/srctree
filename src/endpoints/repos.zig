@@ -320,7 +320,7 @@ fn repoBlock(name: []const u8, repo: *const Repo, a: Allocator, io: Io) !S.Repos
         else => {},
     };
 
-    std.sort.heap(Git.Tag, tag_list.items, {}, tags.sort);
+    Git.Tag.sort(&tag_list);
 
     var tag: ?S.ReposHtml.RepoList.TagBlk = null;
     if (tag_list.items.len > 0) {

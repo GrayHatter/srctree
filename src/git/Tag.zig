@@ -125,6 +125,10 @@ pub fn fullTag(sha: Sha, blob: []const u8) !Tag {
     };
 }
 
+pub fn lessThan(self: Tag, peer: Tag) bool {
+    return self.tagger.timestamp < peer.tagger.timestamp;
+}
+
 test fromSlice {
     const blob =
         \\object 73751d1c0e9eaeaafbf38a938afd652d98ee9772
@@ -158,6 +162,14 @@ test fromSlice {
     try std.testing.expectEqual(TagType.commit, t.type);
     try std.testing.expectEqualStrings("Robin Linden", t.tagger.name);
     try std.testing.expectEqualStrings(t_msg, t.message);
+}
+
+pub fn sort(list: *std.ArrayList(Tag)) void {
+    std.sort.heap(Tag, list.items, {}, sortDesc);
+}
+
+pub fn sortDesc(_: void, self: Tag, peer: Tag) bool {
+    return !self.lessThan(peer);
 }
 
 const std = @import("std");

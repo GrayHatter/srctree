@@ -31,7 +31,7 @@ pub const Sort = struct {
     pub const By = enum { commit, tag };
 
     pub fn sort(list: *ArrayList(Repo), a: Allocator, io: Io, by: By) void {
-        std.sort.heap(Repo, list.items, Sort{ .alloc = a, .io = io, .by = by }, Sort.lessThan);
+        std.sort.heap(Repo, list.items, Sort{ .alloc = a, .io = io, .by = by }, Sort.notLessThan);
     }
 
     // TODO deep invert this logic
@@ -62,8 +62,8 @@ pub const Sort = struct {
                 if (tags_left.items.len > 0 or tags_right.items.len > 0) {
                     if (tags_left.items.len == 0) return true;
                     if (tags_right.items.len == 0) return false;
-                    std.sort.heap(Git.Tag, tags_left.items, {}, tags.sort);
-                    std.sort.heap(Git.Tag, tags_right.items, {}, tags.sort);
+                    Git.Tag.sort(&tags_left);
+                    Git.Tag.sort(&tags_right);
 
                     if (tags_left.items[0].tagger.timestamp == tags_right.items[0].tagger.timestamp)
                         return commitSorter(ctx, l, r);
