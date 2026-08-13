@@ -252,34 +252,25 @@ pub fn router(f: *Frame) Router.RoutingError!verse.Router.BuildFn {
     return error.Unrouteable;
 }
 
-const repoctx = struct {
-    alloc: Allocator,
-    io: Io,
-    by: enum {
-        commit,
-        tag,
-    } = .commit,
-};
-
-fn repoSorterNew(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
+fn repoSorterNew(ctx: Repo.SortCtx, l: Repo, r: Repo) bool {
     return !repoSorter(ctx, l, r);
 }
 
-fn commitSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
-    var lc = l.HEAD(ctx.alloc, ctx.io) catch return true;
+fn commitSorter(ctx: Repo.SortCtx, l: Repo, r: Repo) bool {
+    var lc = l.git.HEAD(ctx.alloc, ctx.io) catch return true;
     defer lc.raze(ctx.alloc);
-    var rc = r.HEAD(ctx.alloc, ctx.io) catch return false;
+    var rc = r.git.HEAD(ctx.alloc, ctx.io) catch return false;
     defer rc.raze(ctx.alloc);
     return sorter({}, lc.committer.timestr, rc.committer.timestr);
 }
 
-fn sortPinned(l: Git.Repo, r: Git.Repo) ?bool {
-    const left_pinned: bool = if (l.config) |cfg|
+fn sortPinned(l: Repo, r: Repo) ?bool {
+    const left_pinned: bool = if (l.git.config) |cfg|
         if (cfg.srctree) |srctree| srctree.pinned orelse false else false
     else
         false;
 
-    const right_pinned: bool = if (r.config) |cfg|
+    const right_pinned: bool = if (r.git.config) |cfg|
         if (cfg.srctree) |srctree| srctree.pinned orelse false else false
     else
         false;
@@ -295,25 +286,25 @@ fn sortPinned(l: Git.Repo, r: Git.Repo) ?bool {
 }
 
 // TODO deep invert this logic
-fn repoSorter(ctx: repoctx, l: Git.Repo, r: Git.Repo) bool {
+fn repoSorter(ctx: Repo.SortCtx, l: Repo, r: Repo) bool {
     if (sortPinned(l, r)) |pinned| return !pinned;
 
     switch (ctx.by) {
         .commit => return commitSorter(ctx, l, r),
         .tag => {
             var tags_left: std.ArrayList(Git.Tag) = .empty;
-            for (l.refs.map.keys(), l.refs.map.values()) |name, ref| switch (ref) {
+            for (l.git.refs.map.keys(), l.git.refs.map.values()) |name, ref| switch (ref) {
                 .tag => tags_left.append(ctx.alloc, Git.Tag.fromObject(
-                    l.objects.load(ref.resolve(&l) catch continue, ctx.alloc, ctx.io) catch continue,
+                    l.git.objects.load(ref.resolve(&l.git) catch continue, ctx.alloc, ctx.io) catch continue,
                     ctx.alloc.dupe(u8, name) catch unreachable,
                 ) catch continue) catch unreachable,
                 else => {},
             };
 
             var tags_right: std.ArrayList(Git.Tag) = .empty;
-            for (r.refs.map.keys(), r.refs.map.values()) |name, ref| switch (ref) {
+            for (r.git.refs.map.keys(), r.git.refs.map.values()) |name, ref| switch (ref) {
                 .tag => tags_right.append(ctx.alloc, Git.Tag.fromObject(
-                    r.objects.load(ref.resolve(&r) catch continue, ctx.alloc, ctx.io) catch continue,
+                    r.git.objects.load(ref.resolve(&r.git) catch continue, ctx.alloc, ctx.io) catch continue,
                     ctx.alloc.dupe(u8, name) catch unreachable,
                 ) catch continue) catch unreachable,
                 else => {},
@@ -338,7 +329,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn svgPoints(repo: *const Git.Repo, arena: Allocator, io: Io) !abx.Html {
+fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !abx.Html {
     const width = 52 * "l 100 100 ".len;
     const b = try arena.alloc(u8, width);
     errdefer arena.free(b);
@@ -348,14 +339,14 @@ fn svgPoints(repo: *const Git.Repo, arena: Allocator, io: Io) !abx.Html {
     var heat: [52]u16 = @splat(0);
 
     var max: isize = 1;
-    var commit: Git.Commit = repo.HEAD(arena, io) catch return .safe("V 46 M 109 46 ");
+    var commit: Git.Commit = repo.git.HEAD(arena, io) catch return .safe("V 46 M 109 46 ");
 
     for (0..52) |i| {
         const first = now.addDuration(.fromSeconds(-86400 * 7));
         defer now = first;
         const week: *u16 = &heat[heat.len - 1 - i];
         while (commit.committer.timestamp > first.toSeconds()) {
-            commit = commit.toParent(0, repo, arena, io) catch break;
+            commit = commit.toParent(0, &repo.git, arena, io) catch break;
             week.* +|= 1;
         }
         max = @max(max, week.*);
@@ -373,20 +364,20 @@ fn svgPoints(repo: *const Git.Repo, arena: Allocator, io: Io) !abx.Html {
     return .safe(w.buffered());
 }
 
-fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
+fn repoBlock(name: []const u8, repo: *const Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
     const now = Io.Clock.real.now(io).toSeconds();
     const desc: []const u8 = try allocPrint(a, "{f}", .{
-        abx.Html{ .text = repo.description(a, io) catch "" },
+        abx.Html{ .text = repo.git.description(a, io) catch "" },
     });
 
     var upstream: ?[]const u8 = null;
-    if (repo.findRemote("upstream")) |remote| {
+    if (repo.git.findRemote("upstream")) |remote| {
         upstream = try allocPrint(a, "{f}", .{std.fmt.alt(remote, .formatLink)});
     }
 
     var sha: Git.Sha = .zeros;
     var updated: []const u8 = "new repo";
-    if (repo.HEAD(a, io)) |cmt| {
+    if (repo.git.HEAD(a, io)) |cmt| {
         defer cmt.raze(a);
         sha = cmt.sha;
         const committer = cmt.committer;
@@ -394,9 +385,9 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
     } else |_| {}
 
     var tag_list: std.ArrayList(Git.Tag) = .empty;
-    for (repo.refs.map.keys(), repo.refs.map.values()) |tag_name, ref| switch (ref) {
+    for (repo.git.refs.map.keys(), repo.git.refs.map.values()) |tag_name, ref| switch (ref) {
         .tag => tag_list.append(a, Git.Tag.fromObject(
-            repo.objects.load(ref.resolve(repo) catch continue, a, io) catch continue,
+            repo.git.objects.load(ref.resolve(&repo.git) catch continue, a, io) catch continue,
             a.dupe(u8, tag_name) catch unreachable,
         ) catch continue) catch unreachable,
         else => {},
@@ -415,7 +406,7 @@ fn repoBlock(name: []const u8, repo: *const Git.Repo, a: Allocator, io: Io) !S.R
     }
 
     var repo_class: ?[]const u8 = "lowlight";
-    if (repo.config) |cfg| {
+    if (repo.git.config) |cfg| {
         if (cfg.srctree) |srctree| {
             if (srctree.pinned orelse false) repo_class = null;
         }
@@ -451,19 +442,19 @@ fn list(f: *Frame) verse.Router.Error!void {
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo_iter = Repo.allRepoIterator(vis, f.io) catch return error.Unknown;
-    var current_repos: ArrayList(Git.Repo) = .empty;
+    var current_repos: ArrayList(Repo) = .empty;
     while (repo_iter.next(f.io) catch return error.Unknown) |rpo_| {
         var rpo = rpo_;
-        rpo.loadData(f.alloc, f.io) catch |err| {
+        rpo.git.loadData(f.alloc, f.io) catch |err| {
             log.err("Error, unable to load data on repo {s} {}", .{ repo_iter.current_name.?, err });
             continue;
         };
-        rpo.repo_name = f.alloc.dupe(u8, repo_iter.current_name.?) catch null;
+        rpo.name = f.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
         try current_repos.append(f.alloc, rpo);
     }
 
-    std.sort.heap(Git.Repo, current_repos.items, repoctx{
+    std.sort.heap(Repo, current_repos.items, Repo.SortCtx{
         .alloc = f.alloc,
         .io = f.io,
         .by = if (tag_sort) .tag else .commit,
@@ -472,7 +463,7 @@ fn list(f: *Frame) verse.Router.Error!void {
     const repos_compiled = try f.alloc.alloc(S.ReposHtml.RepoList, current_repos.items.len);
     for (current_repos.items, repos_compiled) |*repo, *compiled| {
         defer repo.raze(f.alloc, f.io);
-        compiled.* = repoBlock(repo.repo_name orelse "unknown", repo, f.alloc, f.io) catch {
+        compiled.* = repoBlock(repo.name orelse "unknown", repo, f.alloc, f.io) catch {
             return error.Unknown;
         };
     }

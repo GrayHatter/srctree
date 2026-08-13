@@ -9,14 +9,14 @@ pub fn index(ctx: *Frame) Error!void {
     var repo_iter = Repo.iterateAll(vis, ctx.io) catch return error.Unknown;
     while (repo_iter.next(ctx.io) catch return error.Unknown) |repoC| {
         var repo = repoC;
-        repo.loadData(ctx.alloc, ctx.io) catch |err| {
+        repo.git.loadData(ctx.alloc, ctx.io) catch |err| {
             log.err("Error, unable to load data on repo {s} {}", .{ repo_iter.current_name.?, err });
             continue;
         };
         defer repo.raze(ctx.alloc, ctx.io);
-        repo.repo_name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
+        repo.name = ctx.alloc.dupe(u8, repo_iter.current_name.?) catch null;
 
-        if (repo.findRemote("upstream")) |remote| {
+        if (repo.git.findRemote("upstream")) |remote| {
             if (remote.url) |_| {
                 dom = dom.open(html.h3(&.{}, &.{.class("upstream")}));
                 dom.push(html.text("Upstream: "));

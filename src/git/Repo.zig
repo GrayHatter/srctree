@@ -6,7 +6,6 @@ current: ?[]u8 = null,
 remotes: StringArrayHashMap(Remote) = .empty,
 config: ?Ini.Config(Config).Base = null,
 config_ini: ?Ini.Config(Config) = null,
-repo_name: ?[]const u8 = null,
 
 const Repo = @This();
 

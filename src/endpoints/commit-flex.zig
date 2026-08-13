@@ -59,10 +59,10 @@ const Journal = struct {
         a.destroy(j);
     }
 
-    pub fn addRepo(j: *Journal, name: []const u8, repo: Git.Repo, a: Allocator) !void {
+    pub fn addRepo(j: *Journal, repo: Repo, a: Allocator) !void {
         try j.repos.append(a, .{
-            .name = try a.dupe(u8, name),
-            .repo = repo,
+            .name = try a.dupe(u8, repo.name orelse ""),
+            .repo = repo.git,
             .bufset = .init(a),
             .commits = .empty,
         });
@@ -473,16 +473,16 @@ pub fn commitFlex(ctx: *Frame) Error!void {
         },
     }) |input| {
         var repo = input;
-        repo.loadData(ctx.alloc, ctx.io) catch {
+        repo.git.loadData(ctx.alloc, ctx.io) catch {
             log.err("unable to load data for repo {s}", .{all_repos.current_name.?});
             continue;
         };
         errdefer repo.raze(ctx.alloc, ctx.io);
-        if (repo.config.?.srctree) |st| if (st.heatmapexcluded orelse false) {
+        if (repo.git.config.?.srctree) |st| if (st.heatmapexcluded orelse false) {
             repo.raze(ctx.alloc, ctx.io);
             continue;
         };
-        try journal.addRepo(all_repos.current_name.?, repo, ctx.alloc);
+        try journal.addRepo(repo, ctx.alloc);
         repo_count +|= 1;
     }
 

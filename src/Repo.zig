@@ -1,4 +1,4 @@
-name: []const u8 = &.{},
+name: ?[]const u8 = null,
 git: Git.Repo,
 ci: RepoCi = .{},
 
@@ -12,9 +12,22 @@ pub const RepoCi = struct {
     enabled: bool = false,
 };
 
-pub fn init(git: Git.Repo) !Repo {
-    return .{ .git = git };
+pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
+    return .{
+        .name = name,
+        .git = try Git.Repo.init(rdir, io),
+    };
 }
+
+pub fn raze(r: *Repo, a: Allocator, io: Io) void {
+    r.git.raze(a, io);
+}
+
+pub const SortCtx = struct {
+    alloc: Allocator,
+    io: Io,
+    by: enum { commit, tag } = .commit,
+};
 
 pub const Visibility = enum {
     public,
@@ -78,7 +91,7 @@ pub const Iterator = struct {
     /// only valid until the following call to next()
     current_name: ?[]const u8 = null,
 
-    pub fn next(ri: *Iterator, io: Io) !?Git.Repo {
+    pub fn next(ri: *Iterator, io: Io) !?Repo {
         while (try ri.itr.next(io)) |file| {
             if (file.kind != .directory and file.kind != .sym_link) continue;
             if (file.name[0] == '.') continue;
@@ -86,7 +99,7 @@ pub const Iterator = struct {
             const rdir = ri.dir.openDir(io, file.name, .{}) catch continue;
             ri.current_name = file.name;
             //return try .init(try Git.Repo.init(rdir, io));
-            return try Git.Repo.init(rdir, io);
+            return try .init(ri.current_name, rdir, io);
         }
         ri.current_name = null;
         ri.dir.close(io);
