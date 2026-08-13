@@ -15,35 +15,40 @@ pub const Sha = @import("git/Sha.zig");
 pub const Tag = @import("git/Tag.zig");
 pub const Tree = @import("git/Tree.zig");
 
+/// Small Shim to abstract RefName from target
 pub const Ref = union(enum) {
     diff: []const u8,
-    head: []const u8,
-    ref: []const u8,
+    heads: []const u8,
+    ref: []const u8, // any
     tag: []const u8,
+    remote: []const u8,
 
     sha: Sha,
-    pending: void,
-    //missing: void,
+
+    pub fn loadObject(r: Ref, repo: *const Repo, a: Allocator, io: Io) !Object {
+        const sha: Sha = try r.resolve(repo);
+        return repo.objects.load(sha, a, io);
+    }
 
     pub fn resolve(r: Ref, repo: *const Repo) !Sha {
         return switch (r) {
             .sha => |s| s,
             .diff => |diff| try repo.ref(diff),
-            .head => |head| try repo.ref(head),
+            .heads => |heads| try repo.ref(heads),
             .tag => |tag| try repo.ref(tag),
             .ref => |ref| try repo.ref(ref),
-            .pending => return error.NotImplemented,
+            .remote => return error.NotImplemented,
         };
     }
 
     pub fn format(r: Ref, w: *std.Io.Writer) !void {
         return switch (r) {
             .diff => |diff| w.print("refs/diffs/{s}", .{diff}),
-            .head => |head| w.print("refs/heads/{s}", .{head}),
+            .heads => |heads| w.print("refs/heads/{s}", .{heads}),
             .remote => |remt| w.print("refs/remotes/{s}", .{remt}),
             .tag => |tag| w.print("refs/tags/{s}", .{tag}),
             .sha => |sha| w.print("{f}", .{sha.text()}),
-            .pending => unreachable,
+            .remote => unreachable,
         };
     }
 };

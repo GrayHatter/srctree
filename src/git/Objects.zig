@@ -152,6 +152,7 @@ pub fn loadObjectOrDelta(objs: Objects, sha: Sha, a: Allocator, io: Io) !union(e
 }
 
 pub fn load(objs: Objects, sha: Sha, a: Allocator, io: Io) !Any {
+    log.debug("load {f}", .{sha.text()});
     return try objs.loadFromPacks(sha, a, io) orelse try objs.loadFile(sha, a, io);
 }
 

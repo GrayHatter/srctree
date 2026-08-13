@@ -1,7 +1,7 @@
 name: []const u8,
 url: ?[]const u8,
 fetch: ?[]const u8,
-refs: RefMap = .empty,
+refs: RefMap,
 
 const Remote = @This();
 
@@ -57,8 +57,7 @@ pub fn raze(r: *Remote, a: std.mem.Allocator) void {
     a.free(r.name);
     if (r.url) |url| a.free(url);
     if (r.fetch) |fetch| a.free(fetch);
-    for (r.refs.map.keys()) |key| a.free(key);
-    r.refs.deinit(a);
+    r.refs.raze(a);
 }
 
 const std = @import("std");

@@ -189,8 +189,10 @@ pub fn initPartial(sha: []const u8) Sha {
 
 pub fn initCheck(sha: []const u8) !Sha {
     return switch (sha.len) {
-        20 => .init(sha),
-        40 => if (!ascii(sha)) return error.InvalidSha else .init(sha),
+        20 => .init1(sha),
+        32 => .init256(sha),
+        40 => if (!ascii(sha)) return error.InvalidSha else .init1(sha),
+        64 => if (!ascii(sha)) return error.InvalidSha else .init256(sha),
         else => error.InvalidSha,
     };
 }

@@ -305,9 +305,8 @@ test "commit mk sub tree" {
 
     const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
     var repo = try Repo.init(cwd, io);
-    defer repo.raze(a, io);
-
     try repo.loadData(a, io);
+    defer repo.raze(a, io);
 
     const cmtt = try repo.HEAD(a, io);
     defer cmtt.raze(a);

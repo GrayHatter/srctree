@@ -62,8 +62,8 @@ pub const Sort = struct {
                 if (tags_left.items.len > 0 or tags_right.items.len > 0) {
                     if (tags_left.items.len == 0) return true;
                     if (tags_right.items.len == 0) return false;
-                    Git.Tag.sort(&tags_left);
-                    Git.Tag.sort(&tags_right);
+                    Git.Tag.sortNewest(&tags_left);
+                    Git.Tag.sortNewest(&tags_right);
 
                     if (tags_left.items[0].tagger.timestamp == tags_right.items[0].tagger.timestamp)
                         return commitSorter(ctx, l, r);

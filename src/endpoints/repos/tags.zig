@@ -9,18 +9,27 @@ pub fn list(f: *Frame) Router.Error!void {
     defer repo.raze(f.alloc, f.io);
 
     var tags: std.ArrayList(Git.Tag) = .empty;
-    for (repo.refs.map.keys(), repo.refs.map.values()) |tag_name, ref| switch (ref) {
-        .tag => tags.append(f.alloc, Git.Tag.fromObject(
-            repo.objects.load(ref.resolve(&repo) catch continue, f.alloc, f.io) catch continue,
-            f.alloc.dupe(u8, tag_name) catch unreachable,
-        ) catch continue) catch unreachable,
-        else => {},
-    };
+    for (repo.refs.map.keys(), repo.refs.map.values()) |tag_name, ref| {
+        switch (ref) {
+            .tag => |t| {
+                const sha: Git.Sha = .init(t);
+                const obj = repo.objects.load(sha, f.alloc, f.io) catch |err| {
+                    log.err("{}", .{err});
+                    continue;
+                };
+                const name = try f.alloc.dupe(u8, tag_name);
+                errdefer f.alloc.free(name);
+                const tag: Git.Tag = Git.Tag.fromObject(obj, name) catch continue;
+                tags.append(f.alloc, tag) catch return error.ServerFault;
+            },
+            else => |_, t| log.debug("lol ignoring {}", .{t}),
+        }
+    }
 
-    Git.Tag.sort(&tags);
+    Git.Tag.sortNewest(&tags);
     var tstack: std.ArrayList(S.RepoTagsHtml.Tags) = .empty;
     for (tags.items) |tag| {
-        tstack.append(f.alloc, .{ .name = .abx(tag.name) }) catch unreachable;
+        try tstack.append(f.alloc, .{ .name = .abx(tag.name) });
     }
 
     //const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse "" };
@@ -54,6 +63,7 @@ const Frame = verse.Frame;
 const S = verse.template.Structs;
 const PageData = verse.template.PageData;
 const Router = verse.Router;
+const log = std.log.scoped(.endpoint_tags);
 const repos = @import("../../repos.zig");
 const Repo = @import("../../Repo.zig");
 const Git = @import("../../git.zig");

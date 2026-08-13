@@ -68,8 +68,16 @@ pub const RefMap = struct {
         return rm.map.get(name);
     }
 
-    pub fn deinit(rm: *RefMap, a: Allocator) void {
-        return rm.map.deinit(a);
+    pub fn raze(rm: *RefMap, a: Allocator) void {
+        for (rm.map.keys(), rm.map.values()) |key, val| {
+            a.free(key);
+            switch (val) {
+                .heads, .ref, .remote, .tag => |r| a.free(r),
+                .diff => {},
+                .sha => {},
+            }
+        }
+        rm.map.deinit(a);
     }
 };
 
@@ -134,6 +142,7 @@ fn loadRemotes(repo: *Repo, a: Allocator) !void {
                 .name = gop.key_ptr.*,
                 .url = if (ns.get("url")) |url| try a.dupe(u8, url) else null,
                 .fetch = if (ns.get("fetch")) |fetch| try a.dupe(u8, fetch) else null,
+                .refs = .empty,
             };
         } else {
             if (gop.value_ptr.url == null)
@@ -155,38 +164,59 @@ pub fn loadBlob(repo: Repo, sha: Sha, a: Allocator, io: Io) !Blob {
     };
 }
 
-fn addRemote(repo: *Repo, ref_name: []const u8, sha_txt: []const u8, a: Allocator) !void {
+fn addRemote(repo: *Repo, ref_name: []const u8, sha: Sha, a: Allocator) !void {
     const remotes = &repo.remotes;
     const remote, const branch_str = std.mem.cut(u8, ref_name, "/") orelse return error.BadRemoteName;
-    const gop = try remotes.getOrPut(a, remote);
-    if (!gop.found_existing) {
-        gop.key_ptr.* = try a.dupe(u8, remote);
-        gop.value_ptr.* = .{
-            .name = gop.key_ptr.*,
+    const remote_gop = try remotes.getOrPut(a, remote);
+    if (!remote_gop.found_existing) {
+        remote_gop.key_ptr.* = try a.dupe(u8, remote);
+        remote_gop.value_ptr.* = .{
+            .name = remote_gop.key_ptr.*,
             .url = null,
             .fetch = null,
+            .refs = .empty,
         };
     }
+
     const branch = try a.dupe(u8, branch_str);
-    if (try gop.value_ptr.refs.map.fetchPut(a, branch, .{ .sha = .init(sha_txt) })) |_| {
+    const sha_txt = try sha.textAlloc(a);
+    if (try remote_gop.value_ptr.refs.map.fetchPut(a, branch, .{ .heads = sha_txt })) |old| {
+        a.free(old.value.heads);
         a.free(branch);
     }
 }
 
-pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
-    const local: *RefMap = &self.refs;
-    if (self.dir.openFile(io, "packed-refs", .{})) |*fd| {
+fn addTag(r: *Repo, name: []const u8, sha: Sha, a: Allocator) !void {
+    const gop = try r.refs.map.getOrPut(a, name);
+    if (!gop.found_existing) {
+        gop.value_ptr.* = .{ .tag = try sha.textAlloc(a) };
+        gop.key_ptr.* = try a.dupe(u8, name);
+    }
+}
+
+fn addBranch(r: *Repo, name: []const u8, sha: Sha, a: Allocator) !void {
+    const gop = try r.refs.map.getOrPut(a, name);
+    if (!gop.found_existing) {
+        gop.key_ptr.* = try a.dupe(u8, name);
+        gop.value_ptr.* = .{ .heads = try sha.textAlloc(a) };
+    }
+}
+
+pub fn loadRefs(r: *Repo, a: Allocator, io: Io) !void {
+    if (r.dir.openFile(io, "packed-refs", .{})) |*fd| {
         defer fd.close(io);
         var buf: [2048]u8 = undefined;
-        var r = fd.reader(io, &buf);
-        while (r.interface.takeSentinel('\n')) |line| {
-            if (std.mem.cut(u8, line, " refs/heads/")) |cut| {
-                const sha, const ref_name = cut;
-                const name = try a.dupe(u8, ref_name);
-                if (try local.map.fetchPut(a, name, .{ .sha = .init(sha) })) |_| a.free(name);
-            } else if (std.mem.cut(u8, line, " refs/remotes/")) |cut| {
-                const sha, const ref_name = cut;
-                self.addRemote(ref_name, sha, a) catch return;
+        var read = fd.reader(io, &buf);
+        while (read.interface.takeSentinel('\n')) |line| {
+            if (std.mem.cut(u8, line, " refs/")) |pair| {
+                const sha: Sha = .init(pair[0]);
+                if (cutPrefix(u8, pair[1], "heads/")) |name| {
+                    try r.addBranch(name, sha, a);
+                } else if (cutPrefix(u8, pair[1], "remotes/")) |name| {
+                    r.addRemote(name, sha, a) catch return;
+                } else if (cutPrefix(u8, pair[1], "tags/")) |name| {
+                    try r.addTag(name, sha, a);
+                }
             }
         } else |e| switch (e) {
             error.EndOfStream => {},
@@ -197,7 +227,7 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
         else => std.debug.print("unable to read packed ref {}\n", .{err}),
     }
 
-    if (self.dir.openDir(io, "refs", .{ .iterate = true })) |*ndir| {
+    if (r.dir.openDir(io, "refs", .{ .iterate = true })) |*ndir| {
         defer ndir.close(io);
         var walker = try ndir.walkSelectively(a);
         defer walker.deinit();
@@ -209,35 +239,30 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
             // surely enough for sha-50 right?
             var buf: [256]u8 = undefined;
             var reader = f.reader(io, &buf);
-            const sha_txt = try reader.interface.takeDelimiter('\n') orelse continue;
+            const line = try reader.interface.takeDelimiter('\n') orelse continue;
             if (cutPrefix(u8, next.path, "remotes/")) |name| {
-                if (find(u8, sha_txt, "ref: ")) |_| continue;
-                self.addRemote(name, sha_txt, a) catch continue;
-            } else if (cutPrefix(u8, next.path, "heads/")) |ref_name| {
-                if (find(u8, sha_txt, "ref: ")) |_| continue;
-                const sha: Sha = .init(sha_txt);
-                const name = try a.dupe(u8, ref_name);
-                if (try local.map.fetchPut(a, name, .{ .sha = sha })) |_|
-                    a.free(name);
+                if (find(u8, line, "ref: ")) |_| continue;
+                r.addRemote(name, .init(line), a) catch continue;
+            } else if (cutPrefix(u8, next.path, "heads/")) |name| {
+                if (find(u8, line, "ref: ")) |_| continue;
+                try r.addBranch(name, .init(line), a);
             } else if (cutPrefix(u8, next.path, "diffs/")) |_| {
-                if (find(u8, sha_txt, "ref: ")) |_| continue;
-                const sha: Sha = .init(sha_txt);
+                if (find(u8, line, "ref: ")) |_| continue;
                 const name = try a.dupe(u8, next.path);
-                if (try local.map.fetchPut(a, name, .{ .sha = sha })) |_|
+                if (try r.refs.map.fetchPut(a, name, .{ .sha = .init(line) })) |_| {
                     a.free(name);
-            } else if (cutPrefix(u8, next.path, "tags/")) |ref_name| {
-                if (find(u8, sha_txt, "ref: ")) |_| continue;
-                //const sha: Sha = .init(sha_txt);
-                // TODO leaks
-                const sha: []const u8 = try a.dupe(u8, sha_txt);
-                const name = try a.dupe(u8, ref_name);
-                if (try local.map.fetchPut(a, name, .{ .tag = sha })) |_|
-                    a.free(name);
+                }
+            } else if (cutPrefix(u8, next.path, "tags/")) |name| {
+                if (find(u8, line, "ref: ")) |_| {
+                    log.warn("skipping tag '{s}'", .{name});
+                    continue;
+                }
+                try r.addTag(name, .init(line), a);
             }
         }
     } else |_| {}
 
-    if (self.dir.openFile(io, "HEAD", .{})) |*f| {
+    if (r.dir.openFile(io, "HEAD", .{})) |*f| {
         defer f.close(io);
         var buff: [0xFF]u8 = undefined;
 
@@ -247,30 +272,33 @@ pub fn loadRefs(self: *Repo, a: Allocator, io: Io) !void {
         const head = buff[0..size];
 
         if (cutPrefix(u8, trimWs(head), "ref: refs/")) |head_str| {
-            //if (self.ref(head_str)) |found| {
+            //if (r.ref(head_str)) |found| {
             //    try local.put(a, try a.dupe(u8, "HEAD"), .{ .sha = found });
             //} else |_| try local.put(a, try a.dupe(u8, "HEAD"), .{ .ref = try a.dupe(u8, head_str) });
             // repo sync agent requires a ref: refs/ to a valid remote HEAD
-            try local.map.put(a, try a.dupe(u8, "HEAD"), .{ .ref = try a.dupe(u8, head_str) });
+            try r.refs.map.put(a, try a.dupe(u8, "HEAD"), .{ .ref = try a.dupe(u8, head_str) });
         } else {
-            try local.map.put(a, try a.dupe(u8, "HEAD"), .{ .sha = .init(trimWs(head)) });
+            try r.refs.map.put(a, try a.dupe(u8, "HEAD"), .{ .sha = .init(trimWs(head)) });
         }
     } else |_| {}
 }
 
 pub fn ref(repo: Repo, str: []const u8) !Sha {
-    const target = cutPrefix(u8, str, "refs/") orelse str;
-    if (repo.refs.map.get(target)) |refr| switch (refr) {
+    if (cutPrefix(u8, str, "refs/")) |target| return repo.ref(target);
+    if (cutPrefix(u8, str, "heads/")) |postfix| return repo.ref(postfix);
+
+    if (repo.refs.map.get(str)) |refr| switch (refr) {
         .sha => |s| return s,
-        .ref => |r| {
+        .heads, .ref => |r| {
             std.debug.assert(!eql(u8, str, r));
             return repo.ref(r);
         },
-        .head, .diff, .tag => @panic("not implemented"),
-        .pending => unreachable,
+        .tag => |t| return .init(t),
+        .diff => @panic("not implemented"),
+        .remote => unreachable,
     };
-    if (cutPrefix(u8, target, "heads/")) |cut| return repo.ref(cut);
-    return error.RefMissing;
+    log.info("ref not found '{s}'", .{str});
+    return Sha.initCheck(str) catch error.RefMissing;
 }
 
 pub fn resolve(self: Repo, r: Ref) !Sha {
@@ -280,11 +308,16 @@ pub fn resolve(self: Repo, r: Ref) !Sha {
     }
 }
 
-pub fn HEAD(self: *const Repo, a: Allocator, io: Io) !Commit {
-    const sha = self.refs.map.get("HEAD") orelse return error.CommitInvalid;
-    switch (sha) {
-        .sha => |s| return self.commit(s, a, io),
-        else => |res| return self.commit(try res.resolve(self), a, io),
+pub fn HEAD(repo: *const Repo, a: Allocator, io: Io) !Commit {
+    const refname = repo.refs.map.get("HEAD") orelse return error.CommitInvalid;
+    switch (refname) {
+        .sha => |s| return repo.commit(s, a, io),
+        .ref => |r| {
+            const head_ref = try repo.ref(r);
+            const obj = try repo.objects.load(head_ref, a, io);
+            return obj.commit;
+        },
+        else => unreachable,
     }
 }
 
@@ -329,20 +362,11 @@ pub fn raze(self: *Repo, a: Allocator, io: Io) void {
         a.free(cfg.ptr);
         cfg.raze(a);
     }
-
     self.objects.raze(a, io);
-
-    for (self.refs.map.keys(), self.refs.map.values()) |key, val| switch (val) {
-        .ref => |r| {
-            a.free(r);
-            a.free(key);
-        },
-        else => a.free(key),
-    };
-    self.refs.deinit(a);
 
     if (self.current) |c| a.free(c);
     for (self.remotes.values()) |*remote| remote.raze(a);
+    self.refs.raze(a);
     self.remotes.deinit(a);
 }
 
@@ -393,6 +417,7 @@ const find = std.mem.find;
 const findScalar = std.mem.findScalar;
 const zlib = std.compress.flate;
 const bufPrint = std.fmt.bufPrint;
+const cut = std.mem.cut;
 const cutPrefix = std.mem.cutPrefix;
 const trim = std.mem.trim;
 const StringArrayHashMap = std.StringArrayHashMapUnmanaged;

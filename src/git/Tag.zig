@@ -1,7 +1,7 @@
 name: []u8,
 sha: Sha,
-object: []const u8,
-type: TagType,
+object: Sha,
+type: Type,
 tagger: Actor,
 message: []const u8,
 signature: ?[]const u8,
@@ -11,24 +11,10 @@ bytes: []u8 = &.{},
 
 const Tag = @This();
 
-pub const TagType = enum {
+pub const Type = enum {
     commit,
     lightweight,
-
-    pub fn fromSlice(str: []const u8) ?TagType {
-        inline for (std.meta.tags(TagType)) |t| {
-            if (std.mem.eql(u8, @tagName(t), str)) return t;
-        }
-        return null;
-    }
 };
-
-pub fn raze(tag: Tag, a: std.mem.Allocator) void {
-    switch (tag.type) {
-        .lightweight => a.free(tag.name),
-        else => {},
-    }
-}
 
 pub fn init(sha: Sha, data: []const u8) !Tag {
     return fromSlice(sha, data);
@@ -51,7 +37,7 @@ pub fn fromObject(obj: Object, name: []u8) !Tag {
 pub fn fromSlice(sha: Sha, bblob: []const u8) !Tag {
     // sometimes, the slice will have a preamble
     var blob = bblob;
-    if (indexOf(u8, bblob[0..20], "\x00")) |i| {
+    if (find(u8, bblob[0..20], "\x00")) |i| {
         std.debug.assert(startsWith(u8, bblob, "tag "));
         blob = bblob[i + 1 ..];
     }
@@ -69,16 +55,16 @@ pub fn fromSlice(sha: Sha, bblob: []const u8) !Tag {
 /// Dear past mes... you both suck!
 pub fn lightTag(sha: Sha, name: []u8, blob: []const u8) !Tag {
     var actor: ?Actor = null;
-    if (indexOf(u8, blob, "committer ")) |i| {
+    if (find(u8, blob, "committer ")) |i| {
         var act = blob[i + 10 ..];
-        if (indexOf(u8, act, "\n")) |end| act = act[0..end];
+        if (find(u8, act, "\n")) |end| act = act[0..end];
         actor = Actor.make(act) catch return error.InvalidActor;
     } else return error.InvalidTag;
 
     return .{
         .name = name,
         .sha = sha,
-        .object = sha.text().sha1[0..],
+        .object = sha,
         .type = .lightweight,
         .tagger = actor orelse unreachable,
         .message = "",
@@ -88,15 +74,15 @@ pub fn lightTag(sha: Sha, name: []u8, blob: []const u8) !Tag {
 
 pub fn fullTag(sha: Sha, blob: []const u8) !Tag {
     var name: ?[]u8 = null;
-    var object: ?[]const u8 = null;
-    var ttype: ?TagType = null;
+    var object: ?Sha = null;
+    var ttype: ?Type = null;
     var actor: ?Actor = null;
     var itr = splitScalar(u8, blob, '\n');
     while (itr.next()) |line| {
         if (startsWith(u8, line, "object ")) {
-            object = line[7..];
+            object = .init(line[7..]);
         } else if (startsWith(u8, line, "type ")) {
-            ttype = TagType.fromSlice(line[5..]);
+            ttype = if (eql(u8, "lightweight", line[5..])) .lightweight else if (eql(u8, "commit", line[5..])) .commit else null;
         } else if (startsWith(u8, line, "tag ")) {
             name = @constCast(line[4..]);
         } else if (startsWith(u8, line, "tagger ")) {
@@ -123,6 +109,13 @@ pub fn fullTag(sha: Sha, blob: []const u8) !Tag {
         .message = msg,
         .signature = sig,
     };
+}
+
+pub fn raze(tag: Tag, a: std.mem.Allocator) void {
+    switch (tag.type) {
+        .lightweight => a.free(tag.name),
+        else => {},
+    }
 }
 
 pub fn lessThan(self: Tag, peer: Tag) bool {
@@ -158,8 +151,8 @@ test fromSlice {
     const t_msg = "Yet another bugfix release for 0.7.0, especially for Samsung phones.\n";
     const t = try fromSlice(Sha.init("c66fba80f3351a94432a662b1ecc55a21898f830"), blob);
     try std.testing.expectEqualStrings("v0.7.3", t.name);
-    try std.testing.expectEqualStrings("73751d1c0e9eaeaafbf38a938afd652d98ee9772", t.object);
-    try std.testing.expectEqual(TagType.commit, t.type);
+    try std.testing.expectEqualStrings("73751d1c0e9eaeaafbf38a938afd652d98ee9772", t.object.text().slice());
+    try std.testing.expectEqual(Type.commit, t.type);
     try std.testing.expectEqualStrings("Robin Linden", t.tagger.name);
     try std.testing.expectEqualStrings(t_msg, t.message);
 }
@@ -168,13 +161,22 @@ pub fn sort(list: *std.ArrayList(Tag)) void {
     std.sort.heap(Tag, list.items, {}, sortDesc);
 }
 
+pub fn sortNewest(list: *std.ArrayList(Tag)) void {
+    std.sort.heap(Tag, list.items, {}, sortAsc);
+}
+
+pub fn sortAsc(_: void, self: Tag, peer: Tag) bool {
+    return !self.lessThan(peer);
+}
+
 pub fn sortDesc(_: void, self: Tag, peer: Tag) bool {
     return !self.lessThan(peer);
 }
 
 const std = @import("std");
-const indexOf = std.mem.indexOf;
+const find = std.mem.find;
 const startsWith = std.mem.startsWith;
+const eql = std.mem.eql;
 const splitScalar = std.mem.splitScalar;
 const Sha = @import("Sha.zig");
 const Actor = @import("actor.zig");
