@@ -53,6 +53,7 @@ pub const Translate = struct {
         }
         indent = indent[0..indent_len];
         for (indent) |c| assert(c == ' ');
+
         sw: switch (r.peekByte() catch return) {
             '\r', '\n' => {
                 indent = &.{};
@@ -71,7 +72,7 @@ pub const Translate = struct {
             },
             '#' => {
                 if (r.takeDelimiter('\n')) |until| {
-                    header(until orelse r.take(r.bufferedLen()) catch unreachable, dst) catch return;
+                    header(until orelse return, dst) catch return;
                 } else |_| return;
                 try dst.writeByte('\n');
                 continue :sw r.peekByte() catch return;
@@ -169,9 +170,9 @@ pub const Translate = struct {
         else
             1;
 
-        var leaf_r: Reader = .fixed(r.take(until + extra) catch unreachable);
+        const bytes = r.take(until + extra) catch unreachable;
+        var leaf_r: Reader = .fixed(bytes);
         try leaf(&leaf_r, dst, indent);
-        r.toss(extra);
 
         try dst.writeAll("</p>\n");
     }
@@ -290,6 +291,29 @@ pub const Translate = struct {
         _ = indent;
     }
 
+    fn multiStar(src: []const u8, index: *usize, dst: *Writer) error{WriteFailed}!void {
+        var idx = index.*;
+        defer index.* = idx;
+        if (startsWith(u8, src[idx..], "***")) {
+            if (idx + 3 < src.len and src[idx + 3] == '*') return try dst.writeByte('*');
+            if (findPos(u8, src, idx + 3, "***")) |end| {
+                try dst.print("<em><strong>{s}</strong></em>", .{src[idx + 3 .. end]});
+                idx = end + 2;
+            } else return try dst.writeByte('*');
+        } else if (startsWith(u8, src[idx..], "**")) {
+            if (findPos(u8, src, idx + 2, "**")) |end| {
+                try dst.print("<strong>{s}</strong>", .{src[idx + 2 .. end]});
+                idx = end + 1;
+            } else return try dst.writeByte('*');
+        } else if (startsWith(u8, src[idx..], "*")) {
+            if (findPos(u8, src, idx + 1, "*")) |end| {
+                if (src[end - 1] == ' ') return try dst.writeByte('*'); // Sorry about this
+                try dst.print("<em>{s}</em>", .{src[idx + 1 .. end]});
+                idx = end;
+            } else return try dst.writeByte('*');
+        }
+    }
+
     fn lineBasic(src: []const u8, dst: *Writer) error{WriteFailed}!void {
         var idx: usize = 0;
         while (idx < src.len) : (idx += 1) {
@@ -309,64 +333,57 @@ pub const Translate = struct {
                         idx = end;
                     }
                 },
-                '*' => {
-                    if (idx + 7 < src.len and src[idx + 1] == '*' and src[idx + 2] == '*' and src[idx + 3] != ' ') {
-                        if (findClosing(src[idx..], "***")) |estrong| {
-                            try dst.print("<em><strong>{s}</strong></em>", .{estrong[3..]});
-                            idx += estrong.len + 2;
-                        } else try dst.writeByte('*');
-                    } else if (idx + 5 < src.len and src[idx + 1] == '*' and src[idx + 2] != ' ') {
-                        if (findClosing(src[idx..], "**")) |strong| {
-                            try dst.print("<strong>{s}</strong>", .{strong[2..]});
-                            idx += strong.len + 1;
-                        } else try dst.writeByte('*');
-                    } else if (idx + 2 < src.len and src[idx + 1] != ' ') {
-                        if (findClosing(src[idx..], "*")) |em| {
-                            try dst.print("<em>{s}</em>", .{em[1..]});
-                            idx += em.len;
-                        } else try dst.writeByte('*');
-                    } else try dst.writeByte('*');
-                },
+                '*' => try multiStar(src, &idx, dst),
                 '[' => {
                     if (src.len < idx + 5) {
                         try dst.writeByte('[');
                         continue;
                     }
-                    if (src[idx + 1] == '!') {
-                        const imgend = try makeImage(src[idx + 1 ..], dst, false);
-                        if (imgend > 1) {
-                            if (findLink(src[idx + imgend ..])) |found| {
-                                const text, const url, const end = found;
-                                const valid_url = validUrl(url) orelse {
-                                    Abx.Html.clean(src[idx], dst) catch unreachable;
-                                    continue;
-                                };
-                                idx = end + 3;
-
-                                try dst.print("<a href=\"{f}\">{f}</a>", .{
-                                    Abx.Html{ .text = valid_url }, Abx.Html{ .text = text },
-                                });
-                            } else idx += imgend;
-                        }
-                    } else if (findLink(src[idx + 1 ..])) |found| {
-                        const text, const url, const end = found;
-                        const valid_url = validUrl(url) orelse {
-                            Abx.Html.clean(src[idx], dst) catch unreachable;
-                            continue;
+                    if (findPos(u8, src, idx, "]")) |end| {
+                        var i = idx + 1;
+                        while (i < end) : (i += 1) switch (src[i]) {
+                            'A'...'Z', 'a'...'z', '0'...'9', '*', '!', ' ' => continue,
+                            else => break,
                         };
-                        idx = end + 3;
+                        if (i != end) {
+                            try dst.print("{f}", .{Abx.Html.abx(src[idx..end])});
+                            idx = i;
+                            continue;
+                        }
+                        if (src[idx + 1] == '!') {
+                            const imgend = try makeImage(src[idx + 1 ..], dst, false);
+                            if (imgend > 1) {
+                                if (findLink(src[idx + imgend ..])) |found| {
+                                    const text, const url, const link_end = found;
+                                    const valid_url = validUrl(url) orelse {
+                                        Abx.Html.clean(src[idx], dst) catch unreachable;
+                                        continue;
+                                    };
+                                    idx = link_end + 3;
 
-                        try dst.print("<a href=\"{f}\">{f}</a>", .{
-                            Abx.Html{ .text = valid_url }, Abx.Html{ .text = text },
-                        });
-                    } else try dst.writeByte('[');
+                                    try dst.print("<a href=\"{f}\">{f}</a>", .{
+                                        Abx.Html{ .text = valid_url },
+                                        Abx.Html{ .text = text },
+                                    });
+                                } else idx += imgend;
+                            }
+                        } else if (findLink(src[idx + 1 ..])) |found| {
+                            const text, const url, const link_end = found;
+                            const valid_url = validUrl(url) orelse {
+                                Abx.Html.clean(src[idx], dst) catch unreachable;
+                                continue;
+                            };
+                            idx += link_end + 1;
+                            try dst.print("<a href=\"{f}\">{f}</a>", .{
+                                Abx.Html{ .text = valid_url }, Abx.Html{ .text = text },
+                            });
+                        } else try dst.writeByte('[');
+                    }
                 },
-                '!' => {
-                    if (src.len > idx + 5) {
-                        idx +|= try makeImage(src[idx..], dst, true);
-                    } else try dst.writeByte('!');
-                },
-                else => Abx.Html.clean(src[idx], dst) catch unreachable,
+                '!' => if (src.len > idx + 5) {
+                    idx +|= try makeImage(src[idx..], dst, true);
+                } else try dst.writeByte('!'),
+                else => try Abx.Html.clean(src[idx], dst),
                 '\r' => {},
             }
         }
@@ -391,7 +408,7 @@ pub const Translate = struct {
             }
             return end + 4;
         }
-        Abx.Html.clean(src[0], w) catch unreachable;
+        try Abx.Html.clean(src[0], w);
         return 0;
     }
 
@@ -414,8 +431,11 @@ pub const Translate = struct {
     }
 
     fn validUrl(src: []const u8) ?[]const u8 {
-        if (startsWith(u8, src, "https://") or startsWith(u8, src, "https://")) return src;
-        return null;
+        if (findPos(u8, src, 0, "://")) |slash| {
+            if (eql(u8, src[0..slash], "https")) return src;
+            return null;
+        }
+        return src;
     }
 
     pub fn findClosing(src: []const u8, comptime tag: []const u8) ?[]const u8 {
@@ -880,6 +900,60 @@ test "ref link" {
 
     if (true) return error.SkipZigTest;
     try std.testing.expectEqualStrings(expected, w.written());
+}
+
+test "leaf patho-0" {
+    var r: Reader = .fixed("[**Installing**](docs/INSTALL.md) **|**\n");
+    var b: [260]u8 = undefined;
+    var writer: Writer = .fixed(&b);
+    try Translate.leaf(&r, &writer, &.{});
+    try std.testing.expectEqualStrings("<a href=\"docs/INSTALL.md\">**Installing**</a> <strong>|</strong>", writer.buffered());
+}
+
+test "leaf patho-1" {
+    var r: Reader = .fixed("[**Installing**](docs/INSTALL.md) **|** [**Compiling**](docs/BUILD.md) **|**\n");
+    var b: [260]u8 = undefined;
+    var writer: Writer = .fixed(&b);
+    try Translate.leaf(&r, &writer, &.{});
+    try std.testing.expectEqualStrings(
+        \\<a href="docs/INSTALL.md">**Installing**</a> <strong>|</strong> <a href="docs/BUILD.md">**Compiling**</a> <strong>|</strong>
+    , writer.buffered());
+}
+
+test "leaf patho-2" {
+    var r: Reader = .fixed("[**Installing**](docs/INSTALL.md) **|** [**Compiling**](docs/BUILD.md) **|** [**Screenshots**](screenshots/INDEX.md) **|** [**Release Notes**](release_notes/INDEX.md) **|** [**TokTok Site**](http://toktok.github.io/) **|** [**Toxcore Spec**](https://toktok.github.io/spec)\n");
+    var b: [1560]u8 = undefined;
+    var writer: Writer = .fixed(&b);
+    try Translate.leaf(&r, &writer, &.{});
+    // TODO FIXME: very broken
+    try std.testing.expectEqualStrings(
+        "<a href=\"docs/INSTALL.md\">**Installing**</a> " ++
+            "<strong>|</strong> <a href=\"docs/BUILD.md\">**Compiling**</a> " ++
+            "<strong>|</strong> <a href=\"screenshots/INDEX.md\">**Screenshots**</a> " ++
+            "<strong>|</strong> <a href=\"release_notes/INDEX.md\">**Release Notes**</a> " ++
+            "<strong>|</strong> [<strong>TokTok Site</strong>](http://toktok.github.io/) " ++ // http should not resolve
+            "<strong>|</strong> <a href=\"https://toktok.github.io/spec\">**Toxcore Spec**</a>",
+        writer.buffered(),
+    );
+}
+
+test "utox readme" {
+    const input =
+        \\Just like Toxcore, µTox is still alpha software, so you may encounter bugs, or maybe a crash or two. µTox also needs your help, if you do encounter any bugs or problems please [open an issue](https://github.com/uTox/uTox/issues/new).
+        \\If you do not have a GitHub account, you may also [send an email](#team) directly to avoidr.
+        \\
+    ;
+    var r: Reader = .fixed(input);
+    var b: [560]u8 = undefined;
+    var writer: Writer = .fixed(&b);
+    try Translate.leaf(&r, &writer, &.{});
+    // TODO FIXME: very broken
+    try std.testing.expectEqualStrings(
+        "Just like Toxcore, µTox is still alpha software, so you may encounter bugs, or maybe a crash or two. " ++
+            "µTox also needs your help, if you do encounter any bugs or problems please <a href=\"https://github.com/uTox/uTox/issues/new\">open an issue</a>. " ++
+            "If you do not have a GitHub account, you may also <a href=\"#team\">send an email</a> directly to avoidr.",
+        writer.buffered(),
+    );
 }
 
 const syntax = @import("../syntax-highlight.zig");
