@@ -14,6 +14,7 @@ pub const RepoCi = struct {
 
     pub fn status(ci: *RepoCi, a: Allocator, io: Io) !bool {
         const repo: *Repo = @fieldParentPtr("ci", ci);
+        ci.enabled = false;
         const commit = repo.git.HEAD(a, io) catch return false; // empty or broken repo
         const tree = try commit.loadTree(&repo.git, a, io);
         var itr = tree.iterate();

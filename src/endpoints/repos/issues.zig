@@ -39,11 +39,12 @@ pub fn router(ctx: *verse.Frame) Router.RoutingError!Router.BuildFn {
 
 const IssueNewPage = T.PageData("issue-new.html");
 
-fn new(ctx: *verse.Frame) Error!void {
+fn new(f: *Frame) Error!void {
+    const rd = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(ctx) } };
-    if (ctx.user) |usr| {
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
 
@@ -52,14 +53,15 @@ fn new(ctx: *verse.Frame) Error!void {
         .body_header = body_header,
         .flavor = .{ .default = true },
     });
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
-fn newRemote(ctx: *verse.Frame) Error!void {
+fn newRemote(f: *Frame) Error!void {
+    const rd = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(ctx) } };
-    if (ctx.user) |usr| {
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
     var page = IssueNewPage.init(.{
@@ -67,14 +69,15 @@ fn newRemote(ctx: *verse.Frame) Error!void {
         .body_header = body_header,
         .flavor = .{ .remote = true },
     });
-    try ctx.sendPage(&page);
+    try f.sendPage(&page);
 }
 
-fn edit(f: *verse.Frame) Error!void {
+fn edit(f: *Frame) Error!void {
+    const rd = RouteData.init(f) orelse return error.ServerFault;
     std.debug.print("{s}\n", .{f.uri.next().?});
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
     if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
@@ -90,7 +93,7 @@ fn edit(f: *verse.Frame) Error!void {
     try f.sendPage(&page);
 }
 
-fn editPost(f: *verse.Frame) Error!void {
+fn editPost(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     var buf: [2048]u8 = undefined;
     if (f.request.data.post) |post| {
@@ -137,7 +140,7 @@ fn newPostError(_: *verse.Frame) Error!void {
     return error.DataInvalid;
 }
 
-fn newPost(f: *verse.Frame) Error!void {
+fn newPost(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     var buf: [2048]u8 = undefined;
     if (f.request.data.post) |post| {
@@ -181,7 +184,7 @@ const RemoteData = struct {
     comments: [][]u8,
 };
 
-fn newRemotePost(f: *verse.Frame) Error!void {
+fn newRemotePost(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     var buf: [2048]u8 = undefined;
     if (f.request.data.post) |post| {
@@ -195,7 +198,7 @@ fn newRemotePost(f: *verse.Frame) Error!void {
     return f.redirect(loc, .see_other) catch unreachable;
 }
 
-fn addComment(f: *verse.Frame) Error!void {
+fn addComment(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const post = f.request.data.post orelse return error.DataMissing;
     const valid = post.validate(delta_shared.AddCommentReq) catch return error.DataInvalid;
@@ -208,7 +211,7 @@ fn addComment(f: *verse.Frame) Error!void {
 
 const DeltaPage = T.PageData("delta.html");
 
-fn view(f: *verse.Frame) Error!void {
+fn view(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const delta_id = f.uri.next().?;
     const idx = isHex(delta_id) orelse return error.ServerFault;
@@ -238,7 +241,7 @@ fn view(f: *verse.Frame) Error!void {
     const username = if (f.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try repos_ep.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
     if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
@@ -302,7 +305,7 @@ fn searchPage(f: *Frame, str: abx.Html) Error!void {
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
 
     var body_header: S.BodyHeaderHtml = .{
-        .nav = .{ .nav_buttons = &(repos_ep.navButtons(f) catch unreachable) },
+        .nav = .{ .nav_buttons = &(rd.navButtons(f)) },
     };
     if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
     f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};

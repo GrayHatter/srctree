@@ -81,9 +81,9 @@ fn pendingNew(f: *Frame) Error!void {
     var title: ?[]const u8 = null;
     var desc: ?[]const u8 = null;
 
-    const routing_data = RouteData.init(f) orelse return error.ServerFault;
+    const rd = RouteData.init(f) orelse return error.ServerFault;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(routing_data.name, vis, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
+    var repo = (repos.open(rd.name, vis, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
     defer repo.raze(f.alloc, f.io);
 
@@ -97,7 +97,7 @@ fn pendingNew(f: *Frame) Error!void {
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
     if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
     const host = try (f.request.host orelse return error.DataMissing).valid();
 
@@ -105,13 +105,13 @@ fn pendingNew(f: *Frame) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
         .repo_header = .{
-            .repo_name = .abx(routing_data.name),
+            .repo_name = .safe(rd.name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),
-            .git_uri = .{ .host = .safe(host), .repo_name = .abx(routing_data.name) },
+            .git_uri = .{ .host = .safe(host), .repo_name = .safe(rd.name) },
             .upstream = upstream,
             .blame = null,
         },
-        .push_uri = .{ .host = .safe(host), .repo_name = .safe(routing_data.name) },
+        .push_uri = .{ .host = .safe(host), .repo_name = .safe(rd.name) },
         .err = null,
         .title = title,
         .desc = desc,
@@ -228,7 +228,7 @@ fn createError(f: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!voi
     const host = try (f.request.host orelse return error.DataMissing).valid();
     var page = DiffNewHtml.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } },
+        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
         .err = switch (err) {
             .remote_error => |str| .{ .error_string = .safe("Unable to fetch patch from remote (" ++ str ++ ")") },
             else => .{ .error_string = .safe("error") },
@@ -890,7 +890,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
     if (f.user) |usr| {
         body_header.nav.nav_auth = usr.username.?;
     }
@@ -958,7 +958,7 @@ fn list(f: *Frame) Error!void {
     const search_str: abx.Html = if (udata.q) |q| .abx(q) else .safe(default_search);
 
     var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .nav_buttons = &(endpt_repos.navButtons(f) catch unreachable),
+        .nav_buttons = &(rd.navButtons(f)),
     } };
     if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
     f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};

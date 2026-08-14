@@ -16,7 +16,7 @@ fn list(f: *Frame) Router.Error!void {
 
     var page: ArtifactsHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } },
+        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),

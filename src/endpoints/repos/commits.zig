@@ -39,6 +39,7 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]T.Context {
 }
 
 fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
+    const rd = RouteData.init(f) orelse return error.ServerFault; // Probably NotFound TODO check
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     if (!Git.commitish(sha)) {
         std.debug.print("Abuse ''{s}''\n", .{sha});
@@ -65,7 +66,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         else => return error.Unknown,
     };
 
-    if (std.mem.indexOf(u8, diff, "diff")) |i| {
+    if (find(u8, diff, "diff")) |i| {
         diff = diff[i..];
     }
     var patch: Patch = .init(diff);
@@ -128,7 +129,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         .repo = .safe(repo_name),
         .sha = .safe(current.sha.text().slice()),
         .meta_head = .{ .title = page_title, .open_graph = .{ .title = og_title, .desc = og_desc } },
-        .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
+        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
         .repo_header = .{
             .repo_name = .abx(repo_name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),
@@ -250,11 +251,14 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
 
     return .{
         .repo = .abx(repo_name),
-        .body = if (c.body.len > 0) try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.body, ws) }}) else null,
+        .body = if (c.body.len > 0)
+            try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.body, ws) }})
+        else
+            null,
         .title = .abx(trim(u8, c.title, ws)),
         .cmt_line_src = .{
             .pre = .safe("by "),
-            .link_root = .safe("/user?user="),
+            .link_root = if (include_email) .safe("/user?user=") else .safe(""),
             .link_target = .abx(email),
             .name = .abx(trim(u8, c.author.name, ws)),
         },
@@ -321,19 +325,6 @@ pub fn commitList(f: *Frame) Error!void {
         if (f.uri.next()) |before| commitish = .init(before);
     };
 
-    // TODO use left and right commit finding
-    //if (commitish) |cmish| {
-    //    std.debug.print("{s}\n", .{cmish});
-    //    if (!Git.commitish(cmish)) return error.ServerFault;
-    //    if (std.mem.indexOf(u8, cmish, "..")) |i| {
-    //        const left = cmish[0..i];
-    //        if (!Git.commitish(left)) return error.ServerFault;
-    //        const right = cmish[i + 2 ..];
-    //        if (!Git.commitish(right)) return error.ServerFault;
-    //        std.debug.print("{s}, {s}\n", .{ left, right });
-    //    }
-    //} else {}
-
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
@@ -350,9 +341,6 @@ pub fn commitList(f: *Frame) Error!void {
 
 pub fn commitsBefore(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
-
-    std.debug.assert(std.mem.eql(u8, "after", f.uri.next().?));
-
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
@@ -369,15 +357,15 @@ pub fn commitsBefore(f: *Frame) Error!void {
 }
 
 fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Git.Sha) Error!void {
+    const rd = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     const sha_text = if (sha) |s| s.text() else Git.Sha.Text.zeros;
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{ .nav_buttons = &try Repos.navButtons(f) } },
-
+        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
         .commit_list = list,
         .after_commits = if (sha) |_| .{
-            .repo_name = .abx(repo_name),
+            .repo_name = .safe(repo_name),
             .sha = .safe(sha_text.slice()),
         } else null,
     });
@@ -395,6 +383,7 @@ const allocPrint = std.fmt.allocPrint;
 const print = std.fmt.bufPrint;
 const endsWith = std.mem.endsWith;
 const eql = std.mem.eql;
+const find = std.mem.find;
 const trim = std.mem.trim;
 const verse = @import("verse");
 const Router = verse.Router;

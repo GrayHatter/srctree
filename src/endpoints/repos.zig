@@ -108,6 +108,49 @@ pub const Router = struct {
         return repos.exists(self.name, vis, io);
     }
 
+    fn mkNav(name: []const u8, i: usize, d: usize, a: Allocator) [2]S.NavButtons {
+        return .{
+            .{ .name = .safe("issues"), .extra = i, .url = .abx(
+                allocPrint(a, "/repo/{s}/issues/", .{name}) catch "[OOM]",
+            ) },
+            .{ .name = .safe("diffs"), .extra = d, .url = .abx(
+                allocPrint(a, "/repo/{s}/diffs/", .{name}) catch "[OOM]",
+            ) },
+        };
+    }
+
+    pub fn navButtons(rd: RouteData, f: *Frame) [2]S.NavButtons {
+        const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
+        if (!rd.exists(vis, f.io)) return mkNav(rd.name, 0, 0, f.alloc);
+        var i_count: usize = 0;
+        var d_count: usize = 0;
+        var itr: Delta.RepoIterator = .init(rd.name, f.io);
+        while (itr.next(f.alloc, f.io)) |dlt| {
+            defer dlt.raze(f.alloc);
+            if (!dlt.state.isOpen()) continue;
+            switch (dlt.attach) {
+                .diff => d_count += 1,
+                .issue => i_count += 1,
+                else => {},
+            }
+        }
+
+        const btns = [2]S.NavButtons{
+            .{
+                .name = .safe("issues"),
+                .extra = i_count,
+                .url = .safe(allocPrint(f.alloc, "/repo/{s}/issues/", .{rd.name}) catch "[OOM]"),
+            },
+            .{
+                .name = .safe("diffs"),
+                .extra = d_count,
+                .url = .safe(allocPrint(f.alloc, "/repo/{s}/diffs/", .{rd.name}) catch "[OOM]"),
+            },
+        };
+
+        return btns;
+    }
+
     pub fn repoHeader(rd: Router, host: []const u8) !S.BaseRepoHeaderHtml {
         _ = rd;
         _ = host;
@@ -129,39 +172,6 @@ pub const Router = struct {
         return ref;
     }
 };
-
-pub fn navButtons(f: *Frame) ![2]S.NavButtons {
-    const rd = RouteData.init(f) orelse return error.InvalidURI;
-    const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    if (!rd.exists(vis, f.io)) return error.InvalidURI;
-    var i_count: usize = 0;
-    var d_count: usize = 0;
-    var itr: Delta.RepoIterator = .init(rd.name, f.io);
-    while (itr.next(f.alloc, f.io)) |dlt| {
-        defer dlt.raze(f.alloc);
-        if (!dlt.state.isOpen()) continue;
-        switch (dlt.attach) {
-            .diff => d_count += 1,
-            .issue => i_count += 1,
-            else => {},
-        }
-    }
-
-    const btns = [2]S.NavButtons{
-        .{
-            .name = .safe("issues"),
-            .extra = i_count,
-            .url = .abx(try allocPrint(f.alloc, "/repo/{s}/issues/", .{rd.name})),
-        },
-        .{
-            .name = .safe("diffs"),
-            .extra = d_count,
-            .url = .abx(try allocPrint(f.alloc, "/repo/{s}/diffs/", .{rd.name})),
-        },
-    };
-
-    return btns;
-}
 
 pub const PatchView = struct {
     @"inline": ?bool = null,
@@ -233,7 +243,7 @@ pub fn router(f: *Frame) Router.RoutingError!verse.Router.BuildFn {
             } }) catch unreachable;
             break :bhP f.response_data.get(S.BodyHeaderHtml).?;
         };
-        bh.nav.nav_buttons = f.alloc.dupe(S.NavButtons, &(navButtons(f) catch @panic("unreachable"))) catch unreachable;
+        bh.nav.nav_buttons = f.alloc.dupe(S.NavButtons, &(rd.navButtons(f))) catch @panic("OOM");
 
         _ = f.uri.next();
         _ = f.uri.next();

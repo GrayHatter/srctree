@@ -40,7 +40,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
 
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &try RepoEndpoint.navButtons(f) } },
+        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(try f.alloc.dupe(u8, repo.description(f.alloc, f.io) catch "")),
