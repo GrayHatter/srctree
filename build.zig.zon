@@ -22,4 +22,9 @@
         "build.zig.zon",
         "src",
     },
+
+    .srctree = .{
+        .ci = "test",
+        .docs = "docs",
+    },
 }

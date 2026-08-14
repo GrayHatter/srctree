@@ -244,17 +244,17 @@ repolist {
 			}
 			.updated:only-child { margin: 0; }
 		}
-		&.lowlight {
-			a { color: #777; &:visited { color: #777; } }
-			header { background: #1118; }
-			desc {
-				color: #999;
-				background-image: linear-gradient(#2220 92%, #320021 100%);
-				border-bottom: #320021 solid 1px;
-				.updated { color: #888; }
-			}
-		}
 		.muted.small { font-size: 75%; }
+	}
+}
+.lowlight {
+	a { color: #777; &:visited { color: #777; } }
+	header { background: #1118; }
+	desc {
+		color: #999;
+		background-image: linear-gradient(#2220 92%, #320021 100%);
+		border-bottom: #320021 solid 1px;
+		.updated { color: #888; }
 	}
 }
 repo {
@@ -793,7 +793,8 @@ blob, gist, patch {
 }
 .admin-content { display: none; textarea { min-width: 35rem; } }
 .admin-content.active { display: inline-block; background: #a112; height: 50vh; min-width: 30rem; }
-.cistatus {
+a.cistatus {
+
 	&.success { color: green; }
 	&.pending { color: yellow; }
 	&.failed { color: red; }

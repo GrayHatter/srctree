@@ -9,7 +9,28 @@ pub const Agent = @import("Repo/Agent.zig");
 pub var dirs: repos.Dirs = .{};
 
 pub const RepoCi = struct {
-    enabled: bool = false,
+    // Aligned to Git.Repo for @fieldParentPtr
+    enabled: bool align(8) = false,
+
+    pub fn status(ci: *RepoCi, a: Allocator, io: Io) !bool {
+        const repo: *Repo = @fieldParentPtr("ci", ci);
+        const commit = repo.git.HEAD(a, io) catch return false; // empty or broken repo
+        const tree = try commit.loadTree(&repo.git, a, io);
+        var itr = tree.iterate();
+        while (itr.next()) |next| {
+            if (eql(u8, next.name, "build.zig.zon")) {
+                const blob = try repo.git.objects.load(next.sha, a, io);
+                switch (blob) {
+                    .blob => if (find(u8, blob.blob.bytes, ".srctree =")) |_| {
+                        return true;
+                    },
+                    else => return false,
+                }
+            }
+        }
+
+        return false;
+    }
 };
 
 pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
@@ -245,4 +266,5 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
 const eql = std.mem.eql;
+const find = std.mem.find;
 const global_config = &@import("Config.zig").global;
