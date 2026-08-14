@@ -18,9 +18,11 @@ ptr_parent: ?*Commit = null, // TOOO multiple parents
 const Commit = @This();
 
 pub fn init(sha: Sha, data: []const u8) !Commit {
-    if (std.mem.startsWith(u8, data, "commit")) unreachable;
-    var lines = std.mem.splitSequence(u8, data, "\n");
-    // I don't like it either, but... lazy
+    var r: Reader = .fixed(data);
+    return init1(sha, &r);
+}
+
+pub fn init1(sha: Sha, r: *Reader) !Commit {
     var p_idx: usize = 0;
     var parent: [9]?Sha = @splat(null);
     var tree: ?Sha = null;
@@ -33,46 +35,46 @@ pub fn init(sha: Sha, data: []const u8) !Commit {
         .partial => unreachable,
     };
 
-    while (lines.next()) |line| {
-        if (startsWith(u8, line, "gpgsig")) {
-            gpgSig(&lines) catch |e| {
+    while (r.takeSentinel('\n')) |line| {
+        if (line.len == 0) break;
+        if (cutPrefix(u8, line, "gpgsig ")) |_| {
+            gpgSig(r) catch |e| {
                 log.err("GPG sig failed {}\n", .{e});
-                log.debug("full stack '''\n{s}\n'''\n", .{data});
+                log.debug("full stack '''\n{s}\n'''\n", .{r.buffered()});
                 return e;
             };
             continue;
         }
-        if (line.len == 0) break;
-        // Seen in GPG headers set by github... thanks github :<
         if (trim(u8, line, " \t").len != line.len) continue;
-        if (indexOf(u8, line, " ")) |brk| {
-            const name = line[0..brk];
-            const payload = line[brk + 1 ..];
-            if (eql(u8, name, "tree")) {
-                tree = .init(payload[0..width]);
-            } else if (eql(u8, name, "parent")) {
-                if (p_idx >= parent.len) return error.TooManyParents;
-                parent[p_idx] = .init(payload[0..width]);
-                p_idx += 1;
-            } else if (eql(u8, name, "author")) {
-                author = try Actor.make(payload);
-            } else if (eql(u8, name, "committer")) {
-                committer = try Actor.make(payload);
-            } else if (eql(u8, name, "change-id")) {
-                log.debug("unsupported git header: '{s}'\n\t\t'{any}'", .{ name, line });
-            } else {
-                log.err("unknown header: {any} '{s}'\n", .{ name, name });
-                return error.UnknownHeader;
+        if (cutPrefix(u8, line, "tree ")) |payload| {
+            tree = .init(payload[0..width]);
+        } else if (cutPrefix(u8, line, "parent ")) |payload| {
+            if (p_idx >= parent.len) return error.TooManyParents;
+            parent[p_idx] = .init(payload[0..width]);
+            p_idx += 1;
+        } else if (cutPrefix(u8, line, "author ")) |payload| {
+            author = try Actor.make(payload);
+        } else if (cutPrefix(u8, line, "committer ")) |payload| {
+            committer = try Actor.make(payload);
+        } else inline for (&.{ "change-id", "mergetag" }) |other_header| {
+            if (cutPrefix(u8, line, other_header)) |_| {
+                log.debug("unsupported git header: '{s}'\n\t\t'{any}'", .{ other_header, line });
+                break;
             }
-        } else return error.MalformedHeader;
-    }
-    var message = lines.rest();
+        } else {
+            log.warn("unknown header: {any} '{s}'", .{ line, line });
+            if (comptime debug_mode) return error.UnknownHeader;
+        }
+    } else |_| {}
+
+    var message = r.buffered();
     var title: []const u8 = message;
     var body: []const u8 = "";
-    if (indexOf(u8, message, "\n\n")) |nl| {
+    if (find(u8, message, "\n\n")) |nl| {
         title = message[0..nl];
         body = message[nl + 2 ..];
     }
+
     return .{
         .sha = sha,
         .tree = tree orelse return error.TreeMissing,
@@ -140,11 +142,11 @@ pub fn format(cmt: Commit, out: *Writer) !void {
 }
 
 /// TODO this
-fn gpgSig(itr: *std.mem.SplitIterator(u8, .sequence)) !void {
-    while (itr.next()) |line| {
-        if (std.mem.indexOf(u8, line, "-----END PGP SIGNATURE-----") != null) return;
-        if (std.mem.indexOf(u8, line, "-----END SSH SIGNATURE-----") != null) return;
-    }
+fn gpgSig(r: *Reader) !void {
+    while (r.takeSentinel('\n')) |line| {
+        if (find(u8, line, "-----END PGP SIGNATURE-----") != null) return;
+        if (find(u8, line, "-----END SSH SIGNATURE-----") != null) return;
+    } else |e| return e;
     return error.InvalidGpgsig;
 }
 
@@ -192,6 +194,8 @@ test {
     _ = &std.testing.refAllDecls(@This());
 }
 
+const debug_mode: bool = @import("builtin").mode == .Debug;
+
 const Sha = @import("Sha.zig");
 const Repo = @import("Repo.zig");
 const Tree = @import("Tree.zig");
@@ -201,10 +205,13 @@ const Objects = @import("Objects.zig");
 const std = @import("std");
 const Io = std.Io;
 const Writer = Io.Writer;
+const Reader = Io.Reader;
 const log = std.log.scoped(.git_internals);
 const eql = std.mem.eql;
-const indexOf = std.mem.indexOf;
+const find = std.mem.find;
+const findScalar = std.mem.findScalar;
 const startsWith = std.mem.startsWith;
+const cutPrefix = std.mem.cutPrefix;
 const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
 
