@@ -269,9 +269,10 @@ fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !abx.Html {
     var commit: Git.Commit = repo.git.HEAD(arena, io) catch return .safe("V 46 M 109 46 ");
 
     for (0..52) |i| {
+        const r_idx = heat.len - 1 - i;
         const first = now.addDuration(.fromSeconds(-86400 * 7));
         defer now = first;
-        const week: *u16 = &heat[heat.len - 1 - i];
+        const week: *u16 = &heat[r_idx];
         while (commit.committer.timestamp > first.toSeconds()) {
             commit = commit.toParent(0, &repo.git, arena, io) catch break;
             week.* +|= 1;

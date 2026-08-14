@@ -194,26 +194,30 @@ fn addTag(r: *Repo, name: []const u8, sha: Sha, a: Allocator) !void {
     }
 }
 
-fn addBranch(r: *Repo, name: []const u8, sha: Sha, a: Allocator) !void {
+fn addBranch(r: *Repo, name: []const u8, sha: Sha, newer: bool, a: Allocator) !void {
     const gop = try r.refs.map.getOrPut(a, name);
     if (!gop.found_existing) {
         gop.key_ptr.* = try a.dupe(u8, name);
         gop.value_ptr.* = .{ .heads = try sha.textAlloc(a) };
+    } else if (newer) {
+        a.free(gop.value_ptr.*.heads);
+        gop.value_ptr.* = .{ .heads = try sha.textAlloc(a) };
     }
 }
 
-pub fn loadRefs(r: *Repo, a: Allocator, io: Io) !void {
+fn loadRefsPacked(r: *Repo, a: Allocator, io: Io) !Io.Timestamp {
     if (r.dir.openFile(io, "packed-refs", .{})) |*fd| {
         defer fd.close(io);
+        const stat = try fd.stat(io);
         var buf: [2048]u8 = undefined;
         var read = fd.reader(io, &buf);
         while (read.interface.takeSentinel('\n')) |line| {
             if (std.mem.cut(u8, line, " refs/")) |pair| {
                 const sha: Sha = .init(pair[0]);
                 if (cutPrefix(u8, pair[1], "heads/")) |name| {
-                    try r.addBranch(name, sha, a);
+                    try r.addBranch(name, sha, false, a);
                 } else if (cutPrefix(u8, pair[1], "remotes/")) |name| {
-                    r.addRemote(name, sha, a) catch return;
+                    try r.addRemote(name, sha, a);
                 } else if (cutPrefix(u8, pair[1], "tags/")) |name| {
                     try r.addTag(name, sha, a);
                 }
@@ -222,10 +226,16 @@ pub fn loadRefs(r: *Repo, a: Allocator, io: Io) !void {
             error.EndOfStream => {},
             else => return e,
         }
+        return stat.mtime;
     } else |err| switch (err) {
         error.FileNotFound => {},
         else => std.debug.print("unable to read packed ref {}\n", .{err}),
     }
+    return .zero;
+}
+
+pub fn loadRefs(r: *Repo, a: Allocator, io: Io) !void {
+    const packed_time = try r.loadRefsPacked(a, io);
 
     if (r.dir.openDir(io, "refs", .{ .iterate = true })) |*ndir| {
         defer ndir.close(io);
@@ -236,6 +246,8 @@ pub fn loadRefs(r: *Repo, a: Allocator, io: Io) !void {
             if (next.kind != .file) continue;
             var f = next.dir.openFile(io, next.basename, .{}) catch continue;
             defer f.close(io);
+            const stat = try f.stat(io);
+            const newer = packed_time.nanoseconds < stat.mtime.nanoseconds;
             // surely enough for sha-50 right?
             var buf: [256]u8 = undefined;
             var reader = f.reader(io, &buf);
@@ -245,7 +257,7 @@ pub fn loadRefs(r: *Repo, a: Allocator, io: Io) !void {
                 r.addRemote(name, .init(line), a) catch continue;
             } else if (cutPrefix(u8, next.path, "heads/")) |name| {
                 if (find(u8, line, "ref: ")) |_| continue;
-                try r.addBranch(name, .init(line), a);
+                try r.addBranch(name, .init(line), newer, a);
             } else if (cutPrefix(u8, next.path, "diffs/")) |_| {
                 if (find(u8, line, "ref: ")) |_| continue;
                 const name = try a.dupe(u8, next.path);
@@ -283,6 +295,7 @@ pub fn loadRefs(r: *Repo, a: Allocator, io: Io) !void {
     } else |_| {}
 }
 
+/// TODO fix pathological recursion
 pub fn ref(repo: Repo, str: []const u8) !Sha {
     if (cutPrefix(u8, str, "refs/")) |target| return repo.ref(target);
     if (cutPrefix(u8, str, "heads/")) |postfix| return repo.ref(postfix);
@@ -297,8 +310,10 @@ pub fn ref(repo: Repo, str: []const u8) !Sha {
         .diff => @panic("not implemented"),
         .remote => unreachable,
     };
-    log.info("ref not found '{s}'", .{str});
-    return Sha.initCheck(str) catch error.RefMissing;
+    return Sha.initCheck(str) catch {
+        log.debug("ref not found '{s}'", .{str});
+        return error.RefMissing;
+    };
 }
 
 pub fn resolve(self: Repo, r: Ref) !Sha {
