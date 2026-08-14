@@ -350,7 +350,6 @@ searchresults {
 		}
 	}
 }
-
 deltalist {
 	margin: 1rem 2.5%;
 	display: block;
@@ -364,8 +363,9 @@ deltalist {
 			padding: 4px;
 			border-bottom: 1px solid gray;
 			text-align: left;
+			&.closed > div.main { text-decoration: line-through; }
+			&:hover { background: #ddd2; }
 		}
-		a:hover { background: #ddd2; }
 		> div { margin: 0 1%; }
 		div.main { flex-grow: 1; font-size: 124%; width: auto; }
 		.meta { width: auto; min-width: 35px; }
@@ -373,7 +373,6 @@ deltalist {
 		desc { display: block; }
 	}
 }
-
 .upstream {
 	color: #bbb;
 	font-family: 'Titillium Web', sans-serif;
