@@ -19,3 +19,4 @@ adding sha256 support was easy
 <russriguez> can you imagine the time when advertising is added to git commits to keep github "free"
 git blame that works in hastur (...sorta)
 1' or 1=1; --
+doesn't advertise itself using your README.md
