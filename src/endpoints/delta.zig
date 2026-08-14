@@ -91,6 +91,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtm
         .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
         .comment_new = if (comments.new) " new" else "",
         .comment_count = comments.count,
+        .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
         .desc = if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }}),
         .delta_meta = meta,
     };

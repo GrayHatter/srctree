@@ -323,7 +323,7 @@ fn list(f: *Frame) Error!void {
 fn isearch(f: *Frame) Error!void {
     const udata = f.request.data.query.validate(struct { q: []const u8 }) catch return error.DataInvalid;
     if (udata.q.len == 0) return list(f);
-    log.warn("issue search q {s}\n", .{udata.q});
+    log.warn("issue search q {s}", .{udata.q});
     return searchPage(f, .abx(udata.q));
 }
 
