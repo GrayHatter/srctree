@@ -304,9 +304,7 @@ fn searchPage(f: *Frame, str: abx.Html) Error!void {
 
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
 
-    var body_header: S.BodyHeaderHtml = .{
-        .nav = .{ .nav_buttons = &(rd.navButtons(f)) },
-    };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &(rd.navButtons(f)) } };
     if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
     f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
 

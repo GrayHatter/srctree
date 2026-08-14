@@ -373,12 +373,7 @@ deltalist {
 		desc { display: block; }
 	}
 }
-.upstream {
-	color: #bbb;
-	font-family: 'Titillium Web', sans-serif;
-	font-size: 85%;
-	margin: 0;
-}
+.upstream { color: #bbb; font-size: 85%; margin: 0; font-family: 'Titillium Web', sans-serif; }
 li { display: block; list-style: none; }
 commit {
 	display: block;
@@ -407,7 +402,7 @@ delta {
 	flex-wrap: wrap;
 	gap: 0.5em;
 	&.diff { flex-wrap: nowrap; }
-	comments { /*min-width: 30em;*/ flex: 1 1 30em; }
+	comments { flex: 1 1 30em; }
 	diff { flex-grow: 10; }
 	sidebar {
 		flex: 1 1 auto;
