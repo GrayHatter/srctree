@@ -11,26 +11,56 @@ pub var dirs: repos.Dirs = .{};
 pub const RepoCi = struct {
     // Aligned to Git.Repo for @fieldParentPtr
     enabled: bool align(8) = false,
+    srctree: SrctreeConf = .empty,
+    conf_bytes: [:0]const u8 = &.{},
+
+    pub const SrctreeConf = struct {
+        ci: ?[]const u8,
+        docs: ?[]const u8,
+
+        pub const empty: SrctreeConf = .{
+            .ci = null,
+            .docs = null,
+        };
+    };
 
     pub fn status(ci: *RepoCi, a: Allocator, io: Io) !bool {
         const repo: *Repo = @fieldParentPtr("ci", ci);
         ci.enabled = false;
         const commit = repo.git.HEAD(a, io) catch return false; // empty or broken repo
+        defer commit.raze(a);
         const tree = try commit.loadTree(&repo.git, a, io);
+        defer tree.raze(a);
         var itr = tree.iterate();
         while (itr.next()) |next| {
             if (eql(u8, next.name, "build.zig.zon")) {
                 const blob = try repo.git.objects.load(next.sha, a, io);
                 switch (blob) {
                     .blob => if (find(u8, blob.blob.bytes, ".srctree =")) |_| {
-                        return true;
+                        defer blob.blob.raze(a);
+                        ci.conf_bytes = try a.dupeSentinel(u8, blob.blob.bytes, 0);
+                        ci.srctree = std.zon.parse.fromSliceAlloc(SrctreeConf, a, ci.conf_bytes, null, .{
+                            .ignore_unknown_fields = true,
+                        }) catch return false;
+
+                        ci.enabled = true;
+                        return ci.enabled;
                     },
-                    else => return false,
+                    else => {},
                 }
             }
         }
+        return ci.enabled;
+    }
 
-        return false;
+    pub fn run(ci: *RepoCi, a: Allocator, io: Io) !void {
+        if (!ci.enabled) return error.Disabled;
+        var agent: Agent = .init(a, io);
+        defer agent.raze();
+    }
+
+    pub fn raze(ci: *RepoCi, a: Allocator) void {
+        a.free(ci.conf_bytes);
     }
 };
 
