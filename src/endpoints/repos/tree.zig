@@ -96,13 +96,15 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         else => return error.ServerFault,
     }
 
-    const page_desc: ?[]const u8 = try allocPrint(ctx.alloc, "{f}", .{
-        abx.Html{ .text = repo.description(ctx.alloc, ctx.io) catch "" },
-    });
+    const page_desc: ?[]const u8 = if (repo.description(ctx.alloc, ctx.io)) |desc|
+        try allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = desc }})
+    else |_|
+        null;
+
     const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse "" };
 
-    const page_title = if (page_desc) |pd|
-        try allocPrint(ctx.alloc, "{s} - {s} - srctree", .{ rd.name, pd })
+    const page_title = if (page_desc != null and page_desc.?.len > 0)
+        try allocPrint(ctx.alloc, "{s} - {s} - srctree", .{ rd.name, page_desc.? })
     else
         try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
 
