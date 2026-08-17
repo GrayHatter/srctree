@@ -66,7 +66,7 @@ pub fn main(init: std.process.Init) !void {
     const a = init.gpa;
 
     var options = Options.default();
-    var runmode: verse.Server.RunMode = .{ .zwsgi = undefined };
+    var runmode: verse.Server.Options.RunMode = .{ .zwsgi = undefined };
 
     var args = init.minimal.args.iterate();
     arg0 = args.next() orelse "srctree";

@@ -10,7 +10,7 @@ pub fn init(a: Allocator, io: Io) Auth {
             .vtable = &.{
                 .valid = valid,
                 .lookupUser = lookupUser,
-                .authenticate = verse.Auth.MTLS.authenticate,
+                .authenticate = verse.Auth.Mtls.authenticate,
                 .createSession = null,
                 .getUserCookie = null,
                 .getUserToken = null,

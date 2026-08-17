@@ -12,7 +12,7 @@ pub const index = commitFlex;
 
 pub const endpoints = verse.Endpoints(.{
     root,
-    verse.stats.Endpoint,
+    verse.Stats.Endpoint,
     @import("endpoints/api.zig"),
     @import("endpoints/auth.zig"),
     @import("endpoints/admin.zig"),
