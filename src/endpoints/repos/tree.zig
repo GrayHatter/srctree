@@ -8,6 +8,17 @@ fn filenameIsHidden(name: []const u8) bool {
         eql(u8, name, "LICENSE.md");
 }
 
+fn readme(blobs: []Git.Blob, repo: *const Git.Repo, a: Allocator, io: Io) !?[]const u8 {
+    for (blobs) |obj| {
+        if (isReadme(obj.name)) {
+            const resolve = repo.blob(obj.sha, a, io) catch return error.Unknown;
+            const readme_html = htmlReadme(resolve.bytes, a, io) catch unreachable;
+            return try allocPrint(a, "{f}", .{readme_html[0]});
+        }
+    }
+    return null;
+}
+
 pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Router.Error!void {
     const now: i64 = Io.Clock.real.now(ctx.io).toSeconds();
     const c = if (rd.ref) |ref|
@@ -85,16 +96,6 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         else => return error.ServerFault,
     }
 
-    var readme: ?[]const u8 = null;
-    for (blobs) |obj| {
-        if (isReadme(obj.name)) {
-            const resolve = repo.blob(obj.sha, ctx.alloc, ctx.io) catch return error.Unknown;
-            const readme_html = htmlReadme(resolve.bytes, ctx.alloc, ctx.io) catch unreachable;
-            readme = try allocPrint(ctx.alloc, "{f}", .{readme_html[0]});
-            break;
-        }
-    }
-
     const page_desc: ?[]const u8 = try allocPrint(ctx.alloc, "{f}", .{
         abx.Html{ .text = repo.description(ctx.alloc, ctx.io) catch "" },
     });
@@ -120,7 +121,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
             .blame = null,
         },
         .repo_name = .abx(rd.name),
-        .readme = readme,
+        .readme = readme(blobs, repo, ctx.alloc, ctx.io) catch &.{} orelse null,
         .commit_slug = .abx(commit_slug),
         .commit_time_human = .safe(commit_time),
         //.commit_hex = commit_hex,
@@ -148,18 +149,18 @@ fn isReadme(name: []const u8) bool {
     return false;
 }
 
-fn htmlReadme(readme: []const u8, a: Allocator, io: Io) ![]E {
+fn htmlReadme(text: []const u8, a: Allocator, io: Io) ![]E {
     var dom: *DOM = .create(a);
 
     dom = dom.open(html.element("readme", &.{}, &.{}));
-    dom.push(html.element("intro", &.{.text("README.md")}, &.{}));
+    dom.dupe(html.element("intro", &.{.text("README.md")}, &.{}));
     dom = dom.open(html.element("code", &.{}, &.{}));
 
-    var r: Reader = .fixed(readme);
-    const buf = try a.alloc(u8, readme.len * 4);
+    var r: Reader = .fixed(text);
+    const buf = try a.alloc(u8, text.len * 4);
     var w: Writer = .fixed(buf);
     Highlight.Markdown.translate(&r, &w, a, io) catch |err| switch (err) {
-        error.InvalidMarkdown => try w.print("{f}", .{abx.Html{ .text = readme }}),
+        error.InvalidMarkdown => try w.print("{f}", .{abx.Html{ .text = text }}),
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };
     dom.push(html.text(w.buffered()));
