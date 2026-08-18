@@ -309,7 +309,7 @@ fn loadDeltaRef(_: Pack, reader: *Reader, _: usize, objs: *const Objects, a: All
         switch (objs.loadObjectOrDelta(sha, a, io) catch return error.ObjectMissing) {
             .pack => |pk| .{ pk.data, pk.data, pk.header.kind },
             .file => |fdata| switch (fdata) {
-                .blob => |b| .{ b.bytes, b.bytes, .blob },
+                .blob => |b| .{ b.data.blob, b.data.blob, .blob },
                 .tree => |t| .{ @constCast(t.bytes), t.bytes, .tree },
                 .commit => |c| .{ c.bytes, c.body, .commit },
                 .tag => |t| .{ t.bytes, t.bytes, .tag },

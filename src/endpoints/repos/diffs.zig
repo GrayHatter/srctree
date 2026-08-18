@@ -475,7 +475,7 @@ fn resolveLineRefRepo(
         var fileitr = files.iterate();
         while (fileitr.next()) |obj| {
             if (eql(u8, obj.name, dirname)) {
-                if (obj.isFile()) {
+                if (obj.data == .blob) {
                     if (itr.peek() != null) return null;
                     break :root obj.sha;
                 }
@@ -496,7 +496,7 @@ fn resolveLineRefRepo(
         .stride => |s| .{ s.number, s.stride - s.number },
         .tag => return null,
     };
-    while (findScalarPos(u8, file.bytes, @max(end, start) + 1, '\n')) |next| {
+    while (findScalarPos(u8, file.data.blob, @max(end, start) + 1, '\n')) |next| {
         if (count > 1) {
             start = next;
         } else if (count == 1) {
@@ -510,7 +510,7 @@ fn resolveLineRefRepo(
         count -|= 1;
     }
     if (count > 1) return error.LineNotFound;
-    const found_line = file.bytes[start..end];
+    const found_line = file.data.blob[start..end];
 
     try found_lines.append(a, try highlightLineRef(line, found_line[1..], filename, "", a, io));
     return try found_lines.toOwnedSlice(a);

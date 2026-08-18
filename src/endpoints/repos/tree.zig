@@ -12,7 +12,7 @@ fn readme(blobs: []Git.Blob, repo: *const Git.Repo, a: Allocator, io: Io) !?[]co
     for (blobs) |obj| {
         if (isReadme(obj.name)) {
             const resolve = repo.blob(obj.sha, a, io) catch return error.Unknown;
-            const readme_html = htmlReadme(resolve.bytes, a, io) catch unreachable;
+            const readme_html = htmlReadme(resolve.data.blob, a, io) catch unreachable;
             return try allocPrint(a, "{f}", .{readme_html[0]});
         }
     }
@@ -58,10 +58,11 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                     const sha_text = ch.sha.text();
                     const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, sha_text.slice()[0..8] });
                     const ctime = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(ch.timestamp, now)});
-                    const href: []const u8 = if (obj.isFile())
-                        try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{ prefix, path orelse "", obj.name })
-                    else
-                        try allocPrint(ctx.alloc, "{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name });
+                    const href: []const u8 = switch (obj.data) {
+                        .blob => try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{ prefix, path orelse "", obj.name }),
+                        .tree => try allocPrint(ctx.alloc, "{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name }),
+                        .unloaded => try allocPrint(ctx.alloc, "{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name }),
+                    };
                     if (filenameIsHidden(ch.name)) {
                         try list_hidden.append(ctx.alloc, .{
                             .name = .abx(ch.name),
@@ -69,24 +70,27 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                             .commit_title = .abx(ch.title),
                             .commit_href = .safe(chref),
                             .commit_time = .safe(ctime),
-                            .class = .safe(if (obj.isFile()) "file" else "tree"),
+                            .class = .safe(switch (obj.data) {
+                                .blob => "file",
+                                .tree => "tree",
+                                .unloaded => "tree",
+                            }),
                         });
-                    } else if (obj.isFile()) {
-                        try list_files.append(ctx.alloc, .{
+                    } else switch (obj.data) {
+                        .blob => try list_files.append(ctx.alloc, .{
                             .name = .abx(ch.name),
                             .href = .abx(href),
                             .commit_title = .abx(ch.title),
                             .commit_href = .safe(chref),
                             .commit_time = .safe(ctime),
-                        });
-                    } else {
-                        try list_trees.append(ctx.alloc, .{
+                        }),
+                        .tree, .unloaded => try list_trees.append(ctx.alloc, .{
                             .name = .abx(ch.name),
                             .href = .abx(href),
                             .commit_title = .abx(ch.title),
                             .commit_href = .safe(chref),
                             .commit_time = .safe(ctime),
-                        });
+                        }),
                     }
                     break;
                 }

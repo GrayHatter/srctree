@@ -35,9 +35,9 @@ pub const RepoCi = struct {
             if (eql(u8, next.name, "build.zig.zon")) {
                 const blob = try repo.git.objects.load(next.sha, a, io);
                 switch (blob) {
-                    .blob => if (find(u8, blob.blob.bytes, ".srctree =")) |_| {
+                    .blob => if (find(u8, blob.blob.data.blob, ".srctree =")) |_| {
                         defer blob.blob.raze(a);
-                        ci.conf_bytes = try a.dupeSentinel(u8, blob.blob.bytes, 0);
+                        ci.conf_bytes = try a.dupeSentinel(u8, blob.blob.data.blob, 0);
                         ci.srctree = std.zon.parse.fromSliceAlloc(SrctreeConf, a, ci.conf_bytes, null, .{
                             .ignore_unknown_fields = true,
                         }) catch return false;

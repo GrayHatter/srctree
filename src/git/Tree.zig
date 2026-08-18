@@ -1,12 +1,12 @@
 sha: Sha,
-bytes: []const u8,
+bytes: []u8,
 name: ?[]const u8,
 parent: ?*const Tree,
 basepath: ?[]const u8,
 
 const Tree = @This();
 
-pub fn init(sha: Sha, blob: []const u8) Tree {
+pub fn init(sha: Sha, blob: []u8) Tree {
     return .{
         .sha = sha,
         .bytes = blob,
@@ -167,12 +167,7 @@ pub const Iterator = struct {
             //    "next {any} {s} {s} {} \n",
             //    .{ mode, name, Sha.init(blob[str_end + 1 ..][0..width]).text().slice(), itr.idx },
             //);
-            return .{
-                .mode = mode,
-                .name = name,
-                .sha = .init(blob[str_end + 1 ..][0..width]),
-                .bytes = &.{},
-            };
+            return .init(.init(blob[str_end + 1 ..][0..width]), mode, name, blob);
         }
         return null;
     }

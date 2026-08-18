@@ -1,21 +1,26 @@
-bytes: []u8,
 sha: Git.Sha,
 mode: [6]u8,
 name: []const u8,
+data: union(enum) {
+    blob: []u8,
+    tree: Tree,
+    unloaded: void,
+} = .unloaded,
 
 const Blob = @This();
 
 pub fn init(sha: Sha, mode: [6]u8, name: []const u8, data: []u8) Blob {
-    return .{
+    return if (mode[0] != 48) .{
         .sha = sha,
         .mode = mode,
         .name = name,
-        .bytes = data,
+        .data = .{ .blob = data },
+    } else .{
+        .sha = sha,
+        .mode = mode,
+        .name = name,
+        .data = .{ .tree = .init(sha, data) },
     };
-}
-
-pub fn isFile(self: Blob) bool {
-    return self.mode[0] != 48;
 }
 
 pub fn toObject(self: Blob, a: Allocator, repo: Repo) !Object {
@@ -25,22 +30,32 @@ pub fn toObject(self: Blob, a: Allocator, repo: Repo) !Object {
     return error.NotImplemented;
 }
 
-pub fn toTree(self: Blob, repo: *const Repo, a: Allocator, io: Io) !Tree {
-    if (self.isFile()) return error.NotATree;
-    return switch (try repo.objects.load(self.sha, a, io)) {
+pub fn load(sha: Sha, repo: *const Repo, a: Allocator, io: Io) !Blob {
+    return switch (try repo.objects.load(sha, a, io)) {
+        .blob => |b| b,
+        else => error.NotABlob,
+    };
+}
+
+pub fn toTree(b: Blob, repo: *const Repo, a: Allocator, io: Io) !Tree {
+    return switch (try repo.objects.load(b.sha, a, io)) {
         .tree => |t| t,
         else => error.NotATree,
     };
 }
 
 pub fn raze(self: Blob, a: Allocator) void {
-    a.free(self.bytes);
+    a.free(self.data.blob);
 }
 
-pub fn format(self: Blob, out: *Io.Writer) !void {
+pub fn format(b: Blob, out: *Io.Writer) !void {
     try out.print("Blob{{ ", .{});
-    try if (self.isFile()) out.print("File", .{}) else out.print("Tree", .{});
-    try out.print(" {s} @ {s} }}", .{ self.name, self.sha });
+    switch (b.data) {
+        .blob => try out.print("File", .{}),
+        .tree => try out.print("Tree", .{}),
+        .unloaded => try out.print("Unknown", .{}),
+    }
+    try out.print(" {s} @ {s} }}", .{ b.name, b.sha });
 }
 
 const std = @import("std");
