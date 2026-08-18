@@ -5,6 +5,8 @@ ci: RepoCi = .{},
 
 const Repo = @This();
 
+pub var dirs: Dirs = .{};
+
 pub const Agent = @import("Repo/Agent.zig");
 
 pub const RepoCi = struct {
@@ -12,6 +14,9 @@ pub const RepoCi = struct {
     enabled: bool align(8) = false,
     srctree: SrctreeConf = .empty,
     conf_bytes: [:0]const u8 = &.{},
+    artifacts: Artifacts = .{},
+    cache: Cache = .{},
+    source: Source = .{},
 
     pub const SrctreeConf = struct {
         ci: ?[]const u8,
@@ -54,12 +59,89 @@ pub const RepoCi = struct {
 
     pub fn run(ci: *RepoCi, a: Allocator, io: Io) !void {
         if (!ci.enabled) return error.Disabled;
-        var agent: Agent = .init(a, io);
-        defer agent.raze();
+        // load instructions
+        try ci.validate(a, io);
+        try ci.source.init(a, io);
+        try ci.cache.inject(a, io);
+        try ci.source.setup(a, io);
+        try ci.source.tests(a, io);
+        // save output
+        ci.artifacts.save(a, io);
+        try ci.cache.backup(a, io);
+        try ci.source.raze(a, io);
     }
 
     pub fn raze(ci: *RepoCi, a: Allocator) void {
         a.free(ci.conf_bytes);
+    }
+
+    pub fn validate(ci: *RepoCi, a: Allocator, io: Io) !void {
+        _ = ci;
+        _ = a;
+        _ = io;
+        return error.NotImplemented;
+    }
+
+    pub const Artifacts = struct {
+        pub fn save(art: *Artifacts, a: Allocator, io: Io) !void {
+            _ = art;
+            _ = a;
+            _ = io;
+            return error.NotImplemented;
+        }
+    };
+
+    pub const Source = struct {
+        pub fn init(src: *Source, a: Allocator, io: Io) !void {
+            _ = src;
+            _ = a;
+            _ = io;
+            return error.NotImplemented;
+        }
+
+        pub fn setup(src: *Source, a: Allocator, io: Io) !void {
+            _ = src;
+            _ = a;
+            _ = io;
+            return error.NotImplemented;
+        }
+
+        pub fn tests(src: *Source, a: Allocator, io: Io) !void {
+            _ = src;
+            _ = a;
+            _ = io;
+            return error.NotImplemented;
+        }
+
+        pub fn raze(src: *Source, a: Allocator, io: Io) !void {
+            _ = src;
+            _ = a;
+            _ = io;
+            return error.NotImplemented;
+        }
+    };
+
+    pub const Cache = struct {
+        pub fn inject(c: *Cache, a: Allocator, io: Io) !void {
+            _ = c;
+            _ = a;
+            _ = io;
+            return error.NotImplemented;
+        }
+
+        pub fn backup(c: *Cache, a: Allocator, io: Io) !void {
+            _ = c;
+            _ = a;
+            _ = io;
+            return error.NotImplemented;
+        }
+    };
+
+    pub fn artifactsStore(ci: *RepoCi, a: Allocator, io: Io) !void {
+        _ = ci;
+        _ = a;
+        _ = io;
+        return error.NotImplemented;
     }
 };
 
@@ -302,8 +384,6 @@ pub fn openGit(name: []const u8, vis: Vis.Select, io: Io) !?Git.Repo {
     };
     return try Git.Repo.init(dir, io);
 }
-
-pub var dirs: Dirs = .{};
 
 pub const Dirs = struct {
     public: ?[]const u8 = "./repos",
