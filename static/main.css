@@ -298,6 +298,10 @@ readme {
 	padding: 0 8px 8px;
 	font-family: "Ubuntu Mono", monospace, sans-serif;
 	min-width: 8rem;
+	position: sticky;
+	top: 3rem;
+	bottom: 0;
+	z-index: -10;
 	span.tree, span.file {
 		border-top: 1px solid gray;
 		margin: auto;
