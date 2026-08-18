@@ -4,7 +4,7 @@ pub fn list(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.InvalidURI;
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.InvalidURI;
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
@@ -64,6 +64,5 @@ const S = verse.template.Structs;
 const PageData = verse.template.PageData;
 const Router = verse.Router;
 const log = std.log.scoped(.endpoint_tags);
-const repos = @import("../../repos.zig");
 const Repo = @import("../../Repo.zig");
 const Git = @import("../../git.zig");

@@ -45,7 +45,7 @@ var after_party: AfterParty = .{
 fn update(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
 
     const update_data = f.request.data.query.validate(UpdateData) catch return error.DataInvalid;
@@ -78,7 +78,6 @@ fn update(f: *Frame) Router.Error!void {
 
 const std = @import("std");
 
-const repos = @import("../../repos.zig");
 const Repo = @import("../../Repo.zig");
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.Router;

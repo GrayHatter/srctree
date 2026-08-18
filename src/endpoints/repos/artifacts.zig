@@ -11,7 +11,7 @@ const ArtifactsHtml = T.PageData("repo/artifacts.html");
 fn list(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
 
     var page: ArtifactsHtml = .init(.{
@@ -41,7 +41,6 @@ fn view(f: *Frame) Router.Error!void {
 
 const std = @import("std");
 const Repo = @import("../../Repo.zig");
-const repos = @import("../../repos.zig");
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.Router;
 const verse = @import("verse");

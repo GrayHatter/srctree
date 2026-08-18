@@ -632,7 +632,6 @@ const log = std.log.scoped(.commit_flex);
 
 const DateTime = @import("../datetime.zig");
 const Git = @import("../git.zig");
-const repos = @import("../repos.zig");
 const Repo = @import("../Repo.zig");
 
 const global_config = &@import("../Config.zig").global;

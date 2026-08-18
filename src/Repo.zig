@@ -1,12 +1,11 @@
 name: ?[]const u8 = null,
 git: Git.Repo,
+pinned: bool,
 ci: RepoCi = .{},
 
 const Repo = @This();
 
 pub const Agent = @import("Repo/Agent.zig");
-
-pub var dirs: repos.Dirs = .{};
 
 pub const RepoCi = struct {
     // Aligned to Git.Repo for @fieldParentPtr
@@ -65,9 +64,23 @@ pub const RepoCi = struct {
 };
 
 pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
+    var git = try Git.Repo.init(rdir, io);
+    var local: [8192]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&local);
+    try git.loadConfig(fba.allocator(), io);
+    defer git.config = null;
+    defer git.config_ini = null;
+
+    var pinned = false;
+    if (git.config.?.srctree) |s| {
+        if (s.pinned) |p| {
+            pinned = p;
+        }
+    }
     return .{
         .name = name,
-        .git = try Git.Repo.init(rdir, io),
+        .git = git,
+        .pinned = pinned,
     };
 }
 
@@ -290,12 +303,52 @@ pub fn openGit(name: []const u8, vis: Vis.Select, io: Io) !?Git.Repo {
     return try Git.Repo.init(dir, io);
 }
 
+pub var dirs: Dirs = .{};
+
+pub const Dirs = struct {
+    public: ?[]const u8 = "./repos",
+    private: ?[]const u8 = null,
+    secret: ?[]const u8 = null,
+
+    pub fn directory(rds: Dirs, vis: Visibility, io: Io) !std.Io.Dir {
+        var cwd = std.Io.Dir.cwd();
+        return cwd.openDir(io, switch (vis) {
+            .public => rds.public orelse return error.NoDirectory,
+            .private => rds.private orelse return error.NoDirectory,
+            .secret => rds.secret orelse return error.NoDirectory,
+            .unlisted => rds.secret orelse return error.NoDirectory,
+        }, .{ .iterate = true });
+    }
+};
+
+pub fn exists(name: []const u8, vis: Visibility.Select, io: Io) bool {
+    // TODO skips non-public dirs
+    var dir = dirs.directory(.public, io) catch return false;
+    defer dir.close(io);
+    var itr = dir.iterate();
+    while (itr.next(io) catch return false) |file| {
+        if (file.kind != .directory and file.kind != .sym_link) continue;
+        if (eql(u8, file.name, name)) {
+            // lol, crap, there's a side channel leak no matter where I put
+            // this... given near zero thought I've decided this is the better
+            // option
+            if (!Vis.fromConfig(name).isVisible(vis)) return false;
+            return true;
+        }
+    }
+    return false;
+}
+
+pub fn containsName(name: []const u8) bool {
+    return if (name.len > 0) true else false;
+}
+
 const Git = @import("git.zig");
-const repos = @import("repos.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
 const eql = std.mem.eql;
 const find = std.mem.find;
+const parseInt = std.fmt.parseInt;
 const global_config = &@import("Config.zig").global;

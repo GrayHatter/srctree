@@ -18,7 +18,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     const blame_file = (rd.path orelse return error.InvalidURI).path[rd.path.?.index..];
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
     // TODO be more specific
     //repo.loadRemotes() catch {};
     repo.loadData(f.alloc, f.io) catch {}; // This is a safe optional because it's only used to get upstream
@@ -258,7 +258,6 @@ const repos_ = @import("../repos.zig");
 const RouteData = repos_.RouteData;
 const Humanize = @import("../../humanize.zig");
 const Repo = @import("../../Repo.zig");
-const repos = @import("../../repos.zig");
 const Git = @import("../../git.zig");
 const Sha = Git.Sha;
 const Highlight = @import("../../syntax-highlight.zig");

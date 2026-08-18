@@ -74,15 +74,16 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 switch (bot.name) {
                     .googlebot => return null,
                     .bingbot => return null,
+                    .gptbot,
+                    .metaexternalagent,
+                    .scrybot,
+                    .youbot,
+                    => return dropRequest(fr),
                     .unknown => {
                         if (find(u8, ua.string, "SearchBot/1.0")) |_| return dropRequest(fr);
                         if (find(u8, ua.string, "SleepBot/1.0")) |_| return dropRequest(fr);
                         return null;
                     },
-                    .gptbot,
-                    .metaexternalagent,
-                    .youbot,
-                    => return dropRequest(fr),
 
                     else => {
                         const ua_str = fr.request.user_agent.?.string;

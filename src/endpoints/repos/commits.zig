@@ -176,7 +176,7 @@ pub fn viewCommit(f: *Frame) Error!void {
     if (std.mem.indexOf(u8, sha, ".") != null and !std.mem.endsWith(u8, sha, ".patch")) return error.ServerFault;
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse {
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.ServerFault) orelse {
         log.err("Repo doesn't exist? {s}", .{rd.name});
         return f.sendDefaultErrorPage(.not_found);
     };
@@ -326,7 +326,7 @@ pub fn commitList(f: *Frame) Error!void {
     };
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
@@ -342,7 +342,7 @@ pub fn commitList(f: *Frame) Error!void {
 pub fn commitsBefore(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.ServerFault) orelse
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.ServerFault) orelse
         return f.sendDefaultErrorPage(.not_found);
     repo.loadData(f.alloc) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
@@ -402,7 +402,6 @@ const Git = @import("../../git.zig");
 const Highlight = @import("../../syntax-highlight.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../Patch.zig");
-const repos = @import("../../repos.zig");
 const Repo = @import("../../Repo.zig");
 const delta_shared = @import("../delta.zig");
 const Types = @import("../../types.zig");

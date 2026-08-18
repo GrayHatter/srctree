@@ -350,6 +350,5 @@ const Router = verse.Router;
 const Error = Router.Error;
 
 const git = @import("git.zig");
-const repos = @import("repos.zig");
 const Repo = @import("Repo.zig");
 const Config = @import("Config.zig");

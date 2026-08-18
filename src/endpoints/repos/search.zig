@@ -19,7 +19,7 @@ const extra_lines: usize = 6;
 fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
 
     const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
@@ -262,7 +262,6 @@ const findScalarPos = std.mem.findScalarPos;
 const countScalar = std.mem.countScalar;
 const log = std.log.scoped(.repo_search);
 
-const repos = @import("../../repos.zig");
 const Repo = @import("../../Repo.zig");
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.RouteData;

@@ -4,7 +4,7 @@ pub fn list(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.InvalidURI;
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.InvalidURI;
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
@@ -85,7 +85,6 @@ pub fn sort(ctx: SortCtx, l: Git.Branch, r: Git.Branch) bool {
     return ltime > rtime;
 }
 
-const repos = @import("../../repos.zig");
 const RouteData = @import("../repos.zig").RouteData;
 const Repo = @import("../../Repo.zig");
 

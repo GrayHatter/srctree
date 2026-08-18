@@ -146,7 +146,7 @@ pub fn main(init: std.process.Init) !void {
         }
     }
 
-    var agent: Repos.Agent = .init(.{
+    var agent: Repo.Agent = .init(.{
         .enabled = SrcConfig.global.agent.?.enabled,
         .upstream = .{
             .push = SrcConfig.global.agent.?.upstream_push,
@@ -170,9 +170,9 @@ pub fn main(init: std.process.Init) !void {
 
     if (SrcConfig.global.repos) |repo_config| {
         if (repo_config.dir) |public_repo_dir|
-            Repos.dirs.public = public_repo_dir;
+            Repo.dirs.public = public_repo_dir;
         if (repo_config.private_dir) |private_repo_dir|
-            Repos.dirs.private = private_repo_dir;
+            Repo.dirs.private = private_repo_dir;
     }
 
     Srctree.endpoints.serve(a, .{
@@ -202,7 +202,7 @@ const Server = verse.Server;
 const log = std.log;
 
 const Database = @import("database.zig");
-const Repos = @import("repos.zig");
+const Repo = @import("Repo.zig");
 const Types = @import("types.zig");
 
 const Ini = @import("ini.zig");

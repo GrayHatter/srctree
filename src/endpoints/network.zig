@@ -50,6 +50,5 @@ const DOM = html.DOM;
 
 const Error = verse.Router.Error;
 const Repo = @import("../Repo.zig");
-const repos = @import("../repos.zig");
 const Ini = @import("../ini.zig");
 const Git = @import("../git.zig");

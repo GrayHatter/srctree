@@ -197,6 +197,5 @@ const E = html.E;
 const PageData = verse.template.PageData;
 const Router = verse.Router;
 const Humanize = @import("../../humanize.zig");
-const repos = @import("../../repos.zig");
 const Git = @import("../../git.zig");
 const Highlight = @import("../../syntax-highlight.zig");

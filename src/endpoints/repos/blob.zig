@@ -3,7 +3,7 @@ pub fn treeBlob(f: *Frame) Router.Error!void {
     _ = f.uri.next();
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (repos.open(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
+    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
     repo.loadData(f.alloc, f.io) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
@@ -226,7 +226,6 @@ const Frame = verse.Frame;
 const S = verse.template.Structs;
 const PageData = verse.template.PageData;
 const Router = verse.Router;
-const repos = @import("../../repos.zig");
 const Repo = @import("../../Repo.zig");
 const Git = @import("../../git.zig");
 const Highlight = @import("../../syntax-highlight.zig");

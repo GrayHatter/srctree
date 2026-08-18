@@ -105,7 +105,7 @@ pub const Router = struct {
     }
 
     pub fn exists(self: Router, vis: Repo.Visibility.Select, io: Io) bool {
-        return repos.exists(self.name, vis, io);
+        return Repo.exists(self.name, vis, io);
     }
 
     fn mkNav(name: []const u8, i: usize, d: usize, a: Allocator) [2]S.NavButtons {
@@ -226,7 +226,7 @@ pub fn router(f: *Frame) Router.RoutingError!verse.Router.BuildFn {
     if (rd.exists(vis, f.io)) {
         if (useGitProto(f)) return gitweb.router(f);
 
-        if (repos.open(rd.name, vis, f.io)) |repo_| b: {
+        if (Repo.openGit(rd.name, vis, f.io)) |repo_| b: {
             var repo = repo_ orelse break :b;
             if (repo.loadData(f.alloc, f.io)) {
                 defer repo.raze(f.alloc, f.io);
@@ -350,6 +350,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
         }
     }
     const status = repo.ci.status(a, io) catch unreachable;
+    std.debug.print("repo.ci {s} = {any}\n", .{ name, repo.ci.srctree });
 
     const commit_uri = try allocPrint(a, "/repo/{s}/commit/{f}", .{ name, std.fmt.alt(sha, .fmtHex) });
     const sha_str = try sha.text().dupe(a);
@@ -443,7 +444,6 @@ const html = verse.template.html;
 const S = verse.template.Structs;
 const ROUTE = verse.Router.ROUTE;
 const Humanize = @import("../humanize.zig");
-const repos = @import("../repos.zig");
 const Repo = @import("../Repo.zig");
 const Git = @import("../git.zig");
 const Highlight = @import("../syntax-highlight.zig");
