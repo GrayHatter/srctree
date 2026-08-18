@@ -201,9 +201,22 @@ pub fn highlight(lang: Language, text: []const u8, a: Allocator, io: Io) Highlig
 }
 
 fn wrap(comptime class: []const u8, text: []const u8, out: *Writer) !void {
+    var idx: usize = 0;
+    while (findScalarPos(u8, text, idx, '\n')) |new| {
+        if (std.mem.trim(u8, text[idx..new], " \r\n\t").len > 0) {
+            try out.writeAll("<span class=\"" ++ class ++ "\">");
+            try appendEscaped(out, text[idx..new]);
+            try out.writeAll("</span>\n");
+        } else try out.writeAll("\n");
+        idx = new + 1;
+    }
     try out.writeAll("<span class=\"" ++ class ++ "\">");
-    try appendEscaped(out, text);
+    try appendEscaped(out, text[idx..@max(idx, text.len)]);
     try out.writeAll("</span>");
+}
+
+fn astComment(text: []const u8) bool {
+    return std.mem.trim(u8, text, " \t\r\n").len > 0;
 }
 
 pub fn highlightInternal(lang: Language, text: [:0]const u8, a: Allocator) ![]u8 {
@@ -239,10 +252,8 @@ pub fn highlightInternal(lang: Language, text: [:0]const u8, a: Allocator) ![]u8
             for (tags, starts, start_token..) |tag, start, token_index2| {
                 const token_index: u32 = @intCast(token_index2);
                 const between = ast.source[cursor..start];
-                if (std.mem.trim(u8, between, " \t\r\n").len > 0) {
-                    try out.writeAll("<span class=\"c1\">");
-                    try appendUnindented(out, between, indent);
-                    try out.writeAll("</span>");
+                if (astComment(between)) {
+                    try wrap("c1", between, out);
                 } else if (between.len > 0) {
                     try appendUnindented(out, between, indent);
                 }
@@ -547,3 +558,4 @@ const endsWith = std.mem.endsWith;
 const startsWith = std.mem.startsWith;
 const eql = std.mem.eql;
 const findLast = std.mem.findLast;
+const findScalarPos = std.mem.findScalarPos;
