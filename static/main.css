@@ -54,6 +54,7 @@ details:open > summary.hide { display: none; }
 	position: sticky;
 	top:0;
 	background:#222;
+	z-index: 10;
 	> div { display: flex; justify-content: left; flex-wrap: wrap; gap: 0.4em;  }
 	h3 { font-family: 'Titillium Web', sans-serif; font-size: 220%; flex: 1 1 0; }
 	.description { font-size: 90%; color: #aaa; margin: auto 0; flex: 5 0 0; }
@@ -301,7 +302,6 @@ readme {
 	position: sticky;
 	top: 3rem;
 	bottom: 0;
-	z-index: -10;
 	span.tree, span.file {
 		border-top: 1px solid gray;
 		margin: auto;
