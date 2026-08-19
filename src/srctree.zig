@@ -99,6 +99,8 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 }
             },
             .browser => |bwsr| {
+                const age: std.Io.Duration = bwsr.age(fr.request.now) catch .fromSeconds(0);
+                const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 95).nanoseconds;
                 const real_ua = ua.validate(fr.request);
                 log.warn("Claims to be a browser", .{});
                 switch (fr.downstream.gateway) {
@@ -135,6 +137,10 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         if (startsWith(u8, val, bad))
                             return dropRequest(fr);
                     }
+                }
+                if (too_old) {
+                    log.err("too old", .{});
+                    return dropRequest(fr);
                 }
             },
             .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/"))
