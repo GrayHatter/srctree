@@ -232,7 +232,7 @@ pub fn router(f: *Frame) Router.RoutingError!verse.Router.BuildFn {
                 defer repo.raze(f.alloc, f.io);
                 if (repo.findRemote("upstream")) |_| {
                     if (repo.config.?.srctree) |s| if (s.pinned) |p| if (p) break :b;
-                    f.headers.addCustom(f.alloc, "X-Robots-Tag", "none") catch {};
+                    f.response_headers.addCustom(f.alloc, "X-Robots-Tag", "none") catch {};
                 }
             } else |_| {}
         } else |_| {}

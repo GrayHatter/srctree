@@ -86,7 +86,26 @@ fn getBlob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Err
     };
 }
 
+fn blobCurl(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
+    const path = rd.path orelse return error.InvalidURI;
+    var path_itr = std.fs.path.componentIterator(path.path);
+    _ = path_itr.last().?.name;
+    //const blob_path = path_itr.path[0..path_itr.start_index];
+
+    const blob_data = try getBlob(f, rd, repo, tree);
+
+    var b: [4096]u8 = undefined;
+    const dispo = try bufPrint(&b, "attachment; filename=\"{s}\"", .{blob_data.name});
+    f.response_headers.addCustom(f.alloc, "Content-Disposition", dispo) catch return error.ServerFault;
+    try f.sendHeaders(.close);
+    _ = try f.downstream.writer.interface.writeAll(blob_data.data.blob);
+}
+
 fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
+    if (f.request.user_agent) |agent| {
+        if (agent.agent == .script and agent.agent.script.name == .curl) return blobCurl(f, rd, repo, tree);
+    }
+
     const path = rd.path orelse return error.InvalidURI;
     var path_itr = std.fs.path.componentIterator(path.path);
     _ = path_itr.last().?.name;
@@ -228,6 +247,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const allocPrint = std.fmt.allocPrint;
+const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;

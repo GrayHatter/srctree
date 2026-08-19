@@ -160,7 +160,7 @@ pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
         const diff = acts.formatPatchRange(range, f.io) catch return error.ServerFault;
         f.status = .ok;
         f.content_type = null;
-        f.headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
+        f.response_headers.addCustom(f.alloc, "Content-Type", "text/x-patch") catch unreachable; // Firefox is trash
         try f.sendHeaders(.close);
         try f.downstream.writer.interface.writeAll(diff);
         return;
