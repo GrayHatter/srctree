@@ -170,6 +170,41 @@ pub fn postUpdate(_: *const Env) !void {
 }
 
 pub const diffs = struct {
+    fn createRefDir(name: []const u8, dir: Io.Dir, io: Io) !bool {
+        return try dir.createDirPathStatus(io, name, .default_dir) == .created;
+    }
+
+    fn createRef(
+        delta: *const Delta,
+        dir: Io.Dir,
+        base: git.Sha,
+        head: git.Sha,
+        revision: ?usize,
+        io: Io,
+    ) !bool {
+        var path_b: [2048]u8 = undefined;
+        var hash_buf: [512]u8 = undefined;
+
+        const path_base = print(&path_b, "refs/diffs/{}/base", .{delta.index}) catch unreachable;
+        const created = try createRefDir(path_base[0 .. path_base.len - 5], dir, io);
+        if (created or revision == null) {
+            const sha_base = try print(&hash_buf, "{f}\n", .{base.text()});
+            try dir.writeFile(io, .{ .sub_path = path_base, .data = sha_base });
+        }
+
+        const path_head = print(&path_b, "refs/diffs/{}/head", .{delta.index}) catch unreachable;
+        const sha_head = try print(&hash_buf, "{f}\n", .{head.text()});
+        try dir.writeFile(io, .{ .sub_path = path_head, .data = sha_head });
+
+        if (created or revision != null) {
+            const rev = revision orelse 0;
+            const path_rev = print(&path_b, "refs/diffs/{}/rev-{}", .{ delta.index, rev }) catch unreachable;
+            try dir.writeFile(io, .{ .sub_path = path_rev, .data = sha_head });
+        }
+
+        return created;
+    }
+
     pub fn new(
         user: []const u8,
         env: *const Env,
@@ -183,30 +218,15 @@ pub const diffs = struct {
         const cmt = try repo.commit(pr.new, a, io);
         var delta = try Delta.new(env.repo.?, trim(u8, cmt.title, "\n "), cmt.body, user, io);
 
-        var b: [512]u8 = undefined;
-        const ref_head = print(&b, "refs/diffs/{}/head", .{delta.index}) catch unreachable;
-        const ref_dir = ref_head[0 .. ref_head.len - 5];
-        if (try dir.createDirPathStatus(io, ref_dir, .default_dir) == .created) {
+        if (try createRef(&delta, dir, pr.old, pr.new, null, io)) {
             var diff: Diff = try .new(&delta, user, "", a, io);
             try diff.commit(io);
             try delta.commit(io);
-        } else {
-            return diffs.update(pr, &delta, dir, w, a, io);
-        }
-        var hash_buf: [512]u8 = undefined;
-        const target = try print(&hash_buf, "{f}\n", .{pr.new.text()});
-        try dir.writeFile(io, .{ .sub_path = ref_head, .data = target });
-        try pr.writeOptions(w, .refname(ref_head));
+            try pr.writeDiff(w, delta.index, .new);
+        } else return diffs.update(pr, &delta, dir, w, a, io);
     }
 
-    pub fn update(
-        pr: ProcRecv,
-        delta: *const Delta,
-        dir: Io.Dir,
-        w: *Writer,
-        a: Allocator,
-        io: Io,
-    ) !void {
+    pub fn update(pr: ProcRecv, delta: *const Delta, dir: Io.Dir, w: *Writer, a: Allocator, io: Io) !void {
         switch (delta.attach) {
             .nos, .diff => {},
             else => @panic("not implemented"),
@@ -215,15 +235,8 @@ pub const diffs = struct {
         diff.revision +%= 1;
         diff.commit(io) catch {};
 
-        var hash_buf: [512]u8 = undefined;
-        const target = try print(&hash_buf, "{f}\n", .{pr.new.text()});
-        var b: [512]u8 = undefined;
-        const ref_head = print(&b, "refs/diffs/{d}/head", .{delta.index}) catch return error.FileSystemFailed;
-        try dir.writeFile(io, .{ .sub_path = ref_head, .data = target });
-        const revision = print(&b, "refs/diffs/{d}/rev-{d}", .{ delta.index, diff.revision }) catch return error.FileSystemFailed;
-        try dir.writeFile(io, .{ .sub_path = revision, .data = target });
-
-        try pr.writeOptions(w, .refname(ref_head));
+        if (try createRef(delta, dir, pr.old, pr.new, diff.revision, io)) {}
+        try pr.writeDiff(w, delta.index, .new);
     }
 
     pub fn updateHead(pr: ProcRecv, repo_name: []const u8, ref_str: []const u8, dir: Io.Dir, w: *Writer, a: Allocator, io: Io) !void {

@@ -123,6 +123,13 @@ pub const ProcRecv = struct {
         if (options.old) |old| try w.print("{x:0>4}option old-oid {f}\n", .{ 16 + old.text().slice().len + 4, old.text() });
         if (options.forced) try PktLine.write(w, "option forced-update");
     }
+
+    /// Magic helper for srctree diffs
+    pub fn writeDiff(pr: ProcRecv, w: *std.Io.Writer, index: usize, force: enum { forced, new }) !void {
+        try w.print("{x:0>4}ok {s}\n", .{ 8 + pr.ref.len, pr.ref });
+        try w.print("{x:0>4}option refname refs/diffs/{}/head\n", .{ 33 + 4 + std.fmt.count("{}", .{index}), index });
+        if (force == .forced) try PktLine.write(w, "option forced-update");
+    }
 };
 
 test ProcRecv {

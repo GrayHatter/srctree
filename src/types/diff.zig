@@ -137,14 +137,14 @@ pub fn patchFromGitRev(
     const base = base_rev orelse if (d.base_hash.len > 0) d.base_hash else "HEAD";
     var b: [512]u8 = undefined;
     const target: []const u8 = switch (diff_rev) {
-        .first => print(&b, "{s}..refs/diffs/{d}/rev-0", .{ base, d.number }) catch unreachable,
-        .prev => print(&b, "{s}..refs/diffs/{d}/rev-{d}", .{ base, d.number, d.revision -| 1 }) catch unreachable,
-        .current => print(&b, "{s}..refs/diffs/{d}/head", .{ base, d.number }) catch unreachable,
+        .first => print(&b, "{s}...refs/diffs/{d}/rev-0", .{ base, d.number }) catch unreachable,
+        .prev => print(&b, "{s}...refs/diffs/{d}/rev-{d}", .{ base, d.number, d.revision -| 1 }) catch unreachable,
+        .current => print(&b, "{s}...refs/diffs/{d}/head", .{ base, d.number }) catch unreachable,
         // TODO find actual last
-        .last => print(&b, "{s}..refs/diffs/{d}/head", .{ base, d.number }) catch unreachable,
+        .last => print(&b, "{s}...refs/diffs/{d}/head", .{ base, d.number }) catch unreachable,
         // experimental
-        .one => print(&b, "refs/diffs/{d}/head^..refs/diffs/{d}/head", .{ d.number, d.number }) catch unreachable,
-        else => |num| print(&b, "{s}..refs/diffs/{d}/rev-{d}", .{ base, d.number, num }) catch unreachable,
+        .one => print(&b, "refs/diffs/{d}/head^...refs/diffs/{d}/head", .{ d.number, d.number }) catch unreachable,
+        else => |num| print(&b, "{s}...refs/diffs/{d}/rev-{d}", .{ base, d.number, num }) catch unreachable,
     };
     log.info("revision {} {s}", .{ diff_rev, target });
 
