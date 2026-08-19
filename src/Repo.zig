@@ -61,7 +61,7 @@ pub const RepoCi = struct {
         if (!ci.enabled) return error.Disabled;
         // load instructions
         try ci.validate(a, io);
-        try ci.source.init(a, io);
+        try ci.source.checkout(a, io);
         try ci.cache.inject(a, io);
         try ci.source.setup(a, io);
         try ci.source.tests(a, io);
@@ -92,7 +92,7 @@ pub const RepoCi = struct {
     };
 
     pub const Source = struct {
-        pub fn init(src: *Source, a: Allocator, io: Io) !void {
+        pub fn checkout(src: *Source, a: Allocator, io: Io) !void {
             _ = src;
             _ = a;
             _ = io;
