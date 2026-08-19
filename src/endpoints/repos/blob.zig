@@ -95,15 +95,23 @@ fn blobCurl(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     const blob_data = try getBlob(f, rd, repo, tree);
 
     var b: [4096]u8 = undefined;
+    // TODO sanitize
     const dispo = try bufPrint(&b, "attachment; filename=\"{s}\"", .{blob_data.name});
     f.response_headers.addCustom(f.alloc, "Content-Disposition", dispo) catch return error.ServerFault;
     try f.sendHeaders(.close);
     _ = try f.downstream.writer.interface.writeAll(blob_data.data.blob);
 }
 
+const DownloadReq = struct {
+    download: []const u8,
+};
+
 fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!void {
     if (f.request.user_agent) |agent| {
         if (agent.agent == .script and agent.agent.script.name == .curl) return blobCurl(f, rd, repo, tree);
+        if (f.request.data.query.validate(DownloadReq) catch null) |_| {
+            return blobCurl(f, rd, repo, tree);
+        }
     }
 
     const path = rd.path orelse return error.InvalidURI;
