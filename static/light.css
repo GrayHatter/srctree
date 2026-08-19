@@ -33,6 +33,7 @@ blob, gist, patch {
 		}
 	}
 }
+ln { &:target { background-color: #fff;  } }
 delta > main > name {
 	background: #a89984;
 	color: #3c3836;
@@ -42,7 +43,11 @@ delta > main > name {
 }
 comment { context { background: #a89984; color: #3c3836; } }
 span.coderef { background: #bdbdbd; }
-.repo-header { div.gituri { background: #d6d4ce; } }
+.repo-header {
+	background: #fff;
+	border-bottom: solid 1px black;
+	div.gituri { background: #d6d4ce; }
+}
 .muted { color: #696969; }
 .codeblock { background: #bdbdbd;  }
 .toggle {
@@ -78,4 +83,4 @@ span.linenos.special { color: #000000; background-color: #ffffc0;}
 .se { color: #912715 } .sh { color: #406c00 } .si { color: #406c00 } .sx { color: #406c00 } .sr { color: #406c00 }
 .s1 { color: #406c00 } .ss { color: #406c00 } .bp { color: #912715 } .fm { color: #8ec07c } .vc { color: #83a598 }
 .vg { color: #83a598 } .vi { color: #83a598 } .vm { color: #83a598 } .il { color: #d3869b }
-.ge { color: #4a3c2a; } .cs { color: #ebdbb2; } .c-PreProc { color: #8ec07c;}
+.ge { color: #4a3c2a; } .cs { color: #ebdbb2; } .c-PreProc { color: #8ec07c;} .null { color: rebeccapurple; }

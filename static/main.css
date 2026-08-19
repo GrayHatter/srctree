@@ -838,7 +838,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 .dl { color: #b8bb26; } .sd { color: #b8bb26; } .s2 { color: #b8bb26; } .se { color: #fe8019; } .sh { color: #b8bb26; }
 .si { color: #b8bb26; } .sx { color: #b8bb26; } .sr { color: #b8bb26; } .s1 { color: #b8bb26; } .ss { color: #b8bb26; }
 .bp { color: #fe8019; } .fm { color: #8ec07c; } .vc { color: #83a598; } .vg { color: #83a598; } .vi { color: #83a598; }
-.vm { color: #83a598; } .il { color: #d3869b; }
+.vm { color: #83a598; } .il { color: #d3869b; } .type { color: #d65d0e; } .null { color: #b16286; }
 /* Titillium Licence /static/OFL.txt */
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 300; src: url(/static/TitilliumWeb-LightItalic.ttf) format('truetype'); }
 @font-face { font-family: 'Titillium Web'; font-style: italic; font-weight: 400; src: url(/static/TitilliumWeb-Italic.ttf) format('truetype'); }
