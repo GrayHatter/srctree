@@ -32,7 +32,7 @@ fn gitHttp(f: *Frame) Error!void {
     if (eql(u8, qstr, "service=git-upload-pack") or eql(u8, uri, "git-upload-pack"))
         return uploadPack(f);
 
-    return error.ServerFault;
+    return error.DataInvalid;
 }
 
 fn prepareEnv(f: *const Frame) !std.process.Environ.Map {
