@@ -169,4 +169,4 @@ const maxInt = std.math.maxInt;
 const git = @import("../git.zig");
 const Patch = @import("../Patch.zig");
 const Types = @import("../types.zig");
-const Delta = @import("delta.zig");
+const Delta = @import("Delta.zig");

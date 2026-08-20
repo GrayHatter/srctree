@@ -175,5 +175,5 @@ const ArrayList = std.ArrayList;
 const indexOf = std.mem.indexOf;
 const parseInt = std.fmt.parseInt;
 const Types = @import("../types.zig");
-const Message = @import("message.zig");
-const Delta = @import("delta.zig");
+const Message = @import("Message.zig");
+const Delta = @import("Delta.zig");

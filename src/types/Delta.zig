@@ -311,4 +311,4 @@ const Types = @import("../types.zig");
 const Thread = Types.Thread;
 const Message = Types.Message;
 const Tsearch = @import("search.zig");
-const Diff = @import("diff.zig");
+const Diff = @import("Diff.zig");

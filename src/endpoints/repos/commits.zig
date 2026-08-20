@@ -60,6 +60,8 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         break :cmt fallback;
     };
 
+    const patch_view_mode = updateFetchPatchView(f) catch .inlined;
+
     var git = repo.agent(f.alloc);
     var diff = git.show(current.sha, f.io) catch |err| switch (err) {
         //error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
@@ -81,27 +83,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
     //    comments.pushSlice(addComment(f.alloc, cm) catch unreachable);
     //}
 
-    const diffstat = patch.patchStat();
-
-    var messages: []S.CommentThreadHtml.Messages = &.{};
-    if (CommitMap.open(repo_name, current.sha, f.alloc, f.io)) |map| {
-        switch (map.attach_to) {
-            .delta => {
-                var delta = Delta.open(repo_name, map.attach_target, f.alloc, f.io) catch return error.DataInvalid;
-                messages = try delta_shared.genThreadMessages(
-                    &delta,
-                    &repo,
-                    &patch,
-                    .{ .edit = f.user != null },
-                    f.alloc,
-                    f.io,
-                );
-            },
-            else => {},
-        }
-    } else |_| {}
-
-    const patch_view_mode = updateFetchPatchView(f) catch .inlined;
+    //var messages: []S.CommentThreadHtml.Messages = &.{};
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
@@ -116,6 +98,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         human_time,
     });
 
+    const diffstat = patch.patchStat();
     const og_title = try allocPrint(f.alloc, "Commit by {s}: changed {} file{s} {f} [+{} -{}]", .{
         allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
         diffstat.files,
@@ -141,7 +124,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
             .blame = null,
         },
         .commit = try commitCtx(current, repo_name, f.alloc, f.io),
-        .comments = .{ .messages = messages },
+        .comments = .{ .messages = &.{} },
         .patch = Diffs.patchStruct(f.alloc, &patch, patch_view_mode) catch return error.Unknown,
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     });
@@ -405,6 +388,5 @@ const Patch = @import("../../Patch.zig");
 const Repo = @import("../../Repo.zig");
 const delta_shared = @import("../delta.zig");
 const Types = @import("../../types.zig");
-const CommitMap = Types.CommitMap;
 const Delta = Types.Delta;
 const log = std.log.scoped(.srctree_commits);

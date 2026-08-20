@@ -3,17 +3,16 @@ pub const search = @import("types/search.zig");
 
 pub const Artifact = @import("types/Artifact.zig");
 pub const CI = @import("types/CI.zig");
-pub const CommitMap = @import("types/commit-map.zig");
-pub const Delta = @import("types/delta.zig");
-pub const Diff = @import("types/diff.zig");
-pub const Gist = @import("types/gist.zig");
-pub const Issue = @import("types/issue.zig");
-pub const Message = @import("types/message.zig");
-pub const Network = @import("types/network.zig");
-pub const Tags = @import("types/tags.zig");
-pub const Thread = @import("types/thread.zig");
-pub const User = @import("types/user.zig");
-pub const Viewers = @import("types/viewers.zig");
+pub const Delta = @import("types/Delta.zig");
+pub const Diff = @import("types/Diff.zig");
+pub const Gist = @import("types/Gist.zig");
+pub const Issue = @import("types/Issue.zig");
+pub const Message = @import("types/Message.zig");
+pub const Network = @import("types/Network.zig");
+pub const Tags = @import("types/Tags.zig");
+pub const Thread = @import("types/Thread.zig");
+pub const User = @import("types/User.zig");
+pub const Viewers = @import("types/Viewers.zig");
 
 pub const DefaultHash = [DefaultHasher.digest_length]u8;
 pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
@@ -68,8 +67,8 @@ pub fn currentPathAlloc(a: Allocator, io: Io) ![]u8 {
 pub fn init(dir: Storage, io: Io) !void {
     storage_dir = dir;
     inline for (.{
-        Artifact, CI,      CommitMap, Delta,  Diff, Gist,
-        Issue,    Message, Network,   Thread, User, Viewers,
+        Artifact, CI,     Delta, Diff,    Gist, Issue, Message,
+        Network,  Thread, User,  Viewers,
     }) |inc| {
         if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
             try inc.initType(try dir.createDirPathOpen(io, inc.TYPE_PREFIX, .{
@@ -375,7 +374,6 @@ test {
     _ = &search;
     _ = &Artifact;
     _ = &CI;
-    _ = &CommitMap;
     _ = &Delta;
     _ = &Diff;
     _ = &Gist;
