@@ -216,10 +216,10 @@ pub const diffs = struct {
         io: Io,
     ) !void {
         const cmt = try repo.commit(pr.new, a, io);
-        var delta = try Delta.new(env.repo.?, trim(u8, cmt.title, "\n "), cmt.body, user, io);
+        var delta: Delta = try .new(env.repo.?, trim(u8, cmt.title, "\n\t "), cmt.body, user, io);
 
         if (try createRef(&delta, dir, pr.old, pr.new, null, io)) {
-            var diff: Diff = try .new(&delta, user, "", a, io);
+            var diff: Diff = try .new(&delta, user, .sha(pr.old, pr.new), a, io);
             try diff.commit(io);
             try delta.commit(io);
             try pr.writeDiff(w, delta.index, .new);
@@ -239,14 +239,42 @@ pub const diffs = struct {
         try pr.writeDiff(w, delta.index, .new);
     }
 
-    pub fn updateHead(pr: ProcRecv, repo_name: []const u8, ref_str: []const u8, dir: Io.Dir, w: *Writer, a: Allocator, io: Io) !void {
+    pub fn directUpdateHead(
+        pr: ProcRecv,
+        name: []const u8,
+        ref_str: []const u8,
+        dir: Io.Dir,
+        w: *Writer,
+        a: Allocator,
+        io: Io,
+    ) !void {
         if (cutPrefix(u8, ref_str, "refs/diffs/")) |num_head| {
             if (cutSuffix(u8, num_head, "/head")) |num| {
                 const delta_id = parseInt(usize, num, 0) catch return error.InvalidDeltaId;
-                const delta: Delta = try .open(repo_name, delta_id, a, io);
+                const delta: Delta = try .open(name, delta_id, a, io);
                 return diffs.update(pr, &delta, dir, w, a, io);
             }
         }
+        log.err("directUpdateHead not implemented for '{s}'", .{ref_str});
+    }
+
+    pub fn directUpdate(
+        pr: ProcRecv,
+        name: []const u8,
+        ref_str: []const u8,
+        dir: Io.Dir,
+        w: *Writer,
+        a: Allocator,
+        io: Io,
+    ) !void {
+        if (cutPrefix(u8, ref_str, "refs/diffs/")) |num_head| {
+            if (cutSuffix(u8, num_head, "/head")) |num| {
+                const delta_id = parseInt(usize, num, 0) catch return error.InvalidDeltaId;
+                const delta: Delta = try .open(name, delta_id, a, io);
+                return diffs.update(pr, &delta, dir, w, a, io);
+            }
+        }
+        log.err("directUpdate not implemented for '{s}'", .{ref_str});
     }
 };
 
@@ -283,7 +311,12 @@ pub fn procReceive(in: *Reader, out: *Writer, env: *const Env, a: Allocator, io:
                         try diffs.new(user, env, pr, &repo, dir, out, a, io);
                         continue;
                     } else if (endsWith(u8, base, "/head")) {
-                        try diffs.updateHead(pr, env.repo.?, base, dir, out, a, io);
+                        if (env.repo) |_| {
+                            try diffs.directUpdateHead(pr, env.repo.?, base, dir, out, a, io);
+                        } else if (env.method == .ssh) {
+                            try diffs.directUpdate(pr, env.repo.?, base, dir, out, a, io);
+                            try pr.fallThrough(out);
+                        }
                         continue;
                     }
                 } else if (!env.authenticated) {

@@ -155,7 +155,7 @@ fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Alloc
             .older, .newer => {
                 comment_diff = (Diff.open(msg.extra0, a, io) catch
                     return error.ServerFault) orelse return error.ServerFault;
-                comment_patch = .init(comment_diff.patch.blob);
+                comment_patch = .init(comment_diff.patch.bytes);
                 comment_patch.parse(a) catch {
                     return .{
                         "<div class=\"sysmsg red\">Unable to parse invalid patch.</div>\n",

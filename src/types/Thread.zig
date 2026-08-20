@@ -16,13 +16,26 @@ pub const State = @import("common.zig").State;
 
 const Index = Types.Index(type_prefix);
 
-pub fn new(delta: Delta, io: Io) !Thread {
+pub fn new(io: Io) !Thread {
     const max: usize = try Index.next(io);
+    const now = Io.Clock.real.now(io).toSeconds();
+    const thread = Thread{
+        .index = max,
+        .created = now,
+        .updated = now,
+    };
+    try thread.commit(io);
+    return thread;
+}
+
+pub fn newDelta(delta: Delta, io: Io) !Thread {
+    const max: usize = try Index.next(io);
+    const now = Io.Clock.real.now(io).toSeconds();
     const thread = Thread{
         .index = max,
         .delta_hash = delta.hash,
-        .created = Io.Clock.real.now(io).toSeconds(),
-        .updated = Io.Clock.real.now(io).toSeconds(),
+        .created = now,
+        .updated = now,
     };
     try thread.commit(io);
     return thread;
@@ -86,12 +99,7 @@ pub fn addMessage(thread: *Thread, m: Message, a: Allocator, io: Io) !void {
 }
 
 pub fn raze(self: Thread, a: std.mem.Allocator) void {
-    //if (self.alloc_data) |data| {
-    //    a.free(data);
-    //}
-    if (self.messages) |c| {
-        a.free(c);
-    }
+    if (self.messages) |c| a.free(c);
 }
 
 pub const Iterator = struct {
@@ -130,7 +138,7 @@ test Thread {
 
     var delta: Delta = undefined;
     delta.hash = @splat('d');
-    var t = try Thread.new(delta, io);
+    var t = try Thread.newDelta(delta, io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);

@@ -4,15 +4,10 @@ created: i64,
 updated: i64,
 number: usize = 0,
 revision: usize = 0,
-base_hash: []const u8 = &.{},
-source_hash: []const u8 = &.{},
 delta_hash: Types.DefaultHash,
 author: []const u8,
 source_uri: ?[]const u8,
-patch: union(enum) {
-    blob: []const u8,
-    repo: git.Sha,
-},
+patch: Flavor,
 
 const Diff = @This();
 
@@ -30,6 +25,33 @@ pub const State = enum(usize) {
     git_push_update = 6,
 };
 
+pub const Flavor = union(enum) {
+    bytes: []const u8,
+    git: struct {
+        base: git.Sha,
+        head: git.Sha,
+    },
+    unknown: void,
+
+    pub fn patch(bytes: []const u8) Flavor {
+        return .{ .bytes = bytes };
+    }
+
+    pub fn sha(base: git.Sha, head: git.Sha) Flavor {
+        return .{ .git = .{ .base = base, .head = head } };
+    }
+
+    pub fn baseHash(f: Flavor) git.Sha {
+        return switch (f) {
+            .git => |g| g.base,
+            .bytes => unreachable, // TODO implement me
+            .unknown => .zeros,
+        };
+    }
+
+    pub const empty: Flavor = .{ .bytes = &.{} };
+};
+
 const typeio = Types.readerWriter(Diff, .{
     .index = 0,
     .created = 0,
@@ -37,13 +59,13 @@ const typeio = Types.readerWriter(Diff, .{
     .author = &.{},
     .source_uri = &.{},
     .delta_hash = undefined,
-    .patch = .{ .blob = undefined },
+    .patch = .{ .bytes = undefined },
 });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 const Index = Types.Index(type_prefix);
 
-pub fn new(delta: *Delta, author: []const u8, patch: []const u8, a: Allocator, io: Io) !Diff {
+pub fn new(delta: *Delta, author: []const u8, flavor: Flavor, a: Allocator, io: Io) !Diff {
     const idx: usize = try Index.next(io);
     const d = Diff{
         .index = idx,
@@ -54,7 +76,7 @@ pub fn new(delta: *Delta, author: []const u8, patch: []const u8, a: Allocator, i
         .number = delta.index,
         .source_uri = null,
         .author = author,
-        .patch = .{ .blob = patch },
+        .patch = flavor,
     };
 
     try d.commit(io);
@@ -91,8 +113,8 @@ pub fn open(index: usize, a: Allocator, io: Io) !?Diff {
 
     // TODO reader.buffered();
     if (find(u8, reader.buffer, "\n\n")) |start| {
-        d.patch.blob = reader.buffer[start..];
-    } else d.patch.blob = &.{};
+        d.patch = .{ .bytes = reader.buffer[start..] };
+    } else d.patch = .empty;
 
     return d;
 }
@@ -105,7 +127,7 @@ pub fn commit(d: Diff, io: Io) !void {
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
     try writerFn(&d, &fd_writer.interface);
-    try fd_writer.interface.writeAll(std.mem.trimStart(u8, d.patch.blob, "\n"));
+    if (d.patch == .bytes) try fd_writer.interface.writeAll(std.mem.trimStart(u8, d.patch.bytes, "\n"));
     try fd_writer.interface.flush();
 }
 
@@ -134,7 +156,9 @@ pub fn patchFromGitRev(
     agent: *const git.Agent,
     io: Io,
 ) error{ServerFault}!Patch {
-    const base = base_rev orelse if (d.base_hash.len > 0) d.base_hash else "HEAD";
+    const base_sha: git.Sha = (if (d.patch == .git) d.patch.git.base else .zeros);
+    const base_sha_text: git.Sha.Text = base_sha.text();
+    const base: []const u8 = base_rev orelse if (!base_sha.eql(.zeros)) base_sha_text.slice() else "HEAD";
     var b: [512]u8 = undefined;
     const target: []const u8 = switch (diff_rev) {
         .first => print(&b, "{s}...refs/diffs/{d}/rev-0", .{ base, d.number }) catch unreachable,

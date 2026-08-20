@@ -170,9 +170,9 @@ fn createDiffCore(rd: RouteData, req: DiffCreateReq, user: []const u8, a: Alloca
             var delta = Delta.new(rd.name, req.title, req.desc, user, io) catch return error.ServerError;
             delta.commit(io) catch unreachable;
 
-            const diff: Diff = Diff.new(&delta, user, data.blob, a, io) catch |err| {
+            const diff: Diff = Diff.new(&delta, user, .patch(data.blob), a, io) catch |err| {
                 std.debug.print("unable to create new diff {}\n", .{err});
-                unreachable;
+                return error.ServerFault;
             };
             _ = diff;
             return delta.index;
@@ -184,7 +184,7 @@ fn createDiffCore(rd: RouteData, req: DiffCreateReq, user: []const u8, a: Alloca
         );
         var delta = Delta.new(rd.name, req.title, req.desc, user, io) catch return error.ServerError;
         try delta.commit(io);
-        var diff: Diff = Diff.new(&delta, user, "", a, io) catch |err| {
+        var diff: Diff = Diff.new(&delta, user, .empty, a, io) catch |err| {
             std.debug.print("unable to create new diff {}\n", .{err});
             unreachable;
         };
@@ -831,9 +831,9 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
 
     var patch_formatted: ?S.PatchHtml = null;
     var curl_hint: ?S.DeltaFlavor.Diff.CurlHint = .{
-        .repo_name = .abx(rd.name),
+        .repo_name = .safe(rd.name),
         .diff_idx = .abx(delta_index),
-        .base_ref = .abx(if (head_commit) |cmt| cmt.sha.text().slice()[0..8] else "base_commit"),
+        .base_ref = .safe(if (head_commit) |cmt| cmt.sha.text().slice()[0..8] else "base_commit"),
         .head_ref = .abx("<HEAD>"),
         .host = .safe(f.request.host.?.valid() catch "127.0.0.1"),
     };
@@ -841,7 +841,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     var messages: []S.CommentThreadHtml.Messages = &.{};
     var applies: bool = false;
     if (delta.attached(f.alloc, f.io)) |_dif| {
-        log.err("base {any}", .{_dif.diff.base_hash});
+        log.err("base {f}", .{_dif.diff.patch.baseHash().text()});
         curl_hint = null;
         const diff = _dif.diff;
         var agent = repo.agent(f.alloc);
@@ -859,7 +859,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             }
             const cmt = repo.HEAD(f.alloc, f.io) catch return error.ServerFault;
             // TODO does this always apply? (If from git, it must)
-            if (cmt.sha.eql(.init(diff.base_hash))) {
+            if (cmt.sha.eql(diff.patch.baseHash())) {
                 applies = true;
             } else {
                 if (agent.checkPatch(patch.blob, f.io)) |_| {

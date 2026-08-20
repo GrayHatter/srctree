@@ -57,18 +57,19 @@ const readerFn = typeio.read;
 const Index = Types.Index(type_prefix);
 
 pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8, io: Io) !Delta {
+    const now = Io.Clock.real.now(io).toSeconds();
     const max: usize = try Index.scoped.next(repo, io);
     var d = Delta{
         .index = max,
-        .created = Io.Clock.real.now(io).toSeconds(),
-        .updated = Io.Clock.real.now(io).toSeconds(),
+        .created = now,
+        .updated = now,
         .repo = repo,
         .title = title,
         .message = msg,
         .author = author,
     };
 
-    var thread = try Thread.new(d, io);
+    var thread: Thread = try .newDelta(d, io);
     try thread.commit(io);
     d.thread_id = thread.index;
     return d;
@@ -102,7 +103,7 @@ pub fn loadThread(delta: *Delta, a: Allocator, io: Io) !*Thread {
     t.* = Thread.open(delta.thread_id, a, io) catch |err| t: {
         log.err("Error loading thread!! {}", .{err});
         log.err(" old thread_id {};", .{delta.thread_id});
-        const thread = Thread.new(delta.*, io) catch |err2| {
+        const thread = Thread.newDelta(delta.*, io) catch |err2| {
             log.err(" unable to create new {}", .{err2});
             return error.UnableToLoadThread;
         };
