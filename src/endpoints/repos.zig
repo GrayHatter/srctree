@@ -210,6 +210,8 @@ pub fn updateFetchPatchView(f: *Frame) error{Unspecified}!PatchViewMode {
 }
 
 fn useGitProto(f: *const Frame) bool {
+    const rd = RouteData.init(f) orelse return false;
+    if (rd.ref) |_| return false;
     if (f.request.user_agent) |ua| switch (ua.agent) {
         .script => |script| return script.name == .git or script.name == .zig,
         .bot => {},
