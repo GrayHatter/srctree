@@ -1,4 +1,4 @@
-// Aligned to Git.Repo for @fieldParentPtr
+/// Aligned to Git.Repo for @fieldParentPtr
 enabled: bool align(8) = false,
 srctree: SrctreeConf = .empty,
 conf_bytes: [:0]const u8 = &.{},

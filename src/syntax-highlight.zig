@@ -195,7 +195,10 @@ pub fn highlight(lang: Language, text: []const u8, a: Allocator, io: Io) Highlig
         },
         .zig => {
             const zerod = try a.dupeSentinel(u8, text, 0);
-            return highlightInternal(lang, zerod, a) catch unreachable;
+            var writer: Writer.Allocating = .init(a);
+
+            highlightInternal(lang, zerod, &writer.writer, a) catch unreachable;
+            return try writer.toOwnedSlice();
         },
     };
 }
@@ -219,37 +222,29 @@ fn astComment(text: []const u8) bool {
     return std.mem.trim(u8, text, " \t\r\n").len > 0;
 }
 
-pub fn highlightInternal(lang: Language, text: [:0]const u8, a: Allocator) ![]u8 {
+pub fn highlightInternal(lang: Language, text: [:0]const u8, out: *Writer, a: Allocator) !void {
     switch (lang) {
         .zig => {
-            const ast = std.zig.Ast.parse(a, text, .zig) catch unreachable;
-
-            var out_w: Writer.Allocating = .init(a);
-            const out = &out_w.writer;
-
-            const root_node = ast.tokenStart(0);
-            const start_token: u32 = ast.firstToken(@enumFromInt(root_node));
-            const end_token = ast.lastToken(@enumFromInt(root_node)) + 1;
-
+            const ast = try std.zig.Ast.parse(a, text, .zig);
+            const start_token: u32 = ast.firstToken(.root);
+            const end_token = ast.lastToken(.root) + 1;
             var cursor: usize = ast.tokenStart(start_token);
-
             var indent: usize = 0;
             if (findLast(u8, ast.source[0..cursor], "\n")) |newline_index| {
-                for (ast.source[newline_index + 1 .. cursor]) |c| {
-                    if (c == ' ') indent += 1 else break;
-                }
+                for (ast.source[newline_index + 1 .. cursor]) |c|
+                    if (c == ' ') {
+                        indent += 1;
+                    } else break;
             }
 
-            //var next_annotate_index: usize = 0;
-            //var token_parents: std.array_hash_map.Auto(std.zig.Ast.TokenIndex, std.zig.Ast.Node.Index) = .empty;
-            //var pre: Writer.Allocating = .init(a);
-            //var field_access_buffer: *Writer = &pre.writer;
             const tags, const starts = .{
                 ast.tokens.items(.tag)[start_token..end_token],
                 ast.tokens.items(.start)[start_token..end_token],
             };
+            log.debug("tags: '{any}' starts '{any}'", .{ tags, starts });
 
             for (tags, starts, start_token..) |tag, start, token_index2| {
+                log.debug("tag: '{any}' start '{any}' tknidx {any}", .{ tag, start, token_index2 });
                 const token_index: u32 = @intCast(token_index2);
                 const between = ast.source[cursor..start];
                 if (astComment(between)) {
@@ -260,10 +255,8 @@ pub fn highlightInternal(lang: Language, text: [:0]const u8, a: Allocator) ![]u8
                 if (tag == .eof) break;
                 const slice = ast.tokenSlice(token_index);
                 cursor = start + slice.len;
-
                 switch (tag) {
                     .eof => unreachable,
-
                     .keyword_addrspace,
                     .keyword_align,
                     .keyword_and,
@@ -389,8 +382,6 @@ pub fn highlightInternal(lang: Language, text: [:0]const u8, a: Allocator) ![]u8
                     .invalid_periodasterisks, .invalid => return error.InvalidToken,
                 }
             }
-            const output = try out_w.toOwnedSlice();
-            return output;
         },
         else => unreachable,
     }

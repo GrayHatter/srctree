@@ -131,7 +131,6 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
         try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blob_data.data.blob }});
 
     const wrapped = try wrapLineNumbers(f.alloc, colored_blob);
-
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
@@ -150,6 +149,7 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
         error.CurrentTree => tree,
         else => return error.ServerFault,
     };
+
     var itr = local_tree.iterate();
     while (itr.next()) |b| if (b.data != .blob) {
         const tree_str = "<span class=\"tree\"><a href=\"/repo/{s}/tree/{s}{s}/\">{s}</a></span>\n";
