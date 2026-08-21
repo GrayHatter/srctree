@@ -124,10 +124,11 @@ pub const Router = struct {
         if (!rd.exists(vis, f.io)) return mkNav(rd.name, 0, 0, f.alloc);
         var i_count: usize = 0;
         var d_count: usize = 0;
-        var itr: Delta.RepoIterator = .init(rd.name, f.io);
+        var itr = Delta.searchRepo(rd.name, &.{
+            .owner("me", false), .is("open", false), .repo(rd.name, false),
+        }, f.io);
         while (itr.next(f.alloc, f.io)) |dlt| {
             defer dlt.raze(f.alloc);
-            if (!dlt.state.isOpen()) continue;
             switch (dlt.attach) {
                 .diff => d_count += 1,
                 .issue => i_count += 1,
@@ -135,20 +136,7 @@ pub const Router = struct {
             }
         }
 
-        const btns = [2]S.NavButtons{
-            .{
-                .name = .safe("issues"),
-                .extra = i_count,
-                .url = .safe(allocPrint(f.alloc, "/repo/{s}/issues/", .{rd.name}) catch "[OOM]"),
-            },
-            .{
-                .name = .safe("diffs"),
-                .extra = d_count,
-                .url = .safe(allocPrint(f.alloc, "/repo/{s}/diffs/", .{rd.name}) catch "[OOM]"),
-            },
-        };
-
-        return btns;
+        return mkNav(rd.name, i_count, d_count, f.alloc);
     }
 
     pub fn repoHeader(rd: Router, host: []const u8) !S.BaseRepoHeaderHtml {
@@ -428,6 +416,8 @@ const tree = @import("repos/tree.zig").tree;
 const blame = @import("repos/blame.zig").blame;
 const tags = @import("repos/tags.zig");
 const branches = @import("repos/branches.zig");
+
+const search = @import("search.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

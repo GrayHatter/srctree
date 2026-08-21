@@ -11,6 +11,7 @@ pub const routes = [_]Route.Match{
     ROUTE("new", new),
     POST("create", createDiff),
     POST("add-comment", newComment),
+    GET("search", isearch),
 };
 
 pub const index = list;
@@ -937,33 +938,16 @@ const SearchReq = struct {
 
 fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
-
-    const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
-    if (udata.q) |q| {
-        var b: [0xFF]u8 = undefined;
-        if (find(u8, q, "is:diff") == null or
-            find(u8, q, try bufPrint(&b, "repo:{s}", .{rd.name})) == null)
-        {
-            var buf: [0x2FF]u8 = undefined;
-            for (f.request.data.query.bytes) |c| if (!std.ascii.isAscii(c)) return error.Abuse;
-            const loc = bufPrint(&buf, "/search?{s}", .{f.request.data.query.bytes}) catch &buf;
-            return f.redirect(loc, .see_other) catch unreachable;
-        }
-    }
-
-    const rules = try search.genRules(udata.q orelse "is:diff", f.alloc);
-    var itr = Delta.searchRepo(rd.name, rules.items, f.io);
     var default_search_buf: [0xFF]u8 = undefined;
-    const default_search = try bufPrint(&default_search_buf, "repo:{s} is:diff", .{rd.name});
-    const search_str: abx.Html = if (udata.q) |q| .abx(q) else .safe(default_search);
+    const def_search = try bufPrint(&default_search_buf, "repo:{s} is:diff is:open", .{rd.name});
+    return delta_shared.searchPage(f, .safe(def_search));
+}
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .nav_buttons = &(rd.navButtons(f)),
-    } };
-    if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
-    f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
-
-    return delta_shared.list(f, Delta.RepoIterator, &itr, search_str);
+fn isearch(f: *Frame) Error!void {
+    const udata = f.request.data.query.validate(struct { q: []const u8 }) catch return error.DataInvalid;
+    if (udata.q.len == 0) return list(f);
+    log.warn("diff search q {s}", .{udata.q});
+    return delta_shared.searchPage(f, .abx(udata.q));
 }
 
 const std = @import("std");
@@ -999,6 +983,7 @@ const abx = verse.Antibiotic;
 const Frame = verse.Frame;
 const Error = Route.Error;
 const POST = Route.POST;
+const GET = Route.GET;
 const ROUTE = Route.ROUTE;
 const Template = verse.template;
 const HTML = verse.HTML;

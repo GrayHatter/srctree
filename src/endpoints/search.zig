@@ -17,42 +17,67 @@ fn inbox(ctx: *Frame) Error!void {
     return custom(ctx, "owner:me is:open");
 }
 
-pub fn index(ctx: *Frame) Error!void {
-    var uri = ctx.uri;
+pub fn index(f: *Frame) Error!void {
+    var uri = f.uri;
     uri.index = 0;
-    if (eql(u8, uri.next() orelse "", "inbox")) return inbox(ctx);
-    const udata = ctx.request.data.query.validate(SearchReq) catch return error.DataInvalid;
+    if (eql(u8, uri.next() orelse "", "inbox")) return inbox(f);
+    const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
 
     const query_str = udata.q orelse "";
+    // TODO this comes from the URI so it should be enforced by verse
+    for (query_str) |c| switch (c) {
+        0...std.ascii.control_code.us => return error.DataInvalid,
+        std.ascii.control_code.del => return error.DataInvalid,
+        else => continue,
+    };
 
-    if (cutPrefix(u8, trim(u8, query_str, " "), "repo:")) |repo| {
-        const len: usize = (findScalar(u8, repo, ' ') orelse repo.len) + 1;
-        for (repo[0 .. len - 1]) |c| {
-            switch (c) {
-                'a'...'z', 'A'...'Z', '0'...'9', '.', '-', '_' => continue,
-                else => break,
-            }
-        } else {
-            var str: []const u8 = "";
-            for (repo) |c| {
-                // TODO this comes from the URI so it should be enforced by verse
-                switch (c) {
-                    0...std.ascii.control_code.us => break,
-                    std.ascii.control_code.del => break,
-                    else => continue,
-                }
-            } else str = repo[len - 1 ..];
+    const rules = try genRules(query_str, f.alloc);
+    for (rules.items) |rule| switch (rule.match) {
+        .repo => |repo| {
+            if (Repo.exists(repo, .public_only, f.io)) {}
             var buf: [4096]u8 = undefined;
-            const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/search?q={s}", .{ repo[0 .. len - 1], str });
-            ctx.redirect(loc, .found) catch unreachable;
-        }
-    }
+            for (rules.items) |rl| switch (rl.match) {
+                .is => |is| {
+                    if (eql(u8, is, "issue")) {
+                        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/issues/search?q={f}", .{ repo, Fmt{ .data = rules.items } });
+                        f.redirect(loc, .found) catch unreachable;
+                    } else if (eql(u8, is, "diff")) {
+                        const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/diffs/search?q={f}", .{ repo, Fmt{ .data = rules.items } });
+                        f.redirect(loc, .found) catch unreachable;
+                    }
+                },
+                else => {},
+            };
+        },
+        else => continue,
+    };
 
-    return custom(ctx, query_str);
+    return custom(f, query_str);
 }
 
-pub fn genRules(search_str: []const u8, a: Allocator) !ArrayList(Tsearch.Rule) {
-    var rules: ArrayList(Tsearch.Rule) = .empty;
+const Fmt = std.fmt.Alt([]const Tsearch.Rule, fmtRules);
+
+fn fmtRules(rules: []const Tsearch.Rule, w: *std.Io.Writer) !void {
+    for (rules) |rl| switch (rl.match) {
+        .repo => |rp| try w.print("repo:{s} ", .{rp}),
+        else => {},
+    };
+
+    for (rules) |rl| switch (rl.match) {
+        .is => |is| try w.print("is:{s} ", .{is}),
+        else => {},
+    };
+
+    for (rules) |rl| switch (rl.match) {
+        .is, .repo => {},
+        else => |m| try w.print("{f} ", .{m}),
+    };
+}
+
+pub const RulesList = ArrayList(Tsearch.Rule);
+
+pub fn genRules(search_str: []const u8, a: Allocator) !RulesList {
+    var rules: RulesList = .empty;
     var itr = splitScalar(u8, search_str, ' ');
     while (itr.next()) |r_line| {
         var line = r_line;
@@ -90,6 +115,7 @@ const Routes = verse.Router;
 const Error = Routes.Error;
 const ROUTE = Routes.ROUTE;
 
+const Repo = @import("../Repo.zig");
 const Delta = @import("../types.zig").Delta;
 const Tsearch = @import("../types/search.zig");
 const delta_shared = @import("delta.zig");

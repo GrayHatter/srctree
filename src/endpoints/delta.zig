@@ -57,6 +57,21 @@ pub fn addComment(
     return msg;
 }
 
+pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
+    const rd = RouteData.init(f) orelse return error.ServerFault;
+    const raw_str = if (str.text.len > 0) str.text else str.text_cleaned;
+
+    const rules = try search.genRules(raw_str, f.alloc);
+
+    var itr = Delta.searchRepo(rd.name, rules.items, f.io);
+
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
+    f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
+
+    return list(f, Delta.RepoIterator, &itr, str);
+}
+
 pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtml.DeltaList {
     const msg = d.message[0..@min(
         d.message.len,
@@ -97,7 +112,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtm
     };
 }
 
-pub fn list(f: *Frame, Itr: type, itr: *search.Iterator(Itr, Delta), search_str: abx.Html) RouterError!void {
+pub fn list(f: *Frame, Itr: type, itr: *Tsearch.Iterator(Itr, Delta), search_str: abx.Html) RouterError!void {
     var d_list: ArrayList(DeltaList) = .empty;
     while (itr.next(f.alloc, f.io)) |deltaC| {
         var d = deltaC;
@@ -269,7 +284,8 @@ pub fn actionButtons(f: *Frame, delta: *const Delta) [2][]const u8 {
 
 const Repos = @import("repos.zig");
 const Types = @import("../types.zig");
-const search = Types.search;
+const search = @import("search.zig");
+const Tsearch = Types.search;
 const Delta = Types.Delta;
 const Message = Types.Message;
 const Diff = Types.Diff;
@@ -278,6 +294,7 @@ const Humanize = @import("../humanize.zig");
 const Repo = @import("../git.zig").Repo;
 const Patch = @import("../Patch.zig");
 const events = @import("../events.zig");
+const RouteData = Repos.RouteData;
 
 const diffs_ep = @import("repos/diffs.zig");
 
