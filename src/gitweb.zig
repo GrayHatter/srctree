@@ -205,7 +205,7 @@ fn receivePackExternal(f: *Frame) Error!void {
     var child = try spawn(f);
     const stdin = child.stdin orelse return error.ServerFault;
     if (f.request.data.post) |pd| {
-        var post_bytes: Reader = .fixed(pd.bytes);
+        var post_bytes: Reader = .fixed(pd.source);
         var gz_b: [std.compress.flate.max_window_len]u8 = undefined;
         var gzip: std.compress.flate.Decompress = .init(&post_bytes, .gzip, &gz_b);
         const reader: *Reader = if (gz_encoded) &gzip.reader else &post_bytes;
@@ -280,7 +280,7 @@ fn uploadPackExternal(f: *Frame) Error!void {
     var child = try spawn(f);
     if (f.request.data.post) |pd| {
         const stdin = child.stdin orelse return error.ServerFault;
-        var post_bytes: Reader = .fixed(pd.bytes);
+        var post_bytes: Reader = .fixed(pd.source);
         var gz_b: [std.compress.flate.max_window_len]u8 = undefined;
         var gzip: std.compress.flate.Decompress = .init(&post_bytes, .gzip, &gz_b);
         const reader: *Reader = if (gz_encoded) &gzip.reader else &post_bytes;
