@@ -44,7 +44,12 @@ pub const Flavor = union(enum) {
     pub fn baseHash(f: Flavor) git.Sha {
         return switch (f) {
             .git => |g| g.base,
-            .bytes => unreachable, // TODO implement me
+            .bytes => |b| {
+                if (cutPrefix(u8, b, "From ")) |from_| {
+                    if (findScalar(u8, from_, ' ')) |end| return .init(from_[0..end]);
+                }
+                return .zeros;
+            },
             .unknown => .zeros,
         };
     }
@@ -188,6 +193,8 @@ const log = std.log.scoped(.types_diff);
 const print = std.fmt.bufPrint;
 const allocPrint = std.fmt.allocPrint;
 const find = std.mem.find;
+const cutPrefix = std.mem.cutPrefix;
+const findScalar = std.mem.findScalar;
 const maxInt = std.math.maxInt;
 
 const git = @import("../git.zig");

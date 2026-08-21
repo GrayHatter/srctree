@@ -64,9 +64,9 @@ pub const Mode = packed struct(u48) {
 
     pub fn toBytes(m: Mode) [6]u8 {
         return switch (m) {
-            default.file => .{ '1', '0', '0', '6', '4', '4' },
-            default.dir => .{ '1', '0', '0', '7', '5', '5' },
-            default.submodule => .{ '1', '2', '0', '0', '0', '0' },
+            default.file => "100644",
+            default.dir => "100755",
+            default.submodule => "120000",
         };
     }
 
