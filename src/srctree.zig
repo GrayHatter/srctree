@@ -48,22 +48,15 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
     if (fr.user != null) return null;
     const botdetect: verse.Robots = .init(fr.request);
 
-    // Annoying abuse I found
-    //if (fr.request.accept_language.zh >= 1.0 and fr.request.accept_language.en == 0 and
-    //    fr.request.accept_encoding.gzip == true and
-    //    fr.request.accept_encoding.br == false and fr.request.accept_encoding.zstd == false)
-    //{
-    //    return dropRequest(fr);
-    //}
-
     fr.dumpDebugData(.{});
+    if (eql(u8, fr.uri.path, "/robots.txt")) {
+        //fr.dumpDebugData(.{});
+        //ua.dumpValidation(fr.request);
+        return null;
+    }
+
     if (fr.request.user_agent) |*ua| {
         ua.dumpValidation(fr.request);
-        if (eql(u8, fr.uri.path, "/robots.txt")) {
-            //fr.dumpDebugData(.{});
-            //ua.dumpValidation(fr.request);
-            return null;
-        }
         switch (ua.agent) {
             .bot => |bot| {
                 switch (fr.downstream.gateway) {
@@ -78,7 +71,10 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     .metaexternalagent,
                     .scrybot,
                     .youbot,
-                    => return dropRequest(fr),
+                    => |t| {
+                        log.err("Dropping malicious traffic from {s}", .{@tagName(t)});
+                        return dropRequest(fr);
+                    },
                     .unknown => {
                         if (find(u8, ua.string, "SearchBot/1.0")) |_| return dropRequest(fr);
                         if (find(u8, ua.string, "SleepBot/1.0")) |_| return dropRequest(fr);
@@ -91,8 +87,6 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         const ia_bot_ua = find(u8, ua_str, ia_ua) == null;
                         if (bot.malicious and !ia_bot_ua) {
                             log.err("Dropping malicious traffic", .{});
-                            //fr.dumpDebugData(.{});
-                            //ua.dumpValidation(fr.request);
                             return Router.defaultResponse(.forbidden);
                         }
                     },
@@ -100,9 +94,8 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
             },
             .browser => |bwsr| {
                 const age: std.Io.Duration = bwsr.age(fr.request.now) catch .fromSeconds(0);
-                const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 95).nanoseconds;
+                const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 200).nanoseconds;
                 const real_ua = ua.validate(fr.request);
-                log.warn("Claims to be a browser", .{});
                 switch (fr.downstream.gateway) {
                     .zwsgi => |zw| if (zw.known.get(.SERVER_PORT)) |port|
                         if (eql(u8, port, "444")) return dropRequest(fr),
@@ -134,8 +127,10 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 };
                 inline for (bads) |bad| {
                     if (fr.request.headers.getCustomValue("HTTP_SEC_CH_UA") catch null) |val| {
-                        if (startsWith(u8, val, bad))
+                        if (startsWith(u8, val, bad)) {
+                            log.err("banned client hint", .{});
                             return dropRequest(fr);
+                        }
                     }
                 }
                 if (too_old) {
@@ -147,8 +142,6 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                 return dropRequest(fr),
             .script => {},
         }
-        //fr.dumpDebugData(.{});
-        //ua.dumpValidation(fr.request);
         return null;
     }
 
