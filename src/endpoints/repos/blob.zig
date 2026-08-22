@@ -98,7 +98,7 @@ fn blobCurl(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     // TODO sanitize
     const dispo = try bufPrint(&b, "attachment; filename=\"{s}\"", .{blob_data.name});
     f.response_headers.addCustom(f.alloc, "Content-Disposition", dispo) catch return error.ServerFault;
-    try f.sendHeaders(.close);
+    try f.sendHeaders(.done);
     _ = try f.downstream.writer.interface.writeAll(blob_data.data.blob);
 }
 

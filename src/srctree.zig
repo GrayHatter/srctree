@@ -151,6 +151,8 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
 }
 
 fn builder(fr: *Frame, call: BuildFn) void {
+    fr.downstream.phase = .{ .responding = .new };
+
     if (userAgentResolution(fr)) |resol| {
         return resol(fr) catch {};
     }
