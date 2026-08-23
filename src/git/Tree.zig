@@ -25,6 +25,57 @@ pub fn loadSha(sha: Sha, repo: *const Repo, a: Allocator, io: Io) !Tree {
     return new.tree;
 }
 
+pub fn checkout(t: Tree, dir: Io.Dir, repo: *const Repo, a: Allocator, io: Io) !void {
+    log.debug("checkout {f}\n", .{t.sha.text()});
+    var itr = t.iterate();
+    while (itr.next()) |file| {
+        switch (file.data) {
+            .blob => {
+                log.debug("creating file {s}\n", .{file.name});
+                const new = try dir.createFile(io, file.name, .{});
+                defer new.close(io);
+                try new.writePositionalAll(io, file.data.blob, 0);
+            },
+            .tree => {
+                log.debug("creating dir {s}\n", .{file.name});
+                const tree2 = try Tree.loadSha(file.data.tree.sha, repo, a, io);
+                defer tree2.raze(a);
+                const new = try dir.createDirPathOpen(io, file.name, .{});
+                defer new.close(io);
+                try tree2.checkout(new, repo, a, io);
+            },
+            .unloaded => unreachable,
+        }
+    }
+}
+
+test checkout {
+    const a = std.testing.allocator;
+    const io = std.testing.io;
+
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
+    defer repo.raze(a, io);
+    try repo.loadData(a, io);
+    var commit = try repo.HEAD(a, io);
+    defer commit.raze(a);
+    const tree = try commit.loadTree(&repo, a, io);
+    defer tree.raze(a);
+
+    var tdir = std.testing.tmpDir(.{ .iterate = true });
+    defer tdir.cleanup();
+
+    try tree.checkout(tdir.dir, &repo, a, io);
+    var w = try tdir.dir.walk(a);
+    defer w.deinit();
+    var c: usize = 0;
+    while (try w.next(io)) |file| {
+        c += 1;
+        log.debug("walk {s}\n", .{file.path});
+    }
+    try std.testing.expect(c > 20); // Assume we have at least 20 files in this repo
+}
+
 pub const DescendError = error{
     CurrentTree,
     InvalidPath,
@@ -163,11 +214,8 @@ pub const Iterator = struct {
                 name = blob[itr.idx + 6 .. str_end];
             }
             defer itr.idx = str_end + width + 1;
-            //std.debug.print(
-            //    "next {any} {s} {s} {} \n",
-            //    .{ mode, name, Sha.init(blob[str_end + 1 ..][0..width]).text().slice(), itr.idx },
-            //);
-            return .init(.init(blob[str_end + 1 ..][0..width]), mode, name, blob);
+            const sha: Sha = .init(blob[str_end + 1 ..][0..width]);
+            return .init(sha, mode, name, blob);
         }
         return null;
     }
