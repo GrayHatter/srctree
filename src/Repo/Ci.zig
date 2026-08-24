@@ -2,9 +2,10 @@
 enabled: bool align(8) = false,
 srctree: SrctreeConf = .empty,
 conf_bytes: [:0]const u8 = &.{},
+working_dir: Io.Dir = undefined,
 artifacts: Artifacts = .{},
 cache: Cache = .{},
-source: Source = .{},
+source: Source = undefined,
 
 const Ci = @This();
 
@@ -47,14 +48,17 @@ pub fn status(ci: *Ci, a: Allocator, io: Io) !bool {
     return ci.enabled;
 }
 
-pub fn run(ci: *Ci, a: Allocator, io: Io) !void {
+pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
+    const repo: *Repo = @fieldParentPtr("ci", ci);
     if (!ci.enabled) return error.Disabled;
     // load instructions
     try ci.validate(a, io);
+
+    try ci.source.init(commit, repo, a, io);
     try ci.source.checkout(a, io);
     try ci.cache.inject(a, io);
-    try ci.source.setup(a, io);
-    try ci.source.tests(a, io);
+    try ci.source.stepSetup(a, io);
+    try ci.source.stepTests(a, io);
     // save output
     ci.artifacts.save(a, io);
     try ci.cache.backup(a, io);
@@ -82,21 +86,28 @@ pub const Artifacts = struct {
 };
 
 pub const Source = struct {
-    pub fn checkout(src: *Source, a: Allocator, io: Io) !void {
+    tree: git.Tree,
+
+    pub fn init(src: *Source, commit: *git.Commit, a: Allocator, io: Io) !void {
+        const ci: *Ci = @fieldParentPtr("source", src);
+        const repo: *Repo = @fieldParentPtr("repo", ci);
+        src.tree = try commit.loadTree(repo, a, io);
+    }
+
+    pub fn checkout(src: *Source, dir: Io.Dir, r: *const git.Repo, a: Allocator, io: Io) !void {
+        //const ci: *Ci = @fieldParentPtr("source", src);
+        //const repo: *Repo = @fieldParentPtr("repo", ci);
+        try src.tree.checkout(dir, r, a, io);
+    }
+
+    pub fn stepSetup(src: *Source, a: Allocator, io: Io) !void {
         _ = src;
         _ = a;
         _ = io;
         return error.NotImplemented;
     }
 
-    pub fn setup(src: *Source, a: Allocator, io: Io) !void {
-        _ = src;
-        _ = a;
-        _ = io;
-        return error.NotImplemented;
-    }
-
-    pub fn tests(src: *Source, a: Allocator, io: Io) !void {
+    pub fn stepTests(src: *Source, a: Allocator, io: Io) !void {
         _ = src;
         _ = a;
         _ = io;
@@ -104,10 +115,8 @@ pub const Source = struct {
     }
 
     pub fn raze(src: *Source, a: Allocator, io: Io) !void {
-        _ = src;
-        _ = a;
+        src.tree.raze(a);
         _ = io;
-        return error.NotImplemented;
     }
 };
 
@@ -116,7 +125,7 @@ pub const Cache = struct {
         _ = c;
         _ = a;
         _ = io;
-        return error.NotImplemented;
+        //return error.NotImplemented;
     }
 
     pub fn backup(c: *Cache, a: Allocator, io: Io) !void {
@@ -142,3 +151,4 @@ const Io = std.Io;
 const eql = std.mem.eql;
 const find = std.mem.find;
 const parseInt = std.fmt.parseInt;
+const git = @import("../git.zig");
