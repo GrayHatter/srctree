@@ -1,7 +1,8 @@
-src: Types.DefaultHash,
-time: i64,
+src: Types.DefaultHash = @splat(0),
+time: i64 = 0,
+count: usize = 0,
 
-viewers: ArrayList(View),
+viewers: ArrayList(View) = .empty,
 
 const Viewers = @This();
 
@@ -23,20 +24,20 @@ pub const View = struct {
 pub const type_prefix = .viewers;
 pub const type_version: usize = 0;
 
-const typeio = Types.readerWriter(Viewers, .{ .src = @splat(0), .viewers = .empty, .time = 0 });
+const typeio = Types.readerWriter(Viewers, .{});
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 const Index = Types.Index(type_prefix);
 
 pub fn new(src: Types.DefaultHash, viewer: []const u8, io: Io) !Viewers {
-    const now = Io.Clock.real.now(io).toSeconds();
-    var view: [1]View = .{
-        .{ .time = now, .name = viewer },
-    };
+    var views: [1]View = .{.{ .time = Io.Clock.real.now(io).toSeconds(), .name = viewer }};
     var v: Viewers = .{
         .src = src,
-        .time = now,
-        .viewers = .{ .items = &view, .capacity = 1 },
+        .time = views[0].time,
+        .viewers = .{
+            .items = &views,
+            .capacity = 1,
+        },
     };
 
     try v.commit(io);
@@ -65,10 +66,22 @@ pub fn commit(v: Viewers, io: Io) !void {
     var writer = file.writer(io, &w_b);
     try writerFn(&v, &writer.interface);
 
-    for (v.viewers.items) |view| {
-        try writer.interface.print("{}:{s}\n", .{ view.time, view.name });
+    for (v.viewers.items) |viewer| {
+        try writer.interface.print("{}:{s}\n", .{ viewer.time, viewer.name });
     }
     try writer.interface.flush();
+}
+
+pub fn inc(v: *Viewers, io: Io) void {
+    v.count +|= 1;
+    v.time = Io.Clock.real.now(io).toSeconds();
+    v.commit(io) catch |err| {
+        log.err("unable to commit viewers {} {any}", .{ err, v.src });
+    };
+}
+
+pub fn view(v: *Viewers, name: []const u8, a: Allocator) !void {
+    try v.viewers.append(a, .name(name));
 }
 
 test Viewers {
@@ -93,14 +106,15 @@ test Viewers {
     defer writer.deinit();
     try writerFn(&viewers, &writer.writer);
 
-    for (viewers.viewers.items) |view|
-        try writer.writer.print("{}:{s}\n", .{ view.time, view.name });
+    for (viewers.viewers.items) |viewer|
+        try writer.writer.print("{}:{s}\n", .{ viewer.time, viewer.name });
     try writer.writer.flush();
 
     const v1_text: []const u8 =
         \\# viewers/0
         \\src: 7676767676767676767676767676767676767676767676767676767676767676
         \\time: 1744830464
+        \\count: 0
         \\
         \\1744830464:grayhatter
         \\
