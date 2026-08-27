@@ -104,11 +104,13 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtm
         .index = .safe(try allocPrint(a, "{x}", .{d.index})),
         .uri_base = .abx(uri),
         .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
-        .comment_new = if (comments.new) " new" else "",
         .comment_count = comments.count,
+        .view_count = 0,
         .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
         .desc = if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }}),
         .delta_meta = meta,
+        .comment = .safe(svg.Icon.slice(if (comments.new) .comment else .comment_new, .{})),
+        .viewers = .safe(svg.Icon.slice(.eye, .{})),
     };
 }
 
@@ -295,6 +297,7 @@ const Repo = @import("../git.zig").Repo;
 const Patch = @import("../Patch.zig");
 const events = @import("../events.zig");
 const RouteData = Repos.RouteData;
+const svg = @import("../svg.zig");
 
 const diffs_ep = @import("repos/diffs.zig");
 

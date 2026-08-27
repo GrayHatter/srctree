@@ -372,7 +372,7 @@ deltalist {
 		}
 		> div { margin: 0 1%; }
 		div.main { flex-grow: 1; font-size: 124%; width: auto; }
-		.meta { width: auto; min-width: 35px; }
+		.meta { width: auto; min-width: 35px; display: flex; flex-direction: column; }
 		.muted { margin: 0 3px 0 0 ; display: inline-block; font-size: 1rem; }
 		desc { display: block; }
 	}
