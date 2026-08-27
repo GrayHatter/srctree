@@ -10,10 +10,10 @@ pub const endpoints = [_]Router.Match{
 };
 
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
-    _ = f.uri.next(); // repo
+    _ = f.uri.first(); // repo
     _ = f.uri.next(); // name
     // target
-    log.warn("gitweb router {any} {s}", .{ f.request.method, f.uri.peek().? });
+    log.warn("gitweb router {any} {s}", .{ f.request.method, f.uri.peek() orelse "[null]" });
     return gitHttp;
 }
 
