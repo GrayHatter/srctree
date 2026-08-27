@@ -99,18 +99,9 @@ const Journal = struct {
             if (eql(u8, j.email, commit.author.email)) {
                 const ws = " \t\n";
                 try j.scribe.append(a, .{
-                    .name = try allocPrint(a, "{f}", .{abx.Html{
-                        .text = trim(u8, commit.author.name, ws),
-                    }}),
-                    .title = try allocPrint(a, "{f}", .{abx.Html{
-                        .text = trim(u8, commit.title, ws),
-                    }}),
-                    .body = if (commit.body.len > 0)
-                        try allocPrint(a, "{f}", .{abx.Html{
-                            .text = trim(u8, commit.body, ws),
-                        }})
-                    else
-                        null,
+                    .name = try a.dupe(u8, trim(u8, commit.author.name, ws)),
+                    .title = try a.dupe(u8, trim(u8, commit.title, ws)),
+                    .body = try a.dupe(u8, trim(u8, commit.body, ws)),
                     .date = DateTime.fromEpoch(commit_time),
                     .sha = commit.sha,
                     .repo = jrepo.name,
@@ -342,7 +333,7 @@ const Scribe = struct {
         name: []const u8,
         repo: []const u8,
         title: []const u8,
-        body: ?[]const u8,
+        body: []const u8,
         date: DateTime,
         sha: Git.Sha,
 
@@ -360,7 +351,7 @@ const Scribe = struct {
 
             return .{
                 .repo = .abx(self.repo),
-                .body = self.body,
+                .body = .abx(self.body),
                 .title = .abx(title),
                 .cmt_line_src = .{
                     .pre = .safe("in "),

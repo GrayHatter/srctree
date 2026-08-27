@@ -234,10 +234,7 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
 
     return .{
         .repo = .abx(repo_name),
-        .body = if (c.body.len > 0)
-            try allocPrint(a, "{f}", .{abx.Html{ .text = trim(u8, c.body, ws) }})
-        else
-            null,
+        .body = .abx(trim(u8, c.body, ws)),
         .title = .abx(trim(u8, c.title, ws)),
         .cmt_line_src = .{
             .pre = .safe("by "),
