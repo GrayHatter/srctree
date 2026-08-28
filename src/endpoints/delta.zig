@@ -103,7 +103,7 @@ pub fn incrView(d: *Delta, f: *Frame) !void {
     d.commit(f.io) catch {};
 }
 
-pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtml.DeltaList {
+pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.DeltaListHtml.DeltaList {
     const msg = d.message[0..@min(
         d.message.len,
         findPos(u8, d.message, 256, " ") orelse d.message.len,
@@ -136,7 +136,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtm
         .uri_base = .abx(uri),
         .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
         .comment_count = comments.count,
-        .view_count = d.viewers.count,
+        .view_count = d.viewers.liveCount(io),
         .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
         .desc = if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }}),
         .delta_meta = meta,
@@ -153,7 +153,7 @@ pub fn list(f: *Frame, Itr: type, itr: *Tsearch.Iterator(Itr, Delta), search_str
 
         _ = d.loadThread(f.alloc, f.io) catch return error.ServerFault;
         const cmtsmeta = d.countComments(f.io);
-        try d_list.append(f.alloc, try deltaList(d, cmtsmeta, f.alloc));
+        try d_list.append(f.alloc, try deltaList(d, cmtsmeta, f.alloc, f.io));
     }
 
     var og_title_b: [256]u8 = undefined;

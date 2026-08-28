@@ -140,6 +140,17 @@ pub fn view(v: *Viewers, name: []const u8, a: Allocator, io: Io) !void {
     try v.commit(io);
 }
 
+pub fn liveCount(v: *const Viewers, io: Io) usize {
+    if (v.time == 0) return v.count;
+    var b: [1024]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&b);
+    var reader = Types.loadDataHashId(type_prefix, v.src, fba.allocator(), io) catch |err| {
+        log.err("unable to update viewer count {x} {}", .{ v.src, err });
+        return v.count;
+    };
+    return readerFn(&reader).count;
+}
+
 pub fn format(v: *const Viewers, w: *Io.Writer) !void {
     try w.print("hash={x} count={} time={}", .{ v.src, v.count, v.time });
 }
