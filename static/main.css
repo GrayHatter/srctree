@@ -292,9 +292,7 @@ readme {
 	.codeblock { white-space: pre; }
 	code {
 		width: 98%;
-		input[type=checkbox] {
-			pointer-events: none;
-		}
+		input[type=checkbox] { pointer-events: none; }
 	}
 	a { color: cadetblue; }
 	a:visited { color: purple; }
