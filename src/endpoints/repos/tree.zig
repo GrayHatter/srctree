@@ -101,11 +101,11 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     }
 
     const page_desc: ?[]const u8 = if (repo.description(ctx.alloc, ctx.io)) |desc|
-        try allocPrint(ctx.alloc, "{f}", .{abx.Html{ .text = desc }})
+        try allocPrint(ctx.alloc, "{f}", .{Abx.Html{ .text = desc }})
     else |_|
         null;
 
-    const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse "" };
+    const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse &.{} };
 
     const page_title = if (page_desc != null and page_desc.?.len > 0)
         try allocPrint(ctx.alloc, "{s} - {s} - srctree", .{ rd.name, page_desc.? })
@@ -127,7 +127,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
             .blame = null,
         },
         .repo_name = .abx(rd.name),
-        .readme = readme(blobs, repo, ctx.alloc, ctx.io) catch &.{} orelse null,
+        .readme = if (readme(blobs, repo, ctx.alloc, ctx.io) catch null) |rm| .safe(rm) else null,
         .commit_slug = .abx(commit_slug),
         .commit_time_human = .safe(commit_time),
         //.commit_hex = commit_hex,
@@ -166,7 +166,7 @@ fn htmlReadme(text: []const u8, a: Allocator, io: Io) ![]E {
     const buf = try a.alloc(u8, text.len * 4);
     var w: Writer = .fixed(buf);
     Highlight.Markdown.translate(&r, &w, a, io) catch |err| switch (err) {
-        error.InvalidMarkdown => try w.print("{f}", .{abx.Html{ .text = text }}),
+        error.InvalidMarkdown => try w.print("{f}", .{Abx.Html{ .text = text }}),
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };
     dom.push(html.text(w.buffered()));
@@ -192,7 +192,7 @@ const splitScalar = std.mem.splitScalar;
 
 const verse = @import("verse");
 const Frame = verse.Frame;
-const abx = verse.Antibiotic;
+const Abx = verse.Antibiotic;
 const S = verse.template.Structs;
 const html = verse.template.html;
 const DOM = html.DOM;

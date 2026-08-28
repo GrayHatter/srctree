@@ -264,7 +264,7 @@ fn view(f: *Frame) Error!void {
         },
         .title = .abx(delta.title),
         .description = .safe(description),
-        .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = author }}) else null,
+        .creator = .abx(delta.author orelse "[no author given]"),
         .status = .safe(delta_shared.status(&delta)),
         .created = .safe(created),
         .updated = .safe(updated),

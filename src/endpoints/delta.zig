@@ -161,14 +161,12 @@ pub fn list(f: *Frame, Itr: type, itr: *Tsearch.Iterator(Itr, Delta), search_str
         .title = bufPrint(&og_title_b, "{} open issues", .{d_list.items.len}) catch unreachable,
     } };
 
-    var b: [2048]u8 = undefined;
-
     var page = DeltaListHtml.init(.{
         .meta_head = meta_head,
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         //.search_action = uri_base,
         .delta_list = try d_list.toOwnedSlice(f.alloc),
-        .search = try bufPrint(&b, "{f}", .{search_str}),
+        .search = search_str,
     });
 
     try f.sendPage(&page);
@@ -259,7 +257,7 @@ pub fn genThreadMessages(
             .comment => .{
                 .author = .abx(try a.dupe(u8, msg.author orelse "[no author]")),
                 .date = .safe(date),
-                .system_tag = systag,
+                .system_tag = if (systag) |st| .safe(st) else null,
                 .message = .safe(body),
                 .edit = if (btns.edit) .{ .index = delta.index, .hash = .safe(msg_hash) } else null,
                 .direct_reply = null, // .{ .index = delta.index, .hash = .safe(msg_hash) },
@@ -274,7 +272,7 @@ pub fn genThreadMessages(
                 .sub_thread = null,
             },
             .state_change => .{
-                .class = "system",
+                .class = .safe("system"),
                 .author = .abx(try a.dupe(u8, msg.author orelse "[no author]")),
                 .date = .safe(date),
                 .message = .abx(msg.message),

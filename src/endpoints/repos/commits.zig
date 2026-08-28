@@ -208,7 +208,7 @@ pub fn commitCtx(c: Git.Commit, repo: []const u8, a: Allocator, io: Io) !S.Commi
         .sha = .safe(sha),
         .sha_short = .safe(sha[0..8]),
         .title = .abx(c.title),
-        .body = w.written(),
+        .body = .safe(w.written()),
     };
 }
 

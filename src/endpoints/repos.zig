@@ -256,7 +256,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !abx.Html {
+fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !Abx.Html {
     const width = 52 * "l 100 100 ".len;
     const b = try arena.alloc(u8, width);
     errdefer arena.free(b);
@@ -294,9 +294,7 @@ fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !abx.Html {
 
 fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
     const now = Io.Clock.real.now(io).toSeconds();
-    const desc: []const u8 = try allocPrint(a, "{f}", .{
-        abx.Html{ .text = repo.git.description(a, io) catch "" },
-    });
+    const desc: Abx.Html = .abx(repo.git.description(a, io) catch &.{});
 
     var upstream: ?[]const u8 = null;
     if (repo.git.findRemote("upstream")) |remote| {
@@ -346,7 +344,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
     const sha_str = try sha.text().dupe(a);
     return .{
         .name = .abx(name),
-        .repo_class = repo_class,
+        .repo_class = .safe(repo_class orelse &.{}),
         .commit_uri = .safe(commit_uri),
         .sha = .safe(sha_str),
         .sha_short = .safe(sha_str[0..10]),
@@ -404,7 +402,7 @@ fn list(f: *Frame) verse.Router.Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .count = repos_compiled.len,
-        .buttons = repo_buttons,
+        .buttons = if (repo_buttons) |rb| .safe(rb) else null,
         .repo_list = repos_compiled,
     });
 
@@ -429,7 +427,7 @@ const eql = std.mem.eql;
 const log = std.log.scoped(.srctree);
 
 const verse = @import("verse");
-const abx = verse.Antibiotic;
+const Abx = verse.Antibiotic;
 const Frame = verse.Frame;
 const PageData = verse.template.PageData;
 const html = verse.template.html;

@@ -128,13 +128,13 @@ fn wrapLineNumbersBlame(
                 .{ .href = .abx(try allocPrint(a, "/repo/{s}/ref/{f}/blame/{s}", .{ repo_name, std.fmt.alt(psha, .fmtHex), path })) }
             else
                 null,
-            .time_style = style_blocks[bcommit.age_block],
+            .time_style = .safe(style_blocks[bcommit.age_block]),
             .author_email = .{
-                .author = if (skip) null else allocPrint(a, "{f}", .{Abx.Html{ .text = bcommit.author.name }}) catch unreachable,
+                .author = .abx(if (skip) &.{} else bcommit.author.name),
                 .email = .abx(email),
             },
-            .m_sha = if (skip) null else sha,
-            .time = if (skip) null else try Humanize.unix(bcommit.author.timestamp, now).printAlloc(a),
+            .m_sha = .safe(if (skip) &.{} else sha),
+            .time = .safe(if (skip) &.{} else try Humanize.unix(bcommit.author.timestamp, now).printAlloc(a)),
         };
     }
     return b_lines;

@@ -79,8 +79,8 @@ fn newPOST(f: *Frame) Error!void {
 }
 
 fn pendingNew(f: *Frame) Error!void {
-    var title: ?[]const u8 = null;
-    var desc: ?[]const u8 = null;
+    var title: []const u8 = &.{};
+    var desc: []const u8 = &.{};
 
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
@@ -114,8 +114,8 @@ fn pendingNew(f: *Frame) Error!void {
         },
         .push_uri = .{ .host = .safe(host), .repo_name = .safe(rd.name) },
         .err = null,
-        .title = title,
-        .desc = desc,
+        .title = .abx(title),
+        .desc = .abx(desc),
     });
 
     try f.sendPage(&page);
@@ -234,8 +234,8 @@ fn createError(f: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!voi
             .remote_error => |str| .{ .error_string = .safe("Unable to fetch patch from remote (" ++ str ++ ")") },
             else => .{ .error_string = .safe("error") },
         },
-        .title = try allocPrint(f.alloc, "{f}", .{abx.Html.abx(udata.title)}),
-        .desc = try allocPrint(f.alloc, "{f}", .{abx.Html.abx(udata.desc)}),
+        .title = .abx(udata.title),
+        .desc = .abx(udata.desc),
         .repo_header = .{
             .repo_name = .safe(rd.name),
             .description = .safe(""),
@@ -912,9 +912,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .status = .safe(delta_shared.status(delta)),
         .created = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)})),
         .updated = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)})),
-        .creator = if (delta.author) |author| try allocPrint(f.alloc, "{f}", .{
-            abx.Html{ .text = author },
-        }) else null,
+        .creator = if (delta.author) |author| .abx(author) else null,
         .delta_flavor = .{
             .diff = .{
                 .patch = patch_data,

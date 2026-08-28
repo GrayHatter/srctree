@@ -23,11 +23,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
 
     const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
-    const str: ?[]const u8, const safe_str = if (udata.q) |usr_str|
-        .{ usr_str, try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = usr_str }}) }
-    else
-        .{ null, "" };
-    const commits, const files = if (str) |s|
+    const commits, const files = if (udata.q) |s|
         .{
             searchCommits(s, &repo, count >> 2, f.alloc, f.io) catch return error.ServerFault,
             searchFiles(s, &repo, count, f.alloc, f.io) catch |err| {
@@ -48,7 +44,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
             .git_uri = null,
             .upstream = null,
         },
-        .search = safe_str,
+        .search = .abx(udata.q orelse &.{}),
         .commits = commits,
         .count_files = files.len,
         .files = files,

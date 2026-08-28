@@ -61,7 +61,7 @@ pub fn settings(f: *Frame) Router.Error!void {
         try w.writer.print("{f}\n", .{ns});
         block.* = .{
             .config_name = ns.name,
-            .config_text = w.writer.buffered(),
+            .config_text = .abx(w.writer.buffered()),
             .count = mem.countScalar(u8, w.writer.buffered(), '\n') + 2,
         };
     }

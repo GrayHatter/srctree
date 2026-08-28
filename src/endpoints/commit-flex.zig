@@ -576,25 +576,25 @@ pub fn commitFlex(ctx: *Frame) Error!void {
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Today"),
-            .lead = try allocPrint(ctx.alloc, "{} commits today", .{blocks.todays.items.len}),
+            .lead = .safe(try allocPrint(ctx.alloc, "{} commits today", .{blocks.todays.items.len})),
             .journal_rows = blocks.todays.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Yesterday"),
-            .lead = try allocPrint(ctx.alloc, "{} commits yesterday", .{blocks.yesterdays.items.len}),
+            .lead = .safe(try allocPrint(ctx.alloc, "{} commits yesterday", .{blocks.yesterdays.items.len})),
             .journal_rows = blocks.yesterdays.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Last Week"),
-            .lead = try allocPrint(ctx.alloc, "{} commits last week", .{blocks.last_weeks.items.len}),
+            .lead = .safe(try allocPrint(ctx.alloc, "{} commits last week", .{blocks.last_weeks.items.len})),
             .journal_rows = blocks.last_weeks.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Last Month"),
-            .lead = try allocPrint(ctx.alloc, "{} commits last month", .{blocks.last_months.items.len}),
+            .lead = .safe(try allocPrint(ctx.alloc, "{} commits last month", .{blocks.last_months.items.len})),
             .journal_rows = blocks.last_months.items,
         });
     }
