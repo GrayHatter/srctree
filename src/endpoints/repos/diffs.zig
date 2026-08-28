@@ -819,6 +819,8 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     defer repo.raze(f.alloc, f.io);
     const head_commit: ?Git.Commit = repo.HEAD(f.alloc, f.io) catch null;
 
+    try delta_shared.incrView(delta, f);
+
     // meme saved to protect history
     //for ([_]Comment{ .{
     //    .author = "grayhatter",

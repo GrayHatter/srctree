@@ -72,6 +72,29 @@ pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
     return list(f, Delta.RepoIterator, &itr, str);
 }
 
+pub fn incrView(d: *Delta, f: *Frame) !void {
+    if (d.viewers.time == 0) {
+        d.viewers.promoteFrom(Delta, f.alloc, f.io) catch |err| {
+            log.err("unable to promote viewers on delta {} {} [{any}]", .{ d.index, err, d.viewers });
+        };
+        d.viewers.inc(f.io);
+        d.commit(f.io) catch |err| {
+            log.err("unable to commit delta {} {}", .{ d.index, err });
+        };
+    }
+
+    if (f.user) |usr| {
+        d.viewers.view(usr.username orelse &.{}, f.alloc, f.io) catch |err| {
+            log.err("unable to add view on delta {} {} '{s}' [{any}]", .{
+                d.index, err, usr.username orelse "[null]", d.viewers,
+            });
+        };
+    } else {
+        d.viewers.inc(f.io);
+    }
+    d.commit(f.io) catch {};
+}
+
 pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtml.DeltaList {
     const msg = d.message[0..@min(
         d.message.len,
@@ -105,7 +128,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator) !S.DeltaListHtm
         .uri_base = .abx(uri),
         .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
         .comment_count = comments.count,
-        .view_count = 0,
+        .view_count = d.viewers.count,
         .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
         .desc = if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }}),
         .delta_meta = meta,

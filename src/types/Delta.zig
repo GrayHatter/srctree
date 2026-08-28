@@ -10,6 +10,7 @@ thread_id: usize = 0,
 tags_id: usize = 0,
 
 state: State = .default,
+viewers: Viewers = .empty,
 // TODO fix when unions are supported
 attach: Attach = .nos,
 attach_target: usize = 0,
@@ -20,7 +21,7 @@ thread: ?*Thread = null,
 
 pub const Delta = @This();
 
-pub const empty: Delta = .{
+pub const blank: Delta = .{
     .index = 0,
     .repo = &.{},
     .title = &.{},
@@ -51,7 +52,7 @@ pub const Attachment = union(Attach) {
     remote: []const u8,
 };
 
-const typeio = Types.readerWriter(Delta, .empty);
+const typeio = Types.readerWriter(Delta, .blank);
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 const Index = Types.Index(type_prefix);
@@ -278,6 +279,7 @@ test Delta {
         \\state.embargoed: false
         \\state.locked: true
         \\state.removed: false
+        \\viewers: hash=0000000000000000000000000000000000000000000000000000000000000000 count=0 time=0
         \\attach: nos
         \\attach_target: 0
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000
@@ -313,3 +315,4 @@ const Thread = Types.Thread;
 const Message = Types.Message;
 const Tsearch = @import("search.zig");
 const Diff = @import("Diff.zig");
+const Viewers = @import("Viewers.zig");

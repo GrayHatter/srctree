@@ -221,6 +221,8 @@ fn view(f: *Frame) Error!void {
     defer repo.raze(f.alloc, f.io);
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch return error.ServerFault;
 
+    try delta_shared.incrView(&delta, f);
+
     const messages = try delta_shared.genThreadMessages(
         &delta,
         &repo,
