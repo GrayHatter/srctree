@@ -73,6 +73,14 @@ pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
 }
 
 pub fn incrView(d: *Delta, f: *Frame) !void {
+    if (f.request.user_agent) |ua| switch (ua.agent) {
+        .script,
+        .bot,
+        .unknown,
+        => return,
+        .browser => {},
+    };
+
     if (d.viewers.time == 0) {
         d.viewers.promoteFrom(Delta, f.alloc, f.io) catch |err| {
             log.err("unable to promote viewers on delta {} {} [{any}]", .{ d.index, err, d.viewers });
