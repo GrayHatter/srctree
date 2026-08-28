@@ -46,12 +46,10 @@ fn dropRequest(f: *Frame) BuildFn {
 fn userAgentResolution(fr: *Frame) ?BuildFn {
     if (global_config.server) |srv| if (!srv.block_scripted_traffic) return null;
     if (fr.user != null) return null;
-    const botdetect: verse.Robots = .init(fr.request);
 
-    fr.dumpDebugData(.{});
+    const botdetect: verse.Robots = .init(fr.request);
     if (eql(u8, fr.uri.path, "/robots.txt")) {
-        //fr.dumpDebugData(.{});
-        //ua.dumpValidation(fr.request);
+        fr.dumpDebugData(.{});
         return null;
     }
 
@@ -64,9 +62,11 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         if (eql(u8, port, "444")) return dropRequest(fr),
                     else => {},
                 }
+                fr.dumpDebugData(.{});
                 switch (bot.name) {
                     .googlebot => return null,
                     .bingbot => return null,
+
                     .gptbot,
                     .metaexternalagent,
                     .scrybot,
@@ -80,6 +80,7 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                         if (find(u8, ua.string, "SleepBot/1.0")) |_| return dropRequest(fr);
                         return null;
                     },
+                    .reflectionbot => return dropRequest(fr),
 
                     else => {
                         const ua_str = fr.request.user_agent.?.string;
@@ -111,6 +112,11 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     bwsr.version <= 137 and bwsr.version >= 130)
                     return dropRequest(fr);
 
+                if (fr.request.accept.encoding == null and bwsr.name == .firefox) {
+                    log.err("encoding missing on firefox", .{});
+                    return dropRequest(fr);
+                }
+
                 const bads = [_][]const u8{
                     \\"Not;A=Brand";v="8"
                     ,
@@ -119,6 +125,10 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
                     \\"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"
                     ,
                     \\"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"
+                    ,
+                    \\"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"
+                    ,
+                    \\"Chromium";v="148", "Microsoft Edge";v="148", "Not/A)Brand";v="99"
                     ,
                     \\"Not_A Brand";v="8", "Chromium";v=
                     ,
