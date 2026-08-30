@@ -45,27 +45,27 @@ const Options = struct {
     config_path: []const u8,
     data_dir: []const u8,
     source_path: ?[]const u8,
+    ci_working_path: []const u8,
 
-    pub fn default() Options {
-        return Options{
-            .config_path = "./config.ini",
-            .data_dir = "data/",
-            .source_path = null,
-        };
-    }
+    pub const default: Options = .{
+        .config_path = "./config.ini",
+        .data_dir = "data/",
+        .source_path = null,
+        .ci_working_path = "working/",
+    };
 };
 
-pub const SrcConfig = @import("Config.zig");
+pub const Config = @import("Config.zig");
 
-//pub var global_config = &SrcConfig.global;
-pub var config_ini: Ini.Config(SrcConfig) = .{ .ini = .empty };
+//pub var global_config = &Config.global;
+pub var config_ini: Ini.Config(Config) = .{ .ini = .empty };
 
 const Auth = @import("Auth.zig");
 
 pub fn main(init: std.process.Init) !void {
     const a = init.gpa;
 
-    var options = Options.default();
+    var options: Options = .default;
     var runmode: verse.Server.Options.RunMode = .{ .zwsgi = undefined };
 
     var args = init.minimal.args.iterate();
@@ -117,12 +117,12 @@ pub fn main(init: std.process.Init) !void {
         const len = try cf.length(io);
         cfg_data = try a.alloc(u8, len);
         var config_reader = cf.reader(io, cfg_data);
-        config_ini = try Ini.Config(SrcConfig).init(&config_reader.interface, a);
-        SrcConfig.global = try config_ini.resolve();
+        config_ini = try Ini.Config(Config).init(&config_reader.interface, a);
+        Config.global = try config_ini.resolve();
     }
     defer config_ini.raze(a);
 
-    if (SrcConfig.global.owner) |owner| {
+    if (Config.global.owner) |owner| {
         if (owner.email) |email| {
             log.debug("{s}", .{email});
         }
@@ -134,10 +134,10 @@ pub fn main(init: std.process.Init) !void {
     const cache = Cache.init(a);
     defer cache.raze();
 
-    const socket_file = if (SrcConfig.global.server.?.sock) |socket| socket else "./srctree.sock";
+    const socket_file = if (Config.global.server.?.sock) |socket| socket else "./srctree.sock";
     log.debug("sock: {s}", .{socket_file});
 
-    if (SrcConfig.global.server) |srv| {
+    if (Config.global.server) |srv| {
         if (srv.remove_on_start) {
             Io.Dir.cwd().deleteFile(io, socket_file) catch |err| switch (err) {
                 error.FileNotFound => {},
@@ -147,16 +147,16 @@ pub fn main(init: std.process.Init) !void {
     }
 
     var agent: Repo.Agent = .init(.{
-        .enabled = SrcConfig.global.agent.?.enabled,
+        .enabled = Config.global.agent.?.enabled,
         .upstream = .{
-            .push = SrcConfig.global.agent.?.upstream_push,
-            .pull = SrcConfig.global.agent.?.upstream_pull,
+            .push = Config.global.agent.?.upstream_push,
+            .pull = Config.global.agent.?.upstream_pull,
         },
         .downstream = .{
-            .push = SrcConfig.global.agent.?.downstream_push,
-            .pull = SrcConfig.global.agent.?.downstream_pull,
+            .push = Config.global.agent.?.downstream_push,
+            .pull = Config.global.agent.?.downstream_pull,
         },
-        .skips = SrcConfig.global.agent.?.skip_repos,
+        .skips = Config.global.agent.?.skip_repos,
     }, io);
     try agent.startThread();
     defer agent.joinThread();
@@ -168,7 +168,7 @@ pub fn main(init: std.process.Init) !void {
     defer auth.raze();
     var mtls = Auth.init(auth_alloc, io);
 
-    if (SrcConfig.global.repos) |repo_config| {
+    if (Config.global.repos) |repo_config| {
         if (repo_config.dir) |public_repo_dir|
             Repo.dirs.public = public_repo_dir;
         if (repo_config.private_dir) |private_repo_dir|

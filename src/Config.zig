@@ -4,10 +4,21 @@ repos: ?Repos,
 agent: ?Agent,
 notifications: ?Notifications,
 git: ?Git,
+ci: ?Ci,
+
+const Config = @This();
 
 pub var global: Config = .empty;
 
-const Config = @This();
+pub const empty: Config = .{
+    .server = null,
+    .owner = null,
+    .repos = null,
+    .agent = null,
+    .notifications = null,
+    .git = .default,
+    .ci = null,
+};
 
 pub const Server = struct {
     block_scripted_traffic: bool = true,
@@ -54,11 +65,12 @@ pub const Git = struct {
     pub const default: Git = .{};
 };
 
-pub const empty: Config = .{
-    .server = null,
-    .owner = null,
-    .repos = null,
-    .agent = null,
-    .notifications = null,
-    .git = .default,
+pub const Ci = struct {
+    enabled: ?bool,
+    working_path: ?[]const u8,
+
+    pub const default: Ci = .{
+        .enabled = false,
+        .working_path = "working",
+    };
 };

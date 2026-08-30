@@ -32,3 +32,7 @@ remove_on_start = true
 push_enabled = false
 pull_enabled = true
 auto_create_enabled = false
+
+[ci]
+enabled = false
+working_path = working/

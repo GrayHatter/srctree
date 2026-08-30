@@ -20,9 +20,7 @@ pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
 
     var pinned = false;
     if (git.config.?.srctree) |s| {
-        if (s.pinned) |p| {
-            pinned = p;
-        }
+        if (s.pinned) |p| pinned = p;
     }
     return .{
         .name = name,
