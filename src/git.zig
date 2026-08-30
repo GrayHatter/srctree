@@ -53,26 +53,34 @@ pub const Ref = union(enum) {
     }
 };
 
-pub const Mode = packed struct(u48) {
-    file: bool,
+pub const Mode = enum {
+    file,
+    exec,
+    dir,
+    submodule,
 
-    pub const default = struct {
-        pub const file: Mode = .{};
-        pub const dir: Mode = .{};
-        pub const submodule: Mode = .{};
-    };
-
-    pub fn toBytes(m: Mode) [6]u8 {
+    pub fn toBytes(m: Mode) [:0]const u8 {
         return switch (m) {
-            default.file => "100644",
-            default.dir => "100755",
-            default.submodule => "120000",
+            .file => "100644",
+            .exec => "100755",
+            .dir => "40000",
+            .submodule => "120000",
         };
     }
 
-    pub fn fromBytes(bytes: [6]u8) !Mode {
-        _ = bytes;
-        return error.InvalidGitMode;
+    pub fn fromBytes(bytes: []const u8) Mode {
+        if (eql(u8, bytes, "40000")) {
+            return .dir;
+        } else if (eql(u8, bytes[0..3], "100")) {
+            if (eql(u8, bytes[3..], "644")) {
+                return .file;
+            } else if (eql(u8, bytes[3..], "755")) {
+                return .exec;
+            }
+        } else if (eql(u8, bytes, "120000")) {
+            return .submodule;
+        }
+        unreachable;
     }
 };
 

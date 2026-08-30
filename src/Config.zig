@@ -68,9 +68,11 @@ pub const Git = struct {
 pub const Ci = struct {
     enabled: ?bool,
     working_path: ?[]const u8,
+    cache_enabled: ?bool,
 
     pub const default: Ci = .{
         .enabled = false,
         .working_path = "working",
+        .cache_enabled = false,
     };
 };

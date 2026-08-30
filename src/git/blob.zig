@@ -1,33 +1,34 @@
 sha: Git.Sha,
-mode: [6]u8,
+mode: Git.Mode,
 name: []const u8,
-data: union(enum) {
-    blob: []u8,
-    tree: Tree,
-    unloaded: void,
-} = .unloaded,
+data: Object = .unloaded,
 
 const Blob = @This();
 
-pub fn init(sha: Sha, mode: [6]u8, name: []const u8, data: []u8) Blob {
-    return if (mode[0] != 48) .{
-        .sha = sha,
-        .mode = mode,
-        .name = name,
-        .data = .{ .blob = data },
-    } else .{
-        .sha = sha,
-        .mode = mode,
-        .name = name,
-        .data = .{ .tree = .init(sha, data) },
-    };
-}
+pub const Object = union(enum) {
+    blob: []u8,
+    tree: Tree,
+    unloaded: void,
 
-pub fn toObject(self: Blob, a: Allocator, repo: Repo) !Object {
-    if (!self.isFile()) return error.NotAFile;
-    _ = a;
-    _ = repo;
-    return error.NotImplemented;
+    pub fn reload(o: *const Object, r: *const Repo, a: Allocator, io: Io) !Blob {
+        const old: *const Blob = @fieldParentPtr("data", o);
+        return Blob.load(old.sha, r, a, io) catch unreachable;
+    }
+};
+
+pub fn init(sha: Sha, mode: Git.Mode, name: []const u8, data: ?[]u8) Blob {
+    return .{
+        .sha = sha,
+        .mode = mode,
+        .name = name,
+        .data = if (data) |d|
+            if (mode == .dir)
+                .{ .tree = .init(sha, d) }
+            else
+                .{ .blob = d }
+        else
+            .unloaded,
+    };
 }
 
 pub fn load(sha: Sha, repo: *const Repo, a: Allocator, io: Io) !Blob {
@@ -64,6 +65,5 @@ const Io = std.Io;
 
 const Git = @import("../git.zig");
 const Repo = Git.Repo;
-const Object = Git.Object;
 const Tree = @import("Tree.zig");
 const Sha = @import("Sha.zig");

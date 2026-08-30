@@ -29,22 +29,27 @@ pub fn checkout(t: Tree, dir: Io.Dir, repo: *const Repo, a: Allocator, io: Io) !
     log.debug("checkout {f}\n", .{t.sha.text()});
     var itr = t.iterate();
     while (itr.next()) |file| {
-        switch (file.data) {
-            .blob => {
-                log.debug("creating file {s}\n", .{file.name});
+        switch (file.mode) {
+            .file, .exec => {
+                log.debug("creating file {s}", .{file.name});
+                const data: ?Blob = switch (file.data) {
+                    .unloaded => try file.data.reload(repo, a, io),
+                    else => null,
+                };
+                defer if (data) |d| d.raze(a);
                 const new = try dir.createFile(io, file.name, .{});
                 defer new.close(io);
-                try new.writePositionalAll(io, file.data.blob, 0);
+                try new.writePositionalAll(io, (data orelse file).data.blob, 0);
             },
-            .tree => {
-                log.debug("creating dir {s}\n", .{file.name});
-                const tree2 = try Tree.loadSha(file.data.tree.sha, repo, a, io);
+            .dir => {
+                log.debug("creating dir {s}", .{file.name});
+                const tree2 = try Tree.loadSha(file.sha, repo, a, io);
                 defer tree2.raze(a);
                 const new = try dir.createDirPathOpen(io, file.name, .{});
                 defer new.close(io);
                 try tree2.checkout(new, repo, a, io);
             },
-            .unloaded => unreachable,
+            .submodule => {},
         }
     }
 }
@@ -68,11 +73,22 @@ test checkout {
     try tree.checkout(tdir.dir, &repo, a, io);
     var w = try tdir.dir.walk(a);
     defer w.deinit();
+    var b: [0x8000]u8 = undefined;
     var c: usize = 0;
+    var found_build_zon = false;
     while (try w.next(io)) |file| {
         c += 1;
+        if (eql(u8, file.path, "build.zig.zon")) {
+            found_build_zon = true;
+            const file_data = try tdir.dir.readFile(io, file.path, &b);
+
+            if (find(u8, file_data, ".fingerprint = 0x4eee355ffa6e50b7,") == null) {
+                return error.FingerprintMissing;
+            }
+        }
         log.debug("walk {s}\n", .{file.path});
     }
+    if (!found_build_zon) return error.BuildZigZonMissing;
     try std.testing.expect(c > 20); // Assume we have at least 20 files in this repo
 }
 
@@ -205,17 +221,15 @@ pub const Iterator = struct {
         const blob = itr.tree.bytes;
         if (itr.idx >= blob.len) return null;
         while (findScalarPos(u8, blob, itr.idx, 0)) |str_end| {
-            var mode: [6]u8 = @splat('0');
-            var name = blob[itr.idx + 7 .. str_end];
-            if (blob[itr.idx] == '1') {
-                @memcpy(mode[0..6], blob[itr.idx..][0..6]);
-            } else if (blob[itr.idx] == '4') {
-                @memcpy(mode[1..6], blob[itr.idx..][0..5]);
-                name = blob[itr.idx + 6 .. str_end];
-            }
             defer itr.idx = str_end + width + 1;
-            const sha: Sha = .init(blob[str_end + 1 ..][0..width]);
-            return .init(sha, mode, name, blob);
+            const mode: git.Mode, const name: []const u8 = if (blob[itr.idx] == '1') .{
+                .fromBytes(blob[itr.idx..][0..6]),
+                blob[itr.idx + 7 .. str_end],
+            } else if (blob[itr.idx] == '4') .{
+                .fromBytes(blob[itr.idx..][0..5]),
+                blob[itr.idx + 6 .. str_end],
+            } else unreachable;
+            return .init(.init(blob[str_end + 1 ..][0..width]), mode, name, null);
         }
         return null;
     }
@@ -428,6 +442,7 @@ const Repo = @import("Repo.zig");
 const Blob = @import("blob.zig");
 const Commit = @import("Commit.zig");
 const ChangeSet = @import("changeset.zig");
+const git = @import("../git.zig");
 
 const std = @import("std");
 const Allocator = std.mem.Allocator;

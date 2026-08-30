@@ -36,3 +36,4 @@ auto_create_enabled = false
 [ci]
 enabled = false
 working_path = working/
+cache_enabled = false

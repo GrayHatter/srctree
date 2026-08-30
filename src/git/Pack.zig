@@ -376,7 +376,7 @@ pub fn resolveOffset(self: Pack, sha: Sha, offset: usize, objs: *const Objects, 
     if (sha.eql(.empty)) @panic("unreachable");
 
     return switch (resolved.header.kind) {
-        .blob => .{ .blob = .init(sha, .{ 0, 0, 0, 0, 0, 0 }, resolved.data, resolved.data) },
+        .blob => .{ .blob = .init(sha, .file, resolved.data, resolved.data) },
         .tree => .{ .tree = .init(sha, resolved.data) },
         .commit => .{ .commit = Commit.initOwned(sha, resolved.data) catch return error.ObjectCorrupt },
         .tag => .{ .tag = Tag.initOwned(sha, resolved.data) catch return error.ObjectCorrupt },

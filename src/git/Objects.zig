@@ -97,7 +97,7 @@ fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) LoadError!Any {
     if (zl.reader.takeSentinel(0)) |take| {
         if (startsWith(u8, take, "blob ")) {
             const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
-            return .{ .blob = .init(sha, @splat(0xff), data, data) };
+            return .{ .blob = .init(sha, .file, data, data) };
         } else if (startsWith(u8, take, "tree ")) {
             const data = zl.reader.allocRemaining(a, .limited(0xffffff)) catch unreachable;
             return .{ .tree = .init(sha, data) };

@@ -68,14 +68,20 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
     try ci.validate(a, io);
 
     try ci.source.init(repo.name.?, commit, a, io);
+    defer ci.source.raze(a, io);
     try ci.source.checkout(a, io);
+
     try ci.cache.inject(a, io);
+    defer ci.cache.backup(a, io) catch unreachable;
+
+    try ci.artifacts.init(a, io);
+    defer ci.artifacts.save(a, io) catch unreachable;
+
     try ci.source.stepSetup(a, io);
+    try ci.source.stepBuild(a, io);
     try ci.source.stepTests(a, io);
-    // save output
-    try ci.artifacts.save(a, io);
-    try ci.cache.backup(a, io);
-    try ci.source.raze(a, io);
+
+    // save build output
 }
 
 pub fn raze(ci: *Ci, a: Allocator, io: Io) void {
@@ -87,22 +93,19 @@ pub fn validate(ci: *Ci, a: Allocator, io: Io) !void {
     _ = ci;
     _ = a;
     _ = io;
-    //return error.NotImplemented;
 }
 
 pub const Artifacts = struct {
+    pub fn init(art: *Artifacts, a: Allocator, io: Io) !void {
+        _ = art;
+        _ = a;
+        _ = io;
+    }
+
     pub fn save(art: *Artifacts, a: Allocator, io: Io) !void {
         _ = art;
         _ = a;
         _ = io;
-        //return error.NotImplemented;
-    }
-
-    pub fn store(ci: *Ci, a: Allocator, io: Io) !void {
-        _ = ci;
-        _ = a;
-        _ = io;
-        return error.NotImplemented;
     }
 };
 
@@ -131,35 +134,85 @@ pub const Source = struct {
         _ = src;
         _ = a;
         _ = io;
-        //return error.NotImplemented;
+    }
+
+    pub fn stepBuild(src: *Source, a: Allocator, io: Io) !void {
+        var stdout: Io.Writer.Allocating = .init(a);
+        var stderr: Io.Writer.Allocating = .init(a);
+        defer stdout.deinit();
+        defer stderr.deinit();
+        try src.exec(&.{ "zig", "build" }, &stdout.writer, &stderr.writer, null, io);
     }
 
     pub fn stepTests(src: *Source, a: Allocator, io: Io) !void {
         _ = src;
         _ = a;
         _ = io;
-        //return error.NotImplemented;
     }
 
-    pub fn raze(src: *Source, a: Allocator, io: Io) !void {
+    pub fn raze(src: *Source, a: Allocator, io: Io) void {
         src.working_dir.close(io);
         src.tree.raze(a);
+    }
+
+    fn exec(
+        src: *Source,
+        argv: []const []const u8,
+        stdout: *Io.Writer,
+        stderr: *Io.Writer,
+        stdin: ?[]const u8,
+        io: Io,
+    ) !void {
+        var child = try std.process.spawn(io, .{
+            .argv = argv,
+            .expand_arg0 = .no_expand,
+            .cwd = .{ .dir = src.working_dir },
+            .stdin = if (stdin != null) .pipe else .ignore,
+            .stdout = .pipe,
+            .stderr = .pipe,
+        });
+
+        if (child.stdin) |cstdin| {
+            var writer = cstdin.writer(io, &.{});
+            try writer.interface.writeAll(stdin.?);
+            cstdin.close(io);
+            child.stdin = null;
+        }
+        defer if (child.stdout) |out| out.close(io);
+        defer if (child.stderr) |err| err.close(io);
+
+        var outr = child.stdout.?.reader(io, &.{});
+        _ = try outr.interface.streamRemaining(stdout);
+
+        var errr = child.stderr.?.reader(io, &.{});
+        _ = try errr.interface.streamRemaining(stderr);
+
+        _ = child.wait(io) catch |err| {
+            log.warn("{any}: {}", .{ argv, err });
+            return err;
+        };
     }
 };
 
 pub const Cache = struct {
-    pub fn inject(c: *Cache, a: Allocator, io: Io) !void {
-        _ = c;
-        _ = a;
-        _ = io;
-        //return error.NotImplemented;
+    pub fn inject(c: *Cache, _: Allocator, _: Io) !void {
+        if (Cache.enabled()) return;
+        const ci: *Ci = @alignCast(@fieldParentPtr("cache", c));
+        _ = ci;
     }
 
-    pub fn backup(c: *Cache, a: Allocator, io: Io) !void {
-        _ = c;
-        _ = a;
-        _ = io;
-        //return error.NotImplemented;
+    pub fn backup(c: *Cache, _: Allocator, _: Io) !void {
+        if (Cache.enabled()) return;
+        const ci: *Ci = @alignCast(@fieldParentPtr("cache", c));
+        _ = ci;
+    }
+
+    fn enabled() bool {
+        if (global_config.ci) |ci| {
+            if (ci.cache_enabled) |en| {
+                return en;
+            } else return false;
+        } else return false;
     }
 };
 
@@ -188,8 +241,16 @@ test {
     var w = try tdir.dir.walk(a);
     defer w.deinit();
     var c: usize = 0;
+    var b: [0x8000]u8 = undefined;
     while (try w.next(io)) |file| {
         c += 1;
+        if (eql(u8, file.path, "srctree/build.zig.zon")) {
+            const file_data = try tdir.dir.readFile(io, file.path, &b);
+
+            if (find(u8, file_data, ".fingerprint = 0x4eee355ffa6e50b7,") == null) {
+                return error.FingerprintMissing;
+            }
+        }
         log.debug("walk {s}", .{file.path});
     }
     try std.testing.expect(c > 20); // Assume we have at least 20 files in this repo
