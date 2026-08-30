@@ -10,6 +10,7 @@ const HeatMapArray = [HEATMAPSIZE]u16;
 
 const Journal = struct {
     email: []const u8,
+    now: DateTime,
     today: i64,
     repos: ArrayList(JRepo),
     heatmap_until: i64,
@@ -28,12 +29,14 @@ const Journal = struct {
         next_ts: i64 = 0,
     };
 
-    pub fn init(email: []const u8, today: i64, until: i64, a: Allocator) !*Journal {
+    pub fn init(email: []const u8, now: DateTime, until: i64, a: Allocator) !*Journal {
         const j = try a.create(Journal);
 
         const scribe_size = 90;
+        const today = now.timeTruncate().timestamp;
         j.* = .{
             .email = try a.dupe(u8, email),
+            .now = now,
             .today = today,
             .repos = .empty,
             .heatmap_until = until,
@@ -146,8 +149,9 @@ const Journal = struct {
             heatmap.sha = .zeros;
         }
 
-        if (!commit.sha.eql(heatmap.sha)) {
+        if (j.now.timestamp > heatmap.expires or !commit.sha.eql(heatmap.sha)) {
             heatmap.sha = commit.sha;
+            heatmap.expires = j.now.timestamp + 3600;
             @memset(&heatmap.hits, 0);
             try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until, a, io);
         }
@@ -385,6 +389,7 @@ const Scribe = struct {
 
 pub const HeatMap = struct {
     sha: Git.Sha,
+    expires: i64,
     hits: HeatMapArray,
 };
 
@@ -446,7 +451,7 @@ pub fn commitFlex(ctx: *Frame) Error!void {
     var repo_count: usize = 0;
     const journal: *Journal = try .init(
         email,
-        nowish.timeTruncate().timestamp,
+        nowish,
         start_date.timestamp,
         ctx.alloc,
     );
@@ -455,11 +460,15 @@ pub fn commitFlex(ctx: *Frame) Error!void {
     var all_repos = Repo.iterateAll(.public_only, ctx.io) catch return error.Unknown;
     while (all_repos.next(ctx.io) catch |err| switch (err) {
         error.NotAGitRepo => brk: {
-            log.warn("'{s}' is not a git repo.", .{all_repos.current_name orelse "[null repo name]"});
+            log.warn("'{s}' is not a git repo.", .{
+                all_repos.current_name orelse "[null repo name]",
+            });
             break :brk all_repos.next(ctx.io) catch return error.ServerFault;
         },
         else => {
-            log.err("unable to itrate repos {} stuck on {s}", .{ err, all_repos.current_name orelse "[null repo name]" });
+            log.err("unable to itrate repos {} stuck on {s}", .{
+                err, all_repos.current_name orelse "[null repo name]",
+            });
             return error.Unknown;
         },
     }) |input| {
@@ -485,7 +494,8 @@ pub fn commitFlex(ctx: *Frame) Error!void {
     var streak: usize = 0;
     var committed_today: bool = false;
     const weeks = HEATMAPSIZE / 7;
-    const flex_weeks: []S.UserCommitsHtml.FlexWeeks = try ctx.alloc.alloc(S.UserCommitsHtml.FlexWeeks, weeks);
+    const flex_weeks: []S.UserCommitsHtml.FlexWeeks =
+        try ctx.alloc.alloc(S.UserCommitsHtml.FlexWeeks, weeks);
 
     var date = start_date;
     for (flex_weeks) |*flex_week| {
