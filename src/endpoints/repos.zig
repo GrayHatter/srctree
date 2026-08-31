@@ -256,7 +256,7 @@ fn sorter(_: void, l: []const u8, r: []const u8) bool {
     return std.mem.lessThan(u8, l, r);
 }
 
-fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !Abx.Html {
+fn svgPoints(repo: *const Repo, head: *const Git.Commit, arena: Allocator, io: Io) !Abx.Html {
     const width = 52 * "l 100 100 ".len;
     const b = try arena.alloc(u8, width);
     errdefer arena.free(b);
@@ -266,7 +266,7 @@ fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !Abx.Html {
     var heat: [52]u16 = @splat(0);
 
     var max: isize = 1;
-    var commit: Git.Commit = repo.git.HEAD(arena, io) catch return .safe("V 46 M 109 46 ");
+    var commit: Git.Commit = head.*;
 
     for (0..52) |i| {
         const r_idx = heat.len - 1 - i;
@@ -290,6 +290,34 @@ fn svgPoints(repo: *const Repo, arena: Allocator, io: Io) !Abx.Html {
         hob = adjst;
     }
     return .safe(w.buffered());
+}
+
+fn cachedSvgPoints(repo: *const Repo, arena: Allocator, io: Io) !Abx.Html {
+    const commit = repo.git.HEAD(arena, io) catch return .safe("V 46 M 109 46 ");
+    const gop = try g_cache.getOrPut(commit.sha.hash.bytes()[0..20].*);
+    if (!gop.found_existing) {
+        const svg = try svgPoints(repo, &commit, arena, io);
+        gop.value_ptr.* = .{
+            .text = &.{},
+            .text_cleaned = try g_cache.allocator.dupe(u8, svg.text_cleaned),
+        };
+        return svg;
+    }
+    return gop.value_ptr.*;
+}
+
+pub const Cache = std.AutoHashMap([20]u8, Abx.Html);
+var g_cache: Cache = undefined;
+pub fn initCache(a: Allocator) void {
+    g_cache = .init(a);
+}
+
+pub fn razeCache(a: Allocator) void {
+    var itr = g_cache.iterator();
+    while (itr.next()) |next| {
+        a.free(next.value_ptr.text_cleaned);
+    }
+    g_cache.deinit();
 }
 
 fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.RepoList {
@@ -338,7 +366,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
         }
     }
     const status = repo.ci.status(a, io) catch unreachable;
-    std.debug.print("repo.ci {s} = {any}\n", .{ name, repo.ci.srctree });
+    //std.debug.print("repo.ci {s} = {any}\n", .{ name, repo.ci.srctree });
 
     const commit_uri = try allocPrint(a, "/repo/{s}/commit/{f}", .{ name, std.fmt.alt(sha, .fmtHex) });
     const sha_str = try sha.text().dupe(a);
@@ -353,7 +381,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
         .upstream_blk = if (upstream) |u| .{ .link = .safe(u) } else null,
         .updated = .safe(updated),
         .tag_blk = tag,
-        .svg_points = try svgPoints(repo, a, io),
+        .svg_points = try cachedSvgPoints(repo, a, io),
         .ci_status = if (status) .broken else .disabled,
     };
 }

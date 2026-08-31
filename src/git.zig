@@ -80,7 +80,7 @@ pub const Mode = enum {
         } else if (eql(u8, bytes, "120000")) {
             return .submodule;
         }
-        unreachable;
+        return .file; //unreachable;
     }
 };
 
