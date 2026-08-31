@@ -31,6 +31,7 @@ pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
 
 pub fn raze(r: *Repo, a: Allocator, io: Io) void {
     r.git.raze(a, io);
+    r.ci.raze(a, io);
 }
 
 pub const Sort = struct {

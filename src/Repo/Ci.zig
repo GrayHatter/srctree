@@ -1,6 +1,6 @@
 /// Aligned to Git.Repo for @fieldParentPtr
 enabled: bool align(8) = false,
-srctree: RepoCiConf = .empty,
+conf_zon: ?CiConf = null,
 conf_bytes: [:0]const u8 = &.{},
 working_dir: ?Io.Dir = null,
 artifacts: Artifacts = .{},
@@ -9,13 +9,21 @@ source: Source = undefined,
 
 const Ci = @This();
 
-pub const RepoCiConf = struct {
-    ci: ?[]const u8,
-    docs: ?[]const u8,
+pub const CiConf = struct {
+    srctree: ?SrctreeConf,
 
-    pub const empty: RepoCiConf = .{
-        .ci = null,
-        .docs = null,
+    pub const SrctreeConf = struct {
+        ci: ?[]const u8,
+        docs: ?[]const u8,
+
+        pub const empty: SrctreeConf = .{
+            .ci = null,
+            .docs = null,
+        };
+    };
+
+    pub const empty: CiConf = .{
+        .srctree = .empty,
     };
 };
 
@@ -34,14 +42,17 @@ pub fn status(ci: *Ci, a: Allocator, io: Io) !bool {
                 .blob => if (find(u8, blob.blob.data.blob, ".srctree =")) |_| {
                     defer blob.blob.raze(a);
                     ci.conf_bytes = try a.dupeSentinel(u8, blob.blob.data.blob, 0);
-                    ci.srctree = std.zon.parse.fromSliceAlloc(RepoCiConf, a, ci.conf_bytes, null, .{
+                    ci.conf_zon = std.zon.parse.fromSliceAlloc(CiConf, a, ci.conf_bytes, null, .{
                         .ignore_unknown_fields = true,
-                    }) catch return false;
+                    }) catch |err| {
+                        log.err("unable to parse zon {}", .{err});
+                        return false;
+                    };
 
                     ci.enabled = true;
                     return ci.enabled;
-                },
-                else => {},
+                } else return false,
+                else => unreachable,
             }
         }
     }
@@ -87,6 +98,7 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
 pub fn raze(ci: *Ci, a: Allocator, io: Io) void {
     if (ci.working_dir) |*wd| wd.close(io);
     a.free(ci.conf_bytes);
+    if (ci.conf_zon) |zon| std.zon.parse.free(a, zon);
 }
 
 pub fn validate(ci: *Ci, a: Allocator, io: Io) !void {
@@ -230,6 +242,10 @@ test {
     try repo.git.loadData(a, io);
     var commit = try repo.git.HEAD(a, io);
     defer commit.raze(a);
+
+    const stats = try repo.ci.status(a, io);
+    _ = stats;
+    //std.debug.print("repo.ci = {any} {any}\n", .{ repo.ci.conf_zon, stats });
 
     repo.ci.enabled = true;
     try repo.ci.prepare(io);
