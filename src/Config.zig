@@ -21,9 +21,10 @@ pub const empty: Config = .{
 };
 
 pub const Server = struct {
-    block_scripted_traffic: bool = true,
-    remove_on_start: bool = false,
     sock: ?[]const u8,
+    remove_on_start: bool = false,
+    block_scripted_traffic: bool = true,
+    debug_blocked_traffic: bool = true,
 };
 
 pub const Owner = struct {

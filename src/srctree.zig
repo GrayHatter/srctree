@@ -35,121 +35,142 @@ fn debug(_: *Frame) Router.Error!void {
     return error.ServerFault;
 }
 
-fn dropRequest(f: *Frame) BuildFn {
-    log.err("Dropping malicious traffic", .{});
-    f.dumpDebugData(.{});
-    if (f.request.user_agent) |*ua|
-        ua.dumpValidation(f.request);
+fn dropRequest(f: *Frame, comptime reason: []const u8) BuildFn {
+    log.err("Dropping traffic: " ++ reason, .{});
+    if (global_config.server) |srv| {
+        if (srv.debug_blocked_traffic) {
+            f.dumpDebugData(.{});
+            if (f.request.user_agent) |ua|
+                ua.dumpValidation(f.request);
+        }
+    } else {
+        f.dumpDebugData(.{});
+        if (f.request.user_agent) |ua|
+            ua.dumpValidation(f.request);
+    }
+
     return notFound;
 }
 
+inline fn botRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
+    const bot = ua.agent.bot;
+    switch (f.downstream.gateway) {
+        .zwsgi => |zw| if (zw.known.get(.SERVER_PORT)) |port|
+            if (eql(u8, port, "444")) return dropRequest(f, "bad port"),
+        else => {},
+    }
+    switch (bot.name) {
+        .googlebot => return null,
+        .bingbot => return null,
+
+        inline .gptbot,
+        .metaexternalagent,
+        .scrybot,
+        .youbot,
+        .reflectionbot,
+        => |t| return dropRequest(f, @tagName(t) ++ "ignores robots.txt"),
+        .unknown => {
+            if (find(u8, ua.string, "SearchBot/1.0")) |_| return dropRequest(f, "ignores robots.txt");
+            if (find(u8, ua.string, "SleepBot/1.0")) |_| return dropRequest(f, "ignores robots.txt");
+            return null;
+        },
+
+        else => {
+            if (global_config.server) |srv| {
+                if (srv.debug_blocked_traffic)
+                    f.dumpDebugData(.{});
+            }
+
+            const ua_str = f.request.user_agent.?.string;
+            const ia_ua = "Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0";
+            const ia_bot_ua = find(u8, ua_str, ia_ua) == null;
+            if (bot.malicious and !ia_bot_ua) {
+                log.err("Dropping other malicious bot traffic", .{});
+                return Router.defaultResponse(.forbidden);
+            }
+        },
+    }
+    return null;
+}
+
+inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
+    const bwsr = ua.agent.browser;
+    switch (f.downstream.gateway) {
+        .zwsgi => |zw| if (zw.known.get(.SERVER_PORT)) |port|
+            if (eql(u8, port, "444"))
+                return dropRequest(f, "bad port"),
+        else => {},
+    }
+
+    // hastur
+    const botdetect: verse.Robots = .init(f.request);
+    const real_ua = ua.validate(f.request);
+    if ((botdetect.score >= 1 or (real_ua.agent == .bot and
+        real_ua.agent.bot.name == .malicious)) and
+        ua.agent.browser.version != 128)
+    {
+        return dropRequest(f, "Malicious score");
+    }
+    // super abusive bot
+    if ((bwsr.name == .chrome or bwsr.name == .edge) and
+        bwsr.version <= 137 and bwsr.version >= 130)
+        return dropRequest(f, "manual bot detection");
+
+    if (f.request.accept.encoding == null and bwsr.name == .firefox) {
+        return dropRequest(f, "ff missing encoding");
+    }
+
+    const bads = [_][]const u8{
+        \\"Not;A=Brand";v="8"
+        ,
+        \\"Chromium";v="143", "Google Chrome";v="143", "Not_A Brand";v="99"
+        ,
+        \\"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"
+        ,
+        \\"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"
+        ,
+        \\"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"
+        ,
+        \\"Chromium";v="148", "Microsoft Edge";v="148", "Not/A)Brand";v="99"
+        ,
+        \\"Not_A Brand";v="8", "Chromium";v=
+        ,
+        \\"Not/A)Brand";v="99", "Chromium";v=
+        ,
+    };
+    inline for (bads) |bad| {
+        if (f.request.headers.getCustomValue("HTTP_SEC_CH_UA") catch null) |val| {
+            if (startsWith(u8, val, bad))
+                return dropRequest(f, "banned client hint");
+        }
+    }
+
+    const age: std.Io.Duration = bwsr.age(f.request.now) catch .fromSeconds(0);
+    const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 200).nanoseconds;
+    if (too_old) return dropRequest(f, "too old");
+
+    f.dumpDebugData(.{});
+    return null;
+}
+
 fn userAgentResolution(fr: *Frame) ?BuildFn {
-    if (global_config.server) |srv| if (!srv.block_scripted_traffic) return null;
+    if (global_config.server) |srv|
+        if (!srv.block_scripted_traffic)
+            return null;
+
     if (fr.user != null) return null;
 
-    const botdetect: verse.Robots = .init(fr.request);
     if (eql(u8, fr.uri.path, "/robots.txt")) {
         fr.dumpDebugData(.{});
         return null;
     }
 
     if (fr.request.user_agent) |*ua| {
-        ua.dumpValidation(fr.request);
         switch (ua.agent) {
-            .bot => |bot| {
-                switch (fr.downstream.gateway) {
-                    .zwsgi => |zw| if (zw.known.get(.SERVER_PORT)) |port|
-                        if (eql(u8, port, "444")) return dropRequest(fr),
-                    else => {},
-                }
-                fr.dumpDebugData(.{});
-                switch (bot.name) {
-                    .googlebot => return null,
-                    .bingbot => return null,
-
-                    .gptbot,
-                    .metaexternalagent,
-                    .scrybot,
-                    .youbot,
-                    => |t| {
-                        log.err("Dropping malicious traffic from {s}", .{@tagName(t)});
-                        return dropRequest(fr);
-                    },
-                    .unknown => {
-                        if (find(u8, ua.string, "SearchBot/1.0")) |_| return dropRequest(fr);
-                        if (find(u8, ua.string, "SleepBot/1.0")) |_| return dropRequest(fr);
-                        return null;
-                    },
-                    .reflectionbot => return dropRequest(fr),
-
-                    else => {
-                        const ua_str = fr.request.user_agent.?.string;
-                        const ia_ua = "Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0";
-                        const ia_bot_ua = find(u8, ua_str, ia_ua) == null;
-                        if (bot.malicious and !ia_bot_ua) {
-                            log.err("Dropping malicious traffic", .{});
-                            return Router.defaultResponse(.forbidden);
-                        }
-                    },
-                }
-            },
-            .browser => |bwsr| {
-                const age: std.Io.Duration = bwsr.age(fr.request.now) catch .fromSeconds(0);
-                const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 200).nanoseconds;
-                const real_ua = ua.validate(fr.request);
-                switch (fr.downstream.gateway) {
-                    .zwsgi => |zw| if (zw.known.get(.SERVER_PORT)) |port|
-                        if (eql(u8, port, "444")) return dropRequest(fr),
-                    else => {},
-                }
-
-                // hastur
-                if ((botdetect.score >= 1 or (real_ua.agent == .bot and
-                    real_ua.agent.bot.name == .malicious)) and
-                    ua.agent.browser.version != 128) return dropRequest(fr);
-                // super abusive bot
-                if ((bwsr.name == .chrome or bwsr.name == .edge) and
-                    bwsr.version <= 137 and bwsr.version >= 130)
-                    return dropRequest(fr);
-
-                if (fr.request.accept.encoding == null and bwsr.name == .firefox) {
-                    log.err("encoding missing on firefox", .{});
-                    return dropRequest(fr);
-                }
-
-                const bads = [_][]const u8{
-                    \\"Not;A=Brand";v="8"
-                    ,
-                    \\"Chromium";v="143", "Google Chrome";v="143", "Not_A Brand";v="99"
-                    ,
-                    \\"Chromium";v="148", "Google Chrome";v="148", "Not/A)Brand";v="99"
-                    ,
-                    \\"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"
-                    ,
-                    \\"Google Chrome";v="149", "Chromium";v="149", "Not)A;Brand";v="24"
-                    ,
-                    \\"Chromium";v="148", "Microsoft Edge";v="148", "Not/A)Brand";v="99"
-                    ,
-                    \\"Not_A Brand";v="8", "Chromium";v=
-                    ,
-                    \\"Not/A)Brand";v="99", "Chromium";v=
-                    ,
-                };
-                inline for (bads) |bad| {
-                    if (fr.request.headers.getCustomValue("HTTP_SEC_CH_UA") catch null) |val| {
-                        if (startsWith(u8, val, bad)) {
-                            log.err("banned client hint", .{});
-                            return dropRequest(fr);
-                        }
-                    }
-                }
-                if (too_old) {
-                    log.err("too old", .{});
-                    return dropRequest(fr);
-                }
-            },
+            .bot => return botRequest(fr, ua),
+            .browser => return browserRequest(fr, ua),
             .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/"))
-                return dropRequest(fr),
+                return dropRequest(fr, "opera"),
             .script => {},
         }
         return null;

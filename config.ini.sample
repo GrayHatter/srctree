@@ -11,9 +11,10 @@
 # skip_repos = repo-without-remotes
 
 [server]
-# block_scripted_traffic = true
-remove_on_start = true
 # sock = ./srctree.sock
+remove_on_start = true
+# block_scripted_traffic = true
+# debug_blocked_traffic = true
 
 [repos]
 # dir = repos/
