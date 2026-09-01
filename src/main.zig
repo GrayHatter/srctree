@@ -28,19 +28,6 @@ fn usage(long: bool) noreturn {
     std.process.exit(0);
 }
 
-fn findConfig(target: []const u8) ?[]const u8 {
-    if (target.len > 0) return target;
-
-    if (std.os.linux.getuid() < 1000) {
-        // TODO and uid shell not in /etc/shells
-        // search in /etc/srctree/
-    } else {
-        // search in cwd, then home dir
-    }
-
-    return null;
-}
-
 const Options = struct {
     config_path: []const u8,
     data_dir: []const u8,
@@ -56,9 +43,45 @@ const Options = struct {
 };
 
 pub const Config = @import("Config.zig");
-
-//pub var global_config = &Config.global;
 pub var config_ini: Ini.Config(Config) = .{ .ini = .empty };
+var conf: Cfg = undefined;
+pub const Cfg = struct {
+    alloc: Allocator = undefined,
+    file: ?std.Io.File = null,
+    data: []u8 = &.{},
+    reader: Io.File.Reader,
+    pub fn loadConfig(cfg: *Cfg, path: []const u8, a: Allocator, io: Io) !void {
+        cfg.alloc = a;
+        cfg.file = try Io.Dir.cwd().openFile(io, path, .{});
+        try cfg.reloadConfig(io);
+    }
+
+    pub fn reloadConfig(cfg: *Cfg, io: Io) !void {
+        if (cfg.file) |*cf| {
+            const len = try cf.length(io);
+            cfg.alloc.free(cfg.data);
+            if (cfg.alloc.alloc(u8, len)) |alloc| {
+                cfg.alloc.free(cfg.data);
+                cfg.data = alloc;
+            } else |err| return err;
+
+            cfg.reader = cf.reader(io, cfg.data);
+            if (Ini.Config(Config).init(&cfg.reader.interface, cfg.alloc)) |ini| {
+                config_ini.raze(cfg.alloc);
+                config_ini = ini;
+            } else |err| return err;
+
+            Config.global = try config_ini.resolve();
+        }
+    }
+
+    pub fn razeConfig(cfg: *Cfg, io: Io) void {
+        cfg.file.?.close(io);
+        cfg.file = null;
+        cfg.alloc.free(cfg.data);
+        config_ini.raze(cfg.alloc);
+    }
+};
 
 const Auth = @import("Auth.zig");
 
@@ -103,31 +126,16 @@ pub fn main(init: std.process.Init) !void {
     // *SIGH*, I love zig master :/
     var threaded: std.Io.Threaded = .init(a, .{ .environ = init.minimal.environ });
     const io = threaded.io();
-    const cwd = std.Io.Dir.cwd();
 
-    var cfg_file: ?std.Io.File = null;
-    if (findConfig(options.config_path)) |cfg| {
-        std.debug.print("reading from '{s}'\n", .{cfg});
-        cfg_file = try cwd.openFile(io, options.config_path, .{});
-    }
-
-    var cfg_data: []u8 = &.{};
-    defer a.free(cfg_data);
-    if (cfg_file) |*cf| {
-        const len = try cf.length(io);
-        cfg_data = try a.alloc(u8, len);
-        var config_reader = cf.reader(io, cfg_data);
-        config_ini = try Ini.Config(Config).init(&config_reader.interface, a);
-        Config.global = try config_ini.resolve();
-    }
-    defer config_ini.raze(a);
+    std.debug.print("reading from '{s}'\n", .{options.config_path});
+    try conf.loadConfig(options.config_path, a, io);
+    defer conf.razeConfig(io);
 
     if (Config.global.owner) |owner| {
         if (owner.email) |email| {
             log.debug("{s}", .{email});
         }
     }
-
     try Database.init(.{ .backing = .{ .filesys = .{ .dir = options.data_dir } } }, io);
     defer Database.raze(io);
 

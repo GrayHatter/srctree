@@ -250,7 +250,9 @@ test {
     repo.ci.enabled = true;
     try repo.ci.prepare(io);
 
+    const old_dir = repo.ci.working_dir;
     repo.ci.working_dir = tdir.dir;
+    defer repo.ci.working_dir = old_dir;
 
     try repo.ci.run(&commit, a, io);
 
