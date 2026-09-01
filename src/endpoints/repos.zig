@@ -366,7 +366,6 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
         }
     }
     const status = repo.ci.status(a, io) catch unreachable;
-    //std.debug.print("repo.ci {s} = {any}\n", .{ name, repo.ci.srctree });
 
     const commit_uri = try allocPrint(a, "/repo/{s}/commit/{f}", .{ name, std.fmt.alt(sha, .fmtHex) });
     const sha_str = try sha.text().dupe(a);

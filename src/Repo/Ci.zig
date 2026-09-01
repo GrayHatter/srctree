@@ -1,28 +1,28 @@
 /// Aligned to Git.Repo for @fieldParentPtr
 enabled: bool align(8) = false,
-conf_zon: ?CiConf = null,
+conf_zon: ?CiZon = null,
 conf_bytes: [:0]const u8 = &.{},
 working_dir: ?Io.Dir = null,
 artifacts: Artifacts = .{},
-cache: Cache = .{},
+cache: Cache = undefined,
 source: Source = undefined,
 
 const Ci = @This();
 
-pub const CiConf = struct {
-    srctree: ?SrctreeConf,
+pub const CiZon = struct {
+    srctree: ?SrctreeZon,
 
-    pub const SrctreeConf = struct {
+    pub const SrctreeZon = struct {
         ci: ?[]const u8,
         docs: ?[]const u8,
 
-        pub const empty: SrctreeConf = .{
+        pub const empty: SrctreeZon = .{
             .ci = null,
             .docs = null,
         };
     };
 
-    pub const empty: CiConf = .{
+    pub const empty: CiZon = .{
         .srctree = .empty,
     };
 };
@@ -42,7 +42,7 @@ pub fn status(ci: *Ci, a: Allocator, io: Io) !bool {
                 .blob => if (find(u8, blob.blob.data.blob, ".srctree =")) |_| {
                     defer blob.blob.raze(a);
                     ci.conf_bytes = try a.dupeSentinel(u8, blob.blob.data.blob, 0);
-                    ci.conf_zon = std.zon.parse.fromSliceAlloc(CiConf, a, ci.conf_bytes, null, .{
+                    ci.conf_zon = std.zon.parse.fromSliceAlloc(CiZon, a, ci.conf_bytes, null, .{
                         .ignore_unknown_fields = true,
                     }) catch |err| {
                         log.err("unable to parse zon {}", .{err});
@@ -82,11 +82,14 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
     defer ci.source.raze(a, io);
     try ci.source.checkout(a, io);
 
-    try ci.cache.inject(a, io);
-    defer ci.cache.backup(a, io) catch unreachable;
+    try ci.cache.init(io);
+    defer ci.cache.raze(a, io);
+
+    try ci.cache.inject(ci.source.dir, a, io);
+    defer ci.cache.backup(ci.source.dir, a, io);
 
     try ci.artifacts.init(a, io);
-    defer ci.artifacts.save(a, io) catch unreachable;
+    defer ci.artifacts.save(a, io);
 
     try ci.source.stepSetup(a, io);
     try ci.source.stepBuild(a, io);
@@ -114,7 +117,7 @@ pub const Artifacts = struct {
         _ = io;
     }
 
-    pub fn save(art: *Artifacts, a: Allocator, io: Io) !void {
+    pub fn save(art: *Artifacts, a: Allocator, io: Io) void {
         _ = art;
         _ = a;
         _ = io;
@@ -122,14 +125,14 @@ pub const Artifacts = struct {
 };
 
 pub const Source = struct {
-    working_dir: Io.Dir,
+    dir: Io.Dir,
     tree: git.Tree,
 
     pub fn init(src: *Source, name: []const u8, commit: *const git.Commit, a: Allocator, io: Io) !void {
         const ci: *Ci = @fieldParentPtr("source", src);
         const repo: *Repo = @fieldParentPtr("ci", ci);
         if (ci.working_dir) |wdir| {
-            src.working_dir = try wdir.createDirPathOpen(io, name, .{
+            src.dir = try wdir.createDirPathOpen(io, name, .{
                 .open_options = .{ .iterate = true },
             });
         }
@@ -139,7 +142,7 @@ pub const Source = struct {
     pub fn checkout(src: *Source, a: Allocator, io: Io) !void {
         const ci: *Ci = @fieldParentPtr("source", src);
         const r: *Repo = @fieldParentPtr("ci", ci);
-        try src.tree.checkout(src.working_dir, &r.git, a, io);
+        try src.tree.checkout(src.dir, &r.git, a, io);
     }
 
     pub fn stepSetup(src: *Source, a: Allocator, io: Io) !void {
@@ -163,7 +166,7 @@ pub const Source = struct {
     }
 
     pub fn raze(src: *Source, a: Allocator, io: Io) void {
-        src.working_dir.close(io);
+        src.dir.close(io);
         src.tree.raze(a);
     }
 
@@ -178,7 +181,7 @@ pub const Source = struct {
         var child = try std.process.spawn(io, .{
             .argv = argv,
             .expand_arg0 = .no_expand,
-            .cwd = .{ .dir = src.working_dir },
+            .cwd = .{ .dir = src.dir },
             .stdin = if (stdin != null) .pipe else .ignore,
             .stdout = .pipe,
             .stderr = .pipe,
@@ -207,22 +210,60 @@ pub const Source = struct {
 };
 
 pub const Cache = struct {
-    pub fn inject(c: *Cache, _: Allocator, _: Io) !void {
-        if (Cache.enabled()) return;
+    dir: Io.Dir,
+
+    pub fn init(c: *Cache, io: Io) !void {
+        if (!Cache.enabled()) return;
         const ci: *Ci = @alignCast(@fieldParentPtr("cache", c));
-        _ = ci;
+        const r: *Repo = @fieldParentPtr("ci", ci);
+        if (ci.working_dir) |wdir| {
+            if (cfgPath()) |path| {
+                const path_dir = try wdir.createDirPathOpen(io, path, .{});
+                defer path_dir.close(io);
+                c.dir = try path_dir.createDirPathOpen(io, r.name.?, .{
+                    .open_options = .{ .iterate = true },
+                });
+            } else return error.BadConfig;
+        } else unreachable;
     }
 
-    pub fn backup(c: *Cache, _: Allocator, _: Io) !void {
-        if (Cache.enabled()) return;
-        const ci: *Ci = @alignCast(@fieldParentPtr("cache", c));
-        _ = ci;
+    pub fn raze(c: *Cache, _: Allocator, io: Io) void {
+        if (!Cache.enabled()) return;
+        c.dir.close(io);
+    }
+
+    pub fn inject(c: *Cache, dest_dir: Io.Dir, _: Allocator, io: Io) !void {
+        if (!Cache.enabled()) return;
+        c.dir.renamePreserve("zig-cache", dest_dir, ".zig-cache", io) catch |err| {
+            if (err == error.NotDir) return; // expected
+            log.err("unable to inject cache {}", .{err});
+        };
+    }
+
+    pub fn backup(c: *Cache, src_dir: Io.Dir, _: Allocator, io: Io) void {
+        if (!Cache.enabled()) return;
+        _ = src_dir.statFile(io, ".zig-cache", .{}) catch |err| {
+            log.err("Unable to stat cache dir {}", .{err});
+        };
+        src_dir.renamePreserve(".zig-cache", c.dir, "zig-cache", io) catch |err| {
+            log.err("Unable to backup cache dir {}", .{err});
+        };
+    }
+
+    fn cfgPath() ?[]const u8 {
+        if (global_config.ci) |ci| {
+            if (ci.cache_path) |path| {
+                return path;
+            }
+        }
+        return null;
     }
 
     fn enabled() bool {
         if (global_config.ci) |ci| {
             if (ci.cache_enabled) |en| {
-                return en;
+                if (!en) return false;
+                return ci.cache_path != null;
             } else return false;
         } else return false;
     }
@@ -244,8 +285,7 @@ test {
     defer commit.raze(a);
 
     const stats = try repo.ci.status(a, io);
-    _ = stats;
-    //std.debug.print("repo.ci = {any} {any}\n", .{ repo.ci.conf_zon, stats });
+    if (false) std.debug.print("repo.ci = {any} {any}\n", .{ repo.ci.conf_zon, stats });
 
     repo.ci.enabled = true;
     try repo.ci.prepare(io);

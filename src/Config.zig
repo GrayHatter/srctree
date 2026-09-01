@@ -70,10 +70,12 @@ pub const Ci = struct {
     enabled: ?bool,
     working_path: ?[]const u8,
     cache_enabled: ?bool,
+    cache_path: ?[]const u8,
 
     pub const default: Ci = .{
         .enabled = false,
-        .working_path = "working",
+        .working_path = "working/",
         .cache_enabled = false,
+        .cache_path = null,
     };
 };
