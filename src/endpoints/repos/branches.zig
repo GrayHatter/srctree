@@ -11,14 +11,14 @@ pub fn list(f: *Frame) Router.Error!void {
     // leaks a lot
     var all_branches: std.ArrayList(Git.Branch) = .empty;
     for (repo.refs.map.keys(), repo.refs.map.values()) |name, branch| {
-        switch (branch) {
-            .sha => try all_branches.append(f.alloc, .{ .name = name, .sha = branch.sha }),
-            .heads => try all_branches.append(f.alloc, .{ .name = name, .sha = branch.sha }),
-            .ref => {},
-            .tag => {},
-            .diff => {},
-            .remote => {},
-        }
+        try all_branches.append(f.alloc, .{ .name = name, .sha = switch (branch) {
+            .sha => |sha| sha,
+            .heads => repo.ref(branch.heads) catch .zeros,
+            .ref => continue,
+            .tag => continue,
+            .diff => continue,
+            .remote => continue,
+        } });
     }
     //if (repo.loadBranchesFrom("refs/remotes/upstream", f.alloc, f.io)) |upstream| {
     //    try all_branches.appendSlice(f.alloc, upstream);

@@ -100,7 +100,7 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
 
 pub fn raze(ci: *Ci, a: Allocator, io: Io) void {
     if (ci.working_dir) |*wd| wd.close(io);
-    a.free(ci.conf_bytes);
+    if (ci.conf_bytes.len > 0) a.free(ci.conf_bytes);
     if (ci.conf_zon) |zon| std.zon.parse.free(a, zon);
 }
 
