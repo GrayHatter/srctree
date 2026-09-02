@@ -1,23 +1,67 @@
-pub const Event = enum {
-    repo_push,
-    new_comment,
-    new_comment_system,
+pub const Event = union(enum) {
+    repo: Repo,
+    build: Build,
+    comment: Comment,
+
+    pub const Repo = enum {
+        push,
+        force_push,
+    };
+
+    pub const Build = enum {
+        start,
+        finish,
+    };
+
+    pub const Comment = enum {
+        new,
+        new_system,
+    };
+
+    pub fn trigger(evt: Event, repo: []const u8, idx: usize, url: []const u8, msg: Message, io: Io) void {
+        switch (evt) {
+            .repo => unreachable,
+            .build => unreachable,
+            .comment => |cmt| switch (cmt) {
+                .new, .new_system => {
+                    Ack.email.newComment(repo, idx, url, msg, io) catch {};
+                },
+            },
+        }
+    }
 };
 
 pub fn newComment(repo: []const u8, idx: usize, url: []const u8, msg: Message, io: Io) !void {
     if (comptime builtin.is_test) return;
-    const notifications = @import("Config.zig").global.notifications orelse return;
-    if (!notifications.enabled) return;
-
-    inline for (@typeInfo(Ack.email).@"struct".decls) |dcl| {
-        if (std.mem.eql(u8, dcl.name, "newComment"))
-            try @call(.auto, @field(Ack.email, dcl.name), .{ repo, idx, url, msg, io });
-    }
+    const evt: Event = .{ .comment = .new };
+    evt.trigger(repo, idx, url, msg, io);
 }
 
 pub const Ack = struct {
     pub const email = struct {
+        pub fn send(
+            sender: []const u8,
+            receiver: []const u8,
+            date: []const u8,
+            subject: []const u8,
+            body: []const u8,
+            io: Io,
+        ) void {
+            smtp.sendMsg(.{
+                .from = sender,
+                .to = receiver,
+                .date = date,
+                .subject = subject,
+                .body = body,
+            }, io) catch |e| {
+                std.log.err("{any}", .{e});
+                @panic("backtrace");
+            };
+        }
+
         pub fn newComment(repo: []const u8, idx: usize, url: []const u8, msg: Message, io: Io) !void {
+            const notifications = @import("Config.zig").global.notifications orelse return;
+            if (!notifications.enabled) return;
             const sender = if (cfg.notifications) |note|
                 note.sender orelse "\"srctree\" <srctree@gr.ht>"
             else
@@ -37,16 +81,7 @@ pub const Ack = struct {
             var body_b: [2048]u8 = undefined;
             const body = try bufPrint(&body_b, "https://srctree.gr.ht{s}", .{url});
 
-            smtp.sendMsg(.{
-                .from = sender,
-                .to = receiver,
-                .date = date,
-                .subject = subject,
-                .body = body,
-            }, io) catch |e| {
-                std.log.err("{any}", .{e});
-                @panic("backtrace");
-            };
+            send(sender, receiver, date, subject, body, io);
         }
     };
 };
