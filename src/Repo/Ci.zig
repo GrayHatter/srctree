@@ -275,7 +275,11 @@ test {
     var tdir = std.testing.tmpDir(.{ .iterate = true });
     defer tdir.cleanup();
 
+    if (!config.full_ci) return error.SkipZigTest;
+
     global_config.ci = .default;
+    global_config.ci.?.cache_path = "local_cache";
+    global_config.ci.?.cache_enabled = true;
 
     const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
     var repo = try Repo.init("srctree", cwd, io);
@@ -325,3 +329,4 @@ const find = std.mem.find;
 const parseInt = std.fmt.parseInt;
 const git = @import("../git.zig");
 const global_config = &@import("../Config.zig").global;
+const config = @import("config");

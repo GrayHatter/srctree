@@ -6,9 +6,13 @@ pub fn build(b: *std.Build) void {
     const use_llvm = optimize != .Debug or true;
 
     const enable_libcurl = b.option(bool, "libcurl", "enable linking with libcurl") orelse false;
-    const options = b.addOptions();
+    const full_ci = b.option(bool, "fullci", "enable full CI tests") orelse false;
+    const ci_cache_path = b.option([]const u8, "ci_cache_path", "path to store the CI tests cache");
 
+    const options = b.addOptions();
     options.addOption(bool, "libcurl", enable_libcurl);
+    options.addOption(bool, "full_ci", full_ci);
+    options.addOption(?[]const u8, "ci_cache_path", ci_cache_path);
 
     const verse = b.dependency("verse", .{
         .target = target,
