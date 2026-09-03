@@ -3,9 +3,9 @@ enabled: bool align(8) = false,
 conf_zon: ?CiZon = null,
 conf_bytes: [:0]const u8 = &.{},
 working_dir: ?Io.Dir = null,
+source: Source = .{},
+cache: Cache = .{},
 artifacts: Artifacts = .{},
-cache: Cache = undefined,
-source: Source = undefined,
 
 const Ci = @This();
 
@@ -91,9 +91,10 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
     try ci.artifacts.init(a, io);
     defer ci.artifacts.save(a, io);
 
-    try ci.source.stepSetup(a, io);
-    try ci.source.stepBuild(a, io);
-    try ci.source.stepTests(a, io);
+    try ci.source.setup(a, io);
+    try ci.source.buildMain(a, io);
+    try ci.source.buildTests(a, io);
+    try ci.source.buildDocs(a, io);
 
     // save build output
 }
@@ -111,32 +112,52 @@ pub fn validate(ci: *Ci, a: Allocator, io: Io) !void {
 }
 
 pub const Artifacts = struct {
-    pub fn init(art: *Artifacts, a: Allocator, io: Io) !void {
-        _ = art;
+    dir: Io.Dir = undefined,
+
+    pub fn init(art: *Artifacts, dir: Io.Dir, a: Allocator, io: Io) !void {
+        art.dir = dir;
         _ = a;
         _ = io;
     }
 
     pub fn save(art: *Artifacts, a: Allocator, io: Io) void {
-        _ = art;
-        _ = a;
-        _ = io;
+        const ci: *Ci = @fieldParentPtr("artifacts", art);
+        //const repo: *Repo = @fieldParentPtr("ci", ci);
+        if (ci.conf_zon.?.srctree) |zon| {
+            if (zon.docs) art.saveDocs(a, io);
+        }
+    }
+
+    fn saveDocs(art: *Artifacts, _: Allocator, io: Io) void {
+        const dir = art.dir.statFile(io, "docs", .{}) catch |err| {
+            log.err("Unable to stat docs {}", .{err});
+            return;
+        };
+        _ = dir;
     }
 };
 
 pub const Source = struct {
-    dir: Io.Dir,
-    tree: git.Tree,
+    dir: Io.Dir = undefined,
+    commit: *const git.Commit = undefined,
+    tree: git.Tree = undefined,
 
     pub fn init(src: *Source, name: []const u8, commit: *const git.Commit, a: Allocator, io: Io) !void {
         const ci: *Ci = @fieldParentPtr("source", src);
         const repo: *Repo = @fieldParentPtr("ci", ci);
         if (ci.working_dir) |wdir| {
-            src.dir = try wdir.createDirPathOpen(io, name, .{
+            const dir = try wdir.createDirPathOpen(io, name, .{
                 .open_options = .{ .iterate = true },
             });
+
+            const tree = try commit.loadTree(&repo.git, a, io);
+            src.* = .{
+                .dir = dir,
+                .tree = tree,
+                .commit = commit,
+            };
         }
-        src.tree = try commit.loadTree(&repo.git, a, io);
+        return error.Unreachable;
     }
 
     pub fn checkout(src: *Source, a: Allocator, io: Io) !void {
@@ -145,24 +166,34 @@ pub const Source = struct {
         try src.tree.checkout(src.dir, &r.git, a, io);
     }
 
-    pub fn stepSetup(src: *Source, a: Allocator, io: Io) !void {
+    pub fn setup(src: *Source, a: Allocator, io: Io) !void {
         _ = src;
         _ = a;
         _ = io;
     }
 
-    pub fn stepBuild(src: *Source, a: Allocator, io: Io) !void {
+    pub fn buildMain(src: *Source, a: Allocator, io: Io) !void {
         var stdout: Io.Writer.Allocating = .init(a);
         var stderr: Io.Writer.Allocating = .init(a);
         defer stdout.deinit();
         defer stderr.deinit();
-        try src.exec(&.{ "zig", "build" }, &stdout.writer, &stderr.writer, null, io);
+        try src.exec(&.{ "zig", "build", "--summary", "all" }, &stdout.writer, &stderr.writer, null, io);
+        std.debug.print("stdout: '{s}'\n", .{stdout.written()});
+        std.debug.print("stderr: '{s}'\n", .{stderr.written()});
     }
 
-    pub fn stepTests(src: *Source, a: Allocator, io: Io) !void {
+    pub fn buildTests(src: *Source, a: Allocator, io: Io) !void {
         _ = src;
         _ = a;
         _ = io;
+    }
+
+    pub fn buildDocs(src: *Source, a: Allocator, io: Io) !void {
+        var stdout: Io.Writer.Allocating = .init(a);
+        var stderr: Io.Writer.Allocating = .init(a);
+        defer stdout.deinit();
+        defer stderr.deinit();
+        try src.exec(&.{ "zig", "build", "--summary", "all", "docs" }, &stdout.writer, &stderr.writer, null, io);
     }
 
     pub fn raze(src: *Source, a: Allocator, io: Io) void {
@@ -210,7 +241,7 @@ pub const Source = struct {
 };
 
 pub const Cache = struct {
-    dir: Io.Dir,
+    dir: Io.Dir = undefined,
 
     pub fn init(c: *Cache, io: Io) !void {
         if (!Cache.enabled()) return;
