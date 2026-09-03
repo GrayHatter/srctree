@@ -13,46 +13,43 @@ Good luck!
 
 
 ## TODO
-In an unsorted order
   - [ ] srctree
-    - [x] internal database upgrade scripts
-    - [ ] manual code sync
     - [x] view code
-    - [x] public http clone
     - [x] view commits
+    - [x] create repos
+    - [x] create issues
+    - [x] clone repo from remote
     - [-] diff/code review
-    - [ ] CI API
+    - [-] CI API
+      - [x] `build.zig` support
+      - [ ] every other build system.
     - [x] blame view for files
     - [ ] blame view for dirs
     - [x] view history for file (navigable blame view)
     - [x] syntax highlighting (ish)
-    - [ ] native syntax highlighting
+    - [x] native syntax highlighting
+      - [x] zig
+      - [ ] every other language
     - [x] README markdown support/formatting
     - [x] fold repo .files by default
-    - [ ] comment on commits
     - [ ] email support
-      - [ ] outgoing email
+      - [-] outgoing email (partial)
       - [ ] incoming email
-    - [-] submit diffs (works with special build step)
-    - [x] open issues
-    - [x] clone repo from remote
-    - [ ] set HEAD for newly clone repos
+    - [x] submit diffs (via git)
     - [x] auto pull from upstream
     - [x] auto push to downstream
-    - [ ] smart push/pull system
-    - [ ] auto create git branch for issues/diffs
+    - [ ] smart push/pull (between networks/peers)
     - [x] support for viewing branches
     - [ ] network collection & browsing
     - [x] owner heat map
     - [x] owner activity journal
       - [x] commits
       - [ ] anything other that
-    - [ ] user accounts
-    - [ ] new account setup
-    - [ ] git via ssh support
-    - [ ] Integration with other web VCS
-    - [ ] Improve CSS theme
-
+    - [ ] users
+      - [ ] account creation UI
+    - [-] Integration with other web VCS
+      - [x] clone issues
+      - [ ] everything else
   - [ ] git 
     - [x] raw blob
     - [x] packed blob
@@ -61,12 +58,12 @@ In an unsorted order
       - [ ] write
     - [x] packed delta
     - [ ] tags
-    - [ ] refs
-    - [ ] remotes
-    - [x] git web (partial)
+    - [x] refs
+    - [x] remotes
+    - [x] git web
     - [ ] PGP support
-    - [ ] commitish (see git.zig)
-    - [ ] .git repo init
-    - [ ] push/pull
+    - [ ] repo init
+    - [ ] push
+    - [ ] pull
     - [ ] blame
     - [ ] diff/patch generation
