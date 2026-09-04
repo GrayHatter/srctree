@@ -9,17 +9,24 @@ pub const index = list;
 const ArtifactsHtml = T.PageData("repo/artifacts.html");
 
 fn list(f: *Frame) Router.Error!void {
-    const rd = RouteData.init(f) orelse return error.ServerFault;
+    const rd = RouteData.init(f) orelse return error.NotFound;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;
-    repo.loadData(f.alloc, f.io) catch return error.ServerFault;
+    var repo = (Repo.open(rd.name, vis, f.io) catch return error.ServerFault) orelse return error.NotFound;
+    repo.git.loadData(f.alloc, f.io) catch return error.ServerFault;
+
+    if (repo.ci.status(f.alloc, f.io) catch unreachable) {
+        repo.ci.prepare(f.io) catch unreachable;
+        var commit = repo.git.HEAD(f.alloc, f.io) catch unreachable;
+        defer commit.raze(f.alloc);
+        repo.ci.run(&commit, f.alloc, f.io) catch unreachable;
+    }
 
     var page: ArtifactsHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
         .repo_header = .{
             .repo_name = .abx(rd.name),
-            .description = .abx(repo.description(f.alloc, f.io) catch ""),
+            .description = .abx(repo.git.description(f.alloc, f.io) catch ""),
             .blame = null,
             .git_uri = null,
             .upstream = null,

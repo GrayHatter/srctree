@@ -34,6 +34,18 @@ pub fn raze(r: *Repo, a: Allocator, io: Io) void {
     r.ci.raze(a, io);
 }
 
+pub fn open(name: []const u8, vis: Vis.Select, io: Io) !?Repo {
+    if (!Vis.fromConfig(name).isVisible(vis)) return null;
+    var root = try dirs.directory(.public, io);
+    defer root.close(io);
+    const dir = root.openDir(io, name, .{}) catch |err| switch (err) {
+        error.FileNotFound => return null,
+        error.NotDir => return null,
+        else => return err,
+    };
+    return try .init(name, dir, io);
+}
+
 pub const Sort = struct {
     alloc: Allocator,
     io: Io,

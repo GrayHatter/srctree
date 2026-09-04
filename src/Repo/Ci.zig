@@ -88,7 +88,7 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
     try ci.cache.inject(ci.source.dir, a, io);
     defer ci.cache.backup(ci.source.dir, a, io);
 
-    try ci.artifacts.init(a, io);
+    try ci.artifacts.init(ci.source.dir, commit.sha, a, io);
     defer ci.artifacts.save(a, io);
 
     try ci.source.setup(a, io);
@@ -112,28 +112,42 @@ pub fn validate(ci: *Ci, a: Allocator, io: Io) !void {
 }
 
 pub const Artifacts = struct {
-    dir: Io.Dir = undefined,
+    src: Io.Dir = undefined,
+    sha: git.Sha = undefined,
 
-    pub fn init(art: *Artifacts, dir: Io.Dir, a: Allocator, io: Io) !void {
-        art.dir = dir;
-        _ = a;
-        _ = io;
+    pub fn init(art: *Artifacts, src_dir: Io.Dir, sha: git.Sha, _: Allocator, _: Io) !void {
+        art.* = .{
+            .src = src_dir,
+            .sha = sha,
+        };
     }
 
     pub fn save(art: *Artifacts, a: Allocator, io: Io) void {
-        const ci: *Ci = @fieldParentPtr("artifacts", art);
+        const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
         //const repo: *Repo = @fieldParentPtr("ci", ci);
         if (ci.conf_zon.?.srctree) |zon| {
-            if (zon.docs) art.saveDocs(a, io);
+            if (zon.docs) |_| art.saveDocs(a, io);
         }
     }
 
     fn saveDocs(art: *Artifacts, _: Allocator, io: Io) void {
-        const dir = art.dir.statFile(io, "docs", .{}) catch |err| {
+        const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
+        const repo: *Repo = @fieldParentPtr("ci", ci);
+        const zig_out = art.src.openDir(io, "zig-out", .{}) catch |err| {
+            if (err != error.NotDir)
+                log.err("unable to open `zig-out' {}", .{err});
+            return;
+        };
+        _ = zig_out.statFile(io, "docs", .{}) catch |err| {
             log.err("Unable to stat docs {}", .{err});
             return;
         };
-        _ = dir;
+        const dest = types.iterableDir(.artifiact, io) catch unreachable;
+        const repo_dir = dest.createDirPathOpen(io, repo.name.?, .{}) catch unreachable;
+        zig_out.renamePreserve("docs", repo_dir, "docs", io) catch |err| {
+            if (err == error.NotDir) return; // expected
+            log.err("unable to inject cache {}", .{err});
+        };
     }
 };
 
@@ -156,6 +170,7 @@ pub const Source = struct {
                 .tree = tree,
                 .commit = commit,
             };
+            return;
         }
         return error.Unreachable;
     }
@@ -216,6 +231,7 @@ pub const Source = struct {
             .stdin = if (stdin != null) .pipe else .ignore,
             .stdout = .pipe,
             .stderr = .pipe,
+            .environ_map = &.{ .array_hash_map = .empty, .allocator = undefined },
         });
 
         if (child.stdin) |cstdin| {
@@ -322,7 +338,7 @@ test {
     const stats = try repo.ci.status(a, io);
     if (false) std.debug.print("repo.ci = {any} {any}\n", .{ repo.ci.conf_zon, stats });
 
-    repo.ci.enabled = true;
+    try std.testing.expectEqual(true, repo.ci.enabled);
     try repo.ci.prepare(io);
 
     const old_dir = repo.ci.working_dir;
@@ -361,3 +377,4 @@ const parseInt = std.fmt.parseInt;
 const git = @import("../git.zig");
 const global_config = &@import("../Config.zig").global;
 const config = @import("config");
+const types = @import("../types.zig");
