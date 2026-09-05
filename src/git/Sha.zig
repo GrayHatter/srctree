@@ -4,7 +4,8 @@ const Sha = @This();
 
 pub const Partial = struct {
     bytes: [31]u8,
-    /// Unfortunately Git thinks returning 7 ascii is reasonable so this is hex len, or bin nibbles
+    /// Unfortunately Git thinks returning 7 ascii is reasonable;
+    /// `Partial.len` is "hex len", or "bin nibbles" [hex.len / 2]
     len: u8,
 };
 
@@ -15,6 +16,8 @@ pub const Hash = union(enum) {
 
     pub const zeros: Hash = .{ .sha1 = @splat(0) };
     pub const zeros265: Hash = .{ .sha256 = @splat(0) };
+
+    pub const max_len = 32;
 
     pub const Sha1 = [20]u8;
     pub const Sha256 = [32]u8;

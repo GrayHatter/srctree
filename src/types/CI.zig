@@ -1,28 +1,20 @@
 index: usize,
-created: i64 = 0,
+created: types.Timestamp = 0,
+updated: types.Timestamp = 0,
 repo: []const u8,
-reason: []const u8,
-source: []const u8,
+hash: Hash = @splat(0),
+revision: usize = 0,
+trigger: []const u8 = &.{},
 result: Result = .unknown,
 thread_id: usize = 0,
-commit_hash: Hash = @splat(0),
 
+thread: ?*Thread = null,
 steps: ArrayList(Step) = .empty,
 
 pub const CI = @This();
-pub const Hash = Types.Sha1Bin;
+pub const Hash = types.DefaultHash;
 
-pub const Result = enum(u8) {
-    unknown,
-    pending,
-    waiting,
-    started,
-    running,
-    stalled,
-    passed,
-    failed,
-    @"error",
-};
+pub const Result = Repo.Ci.Result;
 
 pub const Step = struct {
     result: Result = .unknown,
@@ -32,29 +24,32 @@ pub const Step = struct {
 pub const type_prefix = .continuous_integration;
 pub const type_version = 0;
 
-const typeio = Types.readerWriter(CI, .{
+const typeio = types.readerWriter(CI, .{
     .index = 0,
     .repo = &.{},
-    .reason = &.{},
-    .source = &.{},
 });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
-const Index = Types.Index(type_prefix);
+const Index = types.Index(type_prefix);
 const fmt_str = "{s}.{x}." ++ @tagName(type_prefix);
 
-pub fn new(repo: []const u8, reason: []const u8, source: []const u8, result: Result, commit_hash: Hash, io: Io) !CI {
-    const max: usize = try Index.scoped.next(repo, io);
+pub fn new(repo: *const Repo, trigger: []const u8, result: Result, src_hash: Hash, io: Io) !CI {
+    const max: usize = try Index.scoped.next(repo.name orelse return error.InvalidRepo, io);
     const now = Io.Clock.real.now(io).toSeconds();
     var ci = CI{
         .index = max,
         .created = now,
-        .repo = repo,
-        .reason = reason,
-        .source = source,
+        .updated = now,
+        .repo = repo.name.?,
+        .hash = src_hash,
+        .revision = 0,
+        .trigger = trigger,
         .result = result,
-        .commit_hash = commit_hash,
     };
+
+    var thread: Thread = try .new(CI, &ci, io);
+    try thread.commit(io);
+    ci.thread_id = thread.index;
     try ci.commit(io);
     return ci;
 }
@@ -65,18 +60,37 @@ pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !CI {
 
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, fmt_str, .{ repo, index });
-    var reader = Types.loadDataReader(type_prefix, filename, a, io) catch return error.FSFault;
+    var reader = types.loadDataReader(type_prefix, filename, a, io) catch return error.FSFault;
     return readerFn(&reader);
 }
 
 pub fn commit(ci: CI, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, fmt_str, .{ ci.repo, ci.index });
-    const file = try Types.commit(type_prefix, filename, io);
+    const file = try types.commit(type_prefix, filename, io);
     defer file.close(io);
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
     try writerFn(&ci, &fd_writer.interface);
+}
+
+pub fn loadThread(ci: *CI, a: Allocator, io: Io) !*Thread {
+    if (ci.thread) |thr| return thr;
+    const t = try a.create(Thread);
+    t.* = Thread.open(ci.thread_id, a, io) catch |err| t: {
+        log.err("Error loading thread!! {} old_id: {}", .{ err, ci.thread_id });
+        const thread = Thread.new(CI, ci, io) catch |err2| {
+            log.err(" unable to create new {}", .{err2});
+            return error.UnableToLoadThread;
+        };
+        log.err("new thread_id {}", .{thread.index});
+        ci.thread_id = thread.index;
+        try ci.commit(io);
+        break :t thread;
+    };
+
+    ci.thread = t;
+    return t;
 }
 
 pub const Comment = struct {
@@ -89,13 +103,17 @@ test CI {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(try tempdir.dir.createDirPathOpen(io, "continuous_integration", .{ .open_options = .{ .iterate = true } }), io);
+    try types.init(try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } }), io);
 
-    var ci = try CI.new("repo_name", "reason", "source", .@"error", @splat('z'), io);
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    const repo = try Repo.init("srctree", cwd, io);
+    //defer repo.raze(a, io);
+    var ci = try CI.new(&repo, "trigger", .err, @splat('z'), io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
     ci.created = Io.Clock.real.now(io).toSeconds() & mask;
+    ci.updated = Io.Clock.real.now(io).toSeconds() & mask;
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
@@ -105,12 +123,13 @@ test CI {
         \\# continuous_integration/0
         \\index: 1
         \\created: 1744830464
-        \\repo: repo_name
-        \\reason: reason
-        \\source: source
-        \\result: error
-        \\thread_id: 0
-        \\commit_hash: 7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a
+        \\updated: 1744830464
+        \\repo: srctree
+        \\hash: 7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a
+        \\revision: 0
+        \\trigger: trigger
+        \\result: err
+        \\thread_id: 1
         \\
         \\
     ;
@@ -129,4 +148,7 @@ const ArrayList = std.ArrayList;
 const Io = std.Io;
 const bufPrint = std.fmt.bufPrint;
 
-const Types = @import("../types.zig");
+const types = @import("../types.zig");
+const Repo = @import("../Repo.zig");
+const Viewers = types.Viewers;
+const Thread = types.Thread;

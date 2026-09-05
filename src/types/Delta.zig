@@ -16,7 +16,7 @@ attach: Attach = .nos,
 attach_target: usize = 0,
 attach_remote: []const u8 = &.{},
 
-hash: [32]u8 = @splat(0),
+hash: types.DefaultHash = @splat(0),
 thread: ?*Thread = null,
 
 pub const Delta = @This();
@@ -45,17 +45,17 @@ pub const Attach = enum(u8) {
 /// unstable api
 pub const Attachment = union(Attach) {
     nos,
-    diff: Types.Diff,
+    diff: types.Diff,
     issue,
     commit: []const u8,
     line: []const u8,
     remote: []const u8,
 };
 
-const typeio = Types.readerWriter(Delta, .blank);
+const typeio = types.readerWriter(Delta, .blank);
 const writerFn = typeio.write;
 const readerFn = typeio.read;
-const Index = Types.Index(type_prefix);
+const Index = types.Index(type_prefix);
 
 pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8, io: Io) !Delta {
     const now = Io.Clock.real.now(io).toSeconds();
@@ -70,7 +70,7 @@ pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const
         .author = author,
     };
 
-    var thread: Thread = try .newDelta(d, io);
+    var thread: Thread = try .new(Delta, &d, io);
     try thread.commit(io);
     d.thread_id = thread.index;
     return d;
@@ -82,7 +82,7 @@ pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
 
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
-    var reader = Types.loadDataReader(.deltas, filename, a, io) catch return error.FSFault;
+    var reader = types.loadDataReader(.deltas, filename, a, io) catch return error.FSFault;
     return readerFn(&reader);
 }
 
@@ -91,7 +91,7 @@ pub fn commit(delta: Delta, io: Io) !void {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ delta.repo, delta.index });
-    const file = try Types.commit(.deltas, filename, io);
+    const file = try types.commit(.deltas, filename, io);
     defer file.close(io);
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
@@ -104,7 +104,7 @@ pub fn loadThread(delta: *Delta, a: Allocator, io: Io) !*Thread {
     t.* = Thread.open(delta.thread_id, a, io) catch |err| t: {
         log.err("Error loading thread!! {}", .{err});
         log.err(" old thread_id {};", .{delta.thread_id});
-        const thread = Thread.newDelta(delta.*, io) catch |err2| {
+        const thread = Thread.new(Delta, delta, io) catch |err2| {
             log.err(" unable to create new {}", .{err2});
             return error.UnableToLoadThread;
         };
@@ -207,7 +207,7 @@ pub const Iterator = struct {
     dir: Io.Dir.Iterator,
 
     pub fn init(io: Io) Iterator {
-        const dir: Io.Dir = Types.iterableDir(.deltas, io) catch unreachable;
+        const dir: Io.Dir = types.iterableDir(.deltas, io) catch unreachable;
         return .{
             .dir = dir.iterate(),
         };
@@ -249,7 +249,7 @@ test Delta {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.createDirPathOpen(io, "delta", .{ .open_options = .{ .iterate = true } })), io);
+    try types.init((try tempdir.dir.createDirPathOpen(io, "delta", .{ .open_options = .{ .iterate = true } })), io);
 
     var d = try Delta.new("repo_name", "title", "message", "author", io);
 
@@ -310,9 +310,9 @@ const parseInt = std.fmt.parseInt;
 const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();
 
-const Types = @import("../types.zig");
-const Thread = Types.Thread;
-const Message = Types.Message;
+const types = @import("../types.zig");
+const Thread = types.Thread;
+const Message = types.Message;
 const Tsearch = @import("search.zig");
 const Diff = @import("Diff.zig");
 const Viewers = @import("Viewers.zig");

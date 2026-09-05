@@ -9,6 +9,18 @@ artifacts: Artifacts = .{},
 
 const Ci = @This();
 
+pub const Result = enum(u8) {
+    unknown,
+    pending,
+    waiting,
+    started,
+    running,
+    stalled,
+    passed,
+    failed,
+    err,
+};
+
 pub const CiZon = struct {
     srctree: ?SrctreeZon,
 
@@ -77,6 +89,9 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
     if (!ci.enabled) return error.Disabled;
     // load instructions
     try ci.validate(a, io);
+
+    var ci_res = try types.CI.new(repo, "[undefined]", .pending, types.shaToHash(commit.sha), io);
+    _ = &ci_res;
 
     try ci.source.init(repo.name.?, commit, a, io);
     defer ci.source.raze(a, io);
@@ -192,15 +207,19 @@ pub const Source = struct {
         var stderr: Io.Writer.Allocating = .init(a);
         defer stdout.deinit();
         defer stderr.deinit();
-        try src.exec(&.{ "zig", "build", "--summary", "all" }, &stdout.writer, &stderr.writer, null, io);
+        try src.exec(&.{ "zig", "build", "--summary", "all" }, &stdout.writer, &stderr.writer, null, a, io);
         std.debug.print("stdout: '{s}'\n", .{stdout.written()});
         std.debug.print("stderr: '{s}'\n", .{stderr.written()});
     }
 
     pub fn buildTests(src: *Source, a: Allocator, io: Io) !void {
-        _ = src;
-        _ = a;
-        _ = io;
+        var stdout: Io.Writer.Allocating = .init(a);
+        var stderr: Io.Writer.Allocating = .init(a);
+        defer stdout.deinit();
+        defer stderr.deinit();
+        try src.exec(&.{ "zig", "build", "--summary", "all", "test" }, &stdout.writer, &stderr.writer, null, a, io);
+        std.debug.print("stdout: '{s}'\n", .{stdout.written()});
+        std.debug.print("stderr: '{s}'\n", .{stderr.written()});
     }
 
     pub fn buildDocs(src: *Source, a: Allocator, io: Io) !void {
@@ -208,7 +227,9 @@ pub const Source = struct {
         var stderr: Io.Writer.Allocating = .init(a);
         defer stdout.deinit();
         defer stderr.deinit();
-        try src.exec(&.{ "zig", "build", "--summary", "all", "docs" }, &stdout.writer, &stderr.writer, null, io);
+        try src.exec(&.{ "zig", "build", "--summary", "all", "docs" }, &stdout.writer, &stderr.writer, null, a, io);
+        std.debug.print("stdout: '{s}'\n", .{stdout.written()});
+        std.debug.print("stderr: '{s}'\n", .{stderr.written()});
     }
 
     pub fn raze(src: *Source, a: Allocator, io: Io) void {
@@ -222,8 +243,18 @@ pub const Source = struct {
         stdout: *Io.Writer,
         stderr: *Io.Writer,
         stdin: ?[]const u8,
+        a: Allocator,
         io: Io,
     ) !void {
+        const map: std.process.Environ.Map = .{
+            .array_hash_map = try .init(
+                a,
+                &.{"ZIG_GLOBAL_CACHE_DIR"},
+                &.{"working/"},
+            ),
+            .allocator = undefined,
+        };
+
         var child = try std.process.spawn(io, .{
             .argv = argv,
             .expand_arg0 = .no_expand,
@@ -231,7 +262,7 @@ pub const Source = struct {
             .stdin = if (stdin != null) .pipe else .ignore,
             .stdout = .pipe,
             .stderr = .pipe,
-            .environ_map = &.{ .array_hash_map = .empty, .allocator = undefined },
+            .environ_map = &map,
         });
 
         if (child.stdin) |cstdin| {

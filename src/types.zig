@@ -20,6 +20,7 @@ pub const Sha1Hex = [40]u8;
 pub const Sha1Bin = [20]u8;
 pub const Sha256Hex = [64]u8;
 pub const Sha256Bin = [32]u8;
+pub const Timestamp = i64;
 
 pub const Storage = Io.Dir;
 
@@ -409,6 +410,17 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
     };
 }
 
+pub inline fn shaToHash(sha: git.Sha) DefaultHash {
+    var hash: DefaultHash = @splat(0);
+    if (git.Sha.Hash.max_len > @sizeOf(DefaultHash)) @compileError("git Sha is larger than types.DefaultHash");
+    switch (sha.hash) {
+        .sha1 => |sha1| hash[0..20].* = sha1,
+        .sha256 => |sha256| hash = sha256,
+        .partial => unreachable,
+    }
+    return hash;
+}
+
 test {
     _ = &common;
     _ = &search;
@@ -440,5 +452,6 @@ const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const print = std.fmt.bufPrint;
+const git = @import("git.zig");
 
 const type_debugging = false;

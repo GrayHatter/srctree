@@ -2,8 +2,8 @@ index: usize,
 created: i64 = 0,
 updated: i64 = 0,
 state: State = .default,
-delta_hash: Types.DefaultHash = @splat(0),
-hash: Types.DefaultHash = @splat(0),
+delta_hash: types.DefaultHash = @splat(0),
+hash: types.DefaultHash = @splat(0),
 
 messages: ArrayList(Message) = .empty,
 
@@ -14,26 +14,14 @@ pub const type_version = 0;
 
 pub const State = @import("common.zig").State;
 
-const Index = Types.Index(type_prefix);
+const Index = types.Index(type_prefix);
 
-pub fn new(io: Io) !Thread {
+pub fn new(T: type, src: *const T, io: Io) !Thread {
     const max: usize = try Index.next(io);
     const now = Io.Clock.real.now(io).toSeconds();
     const thread = Thread{
         .index = max,
-        .created = now,
-        .updated = now,
-    };
-    try thread.commit(io);
-    return thread;
-}
-
-pub fn newDelta(delta: Delta, io: Io) !Thread {
-    const max: usize = try Index.next(io);
-    const now = Io.Clock.real.now(io).toSeconds();
-    const thread = Thread{
-        .index = max,
-        .delta_hash = delta.hash,
+        .delta_hash = src.hash,
         .created = now,
         .updated = now,
     };
@@ -47,14 +35,14 @@ pub fn open(index: usize, a: Allocator, io: Io) !Thread {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{index});
-    var reader = try Types.loadDataReader(.thread, filename, a, io);
+    var reader = try types.loadDataReader(.thread, filename, a, io);
     var thread = readerFn(&reader);
 
     if (indexOf(u8, reader.buffer, "\n\n")) |start| {
         var itr = std.mem.splitScalar(u8, reader.buffer[start + 2 ..], '\n');
         while (itr.next()) |next| {
             if (next.len != 64) continue;
-            var msg_hash: Types.DefaultHash = undefined;
+            var msg_hash: types.DefaultHash = undefined;
             for (0..32) |i| msg_hash[i] = parseInt(u8, next[i * 2 .. i * 2 + 2], 16) catch 0;
             const message = Message.open(msg_hash, a, io) catch |err| {
                 std.debug.print("unable to load message {}\n", .{err});
@@ -70,7 +58,7 @@ pub fn open(index: usize, a: Allocator, io: Io) !Thread {
 pub fn commit(thread: Thread, io: Io) !void {
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{x}.thread", .{thread.index});
-    const file = try Types.commit(.thread, filename, io);
+    const file = try types.commit(.thread, filename, io);
     defer file.close(io);
 
     var w_b: [2048]u8 = undefined;
@@ -131,14 +119,14 @@ test Thread {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(
+    try types.init(
         (try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } })),
         io,
     );
 
     var delta: Delta = undefined;
     delta.hash = @splat('d');
-    var t = try Thread.newDelta(delta, io);
+    var t = try Thread.new(Delta, &delta, io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
@@ -172,7 +160,7 @@ test Thread {
     try std.testing.expectEqualDeep(t, read);
 }
 
-const typeio = Types.readerWriter(Thread, .{ .index = 0 });
+const typeio = types.readerWriter(Thread, .{ .index = 0 });
 const writerFn = typeio.write;
 const readerFn = typeio.read;
 
@@ -182,6 +170,6 @@ const Io = std.Io;
 const ArrayList = std.ArrayList;
 const indexOf = std.mem.indexOf;
 const parseInt = std.fmt.parseInt;
-const Types = @import("../types.zig");
+const types = @import("../types.zig");
 const Message = @import("Message.zig");
 const Delta = @import("Delta.zig");
