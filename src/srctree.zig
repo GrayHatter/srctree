@@ -153,14 +153,20 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
     return null;
 }
 
-fn userAgentResolution(fr: *Frame) ?BuildFn {
+fn trafficFilter(fr: *Frame) ?BuildFn {
     if (global_config.server) |srv|
         if (!srv.block_scripted_traffic)
             return null;
 
     if (fr.user != null) return null;
 
-    if (eql(u8, fr.uri.path, "/robots.txt")) {
+    if (fr.request.referer) |ref| {
+        if (startsWith(u8, ref, "https://www.google.com/search?q=gr")) {
+            return dropRequest(fr, "search string");
+        }
+    }
+
+    if (eql(u8, fr.uri.path, "/robots.txt") or eql(u8, fr.uri.path, "robots.txt")) {
         fr.dumpDebugData(.{});
         return null;
     }
@@ -184,7 +190,7 @@ fn userAgentResolution(fr: *Frame) ?BuildFn {
 fn builder(fr: *Frame, call: BuildFn) void {
     fr.downstream.phase = .{ .responding = .new };
 
-    if (userAgentResolution(fr)) |resol| {
+    if (trafficFilter(fr)) |resol| {
         return resol(fr) catch {};
     }
 
