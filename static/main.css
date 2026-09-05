@@ -187,7 +187,7 @@ ln {
 	&.add { background: #568; }
 	&.del { background: #633; }
 	&.nul { background: #2228; height: 1em; margin: 0 2px; }
-	&.add:target { background: #79d; }
+	&.add:target { background: #23d; } /* TODO I don't like this color, please change me */
 	&.del:target { background: #a44; }
 	&.nul:target { background: #2228; height: 1em; margin: 0 2px; }
 	lnex {
