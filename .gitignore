@@ -4,6 +4,7 @@ zig-cache/*
 zig-pkg/*
 .zig-cache/*
 data/*
+working/*
 
 config.ini
 
