@@ -125,8 +125,8 @@ content {
 	h3 { text-align: left; }
 	&.full { min-width: 97%; }
 	&.fw { min-width: 97%; }
-	&.mw { width: 1079px; margin: auto; }
-	&.lw { width: 1050px; text-align:left; }
+	&.mw { width: 60vw; min-width: 1079px; margin: auto; }
+	&.lw { min-width: 1050px; text-align:left; }
 	&.search { min-width: 50rem; width: auto; }
 	&.diff { display: flex; justify-content: flex-start; gap: 1em; width: unset; max-width: 96%; }
 }
