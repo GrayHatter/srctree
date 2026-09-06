@@ -290,6 +290,7 @@ const robots_txt = verse.Robots.robotsTxt(
         .{ .name = "ImagesiftBot", .allow = true },
         .{ .name = "AcademicBotRTU", .allow = false },
         .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
+        .{ .name = "Reflectionbot", .allow = false },
     },
     .{ .extra_rules = "Disallow: /*?*\nDisallow: /repo/*/blame/*\n" },
 );
