@@ -9,17 +9,7 @@ artifacts: Artifacts = .{},
 
 const Ci = @This();
 
-pub const Result = enum(u8) {
-    unknown,
-    pending,
-    waiting,
-    started,
-    running,
-    stalled,
-    passed,
-    failed,
-    err,
-};
+pub const Result = types.CI.Result;
 
 pub const CiZon = struct {
     srctree: ?SrctreeZon,

@@ -14,7 +14,17 @@ steps: ArrayList(Step) = .empty,
 pub const CI = @This();
 pub const Hash = types.DefaultHash;
 
-pub const Result = Repo.Ci.Result;
+pub const Result = enum(u8) {
+    unknown,
+    pending,
+    waiting,
+    started,
+    running,
+    stalled,
+    passed,
+    failed,
+    err,
+};
 
 pub const Step = struct {
     result: Result = .unknown,
