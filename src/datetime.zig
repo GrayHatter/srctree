@@ -300,6 +300,10 @@ pub fn fromActor(actor: Actor) !DateTime {
     return .fromEpochTzStr(actor.timestamp, actor.tzstr);
 }
 
+pub fn fromActorAdj(actor: Actor) !i64 {
+    return (try fromEpochTzStr(actor.timestamp, actor.tzstr)).tzAdjusted();
+}
+
 test "now" {
     const timestamp = std.Io.Clock.real.now(std.testing.io);
     // If this breaks, I know... I KNOW, non-deterministic tests... and I'm sorry!

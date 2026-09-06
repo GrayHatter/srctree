@@ -6,6 +6,10 @@ test "main" {
 
 pub const std_options: std.Options = .{
     .log_level = .info,
+    .log_scope_levels = &.{
+        .{ .scope = .git_objects, .level = .info },
+        .{ .scope = .git_commit, .level = .info },
+    },
 };
 
 var arg0: []const u8 = undefined;
