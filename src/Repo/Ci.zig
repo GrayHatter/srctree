@@ -80,7 +80,7 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
     // load instructions
     try ci.validate(a, io);
 
-    var ci_res = try types.CI.new(repo, "[undefined]", .pending, types.shaToHash(commit.sha), io);
+    var ci_res = try types.CI.new(repo.name.?, "[undefined]", .pending, types.shaToHash(commit.sha), io);
     _ = &ci_res;
 
     try ci.source.init(repo.name.?, commit, a, io);

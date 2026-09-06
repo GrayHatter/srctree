@@ -43,14 +43,14 @@ const readerFn = typeio.read;
 const Index = types.Index(type_prefix);
 const fmt_str = "{s}.{x}." ++ @tagName(type_prefix);
 
-pub fn new(repo: *const Repo, trigger: []const u8, result: Result, src_hash: Hash, io: Io) !CI {
-    const max: usize = try Index.scoped.next(repo.name orelse return error.InvalidRepo, io);
+pub fn new(repo: []const u8, trigger: []const u8, result: Result, src_hash: Hash, io: Io) !CI {
+    const max: usize = try Index.scoped.next(repo, io);
     const now = Io.Clock.real.now(io).toSeconds();
     var ci = CI{
         .index = max,
         .created = now,
         .updated = now,
-        .repo = repo.name.?,
+        .repo = repo,
         .hash = src_hash,
         .revision = 0,
         .trigger = trigger,
@@ -115,10 +115,7 @@ test CI {
     defer tempdir.cleanup();
     try types.init(try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } }), io);
 
-    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
-    const repo = try Repo.init("srctree", cwd, io);
-    //defer repo.raze(a, io);
-    var ci = try CI.new(&repo, "trigger", .err, @splat('z'), io);
+    var ci = try CI.new("srctree", "trigger", .err, @splat('z'), io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
@@ -159,6 +156,5 @@ const Io = std.Io;
 const bufPrint = std.fmt.bufPrint;
 
 const types = @import("../types.zig");
-const Repo = @import("../Repo.zig");
 const Viewers = types.Viewers;
 const Thread = types.Thread;
