@@ -89,10 +89,20 @@ pub fn iterableDir(comptime type_name: @EnumLiteral(), io: Io) !Io.Dir {
     });
 }
 
-pub fn loadDataAlloc(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) ![]u8 {
+fn openFile(comptime type_name: @EnumLiteral(), filename: []const u8, io: Io) !Io.File {
     var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
     defer type_dir.close(io);
-    const file = try type_dir.openFile(io, name, .{});
+    return try type_dir.openFile(io, filename, .{});
+}
+
+fn createFile(comptime type_name: @EnumLiteral(), filename: []const u8, io: Io) !Io.File {
+    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
+    defer type_dir.close(io);
+    return try type_dir.createFile(io, filename, .{});
+}
+
+pub fn loadDataAlloc(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) ![]u8 {
+    const file = try openFile(type_name, name, io);
     defer file.close(io);
     const stat = try file.stat(io);
     const buf = try a.alloc(u8, stat.size);
@@ -103,9 +113,7 @@ pub fn loadDataAlloc(comptime type_name: @EnumLiteral(), name: []const u8, a: Al
 }
 
 pub fn loadDataReader(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) !Io.Reader {
-    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
-    defer type_dir.close(io);
-    const file = try type_dir.openFile(io, name, .{});
+    const file = try openFile(type_name, name, io);
     defer file.close(io);
     const stat = try file.stat(io);
     const buf = try a.alloc(u8, stat.size);
@@ -140,7 +148,6 @@ pub fn Index(type_name: @EnumLiteral()) type {
         var mutex: std.Io.Mutex = .init;
         pub const name = "_" ++ @tagName(type_name) ++ ".index";
         pub const pathfmt = "repo_scoped/{s}/" ++ name;
-        var pbuf: [2048]u8 = undefined;
 
         pub fn current(io: Io) !usize {
             try mutex.lock(io);
@@ -181,7 +188,32 @@ pub fn Index(type_name: @EnumLiteral()) type {
             return idx;
         }
 
+        pub fn openByIndex(idx: usize, io: Io) !Io.File {
+            var buf: [4096]u8 = undefined;
+            const filename = try print(&buf, "{x}." ++ @tagName(type_name), .{idx});
+            return try openFile(type_name, filename, io);
+        }
+
+        pub fn createByIndex(idx: usize, io: Io) !Io.File {
+            var buf: [4096]u8 = undefined;
+            const filename = try print(&buf, "{x}." ++ @tagName(type_name), .{idx});
+            return try createFile(type_name, filename, io);
+        }
+
+        pub fn readerByIndex(idx: usize, a: Allocator, io: Io) !Io.Reader {
+            const file = try @This().fileByIndex(idx, io);
+            defer file.close(io);
+            const stat = try file.stat(io);
+            const buf = try a.alloc(u8, stat.size);
+            errdefer a.free(buf);
+            var reader = file.reader(io, buf);
+            try reader.interface.fill(stat.size);
+            return .fixed(reader.interface.buffer);
+        }
+
         pub const scoped = struct {
+            var pbuf: [2048]u8 = undefined;
+
             pub fn current(scope: []const u8, io: Io) !usize {
                 try mutex.lock(io);
                 defer mutex.unlock(io);
@@ -215,6 +247,23 @@ pub fn Index(type_name: @EnumLiteral()) type {
                 idx += 1;
                 try increment(index_file, idx, io);
                 return idx;
+            }
+
+            pub fn fileByIndex(repo: []const u8, idx: usize, io: Io) !Io.File {
+                var buf: [4096]u8 = undefined;
+                const filename = try print(&buf, "{s}.{x}." ++ @tagName(type_name), .{ repo, idx });
+                return try openFile(type_name, filename, io);
+            }
+
+            pub fn readerByIndex(repo: []const u8, idx: usize, a: Allocator, io: Io) !Io.Reader {
+                const file = try @This().fileByIndex(repo, idx, io);
+                defer file.close(io);
+                const stat = try file.stat(io);
+                const buf = try a.alloc(u8, stat.size);
+                errdefer a.free(buf);
+                var reader = file.reader(io, buf);
+                try reader.interface.fill(stat.size);
+                return .fixed(reader.interface.buffer);
             }
         };
     };
@@ -420,6 +469,19 @@ pub inline fn shaToHash(sha: git.Sha) DefaultHash {
     }
     return hash;
 }
+
+pub const testing = struct {
+    pub fn maskTime(thing: anytype, io: Io) void {
+        // LOL, you thought
+        const T = @typeInfo(@TypeOf(thing)).pointer.child;
+        comptime std.debug.assert(@hasField(T, "created"));
+        comptime std.debug.assert(@hasField(T, "updated"));
+        const mask: i64 = ~@as(i64, 0x7ffffff);
+        const now = Io.Clock.real.now(io).toSeconds();
+        thing.*.created = now & mask;
+        thing.*.updated = now & mask;
+    }
+};
 
 test {
     _ = &common;

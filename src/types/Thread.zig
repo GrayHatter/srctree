@@ -38,7 +38,7 @@ pub fn open(index: usize, a: Allocator, io: Io) !Thread {
     var reader = try types.loadDataReader(.thread, filename, a, io);
     var thread = readerFn(&reader);
 
-    if (indexOf(u8, reader.buffer, "\n\n")) |start| {
+    if (find(u8, reader.buffer, "\n\n")) |start| {
         var itr = std.mem.splitScalar(u8, reader.buffer[start + 2 ..], '\n');
         while (itr.next()) |next| {
             if (next.len != 64) continue;
@@ -168,7 +168,7 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const ArrayList = std.ArrayList;
-const indexOf = std.mem.indexOf;
+const find = std.mem.find;
 const parseInt = std.fmt.parseInt;
 const types = @import("../types.zig");
 const Message = @import("Message.zig");
