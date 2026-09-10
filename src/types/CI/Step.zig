@@ -16,10 +16,10 @@ pub const type_version = 0;
 const type_rw = types.readerWriter(Step, .{ .index = 0, .ci_index = 0 });
 const writerFn = type_rw.write;
 const readerFn = type_rw.read;
-const Index = types.Index(Step.type_prefix);
+const Index = types.Index(type_prefix);
 
 pub fn new(ci: *const CI, name: []const u8, io: Io) !Step {
-    const max: usize = try Step.Index.next(io);
+    const max: usize = try Index.next(io);
     const now = Io.Clock.real.now(io).toSeconds();
     var step = Step{
         .index = max,
@@ -34,10 +34,10 @@ pub fn new(ci: *const CI, name: []const u8, io: Io) !Step {
 }
 
 pub fn open(index: usize, a: Allocator, io: Io) !Step {
-    const max = Step.Index.current(io) catch return error.FSFault;
+    const max = Index.current(io) catch return error.FSFault;
     if (index > max) return error.CIDoesNotExist;
 
-    var file = Step.Index.openByIndex(index, io) catch return error.FSFault;
+    var file = Index.openByIndex(index, io) catch return error.FSFault;
     defer file.close(io);
 
     const stat = try file.stat(io);
@@ -52,7 +52,7 @@ pub fn open(index: usize, a: Allocator, io: Io) !Step {
 }
 
 pub fn commit(step: *const Step, io: Io) !void {
-    const file = try Step.Index.createByIndex(step.index, io);
+    const file = try Index.createFile(step.index, io);
     defer file.close(io);
     var w_b: [4096]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);

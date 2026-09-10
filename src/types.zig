@@ -1,3 +1,5 @@
+const types = @This();
+
 pub const common = @import("types/common.zig");
 pub const search = @import("types/search.zig");
 
@@ -188,16 +190,16 @@ pub fn Index(type_name: @EnumLiteral()) type {
             return idx;
         }
 
-        pub fn openByIndex(idx: usize, io: Io) !Io.File {
+        pub fn openFile(idx: usize, io: Io) !Io.File {
             var buf: [4096]u8 = undefined;
             const filename = try print(&buf, "{x}." ++ @tagName(type_name), .{idx});
-            return try openFile(type_name, filename, io);
+            return try types.openFile(type_name, filename, io);
         }
 
-        pub fn createByIndex(idx: usize, io: Io) !Io.File {
+        pub fn createFile(idx: usize, io: Io) !Io.File {
             var buf: [4096]u8 = undefined;
             const filename = try print(&buf, "{x}." ++ @tagName(type_name), .{idx});
-            return try createFile(type_name, filename, io);
+            return try types.createFile(type_name, filename, io);
         }
 
         pub fn readerByIndex(idx: usize, a: Allocator, io: Io) !Io.Reader {
@@ -252,7 +254,7 @@ pub fn Index(type_name: @EnumLiteral()) type {
             pub fn fileByIndex(repo: []const u8, idx: usize, io: Io) !Io.File {
                 var buf: [4096]u8 = undefined;
                 const filename = try print(&buf, "{s}.{x}." ++ @tagName(type_name), .{ repo, idx });
-                return try openFile(type_name, filename, io);
+                return try types.openFile(type_name, filename, io);
             }
 
             pub fn readerByIndex(repo: []const u8, idx: usize, a: Allocator, io: Io) !Io.Reader {

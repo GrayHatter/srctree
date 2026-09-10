@@ -76,7 +76,7 @@ pub fn addStep(ci: *CI, step: Step, a: Allocator) !void {
 }
 
 pub fn commit(ci: *const CI, io: Io) !void {
-    const file = try Index.createByIndex(ci.index, io);
+    const file = try Index.createFile(ci.index, io);
     defer file.close(io);
     var w_b: [4096]u8 = undefined;
     var writer = file.writer(io, &w_b);
