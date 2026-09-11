@@ -1,7 +1,11 @@
 # srctree
+Share your code. a.k.a Source code sharing (without breaking the back button).
 
-Source code sharing (without breaking the back button)
+Srctree (read: source tree), is a bit different. The srctree has a view on code
+that's inverted from the more common "server hosted" model. Git is distributed,
+srctree expects the your workflow to be as well; and will try to help.
 
+## Setup
 Using a reverse proxy is the preferred method, there's a sample config in
 `contrib/nginx.conf` where `zig build run` should just work. 
 
@@ -10,7 +14,6 @@ should be supported) you can try `zig build run -- http` to use http mode. Full
 HTTP support is planned for "eventually" but no guarantees are made yet :)
 
 Good luck!
-
 
 ## TODO
   - [ ] srctree
