@@ -8,8 +8,8 @@ pub fn treeBlob(f: *Frame) Router.Error!void {
     defer repo.raze(f.alloc, f.io);
 
     const ograph: S.OpenGraph = .{
-        .title = rd.name,
-        .desc = repo.description(f.alloc, f.io) catch |err| switch (err) {
+        .title = .safe(rd.name),
+        .desc = .safe(repo.description(f.alloc, f.io) catch |err| switch (err) {
             error.DefaultDescription, error.NoDescription => try allocPrint(
                 f.alloc,
                 "An Indescribable repo with {s} commits",
@@ -17,7 +17,7 @@ pub fn treeBlob(f: *Frame) Router.Error!void {
             ),
             error.OutOfMemory => return error.OutOfMemory,
             else => return error.ServerFault,
-        },
+        }),
     };
     _ = ograph;
 
@@ -171,10 +171,11 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
         });
     };
 
+    const count = rd.deltaCount(f);
     var page = BlobPage.init(.{
         .meta_head = .{
-            .title = meta_title,
-            .open_graph = .{ .title = safe_name, .desc = meta_desc },
+            .title = .safe(meta_title),
+            .open_graph = .{ .title = .safe(safe_name), .desc = .safe(meta_desc) },
         },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
@@ -183,6 +184,8 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
             .blame = .{ .repo_name = .safe(rd.name), .filename = .abx(path.path) },
             .git_uri = .{ .host = .safe(try f.request.host.?.valid()), .repo_name = .abx(rd.name) },
             .upstream = upstream,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .tree_view = .safe(w.written()),
         .filename = .abx(blob_data.name),
@@ -232,8 +235,8 @@ fn newRepo(f: *Frame) Router.Error!void {
     const meta_title = try allocPrint(f.alloc, "Brand new repo {s} on srctree", .{rd.name});
     var page: NewRepoPage = .init(.{
         .meta_head = .{
-            .title = meta_title,
-            .open_graph = .{ .title = rd.name, .desc = "" },
+            .title = .safe(meta_title),
+            .open_graph = .{ .title = .safe(rd.name), .desc = .safe(&.{}) },
         },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
@@ -242,6 +245,8 @@ fn newRepo(f: *Frame) Router.Error!void {
             .git_uri = .{ .host = .safe(try (f.request.host orelse return error.DataMissing).valid()), .repo_name = .abx(rd.name) },
             .upstream = null,
             .blame = null,
+            .issue_count = 0,
+            .diff_count = 0,
         },
     });
     try f.sendPage(&page);

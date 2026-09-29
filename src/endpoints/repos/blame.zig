@@ -77,6 +77,7 @@ pub fn blame(f: *Frame) Router.Error!void {
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
+    const dcount = rd.deltaCount(f);
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
@@ -86,6 +87,8 @@ pub fn blame(f: *Frame) Router.Error!void {
             .git_uri = .{ .host = .safe(try (f.request.host orelse return error.DataMissing).valid()), .repo_name = .abx(rd.name) },
             .upstream = upstream,
             .blame = null,
+            .issue_count = dcount.issue,
+            .diff_count = dcount.diff,
         },
         .filename = .abx(file_name),
         .blame_lines = wrapped_blames,

@@ -32,15 +32,21 @@ pub fn list(f: *Frame) Router.Error!void {
         try tstack.append(f.alloc, .{ .name = .abx(tag.name) });
     }
 
+    const count = rd.deltaCount(f);
     //const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse "" };
     const repo_header: S.BaseRepoHeaderHtml = .{
-        .git_uri = .{ .host = .safe(try (f.request.host orelse return error.DataMissing).valid()), .repo_name = .abx(rd.name) },
+        .git_uri = .{
+            .host = .safe(try (f.request.host orelse return error.DataMissing).valid()),
+            .repo_name = .abx(rd.name),
+        },
         .repo_name = .safe(rd.name),
         .description = .abx(repo.description(f.alloc, f.io) catch ""),
         .upstream = if (repo.findRemote("upstream")) |up| .{
             .href = .abx(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
         } else null,
         .blame = null,
+        .issue_count = count.issue,
+        .diff_count = count.diff,
     };
 
     var page = TagPage.init(.{

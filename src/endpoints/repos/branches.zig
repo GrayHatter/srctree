@@ -46,10 +46,11 @@ pub fn list(f: *Frame) Router.Error!void {
     } else null;
 
     const open_graph: S.OpenGraph = .{
-        .title = rd.name,
-        .desc = try allocPrint(f.alloc, "{} branches", .{branches.len}),
+        .title = .safe(rd.name),
+        .desc = .safe(try allocPrint(f.alloc, "{} branches", .{branches.len})),
     };
 
+    const count = rd.deltaCount(f);
     var page = BranchPage.init(.{
         .meta_head = .{ .open_graph = open_graph },
         .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
@@ -59,6 +60,8 @@ pub fn list(f: *Frame) Router.Error!void {
             .blame = null,
             .git_uri = .{ .host = .safe(try f.request.host.?.valid()), .repo_name = .abx(rd.name) },
             .upstream = upstream,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .repo_branches = branches,
     });

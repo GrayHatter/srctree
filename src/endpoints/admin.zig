@@ -23,7 +23,9 @@ fn default(f: *Frame) Error!void {
     try f.requireValidUser();
 
     const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
-        &.{ .nav = .{ .nav_buttons = &.{} } };
+        &.{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -60,13 +62,15 @@ pub fn settings(f: *Frame) Router.Error!void {
         var w: Writer.Allocating = try .initCapacity(f.alloc, 256);
         try w.writer.print("{f}\n", .{ns});
         block.* = .{
-            .config_name = ns.name,
+            .config_name = .abx(ns.name),
             .config_text = .abx(w.writer.buffered()),
             .count = mem.countScalar(u8, w.writer.buffered(), '\n') + 2,
         };
     }
     const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
-        &.{ .nav = .{ .nav_buttons = &.{} } };
+        &.{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -81,7 +85,9 @@ fn remotes(f: *Frame) Error!void {
     try f.requireValidUser();
 
     const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
-        &.{ .nav = .{ .nav_buttons = &.{} } };
+        &.{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } };
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -153,7 +159,9 @@ const Repo = struct {
         try f.requireValidUser();
 
         const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{ .nav_buttons = &.{} } };
+            &.{ .nav = .{
+                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+            } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -168,7 +176,9 @@ const Repo = struct {
     fn delete(f: *Frame) Error!void {
         try f.requireValidUser();
         const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{ .nav_buttons = &.{} } };
+            &.{ .nav = .{
+                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+            } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -186,7 +196,9 @@ const Repo = struct {
         try f.requireValidUser();
 
         const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{ .nav_buttons = &.{} } };
+            &.{ .nav = .{
+                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+            } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -231,7 +243,9 @@ const Repo = struct {
     fn clone(f: *Frame) Error!void {
         try f.requireValidUser();
         const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{ .nav_buttons = &.{} } };
+            &.{ .nav = .{
+                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+            } };
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -264,5 +278,5 @@ const HTML = template.html;
 const DOM = HTML.DOM;
 const Error = Route.Error;
 const Router = verse.Router;
-const RequestData = verse.RequestData.RequestData;
 const config_ini = &@import("../main.zig").config_ini;
+const search = @import("search.zig");

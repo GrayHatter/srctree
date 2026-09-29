@@ -108,11 +108,14 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
         diffstat.deletions,
     });
     const og_desc = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.message }}) catch unreachable;
+    const count = rd.deltaCount(f);
     var page = CommitPage.init(.{
         .repo = .safe(repo_name),
         .sha = .safe(current.sha.text().slice()),
-        .meta_head = .{ .title = page_title, .open_graph = .{ .title = og_title, .desc = og_desc } },
-        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
+        .meta_head = .{ .title = .safe(page_title), .open_graph = .{ .title = .safe(og_title), .desc = .safe(og_desc) } },
+        .body_header = .{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } },
         .repo_header = .{
             .repo_name = .abx(repo_name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),
@@ -122,6 +125,8 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
             },
             .upstream = upstream,
             .blame = null,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .commit = try commitCtx(current, repo_name, f.alloc, f.io),
         .comments = .{ .messages = &.{} },
@@ -337,12 +342,14 @@ pub fn commitsBefore(f: *Frame) Error!void {
 }
 
 fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Git.Sha) Error!void {
-    const rd = RouteData.init(f) orelse return error.ServerFault;
+    _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     const sha_text = if (sha) |s| s.text() else Git.Sha.Text.zeros;
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
+        .body_header = .{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } },
         .commit_list = list,
         .after_commits = if (sha) |_| .{
             .repo_name = .safe(repo_name),
@@ -387,3 +394,4 @@ const delta_shared = @import("../delta.zig");
 const Types = @import("../../types.zig");
 const Delta = Types.Delta;
 const log = std.log.scoped(.srctree_commits);
+const search = @import("../search.zig");

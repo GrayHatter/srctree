@@ -21,15 +21,20 @@ fn list(f: *Frame) Router.Error!void {
         repo.ci.run(&commit, f.alloc, f.io) catch unreachable;
     }
 
+    const count = rd.deltaCount(f);
     var page: ArtifactsHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
+        .body_header = .{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } },
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(repo.git.description(f.alloc, f.io) catch ""),
             .blame = null,
             .git_uri = null,
             .upstream = null,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .artifacts = &.{.{
             .name = .safe("name"),
@@ -55,3 +60,4 @@ const T = verse.template;
 const Frame = verse.Frame;
 const Router = verse.Router;
 const GET = Router.GET;
+const search = @import("../search.zig");

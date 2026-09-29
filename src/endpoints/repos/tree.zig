@@ -104,7 +104,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     else |_|
         null;
 
-    const open_graph: S.OpenGraph = .{ .title = rd.name, .desc = page_desc orelse &.{} };
+    const open_graph: S.OpenGraph = .{ .title = .safe(rd.name), .desc = .safe(page_desc orelse &.{}) };
 
     const page_title = if (page_desc != null and page_desc.?.len > 0)
         try allocPrint(ctx.alloc, "{s} - {s} - srctree", .{ rd.name, page_desc.? })
@@ -115,15 +115,18 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         .href = .abx(try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
+    const count = rd.deltaCount(ctx);
     var page = TreePage.init(.{
-        .meta_head = .{ .title = page_title, .open_graph = open_graph },
+        .meta_head = .{ .title = .safe(page_title), .open_graph = open_graph },
         .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
             .git_uri = .{ .host = .safe(try ctx.request.host.?.valid()), .repo_name = .abx(rd.name) },
-            .description = .abx(open_graph.desc),
+            .description = open_graph.desc,
             .repo_name = .abx(rd.name),
             .upstream = upstream,
             .blame = null,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .repo_name = .abx(rd.name),
         .readme = if (readme(blobs, repo, ctx.alloc, ctx.io) catch null) |rm| .safe(rm) else null,

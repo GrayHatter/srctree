@@ -120,6 +120,12 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
         return dropRequest(f, "ff missing encoding");
     }
 
+    if (f.request.accept.mime) |mime| {
+        if (eql(u8, mime,
+            \\text/html,application/xhtml+xml,application/xml;q=0.9,image/heif,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
+        )) return dropRequest(f, "ff missing encoding");
+    }
+
     const bads = [_][]const u8{
         \\"Not;A=Brand";v="8"
         ,
@@ -194,34 +200,15 @@ fn builder(fr: *Frame, call: BuildFn) void {
         return resol(fr) catch {};
     }
 
-    var inbox_count: usize = 0;
-    const search_str = if (fr.user) |_|
-        "is:open owner:me"
-    else
-        "is:open";
-    if (genRules(search_str, fr.alloc)) |rules| {
-        var search_results = Delta.search(rules.items, fr.io);
-        search_results.data = if (fr.user) |usr| .{ .user = usr.username orelse &.{} } else .empty;
-        while (search_results.next(fr.alloc, fr.io)) |dlt| {
-            inbox_count +|= 1;
-            dlt.raze(fr.alloc);
-        }
-    } else |_| {}
-
-    const btns = [1]S.NavButtons{.{
-        .name = .safe("inbox"),
-        .extra = inbox_count,
-        .url = .safe("/inbox"),
-    }};
     var bh: S.BodyHeaderHtml = (fr.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
-        .nav_auth = "Error",
-        .nav_buttons = &btns,
+        .nav_auth = .safe("Error"),
+        .inbox_count = search.inboxCount(fr.user, fr.alloc, fr.io),
     } }).*;
 
     if (fr.user) |usr| {
-        bh.nav.nav_auth = if (usr.username) |un| un else "Error No Username";
+        bh.nav.nav_auth = .abx(if (usr.username) |un| un else "Error No Username");
     } else {
-        bh.nav.nav_auth = "Public";
+        bh.nav.nav_auth = .safe("Public");
     }
 
     fr.response_data.clone(S.BodyHeaderHtml, fr.alloc, bh) catch {};
@@ -349,3 +336,4 @@ const genRules = @import("endpoints/search.zig").genRules;
 const commitFlex = @import("endpoints/commit-flex.zig").commitFlex;
 
 const global_config = &@import("Config.zig").global;
+const search = @import("endpoints/search.zig");

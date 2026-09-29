@@ -525,11 +525,11 @@ pub fn commitFlex(ctx: *Frame) Error!void {
     for (flex_weeks) |*flex_week| {
         const this_week = date;
         const last_week: DateTime = .fromEpoch(date.timestamp - WEEK);
-        flex_week.month = if (last_week.month != this_week.month or
+        flex_week.month = .safe(if (last_week.month != this_week.month or
             date.timestamp == start_date.timestamp)
             this_week.monthSlice()[0..3]
         else
-            "&nbsp;";
+            "&nbsp;");
 
         for (&flex_week.days) |*m| {
             defer date = DateTime.fromEpoch(date.timestamp + DAY);

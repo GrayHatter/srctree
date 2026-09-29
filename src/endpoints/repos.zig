@@ -108,20 +108,9 @@ pub const Router = struct {
         return Repo.exists(self.name, vis, io);
     }
 
-    fn mkNav(name: []const u8, i: usize, d: usize, a: Allocator) [2]S.NavButtons {
-        return .{
-            .{ .name = .safe("issues"), .extra = i, .url = .abx(
-                allocPrint(a, "/repo/{s}/issues/", .{name}) catch "[OOM]",
-            ) },
-            .{ .name = .safe("diffs"), .extra = d, .url = .abx(
-                allocPrint(a, "/repo/{s}/diffs/", .{name}) catch "[OOM]",
-            ) },
-        };
-    }
-
-    pub fn navButtons(rd: RouteData, f: *Frame) [2]S.NavButtons {
+    pub fn deltaCount(rd: RouteData, f: *Frame) struct { issue: usize, diff: usize } {
         const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-        if (!rd.exists(vis, f.io)) return mkNav(rd.name, 0, 0, f.alloc);
+        if (!rd.exists(vis, f.io)) return .{ .issue = 0, .diff = 0 };
         var i_count: usize = 0;
         var d_count: usize = 0;
         var itr = Delta.searchRepo(rd.name, &.{
@@ -136,7 +125,7 @@ pub const Router = struct {
             }
         }
 
-        return mkNav(rd.name, i_count, d_count, f.alloc);
+        return .{ .issue = i_count, .diff = d_count };
     }
 
     pub fn repoHeader(rd: Router, host: []const u8) !S.BaseRepoHeaderHtml {
@@ -226,14 +215,6 @@ pub fn router(f: *Frame) Router.RoutingError!verse.Router.BuildFn {
                 }
             } else |_| {}
         } else |_| {}
-        const bh: *S.BodyHeaderHtml = if (f.response_data.get(S.BodyHeaderHtml)) |bhP| bhP else bhP: {
-            f.response_data.clone(S.BodyHeaderHtml, f.alloc, .{ .nav = .{
-                .nav_auth = "Error",
-                .nav_buttons = undefined,
-            } }) catch unreachable;
-            break :bhP f.response_data.get(S.BodyHeaderHtml).?;
-        };
-        bh.nav.nav_buttons = f.alloc.dupe(S.NavButtons, &(rd.navButtons(f))) catch @panic("OOM");
 
         _ = f.uri.next();
         _ = f.uri.next();

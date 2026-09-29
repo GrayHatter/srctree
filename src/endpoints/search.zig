@@ -17,6 +17,24 @@ fn inbox(ctx: *Frame) Error!void {
     return custom(ctx, "owner:me is:open");
 }
 
+pub fn inboxCount(user: ?verse.Auth.User, a: Allocator, io: Io) usize {
+    var inbox_count: usize = 0;
+    const search_str = if (user) |_|
+        "is:open owner:me"
+    else
+        "is:open";
+    if (genRules(search_str, a)) |rules| {
+        var search_results = Delta.search(rules.items, io);
+        search_results.data = if (user) |usr| .{ .user = usr.username orelse &.{} } else .empty;
+        while (search_results.next(a, io)) |dlt| {
+            inbox_count +|= 1;
+            dlt.raze(a);
+        }
+    } else |_| {}
+
+    return inbox_count;
+}
+
 pub fn index(f: *Frame) Error!void {
     var uri = f.uri;
     uri.index = 0;
@@ -100,6 +118,7 @@ fn custom(f: *Frame, search_str: []const u8) Error!void {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayListUnmanaged;
+const Io = std.Io;
 const log = std.log.scoped(.search);
 const splitScalar = std.mem.splitScalar;
 const cutPrefix = std.mem.cutPrefix;

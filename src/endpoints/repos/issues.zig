@@ -40,12 +40,14 @@ pub fn router(ctx: *verse.Frame) Router.RoutingError!Router.BuildFn {
 const IssueNewPage = T.PageData("issue-new.html");
 
 fn new(f: *Frame) Error!void {
-    const rd = RouteData.init(f) orelse return error.ServerFault;
+    _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{
+        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+    } };
     if (f.user) |usr| {
-        body_header.nav.nav_auth = usr.username.?;
+        body_header.nav.nav_auth = .abx(usr.username.?);
     }
 
     var page = IssueNewPage.init(.{
@@ -57,12 +59,14 @@ fn new(f: *Frame) Error!void {
 }
 
 fn newRemote(f: *Frame) Error!void {
-    const rd = RouteData.init(f) orelse return error.ServerFault;
+    _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{
+        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+    } };
     if (f.user) |usr| {
-        body_header.nav.nav_auth = usr.username.?;
+        body_header.nav.nav_auth = .abx(usr.username.?);
     }
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -73,13 +77,15 @@ fn newRemote(f: *Frame) Error!void {
 }
 
 fn edit(f: *Frame) Error!void {
-    const rd = RouteData.init(f) orelse return error.ServerFault;
+    _ = RouteData.init(f) orelse return error.ServerFault;
     std.debug.print("{s}\n", .{f.uri.next().?});
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{
+        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+    } };
     if (f.user) |usr| {
-        body_header.nav.nav_auth = usr.username.?;
+        body_header.nav.nav_auth = .abx(usr.username.?);
     }
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -243,15 +249,18 @@ fn view(f: *Frame) Error!void {
     const username = if (f.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{
+        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+    } };
     if (f.user) |usr| {
-        body_header.nav.nav_auth = usr.username.?;
+        body_header.nav.nav_auth = .abx(usr.username.?);
     }
 
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     const created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)});
     const updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)});
 
+    const count = rd.deltaCount(f);
     var page: DeltaPage = .init(.{
         .meta_head = meta_head,
         .body_header = body_header,
@@ -261,6 +270,8 @@ fn view(f: *Frame) Error!void {
             .blame = null,
             .git_uri = null,
             .upstream = null,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .title = .abx(delta.title),
         .description = .safe(description),

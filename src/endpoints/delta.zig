@@ -65,8 +65,10 @@ pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
 
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
-    if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{
+        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+    } };
+    if (f.user) |usr| body_header.nav.nav_auth = .abx(usr.username.?);
     f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
 
     return list(f, Delta.RepoIterator, &itr, str);
@@ -138,7 +140,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Delt
         .comment_count = comments.count,
         .view_count = d.viewers.liveCount(io),
         .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
-        .desc = if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }}),
+        .desc = .safe(if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }})),
         .delta_meta = meta,
         .comment = .safe(svg.Icon.slice(if (comments.new) .comment else .comment_new, .{})),
         .viewers = .safe(svg.Icon.slice(.eye, .{})),
@@ -158,7 +160,7 @@ pub fn list(f: *Frame, Itr: type, itr: *Tsearch.Iterator(Itr, Delta), search_str
 
     var og_title_b: [256]u8 = undefined;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{
-        .title = bufPrint(&og_title_b, "{} open issues", .{d_list.items.len}) catch unreachable,
+        .title = .safe(bufPrint(&og_title_b, "{} open issues", .{d_list.items.len}) catch unreachable),
     } };
 
     var page = DeltaListHtml.init(.{

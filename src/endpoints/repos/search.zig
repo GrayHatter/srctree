@@ -34,15 +34,20 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     else
         .{ &.{}, &.{} };
 
+    const dcount = rd.deltaCount(f);
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
+        .body_header = .{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } },
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(try f.alloc.dupe(u8, repo.description(f.alloc, f.io) catch "")),
             .blame = null,
             .git_uri = null,
             .upstream = null,
+            .issue_count = dcount.issue,
+            .diff_count = dcount.diff,
         },
         .search = .abx(udata.q orelse &.{}),
         .commits = commits,
@@ -270,3 +275,4 @@ const Frame = verse.Frame;
 const Router = verse.Router;
 const Match = Router.Match;
 const GET = Router.GET;
+const search = @import("../search.zig");

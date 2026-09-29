@@ -81,9 +81,7 @@ fn new(ctx: *Frame) Error!void {
 
 fn edit(vrs: *Frame, files: []const S.GistNewHtml.GistFiles) Error!void {
     var page = GistNewPage.init(.{
-        .meta_head = .{
-            .open_graph = .{ .title = "Create A New Gist" },
-        },
+        .meta_head = .{ .open_graph = .{ .title = .safe("Create A New Gist") } },
         .body_header = vrs.response_data.get(S.BodyHeaderHtml).?.*,
         .gist_files = files,
     });
@@ -136,7 +134,9 @@ fn toTemplate(files: []const Gist.File, a: Allocator, io: Io) ![]S.GistHtml.Gist
 fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
     const body_header: *const S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) orelse
-        &S.BodyHeaderHtml{ .nav = .{ .nav_buttons = &.{} } };
+        &S.BodyHeaderHtml{ .nav = .{
+            .inbox_count = search.inboxCount(vrs.user, vrs.alloc, vrs.io),
+        } };
 
     const hash = vrs.uri.next() orelse return error.InvalidURI;
     if (hash.len != 64) return error.DataInvalid;
@@ -145,11 +145,11 @@ fn view(vrs: *Frame) Error!void {
     const files = toTemplate(gist.files, vrs.alloc, vrs.io) catch return error.Unknown;
     var page = GistPage.init(.{
         .meta_head = .{ .open_graph = .{
-            .title = try allocPrint(vrs.alloc, "A perfect paste from {f}", .{Abx.Html{ .text = gist.owner }}),
-            .desc = if (gist.file_count == 1)
+            .title = .safe(try allocPrint(vrs.alloc, "A perfect paste from {f}", .{Abx.Html{ .text = gist.owner }})),
+            .desc = .safe(if (gist.file_count == 1)
                 try allocPrint(vrs.alloc, "{f}", .{Abx.Html{ .text = gist.files[0].name }})
             else
-                try allocPrint(vrs.alloc, "{} files", .{gist.file_count}),
+                try allocPrint(vrs.alloc, "{} files", .{gist.file_count})),
         } },
         .body_header = body_header.*,
         .gist_files = files,
@@ -181,3 +181,4 @@ const GET = Router.GET;
 
 const Highlight = @import("../syntax-highlight.zig");
 const Gist = @import("../types.zig").Gist;
+const search = @import("search.zig");

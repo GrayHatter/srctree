@@ -98,9 +98,13 @@ fn pendingNew(f: *Frame) Error!void {
         .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
-    if (f.user) |usr| body_header.nav.nav_auth = usr.username.?;
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{
+        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+    } };
+    if (f.user) |usr| body_header.nav.nav_auth = .abx(usr.username.?);
     const host = try (f.request.host orelse return error.DataMissing).valid();
+
+    const count = rd.deltaCount(f);
 
     var page = DiffNewHtml.init(.{
         .meta_head = .{ .open_graph = .{} },
@@ -111,6 +115,8 @@ fn pendingNew(f: *Frame) Error!void {
             .git_uri = .{ .host = .safe(host), .repo_name = .safe(rd.name) },
             .upstream = upstream,
             .blame = null,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .push_uri = .{ .host = .safe(host), .repo_name = .safe(rd.name) },
         .err = null,
@@ -226,10 +232,13 @@ const ErrStrs = union(enum) {
 fn createError(f: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
 
+    const count = rd.deltaCount(f);
     const host = try (f.request.host orelse return error.DataMissing).valid();
     var page = DiffNewHtml.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } },
+        .body_header = .{ .nav = .{
+            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        } },
         .err = switch (err) {
             .remote_error => |str| .{ .error_string = .safe("Unable to fetch patch from remote (" ++ str ++ ")") },
             else => .{ .error_string = .safe("error") },
@@ -242,6 +251,8 @@ fn createError(f: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!voi
             .git_uri = .{ .host = .safe(host), .repo_name = .abx(rd.name) },
             .upstream = null, // TODO do we need a button here?
             .blame = null,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .push_uri = .{ .host = .safe(host), .repo_name = .safe(rd.name) },
     });
@@ -893,10 +904,14 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{ .nav_buttons = &rd.navButtons(f) } };
+    var body_header: S.BodyHeaderHtml = .{ .nav = .{
+        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+    } };
+
     if (f.user) |usr| {
-        body_header.nav.nav_auth = usr.username.?;
+        body_header.nav.nav_auth = .abx(usr.username.?);
     }
+    const count = rd.deltaCount(f);
     var page: DeltaPage = .init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = body_header,
@@ -906,6 +921,8 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             .blame = null,
             .git_uri = null,
             .upstream = null,
+            .issue_count = count.issue,
+            .diff_count = count.diff,
         },
         .title = .abx(delta.title),
         .description = .abx(delta.message),
@@ -921,7 +938,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 .comment_box = .{
                     .current_username = .abx(username),
                     .delta_id = .safe(delta_index),
-                    .diff_id = try allocPrint(f.alloc, "{}", .{delta.attach_target}),
+                    .diff_id = .safe(try allocPrint(f.alloc, "{}", .{delta.attach_target})),
                     .action_buttons = delta_shared.actionButtons(f, delta)[0..2],
                 },
                 .patch_warning = applies,
