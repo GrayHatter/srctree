@@ -125,7 +125,7 @@ content {
 	h3 { text-align: left; }
 	&.full { min-width: 97%; }
 	&.fw { min-width: 97%; }
-	&.mw { width: 60vw; min-width: 1079px; margin: auto; }
+	&.mw { width: 60vw; min-width: 1124px; margin: auto; }
 	&.lw { min-width: 1050px; text-align:left; }
 	&.search { min-width: 50rem; width: auto; }
 	&.diff { display: flex; justify-content: flex-start; gap: 1em; width: unset; max-width: 96%; }
@@ -703,17 +703,22 @@ blob, gist, patch {
 .commit-flex {
 	margin: auto;
 	line-height: 100%;
-	> .day-col { margin: 0 2px; display: inline-table; text-align: right; > .day { padding: 0 0 1px; } }
+	> .day-col {
+		margin: 0 2px;
+		display: inline-table;
+		text-align: right;
+		> .day { padding: 0 0 1px; margin: 0 0 3px; }
+	}
 	.col {
-		width: 13px;
-		margin: 0 0 0 3px;
+		width: 16px;
+		margin: 0 0 0 2px;
 		display: inline-table;
 		text-align: center;
 		padding: 2px 0;
-		.month { width: 13px; height: 13px; display: inline-block; }
+		.month { width: 16px; height: 16px; display: inline-block; }
 		.day {
-			width: 13px;
-			height: 13px;
+			width: 16px;
+			height: 16px;
 			display: inline-table;
 			border: solid 1px;
 			border-radius: 1px 4px 1px 3px;
@@ -724,7 +729,7 @@ blob, gist, patch {
 			background-color: #1a1a1a;
 			&:hover { background-position: right center; text-decoration: none; }
 		}
-		.day.day-hide { height: 15px; width: 15px; border: none; background: #0000; }
+		.day.day-hide { height: 16px; width: 16px; margin: 0 0 4px; border: none; background: #0000; }
 		.day-pwr-1 { background-image: linear-gradient(108deg, #00708A 0%, #B100B5 100%); }
 		.day-pwr-2 { background-image: linear-gradient(108deg, #009DB3 0%, #D000D6 95%); }
 		.day-pwr-3 { background-image: linear-gradient(108deg, #00DBDE 0%, #FC00FF 100%); }
