@@ -199,7 +199,7 @@ const debug_mode: bool = @import("builtin").mode == .Debug;
 const Sha = @import("Sha.zig");
 const Repo = @import("Repo.zig");
 const Tree = @import("Tree.zig");
-const Actor = @import("actor.zig");
+const Actor = @import("Actor.zig");
 const Objects = @import("Objects.zig");
 
 const std = @import("std");

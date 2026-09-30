@@ -1,6 +1,6 @@
 pub const protocol = @import("git/protocol.zig");
 
-pub const Actor = @import("git/actor.zig");
+pub const Actor = @import("git/Actor.zig");
 pub const Agent = @import("git/agent.zig");
 pub const Blob = @import("git/blob.zig");
 pub const Branch = @import("git/Branch.zig");

@@ -383,4 +383,4 @@ test "datetime" {
 const std = @import("std");
 const Writer = std.Io.Writer;
 const eql = std.mem.eql;
-const Actor = @import("git/actor.zig");
+const Actor = @import("git/Actor.zig");
