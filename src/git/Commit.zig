@@ -190,7 +190,7 @@ pub const Iterator = struct {
         };
     }
 
-    pub fn deinit(itr: *Iterator, a: Allocator) void {
+    pub fn raze(itr: *Iterator, a: Allocator) void {
         itr.hold.deinit(a);
     }
 
