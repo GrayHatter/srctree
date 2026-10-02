@@ -94,6 +94,10 @@ pub fn initOwned(sha: Sha, data: []u8) !Commit {
     return commit;
 }
 
+pub fn iterate(cmt: Commit, repo: *const Repo) Iterator {
+    return .init(cmt, .linear, repo);
+}
+
 pub fn toParent(self: Commit, idx: u8, repo: *const Repo, a: Allocator, io: Io) !Commit {
     if (idx >= self.parent.len) return error.NoParent;
     if (self.parent[idx]) |parent| {
@@ -150,6 +154,147 @@ fn gpgSig(r: *Reader) !void {
     return error.InvalidGpgsig;
 }
 
+pub const Iterator = struct {
+    primary: Commit,
+    branch: ?Commit = null,
+    right: ?Commit = null,
+    hold: ArrayList(Commit) = .empty,
+    repo: *const Repo,
+    strat: Strategy,
+    now: Io.Timestamp = .zero,
+    // expected/found common root commit
+    common: ?Sha = null,
+
+    pub const Strategy = enum {
+        /// returns commits exclusively from the "main" branch, ignoring any commit that are
+        /// normally reachable via merge commits
+        main_branch,
+        /// Expects "fast-forward" only, and returns `error.Branching` on merge commits.
+        branch_error,
+        /// returns commits from any branch, ignoring order
+        linear,
+        /// returns commits ordered by committer.timestamp, (BUG: ignoring timezone)
+        /// descending branches as required to list all commits in the order they were
+        /// committed to the branch.
+        interleave,
+        /// returns commits ordered by author.timestamp, (BUG: ignoring timezone) descending
+        /// branches as required to list all commits in the order each commit
+        chronological,
+    };
+
+    pub fn init(c: Commit, s: Strategy, repo: *const Repo) Iterator {
+        return .{
+            .primary = c,
+            .strat = s,
+            .repo = repo,
+        };
+    }
+
+    pub fn deinit(itr: *Iterator, a: Allocator) void {
+        itr.hold.deinit(a);
+    }
+
+    pub fn next(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+        if (itr.primary.parent[0] == null) return null;
+
+        return switch (itr.strat) {
+            .main_branch => itr.nextMainOnly(a, io),
+            .linear => itr.nextLinear(a, io),
+            .interleave => itr.nextInterleave(a, io),
+            .chronological => itr.nextMainOnly(a, io),
+            .branch_error => itr.nextBranchError(a, io),
+        };
+    }
+
+    pub fn nextMainOnly(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+        return itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
+            error.NoParent => unreachable,
+            else => |e| return e,
+        };
+    }
+
+    pub fn nextBranchError(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+        if (itr.primary.parent[1] != null) return error.Branching;
+        return itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
+            error.NoParent => unreachable,
+            else => |e| return e,
+        };
+    }
+
+    pub fn nextLinear(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+        if (itr.common == null and itr.primary.parent[1] != null) {
+            const left = try itr.primary.toParent(0, itr.repo, a, io);
+            defer left.raze(a);
+            const right = try itr.primary.toParent(1, itr.repo, a, io);
+            itr.common = try itr.findCommon(&left, &right, a, io);
+            if (itr.common != null) {
+                itr.branch = right;
+                return right;
+            }
+        }
+
+        if (itr.branch) |branch| {
+            if (branch.parent[1] != null) @panic("TODO");
+
+            const branch_parent = try branch.toParent(0, itr.repo, a, io);
+            if (!branch_parent.sha.eql(itr.common.?)) {
+                itr.branch = branch_parent;
+                return branch_parent;
+            }
+            branch_parent.raze(a);
+            itr.common = null;
+            itr.branch = null;
+        }
+
+        itr.primary = itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
+            error.NoParent => unreachable,
+            else => |e| return e,
+        };
+        return itr.primary;
+    }
+
+    pub fn nextInterleave(_: *Iterator, _: Allocator, _: Io) !?Commit {
+        unreachable;
+    }
+
+    pub fn nextChronological(_: *Iterator, _: Allocator, _: Io) !?Commit {
+        unreachable;
+    }
+
+    fn findCommon(
+        itr: *const Iterator,
+        left: *const Commit,
+        right: *const Commit,
+        a: Allocator,
+        io: Io,
+    ) !?Sha {
+        if (left.parent[1] != null or right.parent[1] != null) @panic("not implemented");
+        var l_parent = try left.toParent(0, itr.repo, a, io);
+        defer l_parent.raze(a);
+        var r_parent = try right.toParent(0, itr.repo, a, io);
+        defer r_parent.raze(a);
+        while (true) {
+            if (l_parent.committer.timestamp == r_parent.committer.timestamp) {
+                if (l_parent.sha.eql(r_parent.sha)) {
+                    log.debug("common for {f} and {f} is {f}", .{ left.sha.text(), right.sha.text(), l_parent.sha.text() });
+                    return l_parent.sha;
+                } else {
+                    @panic("not implemented");
+                }
+            } else if (l_parent.committer.timestamp > r_parent.committer.timestamp) {
+                const old = l_parent;
+                defer old.raze(a);
+                l_parent = try l_parent.toParent(0, itr.repo, a, io);
+            } else if (l_parent.committer.timestamp < r_parent.committer.timestamp) {
+                const old = r_parent;
+                defer old.raze(a);
+                r_parent = try r_parent.toParent(0, itr.repo, a, io);
+            }
+        }
+        return null;
+    }
+};
+
 test "parse commit" {
     const commit_data =
         \\tree 863dce25c7370ca052f0efddd1e3aa73569fb37b
@@ -190,6 +335,30 @@ test "fuzz" {
     try std.testing.fuzz(Context{}, Context.testOne, .{});
 }
 
+test Iterator {
+    const a = std.testing.allocator;
+    const io = std.testing.io;
+
+    //const cwd = try Io.Dir.cwd().openDir(io, "../gr.ht.hugo", .{});
+    const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
+    var repo = try Repo.init(cwd, io);
+    try repo.loadData(a, io);
+    defer repo.raze(a, io);
+
+    const cmtt = try repo.HEAD(a, io);
+    defer cmtt.raze(a);
+
+    var itr = cmtt.iterate(&repo);
+
+    var remain: usize = 50;
+    while (try itr.next(a, io)) |next| {
+        defer next.raze(a);
+        log.debug("found {f}", .{next.sha.text()});
+        if (remain == 0) break;
+        remain -= 1;
+    }
+}
+
 test {
     _ = &std.testing.refAllDecls(@This());
 }
@@ -214,6 +383,7 @@ const startsWith = std.mem.startsWith;
 const cutPrefix = std.mem.cutPrefix;
 const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
+const ArrayList = std.ArrayList;
 
 // TODO not currently implemented
 pub const GPGSig = struct {};
