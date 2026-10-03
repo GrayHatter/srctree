@@ -38,19 +38,19 @@ pub fn patchVerse(a: Allocator, patch: *Patch.Patch) ![]T.Context {
     return try patch.diffsVerseSlice(a);
 }
 
-fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo) Error!void {
+fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault; // Probably NotFound TODO check
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
-    if (!Git.commitish(sha)) {
+    if (!git.commitish(sha)) {
         std.debug.print("Abuse ''{s}''\n", .{sha});
         return error.Abuse;
     }
 
     // lol... I'd forgotten I'd done this. >:)
-    const current: Git.Commit = repo.commit(.init(sha), f.alloc, f.io) catch |err| cmt: {
+    const current: Commit = repo.commit(.init(sha), f.alloc, f.io) catch |err| cmt: {
         std.debug.print("unable to find commit {}, trying expensive fallback\n", .{err});
         // TODO return 404
-        var fallback: Git.Commit = repo.HEAD(f.alloc, f.io) catch return error.Unknown;
+        var fallback: Commit = repo.HEAD(f.alloc, f.io) catch return error.Unknown;
         while (!fallback.sha.startsWith(.init(sha))) {
             fallback = fallback.toParent(0, &repo, f.alloc, f.io) catch |err2| {
                 log.err("fallback to parent failed {}", .{err2});
@@ -62,8 +62,8 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
 
     const patch_view_mode = updateFetchPatchView(f) catch .inlined;
 
-    var git = repo.agent(f.alloc);
-    var diff = git.show(current.sha, f.io) catch |err| switch (err) {
+    var git_agent = repo.agent(f.alloc);
+    var diff = git_agent.show(current.sha, f.io) catch |err| switch (err) {
         //error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
         else => return error.Unknown,
     };
@@ -138,7 +138,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: Git.Repo)
     return f.sendPage(&page) catch unreachable;
 }
 
-pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: Git.Repo) Error!void {
+pub fn viewAsPatch(f: *Frame, sha: []const u8, repo: git.Repo) Error!void {
     var acts = repo.agent(f.alloc);
     if (endsWith(u8, sha, ".patch")) {
         var rbuf: [0xff]u8 = undefined;
@@ -178,7 +178,7 @@ pub fn viewCommit(f: *Frame) Error!void {
     }
 }
 
-pub fn commitCtxParents(c: Git.Commit, repo: []const u8, a: Allocator) ![]S.CommitHtml.Commit.Parents {
+pub fn commitCtxParents(c: Commit, repo: []const u8, a: Allocator) ![]S.CommitHtml.Commit.Parents {
     var plen: usize = 0;
     for (c.parent) |cp| {
         if (cp != null) plen += 1;
@@ -197,7 +197,7 @@ pub fn commitCtxParents(c: Git.Commit, repo: []const u8, a: Allocator) ![]S.Comm
     return parents;
 }
 
-pub fn commitCtx(c: Git.Commit, repo: []const u8, a: Allocator, io: Io) !S.CommitHtml.Commit {
+pub fn commitCtx(c: Commit, repo: []const u8, a: Allocator, io: Io) !S.CommitHtml.Commit {
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     var r: Reader = .fixed(c.body);
     var w: Writer.Allocating = try .initCapacity(a, c.body.len);
@@ -217,12 +217,12 @@ pub fn commitCtx(c: Git.Commit, repo: []const u8, a: Allocator, io: Io) !S.Commi
     };
 }
 
-fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email: bool) !S.CommitListHtml.CommitList {
+fn commitVerse(a: Allocator, c: Commit, repo_name: []const u8, include_email: bool) !S.CommitListHtml.CommitList {
     var parcount: usize = 0;
     for (c.parent) |p| {
         if (p != null) parcount += 1;
     }
-    var par_ptr: [*]const ?Git.Sha = &c.parent;
+    var par_ptr: [*]const ?Sha = &c.parent;
     for (0..parcount) |i| {
         var lim = 9 - i;
         while (lim > 0 and par_ptr[i] == null) {
@@ -256,27 +256,27 @@ fn commitVerse(a: Allocator, c: Git.Commit, repo_name: []const u8, include_email
 
 fn buildList(
     list: *ArrayList(S.CommitListHtml.CommitList),
-    repo: *const Git.Repo,
+    repo: *const git.Repo,
     name: []const u8,
-    before: ?Git.Sha,
+    before: ?Sha,
     include_email: bool,
     a: Allocator,
     io: Io,
-) !?Git.Sha {
+) !?Sha {
     return buildListBetween(list, repo, name, null, before, include_email, a, io);
 }
 
 fn buildListBetween(
     list: *ArrayList(S.CommitListHtml.CommitList),
-    repo: *const Git.Repo,
+    repo: *const git.Repo,
     name: []const u8,
-    left: ?Git.Sha,
-    right: ?Git.Sha,
+    left: ?Sha,
+    right: ?Sha,
     include_email: bool,
     a: Allocator,
     io: Io,
-) !?Git.Sha {
-    var current: Git.Commit = repo.HEAD(a, io) catch return error.Unknown;
+) !?Sha {
+    var current: Commit = repo.HEAD(a, io) catch return error.Unknown;
     if (right) |r| while (!current.sha.startsWith(r)) {
         current = current.toParent(0, repo, a, io) catch |err| {
             std.debug.print("unable to build commit history {}\n", .{err});
@@ -305,7 +305,7 @@ pub fn commitList(f: *Frame) Error!void {
         if (!std.mem.eql(u8, next, "commits")) return error.ServerFault;
     }
 
-    var commitish: ?Git.Sha = null;
+    var commitish: ?Sha = null;
     if (f.uri.next()) |next| if (eql(u8, next, "before")) {
         if (f.uri.next()) |before| commitish = .init(before);
     };
@@ -318,7 +318,7 @@ pub fn commitList(f: *Frame) Error!void {
 
     var l_b: [50]S.CommitListHtml.CommitList = undefined;
     var list: ArrayList(S.CommitListHtml.CommitList) = .initBuffer(&l_b);
-    const last_sha: ?Git.Sha = buildList(&list, &repo, rd.name, commitish, f.user != null, f.alloc, f.io) catch
+    const last_sha: ?Sha = buildList(&list, &repo, rd.name, commitish, f.user != null, f.alloc, f.io) catch
         return error.Unknown;
 
     return sendCommits(f, list.items, rd.name, last_sha);
@@ -332,7 +332,7 @@ pub fn commitsBefore(f: *Frame) Error!void {
     repo.loadData(f.alloc) catch return error.Unknown;
     defer repo.raze(f.alloc, f.io);
 
-    const before: Git.Sha = if (f.uri.next()) |bf| .init(bf);
+    const before: Sha = if (f.uri.next()) |bf| .init(bf);
     const commits_b = try f.alloc.alloc(T.Verse, 50);
 
     var l_b: [50]S.CommitListHtml.CommitList = undefined;
@@ -341,10 +341,10 @@ pub fn commitsBefore(f: *Frame) Error!void {
     return sendCommits(f, list.items, rd.name, last_sha);
 }
 
-fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Git.Sha) Error!void {
+fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: []const u8, sha: ?Sha) Error!void {
     _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
-    const sha_text = if (sha) |s| s.text() else Git.Sha.Text.zeros;
+    const sha_text = if (sha) |s| s.text() else Sha.Text.zeros;
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
         .body_header = .{ .nav = .{
@@ -385,7 +385,9 @@ const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
 const updateFetchPatchView = Repos.updateFetchPatchView;
 const Datetime = @import("../../datetime.zig");
-const Git = @import("../../git.zig");
+const git = @import("../../git.zig");
+const Commit = git.Commit;
+const Sha = git.Sha;
 const Highlight = @import("../../syntax-highlight.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../Patch.zig");
