@@ -214,7 +214,7 @@ repolist {
 	margin: auto;
 	text-align: left;
 	repo {
-		min-width: 80vw;
+		min-width: 100%;
 		margin: 0 1rem 0.333rem 0;
 		flex: 3 0 fit-content;
 		display: flex;
