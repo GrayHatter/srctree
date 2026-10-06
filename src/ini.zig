@@ -119,14 +119,15 @@ pub fn Config(BaseT: type) type {
                 if (Type == void) return {};
                 var namespace: Type = undefined;
                 const ns = ini.get(name) orelse return null;
-                inline for (@typeInfo(Type).@"struct".fields) |s| {
-                    @field(namespace, s.name) = switch (s.type) {
-                        bool => ns.getBool(s.name) orelse s.defaultValue() orelse return error.SettingMissing,
-                        ?bool => ns.getBool(s.name),
-                        ?isize => ns.getInt(s.name),
-                        []const u8 => ns.get(s.name) orelse return error.SettingMissing,
-                        ?[]const u8 => ns.get(s.name),
-                        else => @compileError("not implemented " ++ s.name),
+                const S = @typeInfo(Type).@"struct";
+                inline for (S.field_names, S.field_types, S.field_attrs) |fname, ftype, fattr| {
+                    @field(namespace, fname) = switch (ftype) {
+                        bool => ns.getBool(fname) orelse fattr.defaultValue(ftype) orelse return error.SettingMissing,
+                        ?bool => ns.getBool(fname),
+                        ?isize => ns.getInt(fname),
+                        []const u8 => ns.get(fname) orelse return error.SettingMissing,
+                        ?[]const u8 => ns.get(fname),
+                        else => @compileError("not implemented " ++ fname),
                     };
                 }
                 return namespace;
@@ -136,12 +137,13 @@ pub fn Config(BaseT: type) type {
         pub fn makeBase(self: *const Self, Type: type) !Type {
             if (Type == void) return {};
             var base: Type = undefined;
-            inline for (@typeInfo(Type).@"struct".fields) |f| {
-                if (f.type == []const u8) comptime unreachable; // Root variable not yet supported
-                @field(base, f.name) = switch (@typeInfo(f.type)) {
-                    .@"struct" => try self.ini.buildStruct(f.type, f.name) orelse return error.NamespaceMissing,
-                    .optional => self.ini.buildStruct(@typeInfo(f.type).optional.child, f.name) catch null,
-                    else => @compileError("not implemented " ++ f.name),
+            const S = @typeInfo(Type).@"struct";
+            inline for (S.field_names, S.field_types) |fname, ftype| {
+                if (ftype == []const u8) comptime unreachable; // Root variable not yet supported
+                @field(base, fname) = switch (@typeInfo(ftype)) {
+                    .@"struct" => try self.ini.buildStruct(ftype, fname) orelse return error.NamespaceMissing,
+                    .optional => self.ini.buildStruct(@typeInfo(ftype).optional.child, fname) catch null,
+                    else => @compileError("not implemented " ++ fname),
                 };
             }
 

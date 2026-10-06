@@ -235,10 +235,11 @@ pub const Caps = struct {
     };
 
     pub fn format(c: Caps, w: *std.Io.Writer) !void {
-        inline for (@typeInfo(Caps).@"struct".fields) |f| {
-            switch (f.type) {
-                bool => if (@field(c, f.name)) try w.writeAll(f.name ++ " "),
-                ?[]const u8 => if (@field(c, f.name)) |str| try w.print("{s}={s} ", .{ f.name, str }),
+        const S = @typeInfo(Caps).@"struct";
+        inline for (S.field_names, S.field_types) |fname, ftype| {
+            switch (ftype) {
+                bool => if (@field(c, fname)) try w.writeAll(fname ++ " "),
+                ?[]const u8 => if (@field(c, fname)) |str| try w.print("{s}={s} ", .{ fname, str }),
                 else => comptime unreachable,
             }
         }

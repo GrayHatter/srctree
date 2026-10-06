@@ -1,6 +1,7 @@
 /// Aligned to Git.Repo for @fieldParentPtr
 enabled: bool align(8) = false,
-conf_zon: ?CiZon = null,
+zon_conf: ?CiZon = null,
+zon_arena: ?std.heap.ArenaAllocator = null,
 conf_bytes: [:0]const u8 = &.{},
 working_dir: ?Io.Dir = null,
 source: Source = .{},
@@ -31,6 +32,7 @@ pub const CiZon = struct {
 
 pub fn status(ci: *Ci, a: Allocator, io: Io) !bool {
     const repo: *Repo = @fieldParentPtr("ci", ci);
+    ci.zon_arena = .init(a);
     ci.enabled = false;
     const commit = repo.git.HEAD(a, io) catch return false; // empty or broken repo
     defer commit.raze(a);
@@ -44,7 +46,12 @@ pub fn status(ci: *Ci, a: Allocator, io: Io) !bool {
                 .blob => if (find(u8, blob.blob.data.blob, ".srctree =")) |_| {
                     defer blob.blob.raze(a);
                     ci.conf_bytes = try a.dupeSentinel(u8, blob.blob.data.blob, 0);
-                    ci.conf_zon = std.zon.parse.fromSliceAlloc(CiZon, a, ci.conf_bytes, null, .{
+                    var diag: std.zon.parse.Diagnostics = .{ .errors = &.{} };
+                    ci.zon_conf = std.zon.parse.fromSlice(CiZon, .{
+                        .gpa = a,
+                        .arena = ci.zon_arena.?.allocator(),
+                        .source = ci.conf_bytes,
+                        .diagnostics = &diag,
                         .ignore_unknown_fields = true,
                     }) catch |err| {
                         log.err("unable to parse zon {}", .{err});
@@ -107,7 +114,10 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
 pub fn raze(ci: *Ci, a: Allocator, io: Io) void {
     if (ci.working_dir) |*wd| wd.close(io);
     if (ci.conf_bytes.len > 0) a.free(ci.conf_bytes);
-    if (ci.conf_zon) |zon| std.zon.parse.free(a, zon);
+    if (ci.zon_arena) |arena| {
+        arena.deinit();
+        ci.zon_conf = null;
+    }
 }
 
 pub fn validate(ci: *Ci, a: Allocator, io: Io) !void {
@@ -130,7 +140,7 @@ pub const Artifacts = struct {
     pub fn save(art: *Artifacts, a: Allocator, io: Io) void {
         const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
         //const repo: *Repo = @fieldParentPtr("ci", ci);
-        if (ci.conf_zon.?.srctree) |zon| {
+        if (ci.zon_conf.?.srctree) |zon| {
             if (zon.docs) |_| art.saveDocs(a, io);
         }
     }

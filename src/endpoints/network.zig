@@ -34,7 +34,7 @@ pub fn index(f: *Frame) Error!void {
 
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
         .netlist = .safe(html.written()),
     });
 

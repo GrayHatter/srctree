@@ -184,7 +184,7 @@ fn monthFrom(year: usize, day: usize) struct { Month, Day } {
         d -= day_IN_MONTH[m];
         m += 1;
     }
-    return .{ @enumFromInt(m), @enumFromInt(d) };
+    return .{ @fromBackingInt(@intCast(m)), @fromBackingInt(@intCast(d)) };
 }
 
 pub fn currentMonth() []const u8 {
@@ -193,7 +193,7 @@ pub fn currentMonth() []const u8 {
 }
 
 pub fn monthSlice(self: DateTime) []const u8 {
-    return Names.Month[@intFromEnum(self.month)];
+    return Names.Month[@backingInt(self.month)];
 }
 
 pub fn weekdaySlice(self: DateTime) []const u8 {
@@ -270,7 +270,7 @@ pub fn fmtDay(self: DateTime, w: *Writer) !void {
 pub fn fmtYMD(self: DateTime, w: *Writer) !void {
     return w.print(
         "{}-{:0>2}-{:0>2}",
-        .{ self.year, @intFromEnum(self.month), @intFromEnum(self.day) },
+        .{ self.year, @backingInt(self.month), @backingInt(self.day) },
     );
 }
 
@@ -285,7 +285,7 @@ pub fn format(self: DateTime, w: *Writer) !void {
     if (self.flags.has_date) {
         try w.print(
             "{}-{:0>2}-{:0>2} {s}",
-            .{ self.year, @intFromEnum(self.month), @intFromEnum(self.day), Names.Day[self.weekday] },
+            .{ self.year, @backingInt(self.month), @backingInt(self.day), Names.Day[self.weekday] },
         );
     }
     if (self.flags.has_time) {
@@ -327,8 +327,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 0,
         .year = 1970,
-        .month = @enumFromInt(1),
-        .day = @enumFromInt(1),
+        .month = @fromBackingInt(@intCast(1)),
+        .day = @fromBackingInt(@intCast(1)),
         .weekday = 4,
         .hours = 0,
         .minutes = 0,
@@ -338,8 +338,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1697312998,
         .year = 2023,
-        .month = @enumFromInt(10),
-        .day = @enumFromInt(14),
+        .month = @fromBackingInt(@intCast(10)),
+        .day = @fromBackingInt(@intCast(14)),
         .weekday = 6,
         .hours = 19,
         .minutes = 49,
@@ -349,8 +349,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148799,
         .year = 1998,
-        .month = @enumFromInt(12),
-        .day = @enumFromInt(31),
+        .month = @fromBackingInt(@intCast(12)),
+        .day = @fromBackingInt(@intCast(31)),
         .weekday = 4,
         .hours = 23,
         .minutes = 59,
@@ -360,8 +360,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148800,
         .year = 1999,
-        .month = @enumFromInt(1),
-        .day = @enumFromInt(1),
+        .month = @fromBackingInt(@intCast(1)),
+        .day = @fromBackingInt(@intCast(1)),
         .weekday = 5,
         .hours = 0,
         .minutes = 0,
@@ -371,8 +371,8 @@ test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1002131014,
         .year = 2001,
-        .month = @enumFromInt(10),
-        .day = @enumFromInt(3),
+        .month = @fromBackingInt(@intCast(10)),
+        .day = @fromBackingInt(@intCast(3)),
         .weekday = 3,
         .hours = 17,
         .minutes = 43,

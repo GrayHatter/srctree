@@ -1,4 +1,4 @@
-mtls_fp: [40]u8 = .{0} ** 40,
+mtls_fp: [40]u8 = @splat(0),
 not_before: i64,
 not_after: i64,
 kind: Type = .user,

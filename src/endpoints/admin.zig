@@ -22,7 +22,7 @@ pub fn index(f: *Frame) Error!void {
 fn default(f: *Frame) Error!void {
     try f.requireValidUser();
 
-    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+    const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
         &.{ .nav = .{
             .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
         } };
@@ -67,7 +67,7 @@ pub fn settings(f: *Frame) Router.Error!void {
             .count = mem.countScalar(u8, w.writer.buffered(), '\n') + 2,
         };
     }
-    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+    const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
         &.{ .nav = .{
             .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
         } };
@@ -84,7 +84,7 @@ pub fn settings(f: *Frame) Router.Error!void {
 fn remotes(f: *Frame) Error!void {
     try f.requireValidUser();
 
-    const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+    const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
         &.{ .nav = .{
             .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
         } };
@@ -158,7 +158,7 @@ const Repo = struct {
     fn create(f: *Frame) Error!void {
         try f.requireValidUser();
 
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+        const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
             &.{ .nav = .{
                 .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
             } };
@@ -175,7 +175,7 @@ const Repo = struct {
 
     fn delete(f: *Frame) Error!void {
         try f.requireValidUser();
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+        const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
             &.{ .nav = .{
                 .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
             } };
@@ -195,7 +195,7 @@ const Repo = struct {
     fn clonePost(f: *Frame) Error!void {
         try f.requireValidUser();
 
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+        const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
             &.{ .nav = .{
                 .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
             } };
@@ -242,7 +242,7 @@ const Repo = struct {
 
     fn clone(f: *Frame) Error!void {
         try f.requireValidUser();
-        const bhdr: *const S.BodyHeaderHtml = f.response_data.get(S.BodyHeaderHtml) orelse
+        const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
             &.{ .nav = .{
                 .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
             } };

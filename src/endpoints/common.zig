@@ -1,5 +1,5 @@
 pub fn bodyHeader(f: *Frame) S.BodyHeaderHtml {
-    if (f.response_data.get(S.BodyHeaderHtml)) |bh| {
+    if (f.template_data.get(S.BodyHeaderHtml)) |bh| {
         return bh.*;
     } else {
         return .{ .nav = .{

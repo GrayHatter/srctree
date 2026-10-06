@@ -200,7 +200,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
         return resol(fr) catch {};
     }
 
-    var bh: S.BodyHeaderHtml = (fr.response_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
+    var bh: S.BodyHeaderHtml = (fr.template_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
         .nav_auth = .safe("Error"),
         .inbox_count = search.inboxCount(fr.user, fr.alloc, fr.io),
     } }).*;
@@ -211,19 +211,19 @@ fn builder(fr: *Frame, call: BuildFn) void {
         bh.nav.nav_auth = .safe("Public");
     }
 
-    fr.response_data.clone(S.BodyHeaderHtml, fr.alloc, bh) catch {};
+    fr.template_data.clone(S.BodyHeaderHtml, fr.alloc, bh) catch {};
     return call(fr) catch |err| switch (err) {
         error.NotFound => builder(fr, notFound), // TODO catch inline
         error.InvalidURI => builder(fr, notFound), // TODO catch inline
         error.WriteFailed => log.err("Unexpected WriteFailure", .{}),
         error.NotImplemented, error.Unknown => {
             log.err("Unexpected error '{}'", .{err});
-            if (@import("builtin").mode == .Debug) unreachable;
+            if (@import("builtin").mode == .debug) unreachable;
             return fr.sendDefaultErrorPage(.internal_server_error);
         },
         error.ServerFault => {
             log.err("Server Fault", .{});
-            if (@import("builtin").mode == .Debug) unreachable;
+            if (@import("builtin").mode == .debug) unreachable;
             return fr.sendDefaultErrorPage(.internal_server_error);
         },
         error.OutOfMemory, error.NoSpaceLeft => {

@@ -118,7 +118,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     const count = rd.deltaCount(ctx);
     var page = TreePage.init(.{
         .meta_head = .{ .title = .safe(page_title), .open_graph = open_graph },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = ctx.template_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
             .git_uri = .{ .host = .safe(try ctx.request.host.?.valid()), .repo_name = .abx(rd.name) },
             .description = open_graph.desc,

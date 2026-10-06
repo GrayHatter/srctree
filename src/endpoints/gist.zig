@@ -82,7 +82,7 @@ fn new(ctx: *Frame) Error!void {
 fn edit(vrs: *Frame, files: []const S.GistNewHtml.GistFiles) Error!void {
     var page = GistNewPage.init(.{
         .meta_head = .{ .open_graph = .{ .title = .safe("Create A New Gist") } },
-        .body_header = vrs.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = vrs.template_data.get(S.BodyHeaderHtml).?.*,
         .gist_files = files,
     });
 
@@ -133,7 +133,7 @@ fn toTemplate(files: []const Gist.File, a: Allocator, io: Io) ![]S.GistHtml.Gist
 
 fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
-    const body_header: *const S.BodyHeaderHtml = vrs.response_data.get(S.BodyHeaderHtml) orelse
+    const body_header: *const S.BodyHeaderHtml = vrs.template_data.get(S.BodyHeaderHtml) orelse
         &S.BodyHeaderHtml{ .nav = .{
             .inbox_count = search.inboxCount(vrs.user, vrs.alloc, vrs.io),
         } };

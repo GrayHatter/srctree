@@ -24,7 +24,7 @@ pub fn raze(objs: Objects, a: Allocator, io: Io) void {
 
 fn findFileSha(objs: Objects, sha: *Sha, io: Io) LoadError!Io.File {
     // TODO error on ambiguous ref
-    var fb = [_]u8{0} ** 2048;
+    var fb: [2048]u8 = @splat(0);
     const byte: u8 = switch (sha.hash) {
         .sha1 => |sh| sh[0],
         .sha256 => |sh| sh[0],
@@ -56,7 +56,7 @@ fn findFile(objs: Objects, sha: Sha, io: Io) LoadError!Io.File {
         .sha1 => |sh| &sh,
         .sha256 => |sh| &sh,
     };
-    var fb = [_]u8{0} ** 2048;
+    var fb: [2048]u8 = @splat(0);
     const grouped = bufPrint(&fb, "./{s}/{s}", .{ text[0..2], text[2..] }) catch unreachable;
     const file = objs.dir.openFile(io, grouped, .{}) catch |err| switch (err) {
         error.FileNotFound => {
@@ -228,7 +228,7 @@ test "hopefully a delta" {
 }
 
 test {
-    var fb = [_]u8{0} ** 2048;
+    var fb: [2048]u8 = @splat(0);
     const objdir = try bufPrint(&fb, "./objects/{x}", .{([1]u8{0})[0..1]});
     try std.testing.expectEqualStrings("./objects/00", objdir);
 }

@@ -45,7 +45,7 @@ pub const File = struct {
     }
 
     pub fn filename(f: File) [74]u8 {
-        var output: [74]u8 = [_]u8{0} ** 64 ++ ".gist-file".*;
+        var output: [74]u8 = @as([64]u8, @splat(0)) ++ ".gist-file".*;
         var sha = Sha256.init(.{});
         sha.update(f.name);
         sha.update(f.blob);

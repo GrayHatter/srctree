@@ -225,7 +225,7 @@ fn astComment(text: []const u8) bool {
 pub fn highlightInternal(lang: Language, text: [:0]const u8, out: *Writer, a: Allocator) !void {
     switch (lang) {
         .zig => {
-            const ast = try std.zig.Ast.parse(a, text, .zig);
+            const ast = try std.zig.Ast.parse(a, text, .{});
             const start_token: u32 = ast.firstToken(.root);
             const end_token = ast.lastToken(.root) + 1;
             var cursor: usize = ast.tokenStart(start_token);
@@ -358,7 +358,6 @@ pub fn highlightInternal(lang: Language, text: [:0]const u8, out: *Writer, a: Al
                     .asterisk_percent_equal,
                     .asterisk_pipe,
                     .asterisk_pipe_equal,
-                    .asterisk_asterisk,
                     .arrow,
                     .colon,
                     .slash,
@@ -379,7 +378,7 @@ pub fn highlightInternal(lang: Language, text: [:0]const u8, out: *Writer, a: Al
                     .angle_bracket_angle_bracket_right_equal,
                     .tilde,
                     => try appendEscaped(out, slice),
-                    .invalid_periodasterisks, .invalid => return error.InvalidToken,
+                    .invalid => return error.InvalidToken,
                 }
             }
         },

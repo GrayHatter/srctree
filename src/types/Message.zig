@@ -60,7 +60,7 @@ pub fn commit(msg: Message, io: Io) !void {
     const file = try Types.commit(.message, filename, io);
     defer file.close(io);
 
-    std.debug.assert(!std.mem.eql(u8, msg.hash[0..], &[_]u8{0} ** 32));
+    std.debug.assert(!std.mem.eql(u8, msg.hash[0..], &@as([32]u8, @splat(0))));
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
     try writerFn(&msg, &fd_writer.interface);
@@ -81,13 +81,13 @@ pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
 }
 
 pub fn genHash(msg: *Message) *const DefaultHash {
-    std.debug.assert(std.mem.eql(u8, msg.hash[0..], &[_]u8{0} ** 32));
+    std.debug.assert(std.mem.eql(u8, msg.hash[0..], @as([32]u8, @splat(0))[0..]));
     var h = Sha256.init(.{});
     h.update(asBytes(&msg.state));
     h.update(asBytes(&msg.target));
     h.update(asBytes(&msg.created));
     h.update(asBytes(&msg.updated));
-    h.update(asBytes(&@intFromEnum(msg.kind)));
+    h.update(asBytes(&@backingInt(msg.kind)));
     switch (msg.kind) {
         .comment => {
             h.update(msg.author orelse "");

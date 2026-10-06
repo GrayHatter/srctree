@@ -80,7 +80,7 @@ pub fn blame(f: *Frame) Router.Error!void {
     const dcount = rd.deltaCount(f);
     var page = BlamePage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),

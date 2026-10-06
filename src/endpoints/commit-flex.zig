@@ -635,7 +635,7 @@ pub fn commitFlex(ctx: *Frame) Error!void {
 
     const page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = ctx.template_data.get(S.BodyHeaderHtml).?.*,
         .total_hits = .safe(try allocPrint(ctx.alloc, "{}", .{tcount})),
         .flex_weeks = flex_weeks,
         .checked_repos = .safe(try allocPrint(ctx.alloc, "{}", .{repo_count})),
@@ -672,4 +672,4 @@ const JournalRows = S.UserCommitsHtml.Months.JournalRows;
 
 const Route = verse.Router;
 const Error = Route.Error;
-const debug_mode: bool = @import("builtin").mode == .Debug;
+const debug_mode: bool = @import("builtin").mode == .debug;

@@ -3,21 +3,24 @@ const std = @import("std");
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
-    const use_llvm = optimize != .Debug or true;
+    const use_llvm = optimize != .debug or false;
 
-    const enable_libcurl = b.option(bool, "libcurl", "enable linking with libcurl") orelse false;
     const full_ci = b.option(bool, "fullci", "enable full CI tests") orelse false;
     const ci_cache_path = b.option([]const u8, "ci_cache_path", "path to store the CI tests cache");
 
     const options = b.addOptions();
-    options.addOption(bool, "libcurl", enable_libcurl);
     options.addOption(bool, "full_ci", full_ci);
     options.addOption(?[]const u8, "ci_cache_path", ci_cache_path);
+
+    //const predir = b.root.openDir(b.graph.io, ".", .{ .iterate = true }) catch @panic("bah");
+    //var buf: [4000]u8 = undefined;
+    //const real = buf[0 .. predir.realPath(b.graph.io, &buf) catch unreachable];
+    //std.debug.print("realpath {s}\n\n", .{real});
 
     const verse = b.dependency("verse", .{
         .target = target,
         .optimize = optimize,
-        .@"template-path" = b.path("templates"),
+        .templates = findTemplates("templates", b, b.allocator, b.graph.io) catch unreachable,
         .@"ua-validation" = true,
         .@"abx-required" = true,
         .@"accept-lang-heat" = "",
@@ -46,7 +49,7 @@ pub fn build(b: *std.Build) void {
     // build run
     const run_cmd = b.addRunArtifact(srctree);
     run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
+    run_cmd.addPassthruArgs();
     const run_step = b.step("run", "run srctree");
     run_step.dependOn(&run_cmd.step);
 
@@ -93,4 +96,29 @@ pub fn build(b: *std.Build) void {
     deploy.dependOn(&hook_artifact.step);
     deploy.dependOn(&artificer_artifact.step);
     deploy.dependOn(&static_files.step);
+}
+
+fn findTemplates(path: []const u8, b: *std.Build, a: std.mem.Allocator, io: std.Io) ![]const std.Build.LazyPath {
+    var list: std.ArrayList(std.Build.LazyPath) = .empty;
+
+    const dir = b.root.openDir(io, path, .{ .iterate = true }) catch |err| switch (err) {
+        else => @panic("unable to open template dir"),
+    };
+    defer dir.close(io);
+    const starting: std.Build.LazyPath = b.path(path);
+
+    var itr = dir.walk(a) catch @panic("OOM");
+    while (itr.next(io) catch @panic("IO")) |file| {
+        switch (file.kind) {
+            .file => if (std.mem.endsWith(u8, file.basename, ".html")) {
+                //std.debug.print("basename {s}\n", .{file.basename});
+                const new = starting.path(b, a.dupe(u8, file.path) catch @panic("OOM"));
+                list.append(a, new) catch @panic("OOM");
+            },
+            .directory => {},
+            else => {},
+        }
+    }
+
+    return try list.toOwnedSlice(a);
 }

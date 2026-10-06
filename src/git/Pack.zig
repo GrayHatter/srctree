@@ -235,7 +235,7 @@ fn parseObjHeader(reader: *Reader) PackedObject.Header {
     byte = reader.takeByte() catch unreachable;
     var h = PackedObject.Header{
         .size = byte & 0b1111,
-        .kind = @enumFromInt((byte & 0b01110000) >> 4),
+        .kind = @fromBackingInt(@intCast((byte & 0b01110000) >> 4)),
     };
     var cont: bool = byte & 0x80 != 0;
     var shift: u6 = 4;

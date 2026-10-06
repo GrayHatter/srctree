@@ -51,7 +51,7 @@ pub fn list(f: *Frame) Router.Error!void {
 
     var page = TagPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = repo_header,
         .tags = tstack.items,
     });

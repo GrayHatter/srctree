@@ -63,8 +63,17 @@ fn update(f: *Frame) Router.Error!void {
     const resolve = repo.loadBlob(blb.sha, f.alloc, f.io) catch return error.ServerFault;
     if (resolve.data != .blob) return {};
     const data = try f.alloc.dupeSentinel(u8, resolve.data.blob, 0);
-    var diag: std.zon.parse.Diagnostics = .{};
-    if (std.zon.parse.fromSliceAlloc(ZonConf, f.alloc, data, &diag, .{ .ignore_unknown_fields = true })) |zon| {
+
+    var arena: std.heap.ArenaAllocator = .init(f.alloc);
+    defer arena.deinit();
+    var diag: std.zon.parse.Diagnostics = .{ .errors = &.{} };
+    if (std.zon.parse.fromSlice(ZonConf, .{
+        .gpa = f.alloc,
+        .arena = arena.allocator(),
+        .source = data,
+        .diagnostics = &diag,
+        .ignore_unknown_fields = true,
+    })) |zon| {
         if (zon.srctree) |srctree| {
             var ci: CI = .{ .name = &.{} };
             if (srctree.docs) |d| after_party.invite(d, &ci) catch unreachable;

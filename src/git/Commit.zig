@@ -3,7 +3,7 @@ sha: Sha,
 tree: Sha,
 /// 9 ought to be enough for anyone... or at least robinli ... at least for a while
 /// TODO fix and make this dynamic
-parent: [9]?Sha = .{null} ** 9,
+parent: [9]?Sha = @splat(null),
 author: Actor,
 committer: Actor,
 
@@ -363,7 +363,7 @@ test {
     _ = &std.testing.refAllDecls(@This());
 }
 
-const debug_mode: bool = @import("builtin").mode == .Debug;
+const debug_mode: bool = @import("builtin").mode == .debug;
 
 const Sha = @import("Sha.zig");
 const Repo = @import("Repo.zig");

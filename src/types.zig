@@ -59,7 +59,9 @@ const custom_types: struct {
         inline for (es.types) |enable| if (enable == t) return true;
         return false;
     }
-} = .{ .types = &.{common.State} };
+} = .{ .types = &.{
+    common.State,
+} };
 
 var storage_dir: Storage = undefined;
 
@@ -287,17 +289,18 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
             while (r.takeDelimiterInclusive('\n')) |line| {
                 if (line.len == 1 and line[0] == '\n') return output;
                 const name: []u8, const value: [:'\n']u8 = split(line) orelse continue;
-                inline for (@typeInfo(T).@"struct".fields) |field| {
-                    const dst = &@field(output, field.name);
-                    const prefixed_name = if (prefix.len > 0) prefix ++ "." ++ field.name else field.name;
-                    if (eql(u8, name, prefixed_name)) switch (field.type) {
+                const S = @typeInfo(T).@"struct";
+                inline for (S.field_names, S.field_types) |fname, ftype| {
+                    const dst = &@field(output, fname);
+                    const prefixed_name = if (prefix.len > 0) prefix ++ "." ++ fname else fname;
+                    if (eql(u8, name, prefixed_name)) switch (ftype) {
                         DefaultHash => if (value.len == 64) {
                             var hex: []const u8 = value;
                             for (0..32) |i| {
                                 dst.*[i] = parseInt(u8, hex[0..2], 16) catch 0;
                                 hex = hex[2..];
                             }
-                        } else log.warn("bad value length when reading " ++ field.name, .{}),
+                        } else log.warn("bad value length when reading " ++ fname, .{}),
                         Sha1Hex => if (value.len == 40) @memcpy(dst.*[0..40], value[0..40]),
                         Sha1Bin => if (value.len == 40) {
                             var hex: []const u8 = value;
@@ -305,7 +308,7 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                                 dst.*[i] = parseInt(u8, hex[0..2], 16) catch 0;
                                 hex = hex[2..];
                             }
-                        } else log.warn("bad value length when reading " ++ field.name, .{}),
+                        } else log.warn("bad value length when reading " ++ fname, .{}),
                         []u8, []const u8, ?[]const u8 => {
                             for (value) |*chr| {
                                 if (chr.* == 0x1a) chr.* = '\n';
@@ -319,44 +322,64 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         VarString(128) => dst.* = VarString(128).init(value),
                         VarString(256) => dst.* = VarString(256).init(value),
                         Viewers => dst.* = Viewers.fromLine(value) catch .empty,
+                        Delta.Attach => dst.* = stringToEnum(ftype, value) orelse dst.*,
+                        User.Type => dst.* = stringToEnum(ftype, value) orelse dst.*,
+                        CI.Step => dst.* = stringToEnum(ftype, value) orelse dst.*,
+                        CI.Result => dst.* = stringToEnum(ftype, value) orelse dst.*,
+                        Issue.Status => dst.* = stringToEnum(ftype, value) orelse dst.*,
 
+                        std.debug.SafetyLock => unreachable,
+                        std.debug.SafetyLock.State => unreachable,
+
+                        ?Io.File,
+                        ?Io.Writer,
                         []const Gist.File, // Managed internally by Gist
                         ArrayList(Message), // Managed internally by Threads
                         ArrayList(Viewers.View), // Managed internally by Viewers
                         ArrayList(CI.Step), // Managed internally by CI
                         ?*Thread,
-                        => if (comptime type_debugging) log.warn(
+                        => if (comptime type_debugging) log.info(
                             "building {s} reader skipped `{s}: {s}` (intentionally skipped)",
-                            .{ @typeName(T), field.name, @typeName(field.type) },
+                            .{ @typeName(T), fname, @typeName(ftype) },
                         ),
-                        else => switch (@typeInfo(field.type)) {
+                        else => switch (@typeInfo(ftype)) {
                             .@"enum" => |enumT| {
-                                if (!enumT.is_exhaustive)
-                                    @compileError("non-exaustive enums are not supported");
-                                if (std.meta.stringToEnum(field.type, value)) |enumV| {
+                                if (enumT.mode == .nonexhaustive)
+                                    @compileError(
+                                        prefix ++
+                                            prefixed_name ++
+                                            @typeName(ftype) ++
+                                            @typeName(BaseType) ++
+                                            @typeName(T) ++
+                                            " non-exaustive enums are not supported",
+                                    );
+                                if (comptime type_debugging) log.warn("unexpected type {s} on {s} (magic fill)", .{
+                                    @typeName(ftype), @typeName(T),
+                                });
+                                if (std.meta.stringToEnum(ftype, value)) |enumV| {
                                     dst.* = enumV;
                                 }
                             },
                             else => if (comptime type_debugging) log.err("skipped type {s} on {s}", .{
-                                @typeName(field.type), @typeName(T),
+                                @typeName(ftype), @typeName(T),
                             }),
                         },
-                    } else if (startsWith(u8, name, field.name) and
-                        name.len > field.name.len and
-                        name[field.name.len] == '.') switch (@typeInfo(field.type)) {
-                        .@"struct" => if (custom_types.contains(field.type)) {
+                    } else if (startsWith(u8, name, fname) and
+                        name.len > fname.len and
+                        name[fname.len] == '.') switch (@typeInfo(ftype)) {
+                        .@"struct" => if (custom_types.contains(ftype)) {
                             const save = r.seek;
                             r.seek -|= line.len;
                             dst.* =
-                                readStruct(field.type, dst.*, field.name, r);
+                                readStruct(ftype, dst.*, fname, r);
                             r.seek = save;
                         } else if (comptime type_debugging) log.err(
                             "building {s} reader skipped `{s}: {s}` (not enabled)",
-                            .{ @typeName(T), field.name, @typeName(field.type) },
+                            .{ @typeName(T), fname, @typeName(ftype) },
                         ),
                         else => log.err(
                             "building {s} reader skipped `{s}: {s}` (not enabled)",
-                            .{ @typeName(T), field.name, @typeName(field.type) },
+                            .{ @typeName(T), fname, @typeName(ftype) },
                         ),
                     };
                 }
@@ -379,16 +402,17 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
         }
 
         fn writeStruct(T: type, t: *const T, comptime name: []const u8, w: *Writer) error{WriteFailed}!void {
-            all: inline for (@typeInfo(T).@"struct".fields) |field| {
+            const S = @typeInfo(T).@"struct";
+            all: inline for (S.field_names, S.field_types) |fname, ftype| {
                 if (comptime @hasDecl(BaseType, "type_skip_fields")) {
                     inline for (BaseType.type_skip_fields) |skip| {
-                        if (comptime eql(u8, skip, field.name)) continue :all;
+                        if (comptime eql(u8, skip, fname)) continue :all;
                     }
                 }
                 if (name.len > 0) try w.writeAll(name ++ ".");
 
-                const src = &@field(t, field.name);
-                switch (field.type) {
+                const src = &@field(t, fname);
+                switch (ftype) {
                     []u8,
                     []const u8,
                     ?[]const u8,
@@ -402,7 +426,7 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         };
                         if (value) |v| {
                             if (v.len > 0) {
-                                try w.print("{s}: ", .{field.name});
+                                try w.print("{s}: ", .{fname});
                                 var itr = splitScalar(u8, v, '\n');
                                 while (itr.next()) |line| {
                                     try w.writeAll(line);
@@ -413,20 +437,27 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         }
                     },
 
-                    DefaultHash => try w.print("{s}: {x}\n", .{ field.name, src.* }),
-                    Sha1Bin => try w.print("{s}: {x}\n", .{ field.name, src.* }),
-                    Sha1Hex => try w.print("{s}: {s}\n", .{ field.name, src.* }),
+                    DefaultHash => try w.print("{s}: {x}\n", .{ fname, src.* }),
+                    Sha1Bin => try w.print("{s}: {x}\n", .{ fname, src.* }),
+                    Sha1Hex => try w.print("{s}: {s}\n", .{ fname, src.* }),
                     usize,
                     isize,
                     i64,
                     i32,
-                    => try w.print("{s}: {d}\n", .{ field.name, src.* }),
+                    => try w.print("{s}: {d}\n", .{ fname, src.* }),
                     bool => try w.print(
                         "{s}: {s}\n",
-                        .{ field.name, if (src.*) "true" else "false" },
+                        .{ fname, if (src.*) "true" else "false" },
                     ),
-                    Viewers => try w.print("{s}: {f}\n", .{ field.name, src.* }),
+                    Viewers => try w.print("{s}: {f}\n", .{ fname, src.* }),
+                    Delta.Attach => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
+                    User.Type => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
+                    CI.Step => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
+                    CI.Result => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
+                    Issue.Status => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
 
+                    ?Io.File,
+                    ?Io.Writer,
                     []const Gist.File, // Managed internally by Gist
                     ArrayList(Message), // Managed internally by Threads
                     ArrayList(Viewers.View), // Managed internally by Viewers
@@ -434,25 +465,29 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                     ?*Thread,
                     => if (comptime type_debugging) log.warn(
                         "building {s} writer skipped `{s}: {s}` (intentionally skipped)",
-                        .{ @typeName(T), field.name, @typeName(field.type) },
+                        .{ @typeName(T), fname, @typeName(ftype) },
                     ),
-                    else => switch (@typeInfo(field.type)) {
+                    else => switch (@typeInfo(ftype)) {
                         .@"enum" => |enumT| {
-                            if (!enumT.is_exhaustive) @compileError("non-exaustive enums are not supported");
-                            try w.print("{s}: {s}\n", .{ field.name, @tagName(src.*) });
+                            if (enumT.mode == .nonexhaustive) @compileError("non-exaustive enums are not supported");
+                            try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) });
+                            if (comptime type_debugging) log.info(
+                                "building {s} writer skipped `{s}: {s}` (magic fill)",
+                                .{ @typeName(T), fname, @typeName(ftype) },
+                            );
                         },
                         .@"struct" => {
-                            if (custom_types.contains(field.type)) {
-                                const prefix = if (name.len > 0) name ++ "." ++ field.name else field.name;
-                                try writeStruct(field.type, src, prefix, w);
+                            if (custom_types.contains(ftype)) {
+                                const prefix = if (name.len > 0) name ++ "." ++ fname else fname;
+                                try writeStruct(ftype, src, prefix, w);
                             } else if (comptime type_debugging) log.err(
                                 "building {s} writer skipped `{s}: {s}` (not enabled)",
-                                .{ @typeName(T), field.name, @typeName(field.type) },
+                                .{ @typeName(T), fname, @typeName(ftype) },
                             );
                         },
                         else => if (comptime type_debugging) log.err(
                             "building {s} writer skipped `{s}: {s}` (not enabled)",
-                            .{ @typeName(T), field.name, @typeName(field.type) },
+                            .{ @typeName(T), fname, @typeName(ftype) },
                         ),
                     },
                 }
@@ -516,6 +551,7 @@ const splitScalar = std.mem.splitScalar;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const print = std.fmt.bufPrint;
+const stringToEnum = std.meta.stringToEnum;
 const git = @import("git.zig");
 
 const type_debugging = false;

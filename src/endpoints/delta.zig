@@ -69,7 +69,7 @@ pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
         .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
     } };
     if (f.user) |usr| body_header.nav.nav_auth = .abx(usr.username.?);
-    f.response_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
+    f.template_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
 
     return list(f, Delta.RepoIterator, &itr, str);
 }
@@ -165,7 +165,7 @@ pub fn list(f: *Frame, Itr: type, itr: *Tsearch.Iterator(Itr, Delta), search_str
 
     var page = DeltaListHtml.init(.{
         .meta_head = meta_head,
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
         //.search_action = uri_base,
         .delta_list = try d_list.toOwnedSlice(f.alloc),
         .search = search_str,

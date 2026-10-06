@@ -4,7 +4,7 @@ const Allocator = std.mem.Allocator;
 pub const Journaling = @This();
 
 pub const Header = struct {
-    inet: [16]u8 = u8{0} ** 16,
+    inet: [16]u8 = @splat(0),
 };
 
 pub const EvtComment = struct {
@@ -34,7 +34,7 @@ pub const Journal = struct {
 
         var fp: ?[]u8 = try a.alloc(u8, 40);
         errdefer if (fp) |ffp| a.free(ffp);
-        var count = try file.read(fp.?);
+        const count = try file.read(fp.?);
         if (count != 40) {
             a.free(fp.?);
             fp = null;

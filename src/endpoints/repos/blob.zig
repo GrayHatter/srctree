@@ -177,7 +177,7 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
             .title = .safe(meta_title),
             .open_graph = .{ .title = .safe(safe_name), .desc = .safe(meta_desc) },
         },
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),
@@ -238,7 +238,7 @@ fn newRepo(f: *Frame) Router.Error!void {
             .title = .safe(meta_title),
             .open_graph = .{ .title = .safe(rd.name), .desc = .safe(&.{}) },
         },
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .safe(""),

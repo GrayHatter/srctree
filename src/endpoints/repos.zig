@@ -67,9 +67,10 @@ pub const Router = struct {
 
         pub fn fromSlice(slice: ?[]const u8) ?Verb {
             const s = slice orelse return null;
-            inline for (@typeInfo(Verb).@"enum".fields) |f| {
-                if (eql(u8, s, f.name)) {
-                    return @enumFromInt(f.value);
+            const E = @typeInfo(Verb).@"enum";
+            inline for (E.field_names, E.field_values) |name, value| {
+                if (eql(u8, s, name)) {
+                    return @fromBackingInt(@intCast(value));
                 }
             }
             return null;
@@ -408,7 +409,7 @@ fn list(f: *Frame) verse.Router.Error!void {
 
     var page = ReposPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = f.response_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
         .count = repos_compiled.len,
         .buttons = if (repo_buttons) |rb| .safe(rb) else null,
         .repo_list = repos_compiled,

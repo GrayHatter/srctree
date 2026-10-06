@@ -30,7 +30,7 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     const uri_api = f.uri.next() orelse return heartbeat;
     if (!std.mem.eql(u8, uri_api, "api")) return heartbeat;
     const rd: APIRouteData = .init(f.alloc);
-    f.response_data.clone(APIRouteData, f.alloc, rd) catch unreachable;
+    f.template_data.clone(APIRouteData, f.alloc, rd) catch unreachable;
 
     return Router.defaultRouter(f, &endpoints);
 }

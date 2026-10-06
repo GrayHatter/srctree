@@ -145,7 +145,7 @@ pub const Revision = enum(usize) {
     _,
 
     pub fn rev(u: usize) Revision {
-        return @enumFromInt(u);
+        return @fromBackingInt(@intCast(u));
     }
 
     pub fn fromStr(str: []const u8) !Revision {

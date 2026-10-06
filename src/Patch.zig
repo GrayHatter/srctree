@@ -115,10 +115,6 @@ fn fetch(uri: []const u8, a: Allocator, io: Io) ![]u8 {
         log.err("stdlib request failed with error {}\n", .{err});
     }
 
-    const curl = try CURL.curlRequest(a, uri);
-    if (curl.code != 200) return error.UnexpectedResponseCode;
-
-    if (curl.body) |b| return b;
     return error.EmptyReponse;
 }
 
@@ -269,6 +265,5 @@ const allocPrint = std.fmt.allocPrint;
 const parseInt = std.fmt.parseInt;
 const log = std.log.scoped(.git_patch);
 
-const CURL = @import("curl.zig");
 const verse = @import("verse");
 const abx = verse.Antibiotic;

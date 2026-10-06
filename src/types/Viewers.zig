@@ -54,6 +54,7 @@ pub fn new(src: Types.DefaultHash, viewer: []const u8, a: Allocator, io: Io) !Vi
         .viewers = .{
             .items = views,
             .capacity = 1,
+            .pointer_stability = .{},
         },
     };
 
