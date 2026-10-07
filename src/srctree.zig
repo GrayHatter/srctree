@@ -151,6 +151,14 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
         }
     }
 
+    const bad_uas = [_][]const u8{
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:151.0) Gecko/20100101 Firefox/151.0",
+    };
+    inline for (bad_uas) |bad| {
+        if (eql(u8, ua.string, bad))
+            return dropRequest(f, "banned User agent");
+    }
+
     const age: std.Io.Duration = bwsr.age(f.request.now) catch .fromSeconds(0);
     const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 200).nanoseconds;
     if (too_old) return dropRequest(f, "too old");
