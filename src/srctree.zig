@@ -256,6 +256,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
 
 const robots_txt = verse.Robots.robotsTxt(
     &.{
+        .{ .name = "AppleBot", .allow = true, .extra = "Disallow: /static/*\n" },
         .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
         .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
         .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
@@ -264,30 +265,32 @@ const robots_txt = verse.Robots.robotsTxt(
         .{ .name = "barkrowler", .allow = false }, // selfish bot
         .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
         .{ .name = "GPTBot", .allow = false }, // aggressive, selfish
-        .{ .name = "OAI-SearchBot", .allow = false },
-        .{ .name = "meta-externalagent", .allow = false }, // agressive
+        .{ .name = "OAI-SearchBot", .allow = false }, // Plagiarism bot
+        .{ .name = "meta-externalagent", .allow = false }, // too aggressive
 
         // If you're the kind of person who enables this, you're part of the problem
         .{ .name = "Amazonbot", .allow = false }, // aggressive, malicious
         .{ .name = "Amzn-SearchBot", .allow = false }, //  malicious
         .{ .name = "Amzn-User", .allow = false }, // malicious
 
-        .{ .name = "SleepBot", .allow = false },
-
+        .{ .name = "SleepBot", .allow = false }, // Non-responsive to emails
         .{ .name = "ScryBot", .allow = false },
-
-        .{ .name = "AppleBot", .allow = true, .extra = "Disallow: /static/*\n" },
-        .{ .name = "AhrefsBot", .allow = false }, // selfish
-        .{ .name = "dotbot", .allow = false }, // selfish
-        .{ .name = "PerplexityBot", .allow = false },
+        .{ .name = "AhrefsBot", .allow = false }, // selfish seo trash
+        .{ .name = "dotbot", .allow = false }, // selfish seo trash
         // Disallowed for being too aggressive, and substituting it's own crawl delay
-        .{ .name = "MJ12bot", .allow = false, .extra = "Crawl-Delay: 90\n" },
-        .{ .name = "ImagesiftBot", .allow = true },
+        .{ .name = "MJ12bot", .allow = false }, // selfish seo trash
         .{ .name = "AcademicBotRTU", .allow = false },
-        .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
+
+        // I'll reconsider the below the first time I find an LLM company that has any ethics
+        .{ .name = "ExaSearchBot", .allow = false },
+        .{ .name = "PerplexityBot", .allow = false },
         .{ .name = "Reflectionbot", .allow = false },
+        .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
     },
-    .{ .extra_rules = "Disallow: /*?*\nDisallow: /repo/*/blame/*\n" },
+    .{ .extra_rules =
+    \\Disallow: /*?*
+    \\Disallow: /repo/*/blame/* 
+    },
 );
 
 test {
