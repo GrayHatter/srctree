@@ -287,9 +287,13 @@ const robots_txt = verse.Robots.robotsTxt(
         .{ .name = "Reflectionbot", .allow = false },
         .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
     },
+    // you can blame bingbot for ref/*/(tree|blob)
     .{ .extra_rules =
     \\Disallow: /*?*
     \\Disallow: /repo/*/blame/* 
+    \\Disallow: /repo/*/ref/*/tree/*
+    \\Disallow: /repo/*/ref/*/blob/*
+    \\
     },
 );
 
