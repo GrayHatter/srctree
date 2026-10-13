@@ -94,7 +94,7 @@ pub fn initOwned(sha: Sha, data: []u8) !Commit {
     return commit;
 }
 
-pub fn iterate(cmt: Commit, repo: *const Repo) Iterator {
+pub fn iterate(cmt: Commit, repo: *const Repo) Commiterator {
     return .init(cmt, .linear, repo);
 }
 
@@ -154,7 +154,10 @@ fn gpgSig(r: *Reader) !void {
     return error.InvalidGpgsig;
 }
 
-pub const Iterator = struct {
+/// See also `Commiterator`. Provided for people who hate fun and whimsy.
+pub const Iterator = Commiterator;
+
+pub const Commiterator = struct {
     primary: Commit,
     branch: ?Commit = null,
     right: ?Commit = null,
@@ -182,7 +185,7 @@ pub const Iterator = struct {
         chronological,
     };
 
-    pub fn init(c: Commit, s: Strategy, repo: *const Repo) Iterator {
+    pub fn init(c: Commit, s: Strategy, repo: *const Repo) Commiterator {
         return .{
             .primary = c,
             .strat = s,
@@ -190,11 +193,11 @@ pub const Iterator = struct {
         };
     }
 
-    pub fn raze(itr: *Iterator, a: Allocator) void {
+    pub fn raze(itr: *Commiterator, a: Allocator) void {
         itr.hold.deinit(a);
     }
 
-    pub fn next(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+    pub fn next(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
         if (itr.primary.parent[0] == null) return null;
 
         return switch (itr.strat) {
@@ -206,14 +209,14 @@ pub const Iterator = struct {
         };
     }
 
-    pub fn nextMainOnly(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+    pub fn nextMainOnly(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
         return itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
             error.NoParent => unreachable,
             else => |e| return e,
         };
     }
 
-    pub fn nextBranchError(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+    pub fn nextBranchError(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
         if (itr.primary.parent[1] != null) return error.Branching;
         return itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
             error.NoParent => unreachable,
@@ -221,7 +224,7 @@ pub const Iterator = struct {
         };
     }
 
-    pub fn nextLinear(itr: *Iterator, a: Allocator, io: Io) !?Commit {
+    pub fn nextLinear(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
         if (itr.common == null and itr.primary.parent[1] != null) {
             const left = try itr.primary.toParent(0, itr.repo, a, io);
             defer left.raze(a);
@@ -253,16 +256,16 @@ pub const Iterator = struct {
         return itr.primary;
     }
 
-    pub fn nextInterleave(_: *Iterator, _: Allocator, _: Io) !?Commit {
+    pub fn nextInterleave(_: *Commiterator, _: Allocator, _: Io) !?Commit {
         unreachable;
     }
 
-    pub fn nextChronological(_: *Iterator, _: Allocator, _: Io) !?Commit {
+    pub fn nextChronological(_: *Commiterator, _: Allocator, _: Io) !?Commit {
         unreachable;
     }
 
     fn findCommon(
-        itr: *const Iterator,
+        itr: *const Commiterator,
         left: *const Commit,
         right: *const Commit,
         a: Allocator,
@@ -335,7 +338,7 @@ test "fuzz" {
     try std.testing.fuzz(Context{}, Context.testOne, .{});
 }
 
-test Iterator {
+test Commiterator {
     const a = std.testing.allocator;
     const io = std.testing.io;
 
