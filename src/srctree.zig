@@ -123,7 +123,7 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
     if (f.request.accept.mime) |mime| {
         if (eql(u8, mime,
             \\text/html,application/xhtml+xml,application/xml;q=0.9,image/heif,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
-        )) return dropRequest(f, "ff missing encoding");
+        )) return dropRequest(f, "that really annoying bot");
     }
 
     const bads = [_][]const u8{

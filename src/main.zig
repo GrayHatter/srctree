@@ -48,42 +48,47 @@ const Options = struct {
 
 pub const Config = @import("Config.zig");
 pub var config_ini: Ini.Config(Config) = .{ .ini = .empty };
-var conf: Cfg = undefined;
+var conf: Cfg = .{};
 pub const Cfg = struct {
-    alloc: Allocator = undefined,
     file: ?std.Io.File = null,
     data: []u8 = &.{},
-    reader: Io.File.Reader,
+    reader: Io.File.Reader = undefined,
+
     pub fn loadConfig(cfg: *Cfg, path: []const u8, a: Allocator, io: Io) !void {
-        cfg.alloc = a;
         cfg.file = try Io.Dir.cwd().openFile(io, path, .{});
-        try cfg.reloadConfig(io);
+        try cfg.reloadConfig(a, io);
     }
 
-    pub fn reloadConfig(cfg: *Cfg, io: Io) !void {
-        if (cfg.file) |*cf| {
-            const len = try cf.length(io);
-            cfg.alloc.free(cfg.data);
-            if (cfg.alloc.alloc(u8, len)) |alloc| {
-                cfg.alloc.free(cfg.data);
-                cfg.data = alloc;
-            } else |err| return err;
-
-            cfg.reader = cf.reader(io, cfg.data);
-            if (Ini.Config(Config).init(&cfg.reader.interface, cfg.alloc)) |ini| {
-                config_ini.raze(cfg.alloc);
-                config_ini = ini;
-            } else |err| return err;
-
-            Config.global = try config_ini.resolve();
+    pub fn reloadConfig(cfg: *Cfg, a: Allocator, io: Io) !void {
+        const cf = cfg.file orelse return error.Unreachable;
+        const len = try cf.length(io);
+        if (cfg.data.len < len) {
+            a.free(cfg.data);
+            cfg.data = try a.alloc(u8, len);
+        } else {
+            if (a.resize(cfg.data, len)) {
+                cfg.data.len = len;
+            } else {
+                cfg.data = try a.realloc(cfg.data, len);
+            }
         }
+
+        cfg.reader = cf.reader(io, cfg.data);
+        if (Ini.Config(Config).init(&cfg.reader.interface, a)) |ini| {
+            config_ini.raze(a);
+            config_ini = ini;
+        } else |err| {
+            std.debug.print("err {any}\n", .{cfg.reader.interface});
+            return err;
+        }
+
+        Config.global = try config_ini.resolve();
     }
 
-    pub fn razeConfig(cfg: *Cfg, io: Io) void {
+    pub fn razeConfig(cfg: *Cfg, a: Allocator, io: Io) void {
         cfg.file.?.close(io);
-        cfg.file = null;
-        cfg.alloc.free(cfg.data);
-        config_ini.raze(cfg.alloc);
+        config_ini.raze(a);
+        a.free(cfg.data);
     }
 };
 
@@ -133,7 +138,7 @@ pub fn main(init: std.process.Init) !void {
 
     std.debug.print("reading from '{s}'\n", .{options.config_path});
     try conf.loadConfig(options.config_path, a, io);
-    defer conf.razeConfig(io);
+    defer conf.razeConfig(a, io);
 
     if (Config.global.owner) |owner| {
         if (owner.email) |email| {
