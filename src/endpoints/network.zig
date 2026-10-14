@@ -30,7 +30,6 @@ pub fn index(f: *Frame) Error!void {
 
     var html: std.Io.Writer.Allocating = .init(f.alloc);
     try dom.render(.compact, &html.writer);
-    dom.raze();
 
     var page = NetworkPage.init(.{
         .meta_head = .{ .open_graph = .{} },
