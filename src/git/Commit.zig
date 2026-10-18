@@ -196,9 +196,16 @@ pub const Commiterator = struct {
     }
 
     pub fn holdBranches(itr: *Commiterator, c: Commit, a: Allocator, io: Io) !void {
-        for (c.parent, 0..) |parent, i| {
-            if (parent == null) break;
-            try itr.hold.append(a, try c.toParent(@intCast(i), itr.repo, a, io));
+        parent: for (c.parent, 0..) |sha, i| {
+            if (sha == null) break;
+            for (itr.hold.items) |itm| {
+                if (sha.?.eql(itm.sha) or c.sha.eql(itm.sha)) continue :parent;
+            }
+            const p_c = c.toParent(@intCast(i), itr.repo, a, io) catch |err| switch (err) {
+                error.NoParent => unreachable,
+                else => |e| return e,
+            };
+            try itr.hold.append(a, p_c);
         }
     }
 

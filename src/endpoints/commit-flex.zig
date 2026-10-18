@@ -24,8 +24,7 @@ const Journal = struct {
     pub const JRepo = struct {
         name: []const u8,
         repo: Git.Repo,
-        bufset: std.BufSet,
-        commits: ArrayList(Git.Commit),
+        iterator: Git.Commit.Commiterator,
         next_ts: i64 = 0,
     };
 
@@ -56,6 +55,7 @@ const Journal = struct {
     pub fn raze(j: *Journal, a: Allocator, io: Io) void {
         a.free(j.email);
         for (j.repos.items) |*repo| {
+            repo.iterator.raze(a);
             repo.repo.raze(a, io);
             a.free(repo.name);
         }
@@ -69,13 +69,18 @@ const Journal = struct {
         j.repos.appendAssumeCapacity(.{
             .name = try a.dupe(u8, repo.name orelse ""),
             .repo = repo.git,
-            .bufset = .init(a),
-            .commits = try .initCapacity(a, 16),
+            // WARN &bug
+            .iterator = .init(undefined, .chronological, &repo.git),
         });
     }
 
     pub fn build(j: *Journal, a: Allocator, io: Io) !void {
         for (j.repos.items) |*repo| {
+            const head = repo.repo.HEAD(a, io) catch |err| switch (err) {
+                error.RefMissing => continue,
+                else => return error.ServerFault,
+            };
+            repo.iterator = .init(head, .chronological, &repo.repo);
             j.buildScribe(repo, a, io) catch |err| switch (err) {
                 error.RefMissing => {
                     log.debug("Error building commit list for repo {s} (new repo?)", .{repo.name});
@@ -89,17 +94,18 @@ const Journal = struct {
             j.cachedHeatMap(repo, a, io) catch |err| {
                 log.warn("unable to build journal for repo {s} [error {}]", .{ repo.name, err });
             };
+            // TODO fix this
+            repo.iterator.raze(a);
+            repo.iterator = .init(head, .chronological, &repo.repo);
         }
         _ = try j.buildStreak(a, io);
     }
 
     fn buildScribe(j: *Journal, jrepo: *JRepo, a: Allocator, io: Io) !void {
-        var lseen = std.BufSet.init(a);
-        var commit = try jrepo.repo.HEAD(a, io);
         const until = j.scribe_until;
-
-        while (true) {
-            if (lseen.contains(commit.sha.hash.bytes())) break;
+        var head: ?Git.Commit = try jrepo.repo.HEAD(a, io);
+        var itr: Git.Commit.Commiterator = .init(head.?, .chronological, &jrepo.repo);
+        while (head) |commit| : (head = itr.next(a, io) catch null) {
             const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
             if (commit_time < until) break;
             if (eql(u8, j.email, commit.author.email)) {
@@ -113,11 +119,7 @@ const Journal = struct {
                     .repo = jrepo.name,
                 });
             }
-
-            commit = commit.toParent(0, &jrepo.repo, a, io) catch |err| switch (err) {
-                error.NoParent => break,
-                else => |e| return e,
-            };
+            commit.raze(a);
         }
     }
 
@@ -156,7 +158,7 @@ const Journal = struct {
             heatmap.sha = commit.sha;
             heatmap.expires = j.now.timestamp + 3600;
             @memset(&heatmap.hits, 0);
-            try j.buildHeatMap(jrepo, &heatmap.hits, commit, j.heatmap_until, a, io);
+            try j.buildHeatMap(jrepo, &heatmap.hits, j.heatmap_until, a, io);
         }
 
         for (&j.hits, heatmap.hits) |*dst, src| dst.* += src;
@@ -168,19 +170,16 @@ const Journal = struct {
         j: *Journal,
         jrepo: *JRepo,
         hits: *HeatMapArray,
-        root_cmt: Git.Commit,
         until: i64,
         a: Allocator,
         io: Io,
     ) !void {
-        var commit = root_cmt;
-        while (true) {
-            if (until > @max(commit.author.timestamp, commit.committer.timestamp)) {
+        var misscount: usize = 0;
+        var head: ?Git.Commit = try jrepo.repo.HEAD(a, io);
+        var itr: Git.Commit.Commiterator = .init(head.?, .chronological, &jrepo.repo);
+        while (head) |commit| : (head = itr.next(a, io) catch null) {
+            if (@max(commit.author.timestamp, commit.committer.timestamp) < until)
                 return;
-            }
-
-            if (jrepo.bufset.contains(commit.sha.hash.bytes())) return;
-            jrepo.bufset.insert(commit.sha.hash.bytes()) catch unreachable;
 
             if (eql(u8, j.email, commit.author.email)) {
                 const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
@@ -191,18 +190,9 @@ const Journal = struct {
                     hits[day_off] += 1;
                     j.total_count += 1;
                 }
-            }
-
-            for (commit.parent[1..], 1..) |parent_sha, pidx| {
-                if (parent_sha) |_| {
-                    const parent = try commit.toParent(@truncate(pidx), &jrepo.repo, a, io);
-                    try j.buildHeatMap(jrepo, hits, parent, until, a, io);
-                }
-            }
-            commit = commit.toParent(0, &jrepo.repo, a, io) catch |err| switch (err) {
-                error.NoParent => break,
-                else => |e| return e,
-            };
+            } else misscount += 1;
+            commit.raze(a);
+            if (misscount > 1000) return;
         }
     }
 
@@ -211,19 +201,10 @@ const Journal = struct {
         j.streak_last = now - DAY * 2;
 
         for (j.repos.items) |*repo| {
-            try repo.commits.append(a, repo.repo.HEAD(a, io) catch |err| switch (err) {
-                error.RefMissing => {
-                    log.debug("Error building commit list for repo {s} (new repo?)", .{repo.name});
-                    continue;
-                },
-                else => {
-                    log.warn("Error building streak list for repo {s} because {}", .{ repo.name, err });
-                    repo.commits.clearAndFree(a);
-                    if (debug_mode) unreachable;
-                    continue;
-                },
-            });
-            repo.next_ts = repo.commits.items[0].author.timestamp;
+            const head = try repo.repo.HEAD(a, io);
+            defer head.raze(a);
+            repo.iterator = .init(head, .chronological, &repo.repo);
+            repo.next_ts = repo.iterator.now;
         }
 
         var last_ts: i64 = now;
@@ -233,17 +214,17 @@ const Journal = struct {
                 @divFloor(now - last_ts, DAY), now - last_ts, last_ts,
             });
             for (j.repos.items, 0..) |*repo, i| {
-                if (repo.commits.items.len == 0) continue;
+                if (repo.iterator.hold.items.len == 0) continue;
                 const too_early = repo.next_ts < last_ts - DAY;
                 const early = if (too_early) "early" else "hit";
                 log.debug("searching repo {s: <24} [{s: ^5}] {} ({} commits left) ", .{
-                    repo.name, early, repo.next_ts, repo.commits.items.len,
+                    repo.name, early, repo.next_ts, repo.iterator.hold.items.len,
                 });
                 if (too_early) continue;
 
                 if (j.repoStreak(repo, last_ts, a, io) catch |err| {
                     log.err("unable to build the streak list for repo {s} [{}]", .{ repo.name, err });
-                    repo.commits.clearAndFree(a);
+                    repo.iterator.raze(a);
                     continue;
                 }) {
                     log.debug("        hit    {s: <24}", .{repo.name});
@@ -260,97 +241,35 @@ const Journal = struct {
         return j.streak;
     }
 
-    pub fn traverse(
-        email: []const u8,
-        repo: *const Git.Repo,
-        commit: Git.Commit,
-        list: *ArrayList(Git.Commit),
-        before: i64,
-        counter: *usize,
-        a: Allocator,
-        io: Io,
-    ) !?Git.Commit {
-        var current = commit;
-        var best: Git.Commit = commit;
-        const after = before - DAY;
-
-        while (true) : (current = try current.toParent(0, repo, a, io)) {
-            counter.* += 1;
-            const ath_time = try DateTime.fromActorAdj(current.author);
-            const cmmt_time = try DateTime.fromActorAdj(current.committer);
-            if (ath_time >= after and ath_time <= before and eql(u8, email, current.author.email)) {
-                return current;
-            }
-            if (counter.* > max_depth * 2) return error.Depth;
-            log.debug("          seek {f} {: >4} {} {} {} {}", .{
-                current.sha.text(),                       counter.*,
-                ath_time <= before and ath_time >= after, @divFloor(before, DAY),
-                @divFloor(ath_time - before, DAY),        @divFloor(cmmt_time - before, DAY),
-            });
-
-            if (@min(cmmt_time, ath_time) < after) {
-                if (@divFloor(cmmt_time - before, DAY) <= -100) {
-                    log.debug("          too old", .{});
-                    return null;
-                }
-                for (list.items) |each| {
-                    if (each.committer.timestamp == best.committer.timestamp) {
-                        return null;
-                    }
-                }
-                try list.append(a, best);
-                return null;
-            }
-
-            if (cmmt_time > before) {
-                best = current;
-            }
-
-            for (current.parent[1..], 1..) |parent_sha, pidx| {
-                if (parent_sha == null) break;
-                const parent = try current.toParent(@truncate(pidx), repo, a, io);
-                const parent_time = try DateTime.fromActorAdj(parent.committer);
-                log.debug("        parent {f}      {} {} {} {}", .{
-                    parent.sha.text(),                    parent_time <= before and parent_time >= after,
-                    @divFloor(before, DAY),               @divFloor(parent_time, DAY),
-                    @divFloor(parent_time - before, DAY),
-                });
-                return try traverse(email, repo, parent, list, before, counter, a, io) orelse continue;
-            }
-            if (current.parent[0] == null) return null;
-        }
-        return null;
-    }
-
     fn repoStreak(j: *Journal, jrepo: *JRepo, before: i64, a: Allocator, io: Io) !bool {
         const after = before - DAY;
-        if (jrepo.commits.items.len == 0) unreachable;
-        var search_count: usize = 0;
-        const slice = try jrepo.commits.toOwnedSlice(a);
-        for (slice) |current| {
-            const commit_ts = try DateTime.fromActorAdj(current.author);
-            if (commit_ts < after) {
-                try jrepo.commits.append(a, current);
-                continue;
-            }
+        if (jrepo.iterator.hold.items.len == 0) unreachable;
+        const head_time = try DateTime.fromActorAdj(jrepo.iterator.head.author);
+        if (head_time < after) return false;
 
-            const repo = &jrepo.repo;
-            const commits = &jrepo.commits;
-            const commit_ = try traverse(j.email, repo, current, commits, before, &search_count, a, io);
-            if (commit_) |commit| {
-                try jrepo.commits.append(a, commit);
-                j.streak_last = (try DateTime.fromActor(commit.author)).tzAdjusted();
-                continue;
-            } else for (jrepo.commits.items) |cmt| {
-                const day_depth = @divFloor(cmt.author.timestamp - before, DAY);
-                if (search_count > max_depth or day_depth > 100 and !eql(u8, j.email, cmt.author.email)) {
-                    log.debug("abandoning     {s: <24} (after {} commits) ", .{ jrepo.name, search_count });
-                    jrepo.commits.clearAndFree(a);
-                    return false;
+        var search_count: usize = 0;
+        for (jrepo.iterator.hold.items) |item| {
+            log.err("count {}", .{search_count});
+            const commit_ts = try DateTime.fromActorAdj(item.author);
+            if (commit_ts >= after and commit_ts <= before) {
+                var current = try jrepo.iterator.next(a, io) orelse unreachable;
+                defer current.raze(a);
+                var current_ts = (try DateTime.fromActor(current.author)).tzAdjusted();
+                while (current_ts > before) {
+                    current = try jrepo.iterator.next(a, io) orelse return false;
+                    current_ts = (try DateTime.fromActor(current.author)).tzAdjusted();
                 }
+                if (search_count > max_depth) return false;
+                search_count += 1;
+                if (current_ts >= after) {
+                    if (!eql(u8, j.email, item.author.email)) continue;
+                    j.streak_last = current_ts;
+                    return true;
+                }
+                return false;
             }
         }
-        return j.streak_last.? <= before;
+        return false;
     }
 };
 
