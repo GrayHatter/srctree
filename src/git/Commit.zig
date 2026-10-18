@@ -157,16 +157,17 @@ fn gpgSig(r: *Reader) !void {
 /// See also `Commiterator`. Provided for people who hate fun and whimsy.
 pub const Iterator = Commiterator;
 
+/// Calling more than a single version of the `next[Strategy]` implementations is undefined
 pub const Commiterator = struct {
-    primary: Commit,
-    branch: ?Commit = null,
-    right: ?Commit = null,
-    hold: ArrayList(Commit) = .empty,
     repo: *const Repo,
     strat: Strategy,
-    now: Io.Timestamp = .zero,
+    /// now according to commiterator state
+    now: i64, // should be Io.Timestamp, but zig stdlib is the ugly step child
+    head: Commit,
+    branch: ?Commit = null,
+    hold: ArrayList(Commit) = .empty,
     // expected/found common root commit
-    common: ?Sha = null,
+    root_sha: ?Sha = null,
 
     pub const Strategy = enum {
         /// returns commits exclusively from the "main" branch, ignoring any commit that are
@@ -187,50 +188,70 @@ pub const Commiterator = struct {
 
     pub fn init(c: Commit, s: Strategy, repo: *const Repo) Commiterator {
         return .{
-            .primary = c,
+            .head = c,
             .strat = s,
             .repo = repo,
+            .now = c.committer.timestamp,
         };
     }
 
+    pub fn holdBranches(itr: *Commiterator, c: Commit, a: Allocator, io: Io) !void {
+        for (c.parent, 0..) |parent, i| {
+            if (parent == null) break;
+            try itr.hold.append(a, try c.toParent(@intCast(i), itr.repo, a, io));
+        }
+    }
+
     pub fn raze(itr: *Commiterator, a: Allocator) void {
+        while (itr.hold.pop()) |c| c.raze(a);
         itr.hold.deinit(a);
     }
 
     pub fn next(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
-        if (itr.primary.parent[0] == null) return null;
+        if (itr.head.parent[0] == null) return null;
 
-        return switch (itr.strat) {
+        const cmt = try switch (itr.strat) {
             .main_branch => itr.nextMainOnly(a, io),
             .linear => itr.nextLinear(a, io),
             .interleave => itr.nextInterleave(a, io),
             .chronological => itr.nextChronological(a, io),
             .branch_error => itr.nextBranchError(a, io),
         };
+
+        switch (itr.strat) {
+            .chronological => itr.now = itr.head.committer.timestamp,
+            .main_branch,
+            .linear,
+            .interleave,
+            .branch_error,
+            => itr.now = itr.head.author.timestamp,
+        }
+
+        return cmt;
     }
 
     pub fn nextMainOnly(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
-        return itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
+        return itr.head.toParent(0, itr.repo, a, io) catch |err| switch (err) {
             error.NoParent => unreachable,
             else => |e| return e,
         };
     }
 
     pub fn nextBranchError(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
-        if (itr.primary.parent[1] != null) return error.Branching;
-        return itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
+        if (itr.head.parent[1] != null) return error.Branching;
+        return itr.head.toParent(0, itr.repo, a, io) catch |err| switch (err) {
             error.NoParent => unreachable,
             else => |e| return e,
         };
     }
 
     pub fn nextLinear(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
-        if (itr.common == null and itr.primary.parent[1] != null) {
-            const left = try itr.primary.toParent(0, itr.repo, a, io);
+        if (itr.root_sha == null and itr.head.parent[1] != null) {
+            const left = try itr.head.toParent(0, itr.repo, a, io);
             defer left.raze(a);
-            const right = try itr.primary.toParent(1, itr.repo, a, io);
-            itr.common = try itr.findCommon(&left, &right, a, io);
-            if (itr.common != null) {
+            const right = try itr.head.toParent(1, itr.repo, a, io);
+            itr.root_sha = try itr.findCommon(&left, &right, a, io);
+            if (itr.root_sha != null) {
                 itr.branch = right;
                 return right;
             }
@@ -240,28 +261,43 @@ pub const Commiterator = struct {
             if (branch.parent[1] != null) @panic("TODO");
 
             const branch_parent = try branch.toParent(0, itr.repo, a, io);
-            if (!branch_parent.sha.eql(itr.common.?)) {
+            if (!branch_parent.sha.eql(itr.root_sha.?)) {
                 itr.branch = branch_parent;
                 return branch_parent;
             }
             branch_parent.raze(a);
-            itr.common = null;
+            itr.root_sha = null;
             itr.branch = null;
         }
 
-        itr.primary = itr.primary.toParent(0, itr.repo, a, io) catch |err| switch (err) {
+        itr.head = itr.head.toParent(0, itr.repo, a, io) catch |err| switch (err) {
             error.NoParent => unreachable,
             else => |e| return e,
         };
-        return itr.primary;
+        return itr.head;
     }
 
     pub fn nextInterleave(_: *Commiterator, _: Allocator, _: Io) !?Commit {
         unreachable;
     }
 
-    pub fn nextChronological(_: *Commiterator, _: Allocator, _: Io) !?Commit {
-        unreachable;
+    pub fn nextChronological(itr: *Commiterator, a: Allocator, io: Io) !?Commit {
+        try itr.holdBranches(itr.head, a, io);
+        // I'm confident that there's a better implementation for this but I'm
+        // not fighting my brain which refuses to play along today.
+        if (itr.hold.items.len == 0) return null;
+
+        var now: i64 = itr.now;
+        var idx: usize = 0;
+
+        for (itr.hold.items, 0..) |item, i| {
+            if (item.author.timestamp >= now) {
+                idx = i;
+                now = item.author.timestamp;
+            }
+        }
+        itr.head = itr.hold.swapRemove(idx);
+        return itr.head;
     }
 
     fn findCommon(
@@ -342,7 +378,6 @@ test Commiterator {
     const a = std.testing.allocator;
     const io = std.testing.io;
 
-    //const cwd = try Io.Dir.cwd().openDir(io, "../gr.ht.hugo", .{});
     const cwd = try Io.Dir.cwd().openDir(io, ".", .{});
     var repo = try Repo.init(cwd, io);
     try repo.loadData(a, io);
@@ -354,6 +389,17 @@ test Commiterator {
     var itr = cmtt.iterate(&repo);
 
     var remain: usize = 50;
+    while (try itr.next(a, io)) |next| {
+        defer next.raze(a);
+        log.debug("found {f}", .{next.sha.text()});
+        if (remain == 0) break;
+        remain -= 1;
+    }
+
+    itr = .init(cmtt, .chronological, &repo);
+    defer itr.raze(a);
+
+    remain = 100;
     while (try itr.next(a, io)) |next| {
         defer next.raze(a);
         log.debug("found {f}", .{next.sha.text()});
