@@ -204,7 +204,7 @@ pub const Commiterator = struct {
             .main_branch => itr.nextMainOnly(a, io),
             .linear => itr.nextLinear(a, io),
             .interleave => itr.nextInterleave(a, io),
-            .chronological => itr.nextMainOnly(a, io),
+            .chronological => itr.nextChronological(a, io),
             .branch_error => itr.nextBranchError(a, io),
         };
     }
