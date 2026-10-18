@@ -1,0 +1,14 @@
+      <script defer>
+        document.querySelectorAll("ln").forEach((elm) => {
+          if (elm.id != '') { elm.addEventListener( "click", (e) => {
+                let s = window.getSelection();
+                const bounds = elm.getBoundingClientRect();
+                const ely = elm.getBoundingClientRect().y;
+                const elx = elm.getBoundingClientRect().x;
+                const in_view = ely < (window.innerHeight * 3 / 4) && ely > 0;
+                if (in_view) { elm.style.cssText = `scroll-margin: ${ely}px 0 0 ${elx}px`; }
+                const not_selecting = s.anchorOffset == s.focusOffset;
+                if (not_selecting) { window.location.hash = elm.id; }
+              }, { passive: true }); elm.style }
+        });
+      </script>
