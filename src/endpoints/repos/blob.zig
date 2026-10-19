@@ -152,7 +152,7 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
 
     var itr = local_tree.iterate();
     while (itr.next()) |b| if (b.mode == .dir or b.mode == .submodule) {
-        const tree_str = "<span class=\"tree\"><a href=\"/repo/{s}/tree/{s}{s}/\">{s}</a></span>\n";
+        const tree_str = "<span class=\"tree\"><a href=\"/repo/{s}/tree{s}{s}/\">{s}</a></span>\n";
         try w.writer.print(tree_str, .{
             rd.name,
             blob_path,
@@ -162,7 +162,7 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     };
     itr = local_tree.iterate();
     while (itr.next()) |b| if (b.mode == .file or b.mode == .exec) {
-        const blob_str = "<span class=\"file\"><a href=\"/repo/{s}/blob/{s}{s}\">{s}</a></span>\n";
+        const blob_str = "<span class=\"file\"><a href=\"/repo/{s}/blob{s}{s}\">{s}</a></span>\n";
         try w.writer.print(blob_str, .{
             rd.name,
             blob_path,
