@@ -13,7 +13,7 @@ fn readme(blobs: []Git.Blob, repo: *const Git.Repo, a: Allocator, io: Io) !?[]co
         if (isReadme(obj.name)) {
             const resolve = repo.blob(obj.sha, a, io) catch return error.Unknown;
             const readme_html = htmlReadme(resolve.data.blob, a, io) catch unreachable;
-            return try allocPrint(a, "{f}", .{readme_html[0]});
+            return try a.print("{f}", .{readme_html[0]});
         }
     }
     return null;
@@ -31,15 +31,15 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
 
     const branch_count = repo.refs.count();
     const commit_slug = std.mem.trim(u8, c.title[0..@min(c.title.len, 50)], " \n");
-    const commit_time = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(c.committer.timestamp, now)});
+    const commit_time = try ctx.alloc.print("{f}", .{Humanize.unix(c.committer.timestamp, now)});
     const commit_text = c.sha.text();
     const commit_hex = commit_text.slice();
     const commit_hex_short = commit_hex[0..8];
 
     const prefix = if (rd.ref) |ref|
-        try allocPrint(ctx.alloc, "/repo/{s}/ref/{s}", .{ rd.name, ref })
+        try ctx.alloc.print("/repo/{s}/ref/{s}", .{ rd.name, ref })
     else
-        try allocPrint(ctx.alloc, "/repo/{s}", .{rd.name});
+        try ctx.alloc.print("/repo/{s}", .{rd.name});
 
     const path: ?[]const u8 = if (rd.path) |p| p.path else null;
 
@@ -56,11 +56,11 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
                     const sha_text = ch.sha.text();
-                    const chref = try allocPrint(ctx.alloc, "/repo/{s}/commit/{s}", .{ rd.name, sha_text.slice()[0..8] });
-                    const ctime = try allocPrint(ctx.alloc, "{f}", .{Humanize.unix(ch.timestamp, now)});
+                    const chref = try ctx.alloc.print("/repo/{s}/commit/{s}", .{ rd.name, sha_text.slice()[0..8] });
+                    const ctime = try ctx.alloc.print("{f}", .{Humanize.unix(ch.timestamp, now)});
                     const href: []const u8 = switch (obj.mode) {
-                        .file, .exec => try allocPrint(ctx.alloc, "{s}/blob/{s}{s}", .{ prefix, path orelse "", obj.name }),
-                        .dir, .submodule => try allocPrint(ctx.alloc, "{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name }),
+                        .file, .exec => try ctx.alloc.print("{s}/blob/{s}{s}", .{ prefix, path orelse "", obj.name }),
+                        .dir, .submodule => try ctx.alloc.print("{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name }),
                     };
                     if (filenameIsHidden(ch.name)) {
                         try list_hidden.append(ctx.alloc, .{
@@ -100,19 +100,19 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     }
 
     const page_desc: ?[]const u8 = if (repo.description(ctx.alloc, ctx.io)) |desc|
-        try allocPrint(ctx.alloc, "{f}", .{Abx.Html{ .text = desc }})
+        try ctx.alloc.print("{f}", .{Abx.Html{ .text = desc }})
     else |_|
         null;
 
     const open_graph: S.OpenGraph = .{ .title = .safe(rd.name), .desc = .safe(page_desc orelse &.{}) };
 
     const page_title = if (page_desc != null and page_desc.?.len > 0)
-        try allocPrint(ctx.alloc, "{s} - {s} - srctree", .{ rd.name, page_desc.? })
+        try ctx.alloc.print("{s} - {s} - srctree", .{ rd.name, page_desc.? })
     else
-        try allocPrint(ctx.alloc, "{s} - srctree", .{rd.name});
+        try ctx.alloc.print("{s} - srctree", .{rd.name});
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = .abx(try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
+        .href = .abx(try ctx.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     const count = rd.deltaCount(ctx);
@@ -187,7 +187,6 @@ const ArrayList = std.ArrayList;
 const Io = std.Io;
 const Reader = std.Io.Reader;
 const Writer = std.Io.Writer;
-const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;

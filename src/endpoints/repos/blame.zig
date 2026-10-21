@@ -63,18 +63,18 @@ pub fn blame(f: *Frame) Router.Error!void {
     const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang|
         Highlight.highlight(lang, source_lines.items, f.alloc, f.io) catch return error.Unknown
     else
-        allocPrint(f.alloc, "{f}", .{Abx.Html{ .text = source_lines.items }}) catch return error.Unknown;
+        try f.alloc.print("{f}", .{Abx.Html{ .text = source_lines.items }});
 
     var litr = std.mem.splitScalar(u8, formatted, '\n');
     for (lines) |*line|
         line.line = litr.next() orelse break;
 
-    const file_name = try allocPrint(f.alloc, "{f}", .{Abx.Html{ .text = blame_file }});
+    const file_name = try f.alloc.print("{f}", .{Abx.Html{ .text = blame_file }});
     const show_emails = f.user != null;
     const wrapped_blames = try wrapLineNumbersBlame(f.alloc, f.io, lines, map, rd.name, file_name, show_emails);
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
+        .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     const dcount = rd.deltaCount(f);
@@ -119,7 +119,7 @@ fn wrapLineNumbersBlame(
         const skip = src.sha.eql(prev_sha);
         if (!skip) prev_sha = src.sha;
         const bcommit = map.get(src.sha) orelse unreachable;
-        const email = if (!include_email) "" else allocPrint(a, "{f}", .{Abx.Html{ .text = bcommit.author.email }}) catch unreachable;
+        const email = if (!include_email) "" else try a.print("{f}", .{Abx.Html{ .text = bcommit.author.email }});
         sha.* = src.sha.text().slice()[0..8].*; // FIXME
         const parent_sha: ?Git.Sha = if (bcommit.parent) |bp| .init(bp) else null;
         blame_line.* = .{
@@ -128,7 +128,7 @@ fn wrapLineNumbersBlame(
             .repo_name = .abx(repo_name),
             .sha = .safe(sha),
             .blame_parent = if (parent_sha) |psha|
-                .{ .href = .abx(try allocPrint(a, "/repo/{s}/ref/{f}/blame/{s}", .{ repo_name, std.fmt.alt(psha, .fmtHex), path })) }
+                .{ .href = .abx(try a.print("/repo/{s}/ref/{f}/blame/{s}", .{ repo_name, std.fmt.alt(psha, .fmtHex), path })) }
             else
                 null,
             .time_style = .safe(style_blocks[bcommit.age_block]),
@@ -250,7 +250,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
-const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const splitScalar = std.mem.splitScalar;

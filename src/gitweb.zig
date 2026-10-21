@@ -49,7 +49,7 @@ fn prepareEnv(f: *const Frame) !std.process.Environ.Map {
     uri.index = 0;
     _ = uri.next() orelse return error.InvalidURI;
     _ = uri.next() orelse return error.InvalidURI;
-    const path_tr = try allocPrint(f.alloc, "repos/{s}/{s}", .{ rd.name, uri.withoutPrefix() orelse "" });
+    const path_tr = try f.alloc.print("repos/{s}/{s}", .{ rd.name, uri.withoutPrefix() orelse "" });
     errdefer f.alloc.free(path_tr);
     log.warn("pathtr {s}", .{path_tr});
 
@@ -336,7 +336,6 @@ const POLL = std.posix.POLL;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
 const log = std.log.scoped(.gitweb);
-const allocPrint = std.fmt.allocPrint;
 const print = std.fmt.bufPrint;
 const RouteData = @import("endpoints/repos.zig").RouteData;
 

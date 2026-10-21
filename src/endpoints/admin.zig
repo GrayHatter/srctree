@@ -266,7 +266,6 @@ const log = std.log.scoped(.srctree_admin);
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Writer = Io.Writer;
-const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const mem = std.mem;
 const verse = @import("verse");

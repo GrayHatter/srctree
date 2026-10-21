@@ -76,7 +76,7 @@ pub fn format(self: Humanize, w: *std.Io.Writer) !void {
 }
 
 pub fn printAlloc(self: Humanize, a: std.mem.Allocator) ![]u8 {
-    return std.fmt.allocPrint(a, "{f}", .{self});
+    return a.print("{f}", .{self});
 }
 
 const std = @import("std");

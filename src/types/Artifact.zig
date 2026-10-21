@@ -125,7 +125,6 @@ const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Sha256 = std.crypto.hash.sha2.Sha256;
-const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const asBytes = std.mem.asBytes;
 const find = std.mem.find;

@@ -44,7 +44,6 @@ test {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const allocPrint = std.fmt.allocPrint;
 const Writer = std.Io.Writer;
 
 const verse = @import("verse");

@@ -104,7 +104,7 @@ fn searchTree(
     while (itr.next()) |obj| {
         if (limit.* == 0) break;
         const path = if (root.len > 0)
-            try allocPrint(a, "{s}/{s}", .{ root, obj.name })
+            try a.print("{s}/{s}", .{ root, obj.name })
         else
             obj.name;
         log.debug("searching {s}\n", .{path});
@@ -252,7 +252,6 @@ const ArrayList = std.ArrayList;
 const Io = std.Io;
 const Reader = Io.Reader;
 const Writer = Io.Writer;
-const allocPrint = std.fmt.allocPrint;
 const startsWith = std.mem.startsWith;
 const endsWith = std.mem.endsWith;
 const find = std.mem.find;

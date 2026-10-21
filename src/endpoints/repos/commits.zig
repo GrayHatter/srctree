@@ -86,12 +86,12 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
     //var messages: []S.CommentThreadHtml.Messages = &.{};
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
+        .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     const human_time = Humanize.unix(current.author.timestamp, now);
 
-    const page_title = try allocPrint(f.alloc, "{f} - [{s}] committed to {s} about {f} - srctree", .{
+    const page_title = try f.alloc.print("{f} - [{s}] committed to {s} about {f} - srctree", .{
         abx.Html{ .text = current.title },
         current.sha.text().slice()[0..10],
         repo_name,
@@ -99,15 +99,15 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
     });
 
     const diffstat = patch.patchStat();
-    const og_title = try allocPrint(f.alloc, "Commit by {s}: changed {} file{s} {f} [+{} -{}]", .{
-        allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
+    const og_title = try f.alloc.print("Commit by {s}: changed {} file{s} {f} [+{} -{}]", .{
+        f.alloc.print("{f}", .{abx.Html{ .text = current.author.name }}) catch unreachable,
         diffstat.files,
         if (diffstat.files > 1) "s" else "",
         human_time,
         diffstat.additions,
         diffstat.deletions,
     });
-    const og_desc = allocPrint(f.alloc, "{f}", .{abx.Html{ .text = current.message }}) catch unreachable;
+    const og_desc = f.alloc.print("{f}", .{abx.Html{ .text = current.message }}) catch unreachable;
     const count = rd.deltaCount(f);
     var page = CommitPage.init(.{
         .repo = .safe(repo_name),
@@ -233,7 +233,7 @@ fn commitVerse(a: Allocator, c: Commit, repo_name: []const u8, include_email: bo
     const ws = " \t\n";
     const date = Datetime.fromEpoch(c.author.timestamp);
 
-    const email = if (!include_email) "" else try allocPrint(a, "{f}", .{
+    const email = if (!include_email) "" else try a.print("{f}", .{
         abx.Html{ .text = trim(u8, c.author.email, ws) },
     });
 
@@ -247,10 +247,10 @@ fn commitVerse(a: Allocator, c: Commit, repo_name: []const u8, include_email: bo
             .link_target = .abx(email),
             .name = .abx(trim(u8, c.author.name, ws)),
         },
-        .day = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(date, .format)})),
+        .day = .safe(try a.print("{f}", .{std.fmt.alt(date, .format)})),
         .weekday = .safe(date.weekdaySlice()),
-        .time = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(date, .fmtDay)})),
-        .sha = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(c.sha, .fmtHex)})),
+        .time = .safe(try a.print("{f}", .{std.fmt.alt(date, .fmtDay)})),
+        .sha = .safe(try a.print("{f}", .{std.fmt.alt(c.sha, .fmtHex)})),
     };
 }
 
@@ -366,7 +366,6 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Reader = Io.Reader;
 const Writer = Io.Writer;
-const allocPrint = std.fmt.allocPrint;
 const print = std.fmt.bufPrint;
 const endsWith = std.mem.endsWith;
 const eql = std.mem.eql;

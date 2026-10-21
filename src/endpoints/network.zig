@@ -21,7 +21,7 @@ pub fn index(f: *Frame) Error!void {
                 dom = dom.open(T.html.h3(&.{}, &.{.class("upstream")}));
                 dom.push(T.html.text("Upstream: "));
 
-                const purl = try allocPrint(f.alloc, "{f}", .{std.fmt.alt(remote, .formatLink)});
+                const purl = try f.alloc.print("{f}", .{std.fmt.alt(remote, .formatLink)});
                 dom.dupe(T.html.anch(&.{.text(purl)}, &.{.href(purl)}));
                 dom = dom.close();
             }
@@ -41,7 +41,6 @@ pub fn index(f: *Frame) Error!void {
 }
 
 const std = @import("std");
-const allocPrint = std.fmt.allocPrint;
 const log = std.log.scoped(.srctree);
 
 const verse = @import("verse");

@@ -113,7 +113,7 @@ fn editPost(f: *Frame) Error!void {
         var delta = Delta.new(rd.name, valid.title, valid.desc, if (f.user) |usr|
             usr.username.?
         else
-            try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
+            try f.alloc.print("remote_address", .{}), f.io) catch unreachable;
 
         delta.state.draft = valid.preview orelse false;
 
@@ -160,7 +160,7 @@ fn newPost(f: *Frame) Error!void {
         var delta = Delta.new(rd.name, valid.title, valid.desc, if (f.user) |usr|
             usr.username.?
         else
-            try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
+            try f.alloc.print("remote_address", .{}), f.io) catch unreachable;
 
         delta.state.draft = valid.preview orelse false;
 
@@ -257,8 +257,8 @@ fn view(f: *Frame) Error!void {
     }
 
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
-    const created = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)});
-    const updated = try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)});
+    const created = try f.alloc.print("{f}", .{Humanize.unix(delta.created, now)});
+    const updated = try f.alloc.print("{f}", .{Humanize.unix(delta.updated, now)});
 
     const count = rd.deltaCount(f);
     var page: DeltaPage = .init(.{
@@ -503,7 +503,7 @@ fn fromRemoteUri(f: *Frame, repo_name: []const u8, uri_str: []const u8) !void {
     var delta = Delta.new(repo_name, data.title, data.description, if (f.user) |usr|
         usr.username.?
     else
-        try allocPrint(f.alloc, "remote_address", .{}), f.io) catch unreachable;
+        try f.alloc.print("remote_address", .{}), f.io) catch unreachable;
 
     delta.attach = .remote;
     delta.attach_remote = uri_str;
@@ -520,7 +520,6 @@ const ArrayList = std.ArrayList;
 const Io = std.Io;
 const Reader = Io.Reader;
 const Writer = Io.Writer;
-const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const findPos = std.mem.findPos;

@@ -306,9 +306,9 @@ const Scribe = struct {
                     .link_target = .abx(self.repo),
                     .name = .abx(self.repo),
                 },
-                .day = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtYMD)})),
+                .day = .safe(try a.print("{f}", .{std.fmt.alt(self.date, .fmtYMD)})),
                 .weekday = .safe(self.date.weekdaySlice()),
-                .time = .safe(try allocPrint(a, "{f}", .{std.fmt.alt(self.date, .fmtTime)})),
+                .time = .safe(try a.print("{f}", .{std.fmt.alt(self.date, .fmtTime)})),
                 .sha = .safe(shahex[0..8]),
             };
         }
@@ -478,8 +478,7 @@ pub fn commitFlex(ctx: *Frame) Error!void {
                 else => " day-commits day-pwr-max",
             });
 
-            m.title = .safe(try std.fmt.allocPrint(
-                ctx.alloc,
+            m.title = .safe(try ctx.alloc.print(
                 "{} commits on {f}",
                 .{ journal.hits[day_idx], date.timeTruncate() },
             ));
@@ -489,7 +488,7 @@ pub fn commitFlex(ctx: *Frame) Error!void {
     const current_streak = switch (streak) {
         0 => "One Day? Or Day One!",
         1 => "Day One!",
-        else => try std.fmt.allocPrint(ctx.alloc, "{} Days{s}", .{
+        else => try ctx.alloc.print("{} Days{s}", .{
             @max(streak, journal.streak + @as(usize, if (committed_today) 1 else 0)),
             if (!committed_today) "?" else "",
         }),
@@ -529,25 +528,25 @@ pub fn commitFlex(ctx: *Frame) Error!void {
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Today"),
-            .lead = .safe(try allocPrint(ctx.alloc, "{} commits today", .{blocks.todays.items.len})),
+            .lead = .safe(try ctx.alloc.print("{} commits today", .{blocks.todays.items.len})),
             .journal_rows = blocks.todays.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Yesterday"),
-            .lead = .safe(try allocPrint(ctx.alloc, "{} commits yesterday", .{blocks.yesterdays.items.len})),
+            .lead = .safe(try ctx.alloc.print("{} commits yesterday", .{blocks.yesterdays.items.len})),
             .journal_rows = blocks.yesterdays.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Last Week"),
-            .lead = .safe(try allocPrint(ctx.alloc, "{} commits last week", .{blocks.last_weeks.items.len})),
+            .lead = .safe(try ctx.alloc.print("{} commits last week", .{blocks.last_weeks.items.len})),
             .journal_rows = blocks.last_weeks.items,
         });
 
         scribe_blocks.appendAssumeCapacity(.{
             .group = .safe("Last Month"),
-            .lead = .safe(try allocPrint(ctx.alloc, "{} commits last month", .{blocks.last_months.items.len})),
+            .lead = .safe(try ctx.alloc.print("{} commits last month", .{blocks.last_months.items.len})),
             .journal_rows = blocks.last_months.items,
         });
     }
@@ -555,9 +554,9 @@ pub fn commitFlex(ctx: *Frame) Error!void {
     const page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = ctx.template_data.get(S.BodyHeaderHtml).?.*,
-        .total_hits = .safe(try allocPrint(ctx.alloc, "{}", .{tcount})),
+        .total_hits = .safe(try ctx.alloc.print("{}", .{tcount})),
         .flex_weeks = flex_weeks,
-        .checked_repos = .safe(try allocPrint(ctx.alloc, "{}", .{repo_count})),
+        .checked_repos = .safe(try ctx.alloc.print("{}", .{repo_count})),
         .current_streak = .safe(current_streak),
         .months = scribe_blocks.items,
     });
@@ -571,7 +570,6 @@ const eql = std.mem.eql;
 const trim = std.mem.trim;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
-const allocPrint = std.fmt.allocPrint;
 const log = std.log.scoped(.commit_flex);
 
 const DateTime = @import("../datetime.zig");

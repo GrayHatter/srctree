@@ -60,7 +60,7 @@ fn gistPost(frame: *Frame) Error!void {
     for (files, udata.file_name, udata.file_blob, 0..) |*file, fname, fblob, i| {
         var name = std.mem.trim(u8, fname, &std.ascii.whitespace);
         if (name.len == 0) {
-            name = try allocPrint(frame.alloc, "filename{}.txt", .{i});
+            name = try frame.alloc.print("filename{}.txt", .{i});
         }
 
         file.* = Gist.File.init(name, fblob) catch return error.DataInvalid;
@@ -145,11 +145,11 @@ fn view(vrs: *Frame) Error!void {
     const files = toTemplate(gist.files, vrs.alloc, vrs.io) catch return error.Unknown;
     var page = GistPage.init(.{
         .meta_head = .{ .open_graph = .{
-            .title = .safe(try allocPrint(vrs.alloc, "A perfect paste from {f}", .{Abx.Html{ .text = gist.owner }})),
+            .title = .safe(try vrs.alloc.print("A perfect paste from {f}", .{Abx.Html{ .text = gist.owner }})),
             .desc = .safe(if (gist.file_count == 1)
-                try allocPrint(vrs.alloc, "{f}", .{Abx.Html{ .text = gist.files[0].name }})
+                try vrs.alloc.print("{f}", .{Abx.Html{ .text = gist.files[0].name }})
             else
-                try allocPrint(vrs.alloc, "{} files", .{gist.file_count})),
+                try vrs.alloc.print("{} files", .{gist.file_count})),
         } },
         .body_header = body_header.*,
         .gist_files = files,
@@ -166,7 +166,6 @@ test {
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const allocPrint = std.fmt.allocPrint;
 const Writer = std.Io.Writer;
 
 const verse = @import("verse");

@@ -152,7 +152,7 @@ test lineNumberFromHeader {
 }
 
 pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]Diff.Line {
-    const clean = allocPrint(a, "{f}", .{abx.Html{ .text = diff }}) catch unreachable;
+    const clean = a.print("{f}", .{abx.Html{ .text = diff }}) catch unreachable;
     const line_count = std.mem.count(u8, clean, "\n");
     var lines: ArrayList(Diff.Line) = .empty;
     var litr = splitScalar(u8, clean, '\n');
@@ -261,7 +261,6 @@ const findPos = std.mem.findPos;
 const indexOfScalarPos = std.mem.indexOfScalarPos;
 const findAnyPos = std.mem.findAnyPos;
 const splitScalar = std.mem.splitScalar;
-const allocPrint = std.fmt.allocPrint;
 const parseInt = std.fmt.parseInt;
 const log = std.log.scoped(.git_patch);
 

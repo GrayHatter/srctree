@@ -42,7 +42,7 @@ pub fn list(f: *Frame) Router.Error!void {
         .repo_name = .safe(rd.name),
         .description = .abx(repo.description(f.alloc, f.io) catch ""),
         .upstream = if (repo.findRemote("upstream")) |up| .{
-            .href = .abx(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
+            .href = .abx(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
         } else null,
         .blame = null,
         .issue_count = count.issue,
@@ -63,7 +63,6 @@ const repos_ = @import("../repos.zig");
 const RouteData = repos_.RouteData;
 
 const std = @import("std");
-const allocPrint = std.fmt.allocPrint;
 const verse = @import("verse");
 const Frame = verse.Frame;
 const S = verse.template.Structs;

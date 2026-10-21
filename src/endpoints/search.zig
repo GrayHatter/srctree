@@ -125,7 +125,6 @@ const cutPrefix = std.mem.cutPrefix;
 const trim = std.mem.trim;
 const eql = std.mem.eql;
 const findScalar = std.mem.findScalar;
-const allocPrint = std.fmt.allocPrint;
 
 const verse = @import("verse");
 const abx = verse.Antibiotic;

@@ -114,10 +114,10 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Delt
 
     // TODO injectable if d.repo is unsanitized
     const uri = switch (d.attach) {
-        .issue => try allocPrint(a, "/repo/{s}/issue", .{d.repo}),
-        .diff => try allocPrint(a, "/repo/{s}/diff", .{d.repo}),
-        .remote => try allocPrint(a, "/repo/{s}/issue", .{d.repo}),
-        else => try allocPrint(a, "/repo/{s}/issue", .{d.repo}),
+        .issue => try a.print("/repo/{s}/issue", .{d.repo}),
+        .diff => try a.print("/repo/{s}/diff", .{d.repo}),
+        .remote => try a.print("/repo/{s}/issue", .{d.repo}),
+        else => try a.print("/repo/{s}/issue", .{d.repo}),
     };
 
     const meta: ?DeltaMeta = switch (d.attach) {
@@ -125,7 +125,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Delt
         .diff => .{ .repo = .abx(d.repo), .flavor = .safe("diff") },
         .remote => .{
             .repo = .abx(d.repo),
-            .flavor = .safe(try allocPrint(a, "Tracking remote issue from {f}", .{
+            .flavor = .safe(try a.print("Tracking remote issue from {f}", .{
                 abx.Html{ .text = d.attach_remote },
             })),
         },
@@ -134,13 +134,13 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Delt
 
     // TODO implement seen
     return .{
-        .index = .safe(try allocPrint(a, "{x}", .{d.index})),
+        .index = .safe(try a.print("{x}", .{d.index})),
         .uri_base = .abx(uri),
         .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
         .comment_count = comments.count,
         .view_count = d.viewers.liveCount(io),
         .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
-        .desc = .safe(if (msg.len == 0) "&nbsp;" else try allocPrint(a, "{f}", .{abx.Html{ .text = msg }})),
+        .desc = .safe(if (msg.len == 0) "&nbsp;" else try a.print("{f}", .{abx.Html{ .text = msg }})),
         .delta_meta = meta,
         .comment = .safe(svg.Icon.slice(if (comments.new) .comment else .comment_new, .{})),
         .viewers = .safe(svg.Icon.slice(.eye, .{})),
@@ -207,7 +207,7 @@ fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Alloc
                 comment_patch.parse(a) catch {
                     return .{
                         "<div class=\"sysmsg red\">Unable to parse invalid patch.</div>\n",
-                        try allocPrint(a, "{f}", .{abx.Html{ .text = if (msg.message.len > 0)
+                        try a.print("{f}", .{abx.Html{ .text = if (msg.message.len > 0)
                             msg.message
                         else
                             "[Empty Message]" }}),
@@ -228,7 +228,7 @@ fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Alloc
         _ = diffs_ep.translateComment(msg.message, .{ .diffs = &.{}, .blob = &.{} }, repo, writer, a, io) catch
             return error.ServerFault;
         comment_body = try w.toOwnedSlice();
-        //comment_body = try allocPrint(a, "{f}", .{abx.Html{
+        //comment_body = try (a, "{f}", .{abx.Html{
         //    .text = msg.message orelse "[Empty Message]",
         //}});
     }
@@ -252,8 +252,8 @@ pub fn genThreadMessages(
     if (thread.messages.items.len == 0) return &.{};
     const messages = try a.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
     for (thread.messages.items, messages) |msg, *html| {
-        const date = try allocPrint(a, "{f}", .{Humanize.unix(msg.updated, now)});
-        const msg_hash = try allocPrint(a, "{x}", .{msg.hash[0..10]});
+        const date = try a.print("{f}", .{Humanize.unix(msg.updated, now)});
+        const msg_hash = try a.print("{x}", .{msg.hash[0..10]});
         const systag, const body = try decodeMessage(msg, repo, patch, a, io);
         html.* = switch (msg.kind) {
             .comment => .{
@@ -344,7 +344,6 @@ const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const ArrayList = std.ArrayList;
 const log = std.log.scoped(.srctree_delta);
-const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const findPos = std.mem.findPos;
 const find = std.mem.find;

@@ -42,12 +42,12 @@ pub fn list(f: *Frame) Router.Error!void {
     }
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
+        .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     const open_graph: S.OpenGraph = .{
         .title = .safe(rd.name),
-        .desc = .safe(try allocPrint(f.alloc, "{} branches", .{branches.len})),
+        .desc = .safe(try f.alloc.print("{} branches", .{branches.len})),
     };
 
     const count = rd.deltaCount(f);
@@ -94,7 +94,6 @@ const Repo = @import("../../Repo.zig");
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const allocPrint = std.fmt.allocPrint;
 const verse = @import("verse");
 const T = verse.template;
 const S = verse.template.Structs;

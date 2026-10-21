@@ -308,7 +308,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
 
     var upstream: ?[]const u8 = null;
     if (repo.git.findRemote("upstream")) |remote| {
-        upstream = try allocPrint(a, "{f}", .{std.fmt.alt(remote, .formatLink)});
+        upstream = try a.print("{f}", .{std.fmt.alt(remote, .formatLink)});
     }
 
     var sha: Git.Sha = .zeros;
@@ -317,7 +317,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
         defer cmt.raze(a);
         sha = cmt.sha;
         const committer = cmt.committer;
-        updated = try allocPrint(a, "{f}", .{Humanize.unix(committer.timestamp, now)});
+        updated = try a.print("{f}", .{Humanize.unix(committer.timestamp, now)});
     } else |_| {}
 
     var tag_list: std.ArrayList(Git.Tag) = .empty;
@@ -336,7 +336,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
         tag = .{
             .tag = .abx(try a.dupe(u8, tag_list.items[0].name)),
             .updated = .safe(
-                try allocPrint(a, "tagged {f}", .{Humanize.unix(tag_list.items[0].tagger.timestamp, now)}),
+                try a.print("tagged {f}", .{Humanize.unix(tag_list.items[0].tagger.timestamp, now)}),
             ),
         };
     }
@@ -349,7 +349,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
     }
     const status = repo.ci.status(a, io) catch unreachable;
 
-    const commit_uri = try allocPrint(a, "/repo/{s}/commit/{f}", .{ name, std.fmt.alt(sha, .fmtHex) });
+    const commit_uri = try a.print("/repo/{s}/commit/{f}", .{ name, std.fmt.alt(sha, .fmtHex) });
     const sha_str = try sha.text().dupe(a);
     return .{
         .name = .abx(name),
@@ -431,7 +431,6 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;
 const Writer = Io.Writer;
-const allocPrint = std.fmt.allocPrint;
 const eql = std.mem.eql;
 const log = std.log.scoped(.srctree);
 

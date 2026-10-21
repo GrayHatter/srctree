@@ -95,7 +95,7 @@ fn pendingNew(f: *Frame) Error!void {
     }
 
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
+        .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
     var body_header: S.BodyHeaderHtml = .{ .nav = .{
@@ -210,7 +210,7 @@ fn createDiff(f: *Frame) Error!void {
         const username = if (f.user) |usr|
             usr.username.?
         else
-            try allocPrint(f.alloc, "REMOTE_ADDR {s}", .{f.request.remote_addr});
+            try f.alloc.print("REMOTE_ADDR {s}", .{f.request.remote_addr});
 
         const idx = createDiffCore(rd, udata, username, f.alloc, f.io) catch {
             return createError(f, udata, .{ .remote_error = "connection failed" });
@@ -304,11 +304,11 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
         if (file_idx > 0) fnum = bufPrint(&fnum_b, "F{d}", .{file_idx}) catch unreachable;
 
         const dstat = patch.patchStat();
-        const stat = try allocPrint(a, "added: {}, removed: {}, total {}", .{
+        const stat = try a.print("added: {}, removed: {}, total {}", .{
             dstat.additions, dstat.deletions, dstat.total,
         });
         //<div class="<DClass />"><ln num="<Num type="usize" />" id="LL<Num type="usize" />" href="#LL<Num type="usize" />"><Line /></ln></div>
-        const name = if (diff.filename) |name| try allocPrint(a, "{s}", .{name}) else switch (diff.header.change) {
+        const name = if (diff.filename) |name| try a.print("{s}", .{name}) else switch (diff.header.change) {
             .deletion => "File Was Deleted",
             else => "File Was Added",
         };
@@ -463,10 +463,10 @@ fn highlightLineRef(
     else if (Highlighting.Language.guessFromFilename(filename)) |lang|
         try Highlighting.highlight(lang, code, a, io)
     else
-        try allocPrint(a, "{f}", .{abx.Html{ .text = code }});
+        try a.print("{f}", .{abx.Html{ .text = code }});
 
-    return try allocPrint(a, "<div title=\"{s}\" class=\"coderef{s}\">{s}</div>", .{
-        try allocPrint(a, "{f}", .{abx.Html{ .text = text }}), color, formatted,
+    return try a.print("<div title=\"{s}\" class=\"coderef{s}\">{s}</div>", .{
+        try a.print("{f}", .{abx.Html{ .text = text }}), color, formatted,
     });
 }
 
@@ -927,8 +927,8 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .title = .abx(delta.title),
         .description = .abx(delta.message),
         .status = .safe(delta_shared.status(delta)),
-        .created = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.created, now)})),
-        .updated = .safe(try allocPrint(f.alloc, "{f}", .{Humanize.unix(delta.updated, now)})),
+        .created = .safe(try f.alloc.print("{f}", .{Humanize.unix(delta.created, now)})),
+        .updated = .safe(try f.alloc.print("{f}", .{Humanize.unix(delta.updated, now)})),
         .creator = if (delta.author) |author| .abx(author) else null,
         .delta_flavor = .{
             .diff = .{
@@ -938,7 +938,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
                 .comment_box = .{
                     .current_username = .abx(username),
                     .delta_id = .safe(delta_index),
-                    .diff_id = .safe(try allocPrint(f.alloc, "{}", .{delta.attach_target})),
+                    .diff_id = .safe(try f.alloc.print("{}", .{delta.attach_target})),
                     .action_buttons = delta_shared.actionButtons(f, delta)[0..2],
                 },
                 .patch_warning = applies,
@@ -973,7 +973,6 @@ const Writer = Io.Writer;
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const log = std.log.scoped(.diffs);
-const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const trim = std.mem.trim;

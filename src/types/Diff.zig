@@ -99,9 +99,9 @@ pub fn new(delta: *Delta, author: []const u8, flavor: Flavor, a: Allocator, io: 
 
     // TODO use hash
     const msg = if (old_attach) |old|
-        try allocPrint(a, "diff patch was updated from {} to {}", .{ old, idx })
+        try a.print("diff patch was updated from {} to {}", .{ old, idx })
     else
-        try allocPrint(a, "diff patch was created {}", .{idx});
+        try a.print("diff patch was created {}", .{idx});
 
     try delta.addMessage(try .new(.diff_update, idx, author, msg, io), a, io);
     return d;
@@ -191,7 +191,6 @@ const Io = std.Io;
 const Allocator = std.mem.Allocator;
 const log = std.log.scoped(.types_diff);
 const print = std.fmt.bufPrint;
-const allocPrint = std.fmt.allocPrint;
 const find = std.mem.find;
 const cutPrefix = std.mem.cutPrefix;
 const findScalar = std.mem.findScalar;

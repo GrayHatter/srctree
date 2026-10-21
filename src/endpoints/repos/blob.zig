@@ -10,8 +10,7 @@ pub fn treeBlob(f: *Frame) Router.Error!void {
     const ograph: S.OpenGraph = .{
         .title = .safe(rd.name),
         .desc = .safe(repo.description(f.alloc, f.io) catch |err| switch (err) {
-            error.DefaultDescription, error.NoDescription => try allocPrint(
-                f.alloc,
+            error.DefaultDescription, error.NoDescription => try f.alloc.print(
                 "An Indescribable repo with {s} commits",
                 .{"[todo count commits]"},
             ),
@@ -51,7 +50,7 @@ fn treeOrBlobAtRef(f: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) R
         .blob => return blobHtml(f, rd, repo, files),
         .tree => {
             if (!f.uri.isDir()) {
-                const uri = try allocPrint(f.alloc, "/{s}/", .{f.uri.path});
+                const uri = try f.alloc.print("/{s}/", .{f.uri.path});
                 return f.redirect(uri, .permanent_redirect);
             }
             var child = files.descend(path.path[path.index..], repo, f.alloc, f.io) catch |err| {
@@ -128,17 +127,17 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     else if (excludedExt(blob_data.name))
         "This file type is currently unsupported"
     else
-        try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blob_data.data.blob }});
+        try f.alloc.print("{f}", .{abx.Html{ .text = blob_data.data.blob }});
 
     const wrapped = try wrapLineNumbers(f.alloc, colored_blob);
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-        .href = .safe(try allocPrint(f.alloc, "{f}", .{std.fmt.alt(up, .formatLink)})),
+        .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
-    const safe_name = try allocPrint(f.alloc, "{f}", .{abx.Html{ .text = blob_data.name }});
-    const meta_title = try allocPrint(f.alloc, "{s} - {s} -- srctree", .{ safe_name, rd.name });
+    const safe_name = try f.alloc.print("{f}", .{abx.Html{ .text = blob_data.name }});
+    const meta_title = try f.alloc.print("{s} - {s} -- srctree", .{ safe_name, rd.name });
     const ext: ?[]const u8 = if (std.mem.findLast(u8, safe_name, ".")) |lst| safe_name[lst + 1 ..] else null;
-    const meta_desc = try allocPrint(f.alloc, "{} lines {s}{s}", .{
+    const meta_desc = try f.alloc.print("{} lines {s}{s}", .{
         countScalar(u8, wrapped, '\n'),
         if (ext) |_| " of " else "",
         if (ext) |e| e else "",
@@ -230,9 +229,9 @@ fn newRepo(f: *Frame) Router.Error!void {
     f.status = .ok;
 
     //const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
-    //    .href = try allocPrint(ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
+    //    .href = try (ctx.alloc, "{f}", .{std.fmt.alt(up, .formatLink)}),
     //} else null;
-    const meta_title = try allocPrint(f.alloc, "Brand new repo {s} on srctree", .{rd.name});
+    const meta_title = try f.alloc.print("Brand new repo {s} on srctree", .{rd.name});
     var page: NewRepoPage = .init(.{
         .meta_head = .{
             .title = .safe(meta_title),
@@ -259,7 +258,6 @@ const RouteData = repos_.RouteData;
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
-const allocPrint = std.fmt.allocPrint;
 const bufPrint = std.fmt.bufPrint;
 const eql = std.mem.eql;
 const startsWith = std.mem.startsWith;
