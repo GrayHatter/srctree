@@ -61,12 +61,12 @@ pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const raw_str = if (str.text.len > 0) str.text else str.text_cleaned;
 
-    const rules = try search.genRules(raw_str, f.alloc);
+    const rules = try searchEP.genRules(raw_str, f.alloc);
 
     var itr = Delta.searchRepo(rd.name, rules.items, f.io);
 
     var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+        .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io),
     } };
     if (f.user) |usr| body_header.nav.nav_auth = .abx(usr.username.?);
     f.template_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
@@ -147,7 +147,7 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Delt
     };
 }
 
-pub fn list(f: *Frame, Itr: type, itr: *Tsearch.Iterator(Itr, Delta), search_str: abx.Html) RouterError!void {
+pub fn list(f: *Frame, Itr: type, itr: *search.Iterator(Itr, Delta), search_str: abx.Html) RouterError!void {
     var d_list: ArrayList(DeltaList) = .empty;
     while (itr.next(f.alloc, f.io)) |deltaC| {
         var d = deltaC;
@@ -316,9 +316,9 @@ pub fn actionButtons(f: *Frame, delta: *const Delta) [2][]const u8 {
 }
 
 const Repos = @import("repos.zig");
+const searchEP = @import("search.zig");
 const Types = @import("../types.zig");
-const search = @import("search.zig");
-const Tsearch = Types.search;
+const search = @import("../search.zig");
 const Delta = Types.Delta;
 const Message = Types.Message;
 const Diff = Types.Diff;

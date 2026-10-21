@@ -1,7 +1,6 @@
 const types = @This();
 
 pub const common = @import("types/common.zig");
-pub const search = @import("types/search.zig");
 
 pub const Artifact = @import("types/Artifact.zig");
 pub const CI = @import("types/CI.zig");
@@ -522,7 +521,6 @@ pub const testing = struct {
 
 test {
     _ = &common;
-    _ = &search;
     _ = &Artifact;
     _ = &CI;
     _ = &Delta;

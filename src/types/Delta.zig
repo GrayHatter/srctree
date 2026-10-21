@@ -224,18 +224,18 @@ pub const Iterator = struct {
     }
 };
 
-pub const RepoIterator = Tsearch.RepoIterator(Index, Delta);
-pub const SearchIterator = Tsearch.Iterator(Iterator, Delta);
-pub const RepoSearchIterator = Tsearch.Iterator(RepoIterator, Delta);
+pub const RepoIterator = search.RepoIterator(Index, Delta);
+pub const SearchIterator = search.Iterator(Iterator, Delta);
+pub const RepoSearchIterator = search.Iterator(RepoIterator, Delta);
 
-pub fn search(rules: []const Tsearch.Rule, io: Io) SearchIterator {
+pub fn searchAll(rules: []const search.Rule, io: Io) SearchIterator {
     return .{
         .rules = rules,
         .iterable = .init(io),
     };
 }
 
-pub fn searchRepo(repo: []const u8, rules: []const Tsearch.Rule, io: Io) RepoSearchIterator {
+pub fn searchRepo(repo: []const u8, rules: []const search.Rule, io: Io) RepoSearchIterator {
     return .{
         .rules = rules,
         .iterable = .init(repo, io),
@@ -310,9 +310,9 @@ const parseInt = std.fmt.parseInt;
 const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();
 
+const search = @import("../search.zig");
 const types = @import("../types.zig");
 const Thread = types.Thread;
 const Message = types.Message;
-const Tsearch = @import("search.zig");
 const Diff = @import("Diff.zig");
 const Viewers = @import("Viewers.zig");

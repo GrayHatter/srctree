@@ -24,7 +24,7 @@ pub fn inboxCount(user: ?verse.Auth.User, a: Allocator, io: Io) usize {
     else
         "is:open";
     if (genRules(search_str, a)) |rules| {
-        var search_results = Delta.search(rules.items, io);
+        var search_results = Delta.searchAll(rules.items, io);
         search_results.data = if (user) |usr| .{ .user = usr.username orelse &.{} } else .empty;
         while (search_results.next(a, io)) |dlt| {
             inbox_count +|= 1;
@@ -73,9 +73,9 @@ pub fn index(f: *Frame) Error!void {
     return custom(f, query_str);
 }
 
-const Fmt = std.fmt.Alt([]const Tsearch.Rule, fmtRules);
+const Fmt = std.fmt.Alt([]const search.Rule, fmtRules);
 
-fn fmtRules(rules: []const Tsearch.Rule, w: *std.Io.Writer) !void {
+fn fmtRules(rules: []const search.Rule, w: *std.Io.Writer) !void {
     for (rules) |rl| switch (rl.match) {
         .repo => |rp| try w.print("repo:{s} ", .{rp}),
         else => {},
@@ -92,7 +92,7 @@ fn fmtRules(rules: []const Tsearch.Rule, w: *std.Io.Writer) !void {
     };
 }
 
-pub const RulesList = ArrayList(Tsearch.Rule);
+pub const RulesList = ArrayList(search.Rule);
 
 pub fn genRules(search_str: []const u8, a: Allocator) !RulesList {
     var rules: RulesList = .empty;
@@ -110,7 +110,7 @@ fn custom(f: *Frame, search_str: []const u8) Error!void {
     const rules = try genRules(search_str, f.alloc);
     for (rules.items) |rule| log.warn("rule = {f}", .{rule});
 
-    var itr = Delta.search(rules.items, f.io);
+    var itr = Delta.searchAll(rules.items, f.io);
 
     try delta_shared.list(f, Delta.Iterator, &itr, .abx(search_str));
 }
@@ -136,5 +136,5 @@ const ROUTE = Routes.ROUTE;
 
 const Repo = @import("../Repo.zig");
 const Delta = @import("../types.zig").Delta;
-const Tsearch = @import("../types/search.zig");
+const search = @import("../search.zig");
 const delta_shared = @import("delta.zig");
