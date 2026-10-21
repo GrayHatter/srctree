@@ -27,7 +27,7 @@ fn openRepo(raw_name: []const u8, a: Allocator, io: Io) !Git.Repo {
     if (!std.mem.eql(u8, raw_name, rname)) return error.InvalidName;
 
     var cwd = Io.Dir.cwd();
-    const filename = try std.fmt.allocPrint(a, "./repos/{s}", .{rname});
+    const filename = try a.print("./repos/{s}", .{rname});
     defer a.free(filename);
     const dir = try cwd.openDir(io, filename, .{});
     var gitrepo = try Git.Repo.init(dir, io);

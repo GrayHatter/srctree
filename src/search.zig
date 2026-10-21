@@ -6,12 +6,45 @@ pub const Specifier = enum {
     owner,
 };
 
+pub const Hit = union(Specifier) {
+    text: Data,
+    target: Data,
+    is: Identity,
+    repo: Repo,
+    owner: User,
+
+    pub const Repo = Data;
+    pub const Identity = Data;
+    pub const User = Data;
+
+    pub const Commit = struct {
+        sha: git.Sha,
+        idx: usize,
+
+        pub fn init(s: git.Sha, idx: usize) Commit {
+            return .{ .sha = s, .idx = idx };
+        }
+    };
+
+    pub const File = struct {
+        path: []const u8,
+        sha: git.Sha,
+        idx: usize,
+        line: u32,
+        code: []const u8,
+    };
+
+    pub const Data = struct {
+        _: void,
+    };
+};
+
 /// By assumption, a subject of len 0 will search across anything
 pub const Rule = struct {
-    match: Match,
+    match: Query,
     invert: bool = false,
 
-    pub const Match = union(Specifier) {
+    pub const Query = union(Specifier) {
         text: []const u8,
         target: struct {
             tag: []const u8,
@@ -21,8 +54,8 @@ pub const Rule = struct {
         repo: []const u8,
         owner: []const u8,
 
-        pub fn format(m: Match, w: *Writer) !void {
-            switch (m) {
+        pub fn format(q: Query, w: *Writer) !void {
+            switch (q) {
                 .text => |s| try w.print("{s}", .{s}),
                 .target => |t| try w.print("{s}:{s}", .{ t.tag, t.text }),
                 .is => |i| try w.print("is:{s}", .{i}),
@@ -87,6 +120,53 @@ pub const Rule = struct {
     }
 };
 
+const Exclude = struct {
+    list: ArrayList([]const u8),
+
+    pub const new: Exclude = .{ .list = .empty };
+
+    fn excluded(e: *Exclude, path: []const u8) bool {
+        for (e.list.items) |ex| {
+            if (startsWith(u8, path, ex)) return true;
+        }
+        return false;
+    }
+
+    fn fromSearch(e: *Exclude, str: []const u8, a: Allocator) !void {
+        var idx: usize = 0;
+        while (idx < str.len) {
+            if (findPos(u8, str, idx, "exclude:")) |pos| {
+                idx = pos + 1;
+                const end = findScalarPos(u8, str, pos, ' ') orelse str.len;
+                try e.list.append(a, str[pos + 8 .. end]);
+            } else return;
+        }
+    }
+
+    fn fromRepo(e: *Exclude, repo: *git.Repo, tree: *git.Tree, a: Allocator, io: Io) !void {
+        var itr = tree.iterate();
+        while (itr.next()) |obj| {
+            if (eql(u8, obj.name, ".gitattributes")) {
+                switch (repo.objects.load(obj.sha, a, io) catch return error.ServerFault) {
+                    .tree, .commit, .tag => break,
+                    .blob => |b| {
+                        var r: Reader = .fixed(b.data.blob);
+                        while (r.takeSentinel('\n')) |line| {
+                            if (endsWith(u8, line, "linguist-vendored") or endsWith(u8, line, " binary")) {
+                                // Hacky guess instead of actually pattern
+                                // matching, (sorry)
+                                if (find(u8, line, "/** ")) |idx| {
+                                    try e.list.append(a, line[0..idx]);
+                                }
+                            }
+                        } else |_| break;
+                    },
+                }
+            }
+        }
+    }
+};
+
 pub fn Iterator(Itr: type, Output: type) type {
     return struct {
         rules: []const Rule,
@@ -123,7 +203,7 @@ pub fn Iterator(Itr: type, Output: type) type {
 
         /// TODO: I think this function might overrun for some inputs
         /// TODO: add support for int types
-        fn eval(self: Self, rule: Rule.Match, target: Output) bool {
+        fn eval(self: Self, rule: Rule.Query, target: Output) bool {
             log.debug("eval rule [{any}]", .{rule});
             if (comptime std.meta.hasMethod(Output, "searchEval")) {
                 return target.searchEval(rule);
@@ -212,18 +292,125 @@ pub fn RepoIterator(Indexer: type, Output: type) type {
     };
 }
 
+pub fn searchTree(
+    files: *ArrayList(Hit.File),
+    tree: *git.Tree,
+    repo: *git.Repo,
+    root: []const u8,
+    search_str: []const u8,
+    ex: *Exclude,
+    limit: *u32,
+    a: Allocator,
+    io: Io,
+) !void {
+    var itr = tree.iterate();
+    while (itr.next()) |obj| {
+        if (limit.* == 0) break;
+        const path = if (root.len > 0)
+            try a.print("{s}/{s}", .{ root, obj.name })
+        else
+            obj.name;
+        log.debug("searching {s}\n", .{path});
+        if (ex.excluded(path)) {
+            if (root.len > 0) a.free(path);
+            continue;
+        }
+        limit.* -|= 1;
+        var object = try repo.objects.load(obj.sha, a, io);
+        switch (object) {
+            .tree => |*t| searchTree(files, t, repo, path, search_str, ex, limit, a, io) catch |err| {
+                log.err("search error {}", .{err});
+                limit.* /= 2;
+                continue;
+            },
+            .blob => |b| {
+                if (find(u8, b.data.blob, search_str)) |idx|
+                    try files.append(a, .{
+                        .path = path,
+                        .sha = b.sha,
+                        .idx = idx,
+                        .line = @truncate(countScalar(u8, b.data.blob[0..idx], '\n')),
+                        .code = b.data.blob,
+                    });
+            },
+            .commit, .tag => return error.CorruptedRepo,
+        }
+    }
+}
+
+const extra_lines: usize = 6;
+
+pub fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io: Io) ![]S.SearchHtml.Files {
+    var limit: u32 = limited;
+    var files: ArrayList(Hit.File) = .empty;
+    defer files.deinit(a);
+    var commit = try repo.HEAD(a, io);
+    var tree: git.Tree = try commit.loadTree(repo, a, io);
+    var excludes: Exclude = .new;
+    try excludes.fromRepo(repo, &tree, a, io);
+    try excludes.fromSearch(str, a);
+    defer excludes.list.deinit(a);
+    for (excludes.list.items) |ex| log.info("tree exclude {s}", .{ex});
+    // TODO real tokenization
+    const string = str[0 .. findScalarPos(u8, str, 0, ' ') orelse str.len];
+    try searchTree(&files, &tree, repo, "", string, &excludes, &limit, a, io);
+
+    var hits: ArrayList(S.SearchHtml.Files) = try .initCapacity(a, files.items.len);
+    for (files.items) |hit| {
+        var start: usize = hit.idx;
+        var before: usize = extra_lines;
+        while (start > 0 and before > 0) : (start -|= 1) {
+            if (hit.code[start] == '\n') before -|= 1;
+        }
+        var end: usize = hit.idx;
+        var after: usize = extra_lines;
+        while (end < hit.code.len and after > 0) : (end += 1) {
+            if (hit.code[end] == '\n') after -|= 1;
+        }
+        if (start > 0) start += 2;
+        const code = hit.code[start .. end - 1];
+        var line_number = hit.line + 1 - countScalar(u8, code[0 .. hit.idx - start], '\n');
+        var writer: Writer.Allocating = try .initCapacity(a, code.len * 2);
+        var source = std.mem.splitScalar(u8, code, '\n');
+        while (source.next()) |line| {
+            try writer.writer.print("<ln num=\"{}\" id=\"L{}\" href=\"#L{}\">{f}</ln>\n", .{
+                line_number, line_number, line_number, abx.Html{ .text = line },
+            });
+            line_number += 1;
+        }
+        hits.appendAssumeCapacity(.{
+            .filename = .abx(hit.path),
+            .line = hit.line + 1,
+            .code = .safe(writer.written()),
+        });
+    }
+
+    return try hits.toOwnedSlice(a);
+}
+
 const std = @import("std");
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
-const fs = std.fs;
+const ArrayList = std.ArrayList;
 const Io = std.Io;
+const Reader = Io.Reader;
 const Writer = Io.Writer;
 const findLast = std.mem.findLast;
 const find = std.mem.find;
 const endsWith = std.mem.endsWith;
+const startsWith = std.mem.startsWith;
 const cutSuffix = std.mem.cutSuffix;
 const eql = std.mem.eql;
 const parseInt = std.fmt.parseInt;
 const bufPrint = std.fmt.bufPrint;
-const endian = builtin.cpu.arch.endian();
-const log = std.log.scoped(.types_search);
+const log = std.log.scoped(.search);
+const git = @import("git.zig");
+
+const findPos = std.mem.findPos;
+const findScalarPos = std.mem.findScalarPos;
+const countScalar = std.mem.countScalar;
+
+const verse = @import("verse");
+const T = verse.template;
+const S = T.Structs;
+const abx = verse.Antibiotic;

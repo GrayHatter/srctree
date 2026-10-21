@@ -14,8 +14,6 @@ const SearchReq = struct {
     q: ?[]const u8,
 };
 
-const extra_lines: usize = 6;
-
 fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
@@ -26,7 +24,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     const commits, const files = if (udata.q) |s|
         .{
             searchCommits(s, &repo, count >> 2, f.alloc, f.io) catch return error.ServerFault,
-            searchFiles(s, &repo, count, f.alloc, f.io) catch |err| {
+            search.searchFiles(s, &repo, count, f.alloc, f.io) catch |err| {
                 log.err("search file err {}", .{err});
                 return error.ServerFault;
             },
@@ -38,7 +36,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .nav = .{
-            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
+            .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io),
         } },
         .repo_header = .{
             .repo_name = .abx(rd.name),
@@ -68,7 +66,7 @@ fn repoSearchDeep(f: *Frame) Router.Error!void {
 
 fn searchCommits(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io: Io) ![]S.SearchHtml.Commits {
     var limit: u32 = limited;
-    var commits: ArrayList(Hit.Commit) = .empty;
+    var commits: ArrayList(search.Hit.Commit) = .empty;
     defer commits.deinit(a);
     var commit = try repo.HEAD(a, io);
 
@@ -90,7 +88,7 @@ fn searchCommits(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, i
 }
 
 fn searchTree(
-    files: *ArrayList(Hit.File),
+    files: *ArrayList(search.Hit.File),
     tree: *git.Tree,
     repo: *git.Repo,
     root: []const u8,
@@ -135,54 +133,6 @@ fn searchTree(
     }
 }
 
-fn searchFiles(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io: Io) ![]S.SearchHtml.Files {
-    var limit: u32 = limited;
-    var files: ArrayList(Hit.File) = .empty;
-    defer files.deinit(a);
-    var commit = try repo.HEAD(a, io);
-    var tree: git.Tree = try commit.loadTree(repo, a, io);
-    var excludes: Exclude = .new;
-    try excludes.fromRepo(repo, &tree, a, io);
-    try excludes.fromSearch(str, a);
-    defer excludes.list.deinit(a);
-    for (excludes.list.items) |ex| log.info("tree exclude {s}", .{ex});
-    // TODO real tokenization
-    const string = str[0 .. findScalarPos(u8, str, 0, ' ') orelse str.len];
-    try searchTree(&files, &tree, repo, "", string, &excludes, &limit, a, io);
-
-    var hits: ArrayList(S.SearchHtml.Files) = try .initCapacity(a, files.items.len);
-    for (files.items) |hit| {
-        var start: usize = hit.idx;
-        var before: usize = extra_lines;
-        while (start > 0 and before > 0) : (start -|= 1) {
-            if (hit.code[start] == '\n') before -|= 1;
-        }
-        var end: usize = hit.idx;
-        var after: usize = extra_lines;
-        while (end < hit.code.len and after > 0) : (end += 1) {
-            if (hit.code[end] == '\n') after -|= 1;
-        }
-        if (start > 0) start += 2;
-        const code = hit.code[start .. end - 1];
-        var line_number = hit.line + 1 - countScalar(u8, code[0 .. hit.idx - start], '\n');
-        var writer: Writer.Allocating = try .initCapacity(a, code.len * 2);
-        var source = std.mem.splitScalar(u8, code, '\n');
-        while (source.next()) |line| {
-            try writer.writer.print("<ln num=\"{}\" id=\"L{}\" href=\"#L{}\">{f}</ln>\n", .{
-                line_number, line_number, line_number, abx.Html{ .text = line },
-            });
-            line_number += 1;
-        }
-        hits.appendAssumeCapacity(.{
-            .filename = .abx(hit.path),
-            .line = hit.line + 1,
-            .code = .safe(writer.written()),
-        });
-    }
-
-    return try hits.toOwnedSlice(a);
-}
-
 const Exclude = struct {
     list: ArrayList([]const u8),
 
@@ -216,6 +166,8 @@ const Exclude = struct {
                         var r: Reader = .fixed(b.data.blob);
                         while (r.takeSentinel('\n')) |line| {
                             if (endsWith(u8, line, "linguist-vendored") or endsWith(u8, line, " binary")) {
+                                // Hacky guess instead of actually pattern
+                                // matching, (sorry)
                                 if (find(u8, line, "/** ")) |idx| {
                                     try e.list.append(a, line[0..idx]);
                                 }
@@ -226,24 +178,6 @@ const Exclude = struct {
             }
         }
     }
-};
-
-const Hit = struct {
-    const Commit = struct {
-        sha: git.Sha,
-        idx: usize,
-
-        pub fn init(s: git.Sha, idx: usize) Commit {
-            return .{ .sha = s, .idx = idx };
-        }
-    };
-    const File = struct {
-        path: []const u8,
-        sha: git.Sha,
-        idx: usize,
-        line: u32,
-        code: []const u8,
-    };
 };
 
 const std = @import("std");
@@ -263,6 +197,7 @@ const log = std.log.scoped(.repo_search);
 
 const Repo = @import("../../Repo.zig");
 const RepoEndpoint = @import("../repos.zig");
+const searchEP = @import("../search.zig");
 const RouteData = RepoEndpoint.RouteData;
 const git = @import("../../git.zig");
 
@@ -274,4 +209,4 @@ const Frame = verse.Frame;
 const Router = verse.Router;
 const Match = Router.Match;
 const GET = Router.GET;
-const search = @import("../search.zig");
+const search = @import("../../search.zig");
