@@ -84,7 +84,7 @@ inline fn botRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
             const ua_str = f.request.user_agent.?.string;
             const ia_ua = "Mozilla/5.0 (X11; Linux x86_64; rv:144.0) Gecko/20100101 Firefox/144.0";
             const ia_bot_ua = find(u8, ua_str, ia_ua) == null;
-            if (bot.malicious and !ia_bot_ua) {
+            if (bot.name.isMalicious() and !ia_bot_ua) {
                 log.err("Dropping other malicious bot traffic", .{});
                 return Router.defaultResponse(.forbidden);
             }
@@ -106,7 +106,7 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
     const botdetect: verse.Robots = .init(f.request);
     const real_ua = ua.validate(f.request);
     if ((botdetect.score >= 1 or (real_ua.agent == .bot and
-        real_ua.agent.bot.name == .malicious)) and
+        real_ua.agent.bot.name == .other_malicious)) and
         ua.agent.browser.version != 128)
     {
         return dropRequest(f, "Malicious score");
