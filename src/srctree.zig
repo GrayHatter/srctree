@@ -256,7 +256,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
 
 const robots_txt = verse.Robots.robotsTxt(
     &.{
-        .{ .name = "AppleBot", .allow = true, .extra = "Disallow: /static/*\n" },
+        .{ .name = "AppleBot", .allow = false, .extra = "Disallow: /static/*\n" }, // bruh, chill
         .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
         .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
         .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
