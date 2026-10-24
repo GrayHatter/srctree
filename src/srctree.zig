@@ -93,6 +93,22 @@ inline fn botRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
     return null;
 }
 
+inline fn langAge(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
+    const bwsr = ua.agent.browser;
+    const age: std.Io.Duration = bwsr.age(f.request.now) catch .fromSeconds(0);
+    const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 35).nanoseconds;
+    if (!too_old) return null;
+
+    // I'm ethically opposed to this too, but y'all need to stop!
+    if (f.request.accept.lang) |lang| {
+        if (find(u8, lang.bytes, "zh-CN")) |_| {
+            return dropRequest(f, "too old zh-CN");
+        } else return null;
+    } else {
+        return dropRequest(f, "too old !lang");
+    }
+}
+
 inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
     const bwsr = ua.agent.browser;
     switch (f.downstream.gateway) {
@@ -125,6 +141,12 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
             \\text/html,application/xhtml+xml,application/xml;q=0.9,image/heif,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7
         )) return dropRequest(f, "that really annoying bot");
     }
+
+    const age: std.Io.Duration = bwsr.age(f.request.now) catch .fromSeconds(0);
+    const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 200).nanoseconds;
+    if (too_old) return dropRequest(f, "too old");
+
+    if (langAge(f, ua)) |la| return la;
 
     const bads = [_][]const u8{
         \\"Not;A=Brand";v="8"
@@ -159,10 +181,6 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
             return dropRequest(f, "banned User agent");
     }
 
-    const age: std.Io.Duration = bwsr.age(f.request.now) catch .fromSeconds(0);
-    const too_old = age.nanoseconds > std.Io.Duration.fromSeconds(86400 * 200).nanoseconds;
-    if (too_old) return dropRequest(f, "too old");
-
     f.dumpDebugData(.{});
     return null;
 }
@@ -173,12 +191,6 @@ fn trafficFilter(fr: *Frame) ?BuildFn {
             return null;
 
     if (fr.user != null) return null;
-
-    if (fr.request.referer) |ref| {
-        if (startsWith(u8, ref, "https://www.google.com/search?q=gr")) {
-            return dropRequest(fr, "search string");
-        }
-    }
 
     if (eql(u8, fr.uri.path, "/robots.txt") or eql(u8, fr.uri.path, "robots.txt")) {
         fr.dumpDebugData(.{});
