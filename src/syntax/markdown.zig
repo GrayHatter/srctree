@@ -4,32 +4,110 @@ pub fn translate(r: *Reader, w: *Writer, a: Allocator, io: Io) !void {
     return try Translate.source(r, w, a, io);
 }
 
+pub const Stateful = struct {
+    /// Reader.buf must be able to whole the entire string
+    input: *Reader,
+    indent: Column = 0,
+    idx: usize,
+    col: Column,
+    last: Token = .start_of_content,
+    references: std.StringHashMapUnmanaged(Reference) = .empty,
+
+    tokens: ArrayList(Token) = .empty,
+
+    pub fn init(in: *Reader) Stateful {
+        return .{
+            .input = in,
+        };
+    }
+
+    fn peek(s: *Stateful) Token {
+        _ = s;
+        unreachable;
+    }
+};
+
+const Idx = u32;
+const Column = u16;
+
+pub const Reference = struct {
+    name: []const u8,
+    link: ?Link = null,
+    idx: Idx,
+    len: Idx,
+};
+
+pub const Link = struct {
+    value: []const u8,
+    title: ?[]const u8 = null,
+    idx: Idx,
+    len: Idx,
+};
+
+pub const Token = enum {
+    start_of_content,
+
+    text,
+    number,
+
+    newline,
+    line_break,
+
+    amp,
+    asterisk,
+    underscore,
+    tilda,
+    carat,
+    bar,
+    dot,
+    colon,
+    escp,
+    bang,
+    hash,
+    plus,
+    dash,
+
+    backtick,
+    trip_backtick,
+
+    paren_l,
+    paran_r,
+    angle_l,
+    angle_r,
+    bracket_l,
+    bracket_r,
+    curly_l,
+    curly_r,
+
+    end_of_content,
+};
+
 const AST = struct {
     tree: void,
-    //
-    pub const Idx = struct {
-        start: u32,
-        len: u32,
-    };
 
     pub const Line = struct {
         idx: Idx,
+        len: Idx,
     };
 
     pub const Leaf = struct {
         idx: Idx,
+        len: Idx,
     };
 
     pub const Block = struct {
         idx: Idx,
+        len: Idx,
     };
 
     pub const List = struct {
         idx: Idx,
+        len: Idx,
     };
 
     pub const Code = struct {
         idx: Idx,
+        len: Idx,
     };
 };
 
