@@ -266,39 +266,39 @@ fn builder(fr: *Frame, call: BuildFn) void {
     };
 }
 
-const robots_txt = verse.Robots.robotsTxt(
-    &.{
-        .{ .name = "AppleBot", .allow = false, .extra = "Disallow: /static/*\n" }, // bruh, chill
-        .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
-        .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
-        .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
-        .{ .name = "Zoominfobot", .allow = false }, // selfish bot
-        .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
-        .{ .name = "barkrowler", .allow = false }, // selfish bot
-        .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
-        .{ .name = "GPTBot", .allow = false }, // aggressive, selfish
-        .{ .name = "OAI-SearchBot", .allow = false }, // Plagiarism bot
-        .{ .name = "meta-externalagent", .allow = false }, // too aggressive
+const robots_txt = verse.Robots.robotsTxt(&.{
+    .{ .name = "AppleBot", .allow = false, .extra = "Disallow: /static/*\n" }, // bruh, chill
+    .{ .name = "GoogleOther", .allow = false }, // aggressive genai bot
+    .{ .name = "SiteAuditBot", .allow = false }, // selfish bot
+    .{ .name = "DataForSeoBot", .allow = false }, // selfish bot
+    .{ .name = "Zoominfobot", .allow = false }, // selfish bot
+    .{ .name = "BacklinksExtendedBot", .allow = false }, // selfish bot
+    .{ .name = "barkrowler", .allow = false }, // selfish bot
+    .{ .name = "ClaudeBot", .allow = false }, // aggressive, selfish
+    .{ .name = "GPTBot", .allow = false }, // aggressive, selfish
+    .{ .name = "OAI-SearchBot", .allow = false }, // Plagiarism bot
+    .{ .name = "meta-externalagent", .allow = false }, // too aggressive
+    .{ .name = "Bytespider", .allow = false }, // aggressive, selfish
 
-        // If you're the kind of person who enables this, you're part of the problem
-        .{ .name = "Amazonbot", .allow = false }, // aggressive, malicious
-        .{ .name = "Amzn-SearchBot", .allow = false }, //  malicious
-        .{ .name = "Amzn-User", .allow = false }, // malicious
+    // If you're the kind of person who enables this, you're part of the problem
+    .{ .name = "Amazonbot", .allow = false }, // aggressive, malicious
+    .{ .name = "Amzn-SearchBot", .allow = false }, //  malicious
+    .{ .name = "Amzn-User", .allow = false }, // malicious
 
-        .{ .name = "SleepBot", .allow = false }, // Non-responsive to emails
-        .{ .name = "ScryBot", .allow = false },
-        .{ .name = "AhrefsBot", .allow = false }, // selfish seo trash
-        .{ .name = "dotbot", .allow = false }, // selfish seo trash
-        // Disallowed for being too aggressive, and substituting it's own crawl delay
-        .{ .name = "MJ12bot", .allow = false }, // selfish seo trash
-        .{ .name = "AcademicBotRTU", .allow = false },
+    .{ .name = "SleepBot", .allow = false }, // Non-responsive to emails
+    .{ .name = "ScryBot", .allow = false },
+    .{ .name = "AhrefsBot", .allow = false }, // selfish seo trash
+    .{ .name = "dotbot", .allow = false }, // selfish seo trash
+    // Disallowed for being too aggressive, and substituting it's own crawl delay
+    .{ .name = "MJ12bot", .allow = false }, // selfish seo trash
+    .{ .name = "AcademicBotRTU", .allow = false },
 
-        // I'll reconsider the below the first time I find an LLM company that has any ethics
-        .{ .name = "ExaSearchBot", .allow = false },
-        .{ .name = "PerplexityBot", .allow = false },
-        .{ .name = "Reflectionbot", .allow = false },
-        .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
-    },
+    // I'll reconsider the below the first time I find an LLM company that has any ethics
+    .{ .name = "ExaSearchBot", .allow = false },
+    .{ .name = "PerplexityBot", .allow = false },
+    .{ .name = "Reflectionbot", .allow = false },
+    .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
+},
     // you can blame bingbot for ref/*/(tree|blob)
     .{ .extra_rules =
     \\Disallow: /*?*
@@ -306,8 +306,7 @@ const robots_txt = verse.Robots.robotsTxt(
     \\Disallow: /repo/*/ref/*/tree/*
     \\Disallow: /repo/*/ref/*/blob/*
     \\
-    },
-);
+});
 
 test {
     const a = std.testing.allocator;
