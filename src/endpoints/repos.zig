@@ -155,10 +155,7 @@ pub const PatchView = struct {
     @"inline": ?bool = null,
 };
 
-pub const PatchViewMode = enum {
-    inlined,
-    split,
-};
+pub const PatchViewMode = @import("../Patch.zig").Formatted.Flavor;
 
 pub fn updatePatchView(f: *Frame) ?PatchViewMode {
     if (f.request.data.query.validate(PatchView)) |data| {
@@ -174,7 +171,7 @@ pub fn updatePatchView(f: *Frame) ?PatchViewMode {
 }
 
 /// or error when unknown
-pub fn updateFetchPatchView(f: *Frame) error{Unspecified}!PatchViewMode {
+pub fn getAndUpdatePatchView(f: *Frame) error{Unspecified}!PatchViewMode {
     if (updatePatchView(f)) |q| {
         return q;
     } else if (f.request.cookie_jar.get("diff-inline")) |cookie| {

@@ -299,10 +299,6 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
     for (diffs, files, 0..) |diff, *file, file_idx| {
         const body = diff.changes orelse continue;
 
-        var fnum_b: [10]u8 = undefined;
-        var fnum: []const u8 = &.{};
-        if (file_idx > 0) fnum = bufPrint(&fnum_b, "F{d}", .{file_idx}) catch unreachable;
-
         const dstat = patch.patchStat();
         const stat = try a.print("added: {}, removed: {}, total {}", .{
             dstat.additions, dstat.deletions, dstat.total,
@@ -312,59 +308,27 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
             .deletion => "File Was Deleted",
             else => "File Was Added",
         };
-        const patch_lines = try Patch.diffLineHtmlUnified(a, body);
+        const patch_formatted = try Patch.formatted(a, body, file_idx, view_mode);
+        var w_left: Io.Writer.Allocating = try .initCapacity(a, body.len);
+        var w_right: Io.Writer.Allocating = try .initCapacity(a, body.len);
+
+        switch (view_mode) {
+            .inlined => try patch_formatted.inlined.format(&w_left.writer),
+            .split => {
+                try patch_formatted.split.fmtLeft(&w_left.writer);
+                try patch_formatted.split.fmtRight(&w_right.writer);
+            },
+        }
+
         file.* = .{
             .diff_stat = .safe(stat),
             .filename = .abx(name),
-            .patch_view = patch_view: switch (view_mode) {
-                .split => {
-                    var w_left: Io.Writer.Allocating = try .initCapacity(a, body.len);
-                    var w_right: Io.Writer.Allocating = try .initCapacity(a, body.len);
-                    const split: Patch.Split = try .fromParsed(patch_lines, a);
-                    for (split.left) |left| switch (left) {
-                        .hdr => |hdr| try w_left.writer.print("<div class=\"block\">{s}</div>", .{hdr.text}),
-                        .add => unreachable,
-                        .del => |del| try w_left.writer.print(
-                            \\<ln num="{0d}" id="{2s}LL{0d}" class="del">{1s}</ln>
-                        , .{ del.number, del.text, fnum }),
-                        .ctx => |ctx| try w_left.writer.print(
-                            \\<ln num="{0d}" id="{2s}LL{0d}">{1s}</ln>
-                        , .{ ctx.number, ctx.text, fnum }),
-                        .nul => try w_left.writer.print("<div class=\"nul\"></div>", .{}),
-                    };
-                    for (split.right) |right| switch (right) {
-                        .hdr => |hdr| try w_right.writer.print("<div class=\"block\">{s}</div>", .{hdr.text}),
-                        .add => |add| try w_right.writer.print(
-                            \\<ln num="{0d}" id="{2s}RL{0d}" class="add">{1s}</ln>
-                        , .{ add.number, add.text, fnum }),
-                        .del => unreachable,
-                        .ctx => |ctx| try w_right.writer.print(
-                            \\<ln num="{0d}" id="{2s}RL{0d}">{1s}</ln>
-                        , .{ ctx.number_right, ctx.text, fnum }),
-                        .nul => try w_right.writer.print("<div class=\"nul\"></div>", .{}),
-                    };
-                    break :patch_view .{ .split = .{
-                        .diff_lines_left = try w_left.toOwnedSlice(),
-                        .diff_lines_right = try w_right.toOwnedSlice(),
-                    } };
-                },
-                .inlined => {
-                    var w: Io.Writer.Allocating = try .initCapacity(a, body.len * 2);
-                    for (patch_lines) |line| switch (line) {
-                        .hdr => |hdr| try w.writer.print("<div class=\"block\">{s}</div>", .{hdr.text}),
-                        .ctx => |ctx| try w.writer.print(
-                            \\<ln id="{3s}L{1d}" num="{0d}"><lnex num="{1d}">{2s}</lnex></ln>
-                        , .{ ctx.number, ctx.number_right, ctx.text, fnum }),
-                        .del => |del| try w.writer.print(
-                            \\<ln id="{2s}LL{0d}" num="{0d}" class="del"><lnex class="del">{1s}</lnex></ln>
-                        , .{ del.number, del.text, fnum }),
-                        .add => |add| try w.writer.print(
-                            \\<ln id="{2s}RL{0d}" class="add"><lnex num="{0d}" class="add">{1s}</lnex></ln>
-                        , .{ add.number_right, add.text, fnum }),
-                        .nul => unreachable,
-                    };
-                    break :patch_view .{ .inlined = .{ .diff_lines = try w.toOwnedSlice() } };
-                },
+            .patch_view = switch (view_mode) {
+                .inlined => .{ .inlined = .{ .diff_lines = w_left.written() } },
+                .split => .{ .split = .{
+                    .diff_lines_left = w_left.written(),
+                    .diff_lines_right = w_right.written(),
+                } },
             },
         };
     }
@@ -822,7 +786,7 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
     const rd = RouteData.init(f) orelse return error.ServerFault;
 
     if (updatePatchView(f)) |_| return f.redirect(f.uri.path, .see_other) catch unreachable;
-    const patch_view_mode = updateFetchPatchView(f) catch .inlined;
+    const patch_view_mode = getAndUpdatePatchView(f) catch .inlined;
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.DataInvalid) orelse return error.DataInvalid;
@@ -987,7 +951,7 @@ const splitScalar = std.mem.splitScalar;
 
 const RepoEndpoint = @import("../repos.zig");
 const RouteData = RepoEndpoint.RouteData;
-const updateFetchPatchView = RepoEndpoint.updateFetchPatchView;
+const getAndUpdatePatchView = RepoEndpoint.getAndUpdatePatchView;
 const updatePatchView = RepoEndpoint.updatePatchView;
 const PatchViewMode = RepoEndpoint.PatchViewMode;
 

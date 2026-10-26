@@ -60,7 +60,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
         break :cmt fallback;
     };
 
-    const patch_view_mode = updateFetchPatchView(f) catch .inlined;
+    const patch_view_mode = getAndUpdatePatchView(f) catch .inlined;
 
     var git_agent = repo.agent(f.alloc);
     var diff = git_agent.show(current.sha, f.io) catch |err| switch (err) {
@@ -382,7 +382,7 @@ const abx = verse.Antibiotic;
 const Diffs = @import("diffs.zig");
 const Repos = @import("../repos.zig");
 const RouteData = Repos.RouteData;
-const updateFetchPatchView = Repos.updateFetchPatchView;
+const getAndUpdatePatchView = Repos.getAndUpdatePatchView;
 const Datetime = @import("../../datetime.zig");
 const git = @import("../../git.zig");
 const Commit = git.Commit;
