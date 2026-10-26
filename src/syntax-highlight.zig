@@ -42,7 +42,7 @@ pub const Language = enum {
         return std.meta.stringToEnum(Language, str);
     }
 
-    pub fn guessFromFilename(name: []const u8) ?Language {
+    pub fn guessFromName(name: []const u8) ?Language {
         if (endsWith(u8, name, ".bash") or endsWith(u8, name, ".sh")) {
             return .sh;
         } else if (endsWith(u8, name, ".c")) {

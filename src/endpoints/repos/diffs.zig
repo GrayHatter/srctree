@@ -308,12 +308,12 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
             .deletion => "File Was Deleted",
             else => "File Was Added",
         };
-        const patch_formatted = try Patch.formatted(a, body, file_idx, view_mode);
+        const patch_formatted = try Patch.formatted(name, body, file_idx, view_mode, a);
         var w_left: Io.Writer.Allocating = try .initCapacity(a, body.len);
         var w_right: Io.Writer.Allocating = try .initCapacity(a, body.len);
 
         switch (view_mode) {
-            .inlined => try patch_formatted.inlined.format(&w_left.writer),
+            .inlined => try patch_formatted.inlined.formatColored(a, &w_left.writer),
             .split => {
                 try patch_formatted.split.fmtLeft(&w_left.writer);
                 try patch_formatted.split.fmtRight(&w_right.writer);
@@ -424,7 +424,7 @@ fn highlightLineRef(
 ) ![]u8 {
     const formatted = if (code.len == 0)
         "&nbsp;"
-    else if (Highlighting.Language.guessFromFilename(filename)) |lang|
+    else if (Highlighting.Language.guessFromName(filename)) |lang|
         try Highlighting.highlight(lang, code, a, io)
     else
         try a.print("{f}", .{abx.Html{ .text = code }});

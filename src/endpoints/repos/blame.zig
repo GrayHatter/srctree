@@ -60,7 +60,7 @@ pub fn blame(f: *Frame) Router.Error!void {
         dst.age_block = @truncate(style_blocks.len - 1 - block);
     }
 
-    const formatted = if (Highlight.Language.guessFromFilename(blame_file)) |lang|
+    const formatted = if (Highlight.Language.guessFromName(blame_file)) |lang|
         Highlight.highlight(lang, source_lines.items, f.alloc, f.io) catch return error.Unknown
     else
         try f.alloc.print("{f}", .{Abx.Html{ .text = source_lines.items }});

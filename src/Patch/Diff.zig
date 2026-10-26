@@ -20,6 +20,12 @@ pub const Line = union(enum) {
         number: u32,
         number_right: u32 = 0,
         text: []const u8,
+
+        pub fn highlight(line: Line, lang: void) []const u8 {
+            _ = line;
+            _ = lang;
+            return &.{};
+        }
     };
 
     pub const Header = struct {

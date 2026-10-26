@@ -28,19 +28,16 @@ pub const Inlined = struct {
     file_idx: u16,
     lines: []Diff.Line,
 
-    pub fn fromParsed(lines: []Diff.Line, file_idx: usize) Inlined {
+    pub fn fromParsed(lines: []Diff.Line, file_idx: usize, name: []const u8) Inlined {
         return .{
             .file_idx = @intCast(file_idx),
-            .lang = .txt,
+            .lang = highlight.Language.guessFromName(name) orelse .txt,
             .lines = lines,
         };
     }
 
-    pub fn format(inl: Inlined, w: *Io.Writer) !void {
-        var fnum_b: [10]u8 = undefined;
-        var fnum: []const u8 = &.{};
-        if (inl.file_idx > 0) fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx}) catch unreachable;
-        for (inl.lines) |line| switch (line) {
+    fn fmtLine(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
+        switch (line) {
             .hdr => |hdr| try w.print("<div class=\"block\">{s}</div>", .{hdr.text}),
             .ctx => |ctx| try w.print(
                 \\<ln id="{3s}L{1d}" num="{0d}"><lnex num="{1d}">{2s}</lnex></ln>
@@ -52,7 +49,66 @@ pub const Inlined = struct {
                 \\<ln id="{2s}RL{0d}" class="add"><lnex num="{0d}" class="add">{1s}</lnex></ln>
             , .{ add.number_right, add.text, fnum }),
             .nul => unreachable,
-        };
+        }
+    }
+
+    fn fmtLineAbx(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
+        switch (line) {
+            .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+            .ctx => |ctx| try w.print(
+                \\<ln id="{3s}L{1d}" num="{0d}"><lnex num="{1d}">{2f}</lnex></ln>
+            , .{ ctx.number, ctx.number_right, abx.Html.abx(ctx.text), fnum }),
+            .del => |del| try w.print(
+                \\<ln id="{2s}LL{0d}" num="{0d}" class="del"><lnex class="del">{1f}</lnex></ln>
+            , .{ del.number, abx.Html.abx(del.text), fnum }),
+            .add => |add| try w.print(
+                \\<ln id="{2s}RL{0d}" class="add"><lnex num="{0d}" class="add">{1f}</lnex></ln>
+            , .{ add.number_right, abx.Html.abx(add.text), fnum }),
+            .nul => unreachable,
+        }
+    }
+
+    pub fn formatColored(inl: Inlined, a: Allocator, w: *Io.Writer) !void {
+        if (inl.lang != .zig) return inl.format(w);
+
+        var fnum_b: [10]u8 = undefined;
+        var fnum: []const u8 = &.{};
+        if (inl.file_idx > 0)
+            fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx}) catch unreachable;
+
+        var line_b: [0x200]u8 = undefined;
+        var write_b: [0x200]u8 = undefined;
+
+        for (inl.lines) |raw_line| {
+            var line: Diff.Line = raw_line;
+            var writer: Io.Writer = .fixed(&write_b);
+
+            switch (line) {
+                .hdr, .nul => try fmtLineAbx(line, fnum, w),
+                .ctx, .add, .del => |*raw| {
+                    // use raw.text to cover writer.len
+                    std.debug.assert(raw.text.len < line_b.len);
+                    const text = std.mem.trimStart(u8, raw.text, " \t\n");
+                    @memcpy(line_b[0..text.len], text);
+                    line_b[text.len] = 0;
+                    const input: [:0]u8 = line_b[0..text.len :0];
+                    for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
+                    highlight.highlightInternal(.zig, input, &writer, a) catch {
+                        writer.writeAll(input) catch unreachable;
+                    };
+                    raw.text = writer.buffered();
+                    try fmtLine(line, fnum, w);
+                },
+            }
+        }
+    }
+
+    pub fn format(inl: Inlined, w: *Io.Writer) !void {
+        var fnum_b: [10]u8 = undefined;
+        var fnum: []const u8 = &.{};
+        if (inl.file_idx > 0)
+            fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx}) catch unreachable;
+        for (inl.lines) |line| try fmtLineAbx(line, fnum, w);
     }
 };
 
@@ -62,7 +118,7 @@ pub const Split = struct {
     left: []Diff.Line,
     right: []Diff.Line,
 
-    pub fn fromInlined(lines: []Diff.Line, file_idx: usize, a: Allocator) !Split {
+    pub fn fromInlined(lines: []Diff.Line, file_idx: usize, name: []const u8, a: Allocator) !Split {
         var left: ArrayList(Diff.Line) = try .initCapacity(a, lines.len / 2);
         var right: ArrayList(Diff.Line) = try .initCapacity(a, lines.len / 2);
         for (lines) |line| {
@@ -92,7 +148,7 @@ pub const Split = struct {
 
         return .{
             .file_idx = @intCast(file_idx),
-            .lang = .txt,
+            .lang = highlight.Language.guessFromName(name) orelse .txt,
             .left = try left.toOwnedSlice(a),
             .right = try right.toOwnedSlice(a),
         };
@@ -248,11 +304,10 @@ test lineNumberFromHeader {
     try std.testing.expectEqual(@as(u32, 1), hdr2.right);
 }
 
-pub fn formatted(a: Allocator, diff: []const u8, file_idx: usize, flavor: Formatted.Flavor) !Formatted {
-    const clean = a.print("{f}", .{abx.Html{ .text = diff }}) catch unreachable;
-    const line_count = std.mem.count(u8, clean, "\n");
+pub fn formatted(name: []const u8, diff: []const u8, file_idx: usize, flavor: Formatted.Flavor, a: Allocator) !Formatted {
+    const line_count = std.mem.count(u8, diff, "\n");
     var lines: ArrayList(Diff.Line) = .empty;
-    var litr = splitScalar(u8, clean, '\n');
+    var litr = splitScalar(u8, diff, '\n');
     var hdr: Diff.Line.Header = .{ .left = 0, .right = 0 };
     var linenum_l: u32 = 0;
     var linenum_r: u32 = 0;
@@ -288,51 +343,12 @@ pub fn formatted(a: Allocator, diff: []const u8, file_idx: usize, flavor: Format
 
     switch (flavor) {
         .inlined => return .{
-            .inlined = .fromParsed(diff_lines, file_idx),
+            .inlined = .fromParsed(diff_lines, file_idx, name),
         },
         .split => return .{
-            .split = try .fromInlined(diff_lines, file_idx, a),
+            .split = try .fromInlined(diff_lines, file_idx, name, a),
         },
     }
-}
-
-pub fn diffLineHtmlUnified(a: Allocator, diff: []const u8) ![]Diff.Line {
-    const clean = a.print("{f}", .{abx.Html{ .text = diff }}) catch unreachable;
-    const line_count = std.mem.count(u8, clean, "\n");
-    var lines: ArrayList(Diff.Line) = .empty;
-    var litr = splitScalar(u8, clean, '\n');
-    var hdr: Diff.Line.Header = .{ .left = 0, .right = 0 };
-    var linenum_l: u32 = 0;
-    var linenum_r: u32 = 0;
-    for (0..line_count + 1) |_| {
-        const line = litr.next().?;
-        const text: []const u8 = if (line.len > 0) if (line[0] != '@') line[1..] else line else "&nbsp;";
-        if (line.len > 0) switch (line[0]) {
-            '@' => {
-                hdr = lineNumberFromHeader(line) catch {
-                    log.err("{s}", .{diff});
-                    unreachable;
-                };
-                linenum_l, linenum_r = hdr.split();
-                try lines.append(a, .{ .hdr = hdr });
-            },
-            '-' => {
-                try lines.append(a, .{ .del = .{ .text = text, .number = linenum_l } });
-                linenum_l += 1;
-            },
-            '+' => {
-                try lines.append(a, .{ .add = .{ .text = text, .number = linenum_r, .number_right = linenum_r } });
-                linenum_r += 1;
-            },
-            ' ' => {
-                try lines.append(a, .{ .ctx = .{ .text = text, .number = linenum_l, .number_right = linenum_r } });
-                linenum_l += 1;
-                linenum_r += 1;
-            },
-            else => break,
-        };
-    }
-    return try lines.toOwnedSlice(a);
 }
 
 test "simple rename" {
