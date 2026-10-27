@@ -20,4 +20,8 @@ adding sha256 support was easy
 git blame that works in hastur (...sorta)
 1' or 1=1; --
 doesn't advertise itself using your README.md
-optimized for any size diff - all browser features work as expected.
+optimized for any size diff - all browser features work as expected
+large commit don't hide content
+all content shown
+searching not required to view content
+
