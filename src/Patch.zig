@@ -38,36 +38,21 @@ pub const Inlined = struct {
 
     fn fmtLine(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
         switch (line) {
-            .hdr => |hdr| try w.print("<div class=\"block\">{s}</div>", .{hdr.text}),
-            .ctx => |ctx| try w.print(
-                \\<ln id="{3s}L{1d}" num="{0d}"><lnex num="{1d}">{2s}</lnex></ln>
-            , .{ ctx.number, ctx.number_right, ctx.text, fnum }),
-            .del => |del| try w.print(
-                \\<ln id="{2s}LL{0d}" num="{0d}" class="del"><lnex class="del">{1s}</lnex></ln>
-            , .{ del.number, del.text, fnum }),
-            .add => |add| try w.print(
-                \\<ln id="{2s}RL{0d}" class="add"><lnex num="{0d}" class="add">{1s}</lnex></ln>
-            , .{ add.number_right, add.text, fnum }),
-            .nul => unreachable,
-        }
-    }
-
-    fn fmtLineAbx(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
-        switch (line) {
-            .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+            .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{hdr}),
             .ctx => |ctx| try w.print(
                 \\<ln id="{3s}L{1d}" num="{0d}"><lnex num="{1d}">{2f}</lnex></ln>
-            , .{ ctx.number, ctx.number_right, abx.Html.abx(ctx.text), fnum }),
+            , .{ ctx.number, ctx.number_right, ctx, fnum }),
             .del => |del| try w.print(
                 \\<ln id="{2s}LL{0d}" num="{0d}" class="del"><lnex class="del">{1f}</lnex></ln>
-            , .{ del.number, abx.Html.abx(del.text), fnum }),
+            , .{ del.number, del, fnum }),
             .add => |add| try w.print(
                 \\<ln id="{2s}RL{0d}" class="add"><lnex num="{0d}" class="add">{1f}</lnex></ln>
-            , .{ add.number_right, abx.Html.abx(add.text), fnum }),
+            , .{ add.number_right, add, fnum }),
             .nul => unreachable,
         }
     }
 
+    /// formatColor leaves lines in an undefined state
     pub fn formatColor(inl: Inlined, a: Allocator, w: *Io.Writer) !void {
         if (inl.lang != .zig) return inl.format(w);
 
@@ -84,7 +69,7 @@ pub const Inlined = struct {
             var writer: Io.Writer = .fixed(&write_b);
 
             switch (line) {
-                .hdr, .nul => try fmtLineAbx(line, fnum, w),
+                .hdr, .nul => try fmtLine(line, fnum, w),
                 .ctx, .add, .del => |*raw| {
                     // use raw.text to cover writer.len
                     std.debug.assert(raw.text.len < line_b.len);
@@ -97,6 +82,7 @@ pub const Inlined = struct {
                         writer.writeAll(input) catch unreachable;
                     };
                     raw.text = writer.buffered();
+                    raw.clean = true;
                     try fmtLine(line, fnum, w);
                 },
             }
@@ -108,7 +94,9 @@ pub const Inlined = struct {
         var fnum: []const u8 = &.{};
         if (inl.file_idx > 0)
             fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx}) catch unreachable;
-        for (inl.lines) |line| try fmtLineAbx(line, fnum, w);
+
+        for (inl.lines) |line|
+            try fmtLine(line, fnum, w);
     }
 };
 
@@ -157,32 +145,19 @@ pub const Split = struct {
     pub const Left = struct {
         fn fmtLine(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
             switch (line) {
-                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
-                .add => unreachable,
-                .del => |del| try w.print(
-                    \\<ln num="{0d}" id="{2s}LL{0d}" class="del">{1s}</ln>
-                , .{ del.number, del.text, fnum }),
-                .ctx => |ctx| try w.print(
-                    \\<ln num="{0d}" id="{2s}LL{0d}">{1s}</ln>
-                , .{ ctx.number, ctx.text, fnum }),
-                .nul => try w.print("<div class=\"nul\"></div>", .{}),
-            }
-        }
-
-        fn fmtLineAbx(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
-            switch (line) {
-                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{hdr}),
                 .add => unreachable,
                 .del => |del| try w.print(
                     \\<ln num="{0d}" id="{2s}LL{0d}" class="del">{1f}</ln>
-                , .{ del.number, abx.Html.abx(del.text), fnum }),
+                , .{ del.number, del, fnum }),
                 .ctx => |ctx| try w.print(
                     \\<ln num="{0d}" id="{2s}LL{0d}">{1f}</ln>
-                , .{ ctx.number, abx.Html.abx(ctx.text), fnum }),
+                , .{ ctx.number, ctx, fnum }),
                 .nul => try w.print("<div class=\"nul\"></div>", .{}),
             }
         }
 
+        /// formatColor leaves lines in an undefined state
         pub fn formatColor(split: Split, a: Allocator, w: *Io.Writer) !void {
             var fnum_b: [10]u8 = undefined;
             var fnum: []const u8 = &.{};
@@ -197,7 +172,7 @@ pub const Split = struct {
                 var writer: Io.Writer = .fixed(&write_b);
 
                 switch (line) {
-                    .hdr, .nul => try fmtLineAbx(line, fnum, w),
+                    .hdr, .nul => try fmtLine(line, fnum, w),
                     .ctx, .add, .del => |*raw| {
                         // use raw.text to cover writer.len
                         std.debug.assert(raw.text.len < line_b.len);
@@ -210,6 +185,7 @@ pub const Split = struct {
                             writer.writeAll(input) catch unreachable;
                         };
                         raw.text = writer.buffered();
+                        raw.clean = true;
                         try fmtLine(line, fnum, w);
                     },
                 }
@@ -222,39 +198,27 @@ pub const Split = struct {
             if (split.file_idx > 0)
                 fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
 
-            for (split.left) |left| try fmtLineAbx(left, fnum, w);
+            for (split.left) |left|
+                try fmtLine(left, fnum, w);
         }
     };
 
     pub const Right = struct {
         fn fmtLine(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
             switch (line) {
-                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
-                .add => |add| try w.print(
-                    \\<ln num="{0d}" id="{2s}RL{0d}" class="add">{1s}</ln>
-                , .{ add.number, add.text, fnum }),
-                .del => unreachable,
-                .ctx => |ctx| try w.print(
-                    \\<ln num="{0d}" id="{2s}RL{0d}">{1s}</ln>
-                , .{ ctx.number_right, ctx.text, fnum }),
-                .nul => try w.print("<div class=\"nul\"></div>", .{}),
-            }
-        }
-
-        fn fmtLineAbx(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
-            switch (line) {
-                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{hdr}),
                 .add => |add| try w.print(
                     \\<ln num="{0d}" id="{2s}RL{0d}" class="add">{1f}</ln>
-                , .{ add.number, abx.Html.abx(add.text), fnum }),
+                , .{ add.number, add, fnum }),
                 .del => unreachable,
                 .ctx => |ctx| try w.print(
                     \\<ln num="{0d}" id="{2s}RL{0d}">{1f}</ln>
-                , .{ ctx.number_right, abx.Html.abx(ctx.text), fnum }),
+                , .{ ctx.number_right, ctx, fnum }),
                 .nul => try w.print("<div class=\"nul\"></div>", .{}),
             }
         }
 
+        /// formatColor leaves lines in an undefined state
         pub fn formatColor(split: Split, a: Allocator, w: *Io.Writer) !void {
             var fnum_b: [10]u8 = undefined;
             var fnum: []const u8 = &.{};
@@ -269,7 +233,7 @@ pub const Split = struct {
                 var writer: Io.Writer = .fixed(&write_b);
 
                 switch (line) {
-                    .hdr, .nul => try fmtLineAbx(line, fnum, w),
+                    .hdr, .nul => try fmtLine(line, fnum, w),
                     .ctx, .add, .del => |*raw| {
                         // use raw.text to cover writer.len
                         std.debug.assert(raw.text.len < line_b.len);
@@ -282,6 +246,7 @@ pub const Split = struct {
                             writer.writeAll(input) catch unreachable;
                         };
                         raw.text = writer.buffered();
+                        raw.clean = true;
                         try fmtLine(line, fnum, w);
                     },
                 }
@@ -294,7 +259,8 @@ pub const Split = struct {
             if (split.file_idx > 0)
                 fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
 
-            for (split.right) |right| try fmtLineAbx(right, fnum, w);
+            for (split.right) |right|
+                try fmtLine(right, fnum, w);
         }
     };
 
@@ -544,6 +510,3 @@ const findAnyPos = std.mem.findAnyPos;
 const splitScalar = std.mem.splitScalar;
 const parseInt = std.fmt.parseInt;
 const log = std.log.scoped(.git_patch);
-
-const verse = @import("verse");
-const abx = verse.Antibiotic;

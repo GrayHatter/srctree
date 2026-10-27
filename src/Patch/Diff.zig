@@ -20,11 +20,20 @@ pub const Line = union(enum) {
         number: u32,
         number_right: u32 = 0,
         text: []const u8,
+        clean: bool = false,
 
         pub fn highlight(line: Line, lang: void) []const u8 {
             _ = line;
             _ = lang;
             return &.{};
+        }
+
+        pub fn format(num: Numbered, w: *Io.Writer) !void {
+            if (num.clean) {
+                try w.print("{s}", .{num.text});
+            } else {
+                try w.print("{f}", .{abx.Html.abx(num.text)});
+            }
         }
     };
 
@@ -32,9 +41,18 @@ pub const Line = union(enum) {
         left: u32,
         right: u32,
         text: []const u8 = &.{},
+        clean: bool = false,
 
         pub fn split(h: Line.Header) struct { u32, u32 } {
             return .{ h.left, h.right };
+        }
+
+        pub fn format(hdr: Line.Header, w: *Io.Writer) !void {
+            if (hdr.clean) {
+                try w.print("{s}", .{hdr.text});
+            } else {
+                try w.print("{f}", .{abx.Html.abx(hdr.text)});
+            }
         }
     };
 };
@@ -394,3 +412,5 @@ const assert = std.debug.assert;
 const eql = std.mem.eql;
 const indexOf = std.mem.indexOf;
 const log = std.log.scoped(.git_patch);
+const verse = @import("verse");
+const abx = verse.Antibiotic;
