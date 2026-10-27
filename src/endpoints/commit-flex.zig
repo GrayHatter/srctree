@@ -11,30 +11,34 @@ const HeatMapArray = [HEATMAPSIZE]u16;
 const Journal = struct {
     email: []const u8,
     now: DateTime,
-    today: i64,
+    today: i96,
     repos: ArrayList(JRepo),
-    heatmap_until: i64,
-    scribe_until: i64,
+    heatmap_until: i96,
+    scribe_until: i96,
     hits: HeatMapArray,
     total_count: usize,
     streak: usize,
-    streak_last: ?i64,
+    streak_last: ?i96,
     scribe: ArrayList(Scribe.Commit),
 
     pub const JRepo = struct {
         name: []const u8,
         repo: Git.Repo,
         iterator: Git.Commit.Commiterator,
-        next_ts: i64 = 0,
+        next_ts: i96 = 0,
     };
 
     const max_depth = 5000;
 
-    pub fn init(email: []const u8, now: DateTime, until: i64, a: Allocator) !*Journal {
+    pub fn init(email: []const u8, now: DateTime, until: i96, a: Allocator) !*Journal {
         const j = try a.create(Journal);
 
         const scribe_size = 90;
-        const today = now.timeTruncate().timestamp;
+        const today = b: {
+            var today = now;
+            today.truncateTime();
+            break :b today.timestamp;
+        };
         j.* = .{
             .email = try a.dupe(u8, email),
             .now = now,
@@ -106,7 +110,7 @@ const Journal = struct {
         var head: ?Git.Commit = try jrepo.repo.HEAD(a, io);
         var itr: Git.Commit.Commiterator = .init(head.?, .chronological, &jrepo.repo);
         while (head) |commit| : (head = itr.next(a, io) catch null) {
-            const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
+            const commit_time: i96 = (try DateTime.fromActor(commit.author)).tzAdjusted();
             if (commit_time < until) break;
             if (eql(u8, j.email, commit.author.email)) {
                 const ws = " \t\n";
@@ -114,7 +118,7 @@ const Journal = struct {
                     .name = try a.dupe(u8, trim(u8, commit.author.name, ws)),
                     .title = try a.dupe(u8, trim(u8, commit.title, ws)),
                     .body = try a.dupe(u8, trim(u8, commit.body, ws)),
-                    .date = DateTime.fromEpoch(commit_time),
+                    .date = .fromEpoch(commit_time),
                     .sha = commit.sha,
                     .repo = jrepo.name,
                 });
@@ -170,7 +174,7 @@ const Journal = struct {
         j: *Journal,
         jrepo: *JRepo,
         hits: *HeatMapArray,
-        until: i64,
+        until: i96,
         a: Allocator,
         io: Io,
     ) !void {
@@ -182,10 +186,10 @@ const Journal = struct {
                 return;
 
             if (eql(u8, j.email, commit.author.email)) {
-                const commit_time: i64 = (try DateTime.fromActor(commit.author)).tzAdjusted();
+                const commit_time: i96 = (try DateTime.fromActor(commit.author)).tzAdjusted();
 
-                const commit_offset: isize = commit_time - until;
-                const day_off: usize = @abs(@divFloor(commit_offset, DAY));
+                const commit_offset: i96 = commit_time - until;
+                const day_off: usize = @intCast(@abs(@divFloor(commit_offset, DAY)));
                 if (day_off < hits.len) {
                     hits[day_off] += 1;
                     j.total_count += 1;
@@ -207,7 +211,7 @@ const Journal = struct {
             repo.next_ts = repo.iterator.now;
         }
 
-        var last_ts: i64 = now;
+        var last_ts: i96 = now;
         streak: while (j.streak_last != null) {
             last_ts = last_ts - DAY;
             log.debug("searching for day {: >9} {: >14} {: >15}", .{
@@ -241,7 +245,7 @@ const Journal = struct {
         return j.streak;
     }
 
-    fn repoStreak(j: *Journal, jrepo: *JRepo, before: i64, a: Allocator, io: Io) !bool {
+    fn repoStreak(j: *Journal, jrepo: *JRepo, before: i96, a: Allocator, io: Io) !bool {
         const after = before - DAY;
         if (jrepo.iterator.hold.items.len == 0) unreachable;
         const head_time = try DateTime.fromActorAdj(jrepo.iterator.head.author);
@@ -332,7 +336,7 @@ const Scribe = struct {
 
 pub const HeatMap = struct {
     sha: Git.Sha,
-    expires: i64,
+    expires: i96,
     hits: HeatMapArray,
 };
 
@@ -367,7 +371,7 @@ const CommitFlexReq = struct {
 pub fn commitFlex(ctx: *Frame) Error!void {
     var nowish = DateTime.now(ctx.io);
     var email: []const u8 = "";
-    var tz_offset: ?i17 = null;
+    var tz_offset: ?i96 = null;
     const reqd = ctx.request.data.query.validate(CommitFlexReq) catch CommitFlexReq{ .user = null };
 
     if (reqd.user) |u| {
@@ -385,8 +389,11 @@ pub fn commitFlex(ctx: *Frame) Error!void {
             }
         }
     }
-    var start_date = nowish.timeTruncate();
-    start_date = .fromEpoch(start_date.timestamp + DAY - DISPLAY_YEARS * YEAR - 7 * DAY);
+    var start_date = nowish;
+    start_date.truncateTime();
+    start_date.add(.secs(DAY));
+    start_date.sub(.secs(DISPLAY_YEARS * YEAR));
+    start_date.sub(.days(7));
     while (start_date.weekday != 0) {
         start_date = .fromEpoch(start_date.timestamp - DAY);
     }
@@ -478,10 +485,9 @@ pub fn commitFlex(ctx: *Frame) Error!void {
                 else => " day-commits day-pwr-max",
             });
 
-            m.title = .safe(try ctx.alloc.print(
-                "{} commits on {f}",
-                .{ journal.hits[day_idx], date.timeTruncate() },
-            ));
+            var dt = date;
+            dt.truncateTime();
+            m.title = .safe(try ctx.alloc.print("{} commits on {f}", .{ journal.hits[day_idx], dt }));
         }
     }
 
@@ -506,10 +512,11 @@ pub fn commitFlex(ctx: *Frame) Error!void {
     };
 
     {
-        const today = if (tz_offset) |tz|
-            DateTime.fromEpoch(DateTime.now(ctx.io).timestamp + tz).timeTruncate()
+        var today: DateTime = if (tz_offset) |tz|
+            DateTime.fromEpoch(DateTime.now(ctx.io).timestamp + tz)
         else
             DateTime.today(ctx.io);
+        today.truncateTime();
         const yesterday = DateTime.fromEpoch(today.timestamp - 86400);
         const last_week = DateTime.fromEpoch(yesterday.timestamp - 86400 * 7);
 

@@ -1,5 +1,5 @@
 // Default to Unix Epoch
-timestamp: i64,
+timestamp: i96,
 year: usize,
 month: Month,
 day: Day,
@@ -57,19 +57,21 @@ pub const Weekday = enum(u3) {
     Saturday,
 };
 
-pub const Tz = packed struct(i17) {
+pub const Tz = packed struct(i96) {
     /// Timezone offset in seconds
-    /// -1200h -> 1200h
-    /// -43200 -> 43200
-    seconds: i17,
+    /// -1200h...1200h
+    /// -43200...43200
+    seconds: i96,
 
-    pub const Minutes = i11;
-    pub const Hours = i5;
+    pub const zero: Tz = .{ .seconds = 0 };
+
+    pub const Minutes = i96;
+    pub const Hours = i96;
 
     pub fn fromStr(str: []const u8) !Tz {
         const tzm: Minutes = try std.fmt.parseInt(Minutes, str[str.len - 2 .. str.len], 10);
         const tzh: Hours = try std.fmt.parseInt(Hours, str[0 .. str.len - 2], 10);
-        var secs: i17 = tzh;
+        var secs: i96 = tzh;
         secs *= 60;
         secs += tzm;
         secs *= 60;
@@ -119,8 +121,36 @@ pub const Names = struct {
     };
 };
 
-pub fn tzAdjusted(dt: DateTime) i64 {
-    const tz = dt.tz orelse return dt.timestamp;
+pub const Scale = struct {
+    seconds: i96 = 0,
+
+    pub fn secs(s: i96) Scale {
+        return .{
+            .seconds = s,
+        };
+    }
+
+    pub fn mins(m: i96) Scale {
+        return .{
+            .seconds = m * 60,
+        };
+    }
+
+    pub fn hours(h: i96) Scale {
+        return .{
+            .seconds = h * 3600,
+        };
+    }
+
+    pub fn days(d: i96) Scale {
+        return .{
+            .seconds = d * 86400,
+        };
+    }
+};
+
+pub fn tzAdjusted(dt: DateTime) i96 {
+    const tz: Tz = dt.tz orelse .zero;
     return dt.timestamp + tz.seconds;
 }
 
@@ -130,18 +160,17 @@ pub fn now(io: std.Io) DateTime {
 
 pub fn today(io: std.Io) DateTime {
     var self = now(io);
-    return self.timeTruncate();
+    self.truncateTime();
+    return self;
 }
 
-pub fn timeTruncate(self: DateTime) DateTime {
-    var output = self;
-    const offset = @as(i64, self.hours) * 60 * 60 + @as(i64, self.minutes) * 60 + self.seconds;
-    output.timestamp -|= offset;
-    output.hours = 0;
-    output.minutes = 0;
-    output.seconds = 0;
-    output.flags.has_time = false;
-    return output;
+pub fn truncateTime(time: *DateTime) void {
+    const new_offset = @as(i64, time.hours) * 3600 + @as(i64, time.minutes) * 60 + time.seconds;
+    time.timestamp -|= new_offset;
+    time.hours = 0;
+    time.minutes = 0;
+    time.seconds = 0;
+    time.flags.has_time = false;
 }
 
 fn leapYear(year: usize) bool {
@@ -200,10 +229,10 @@ pub fn weekdaySlice(self: DateTime) []const u8 {
     return Names.Day[self.weekday];
 }
 
-pub fn fromEpochTz(sts: i64, tzz: ?Tz) DateTime {
+pub fn fromEpochTz(sts: i96, tzz: ?Tz) DateTime {
     if (sts < 0) unreachable; // return error.UnsupportedTimeStamp;
 
-    const tz: Tz = tzz orelse .{ .seconds = 0 };
+    const tz: Tz = tzz orelse .zero;
     const ts: u64 = @intCast(sts + tz.seconds);
 
     const seconds: u6 = @truncate(ts % 60);
@@ -229,7 +258,7 @@ pub fn fromEpochTz(sts: i64, tzz: ?Tz) DateTime {
     };
 }
 
-pub fn fromEpoch(sts: i64) DateTime {
+pub fn fromEpoch(sts: i96) DateTime {
     const ts = fromEpochTz(sts, null);
     return ts;
 }
@@ -241,7 +270,7 @@ pub fn fromEpochStr(str: []const u8) !DateTime {
 }
 
 /// Accepts a Unix Epoch in seconds and timezone in -HHMM format
-pub fn fromEpochTzStr(epoch: i64, tzstr: []const u8) !DateTime {
+pub fn fromEpochTzStr(epoch: i96, tzstr: []const u8) !DateTime {
     const tz: Tz = try .fromStr(tzstr);
     return fromEpochTz(epoch, tz);
 }
@@ -251,6 +280,16 @@ pub fn fromEpochStrTzStr(str: []const u8, tzstr: []const u8) !DateTime {
     const epoch = try std.fmt.parseInt(i64, str, 10);
     const tz: ?Tz = .fromStr(tzstr) catch |err| if (err) return err else null;
     return fromEpochTz(epoch, tz);
+}
+
+pub fn add(datetime: *DateTime, scale: Scale) void {
+    const new: i96 = datetime.timestamp + scale.seconds;
+    datetime.* = .fromEpoch(new);
+}
+
+pub fn sub(datetime: *DateTime, scale: Scale) void {
+    const new: i96 = datetime.timestamp - scale.seconds;
+    datetime.* = .fromEpoch(new);
 }
 
 pub fn fmtTime(self: DateTime, w: *Writer) !void {
@@ -300,7 +339,7 @@ pub fn fromActor(actor: Actor) !DateTime {
     return .fromEpochTzStr(actor.timestamp, actor.tzstr);
 }
 
-pub fn fromActorAdj(actor: Actor) !i64 {
+pub fn fromActorAdj(actor: Actor) !i96 {
     return (try fromEpochTzStr(actor.timestamp, actor.tzstr)).tzAdjusted();
 }
 
