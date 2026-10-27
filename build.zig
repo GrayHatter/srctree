@@ -34,6 +34,7 @@ pub fn build(b: *std.Build) void {
     const srctree_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
+        .optimize = optimize,
     });
     const srctree = b.addExecutable(.{
         .name = "srctree",
@@ -80,6 +81,7 @@ pub fn build(b: *std.Build) void {
     const artificer_mod = b.createModule(.{
         .root_source_file = b.path("src/Artificer.zig"),
         .target = target,
+        .optimize = optimize,
     });
     const artificer = b.addExecutable(.{ .name = "artificer", .root_module = artificer_mod });
     const artificer_artifact = b.addInstallArtifact(artificer, .{});
