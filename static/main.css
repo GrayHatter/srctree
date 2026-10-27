@@ -655,7 +655,7 @@ blob, gist, patch {
 		div { white-space: break-spaces; }
 		.split {
 			display: flex;
-			span {
+			split {
 				white-space: collapse;
 				flex: auto;
 				margin: 0;

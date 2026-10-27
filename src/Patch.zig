@@ -68,7 +68,7 @@ pub const Inlined = struct {
         }
     }
 
-    pub fn formatColored(inl: Inlined, a: Allocator, w: *Io.Writer) !void {
+    pub fn formatColor(inl: Inlined, a: Allocator, w: *Io.Writer) !void {
         if (inl.lang != .zig) return inl.format(w);
 
         var fnum_b: [10]u8 = undefined;
@@ -154,45 +154,164 @@ pub const Split = struct {
         };
     }
 
-    pub fn fmtLeft(split: Split, w: *Io.Writer) !void {
-        var fnum_b: [10]u8 = undefined;
-        var fnum: []const u8 = &.{};
-        if (split.file_idx > 0) fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+    pub const Left = struct {
+        fn fmtLine(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
+            switch (line) {
+                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+                .add => unreachable,
+                .del => |del| try w.print(
+                    \\<ln num="{0d}" id="{2s}LL{0d}" class="del">{1s}</ln>
+                , .{ del.number, del.text, fnum }),
+                .ctx => |ctx| try w.print(
+                    \\<ln num="{0d}" id="{2s}LL{0d}">{1s}</ln>
+                , .{ ctx.number, ctx.text, fnum }),
+                .nul => try w.print("<div class=\"nul\"></div>", .{}),
+            }
+        }
 
-        for (split.left) |left| switch (left) {
-            .hdr => |hdr| try w.print("<div class=\"block\">{s}</div>", .{hdr.text}),
-            .add => unreachable,
-            .del => |del| try w.print(
-                \\<ln num="{0d}" id="{2s}LL{0d}" class="del">{1s}</ln>
-            , .{ del.number, del.text, fnum }),
-            .ctx => |ctx| try w.print(
-                \\<ln num="{0d}" id="{2s}LL{0d}">{1s}</ln>
-            , .{ ctx.number, ctx.text, fnum }),
-            .nul => try w.print("<div class=\"nul\"></div>", .{}),
-        };
+        fn fmtLineAbx(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
+            switch (line) {
+                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+                .add => unreachable,
+                .del => |del| try w.print(
+                    \\<ln num="{0d}" id="{2s}LL{0d}" class="del">{1f}</ln>
+                , .{ del.number, abx.Html.abx(del.text), fnum }),
+                .ctx => |ctx| try w.print(
+                    \\<ln num="{0d}" id="{2s}LL{0d}">{1f}</ln>
+                , .{ ctx.number, abx.Html.abx(ctx.text), fnum }),
+                .nul => try w.print("<div class=\"nul\"></div>", .{}),
+            }
+        }
+
+        pub fn formatColor(split: Split, a: Allocator, w: *Io.Writer) !void {
+            var fnum_b: [10]u8 = undefined;
+            var fnum: []const u8 = &.{};
+            if (split.file_idx > 0)
+                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+
+            var line_b: [0x200]u8 = undefined;
+            var write_b: [0x200]u8 = undefined;
+
+            for (split.left) |raw_line| {
+                var line: Diff.Line = raw_line;
+                var writer: Io.Writer = .fixed(&write_b);
+
+                switch (line) {
+                    .hdr, .nul => try fmtLineAbx(line, fnum, w),
+                    .ctx, .add, .del => |*raw| {
+                        // use raw.text to cover writer.len
+                        std.debug.assert(raw.text.len < line_b.len);
+                        const text = std.mem.trimStart(u8, raw.text, " \t\n");
+                        @memcpy(line_b[0..text.len], text);
+                        line_b[text.len] = 0;
+                        const input: [:0]u8 = line_b[0..text.len :0];
+                        for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
+                        highlight.highlightInternal(.zig, input, &writer, a) catch {
+                            writer.writeAll(input) catch unreachable;
+                        };
+                        raw.text = writer.buffered();
+                        try fmtLine(line, fnum, w);
+                    },
+                }
+            }
+        }
+
+        pub fn format(split: Split, w: *Io.Writer) !void {
+            var fnum_b: [10]u8 = undefined;
+            var fnum: []const u8 = &.{};
+            if (split.file_idx > 0)
+                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+
+            for (split.left) |left| try fmtLineAbx(left, fnum, w);
+        }
+    };
+
+    pub const Right = struct {
+        fn fmtLine(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
+            switch (line) {
+                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+                .add => |add| try w.print(
+                    \\<ln num="{0d}" id="{2s}RL{0d}" class="add">{1s}</ln>
+                , .{ add.number, add.text, fnum }),
+                .del => unreachable,
+                .ctx => |ctx| try w.print(
+                    \\<ln num="{0d}" id="{2s}RL{0d}">{1s}</ln>
+                , .{ ctx.number_right, ctx.text, fnum }),
+                .nul => try w.print("<div class=\"nul\"></div>", .{}),
+            }
+        }
+
+        fn fmtLineAbx(line: Diff.Line, fnum: []const u8, w: *Io.Writer) !void {
+            switch (line) {
+                .hdr => |hdr| try w.print("<div class=\"block\">{f}</div>", .{abx.Html.abx(hdr.text)}),
+                .add => |add| try w.print(
+                    \\<ln num="{0d}" id="{2s}RL{0d}" class="add">{1f}</ln>
+                , .{ add.number, abx.Html.abx(add.text), fnum }),
+                .del => unreachable,
+                .ctx => |ctx| try w.print(
+                    \\<ln num="{0d}" id="{2s}RL{0d}">{1f}</ln>
+                , .{ ctx.number_right, abx.Html.abx(ctx.text), fnum }),
+                .nul => try w.print("<div class=\"nul\"></div>", .{}),
+            }
+        }
+
+        pub fn formatColor(split: Split, a: Allocator, w: *Io.Writer) !void {
+            var fnum_b: [10]u8 = undefined;
+            var fnum: []const u8 = &.{};
+            if (split.file_idx > 0)
+                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+
+            var line_b: [0x200]u8 = undefined;
+            var write_b: [0x200]u8 = undefined;
+
+            for (split.right) |raw_line| {
+                var line: Diff.Line = raw_line;
+                var writer: Io.Writer = .fixed(&write_b);
+
+                switch (line) {
+                    .hdr, .nul => try fmtLineAbx(line, fnum, w),
+                    .ctx, .add, .del => |*raw| {
+                        // use raw.text to cover writer.len
+                        std.debug.assert(raw.text.len < line_b.len);
+                        const text = std.mem.trimStart(u8, raw.text, " \t\n");
+                        @memcpy(line_b[0..text.len], text);
+                        line_b[text.len] = 0;
+                        const input: [:0]u8 = line_b[0..text.len :0];
+                        for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
+                        highlight.highlightInternal(.zig, input, &writer, a) catch {
+                            writer.writeAll(input) catch unreachable;
+                        };
+                        raw.text = writer.buffered();
+                        try fmtLine(line, fnum, w);
+                    },
+                }
+            }
+        }
+
+        pub fn format(split: Split, w: *Io.Writer) !void {
+            var fnum_b: [10]u8 = undefined;
+            var fnum: []const u8 = &.{};
+            if (split.file_idx > 0)
+                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+
+            for (split.right) |right| try fmtLineAbx(right, fnum, w);
+        }
+    };
+
+    pub fn formatColor(split: Split, a: Allocator, left: *Io.Writer, right: *Io.Writer) !void {
+        if (split.lang != .zig) {
+            try Split.Left.format(split, left);
+            try Split.Right.format(split, right);
+            return;
+        }
+
+        try Split.Left.formatColor(split, a, left);
+        try Split.Right.formatColor(split, a, right);
     }
 
-    pub fn fmtRight(split: Split, w: *Io.Writer) !void {
-        var fnum_b: [10]u8 = undefined;
-        var fnum: []const u8 = &.{};
-        if (split.file_idx > 0) fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
-
-        for (split.right) |right| switch (right) {
-            .hdr => |hdr| try w.print("<div class=\"block\">{s}</div>", .{hdr.text}),
-            .add => |add| try w.print(
-                \\<ln num="{0d}" id="{2s}RL{0d}" class="add">{1s}</ln>
-            , .{ add.number, add.text, fnum }),
-            .del => unreachable,
-            .ctx => |ctx| try w.print(
-                \\<ln num="{0d}" id="{2s}RL{0d}">{1s}</ln>
-            , .{ ctx.number_right, ctx.text, fnum }),
-            .nul => try w.print("<div class=\"nul\"></div>", .{}),
-        };
-    }
-
-    pub fn format(split: Split, w: *Io.Writer) !void {
-        try split.fmtLeft(w);
-        try split.fmtRight(w);
+    pub fn format(split: Split, left: *Io.Writer, right: *Io.Writer) !void {
+        try Split.Left.format(split, left);
+        try Split.Right.format(split, right);
     }
 };
 

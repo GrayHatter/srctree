@@ -313,11 +313,8 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
         var w_right: Io.Writer.Allocating = try .initCapacity(a, body.len);
 
         switch (view_mode) {
-            .inlined => try patch_formatted.inlined.formatColored(a, &w_left.writer),
-            .split => {
-                try patch_formatted.split.fmtLeft(&w_left.writer);
-                try patch_formatted.split.fmtRight(&w_right.writer);
-            },
+            .inlined => try patch_formatted.inlined.formatColor(a, &w_left.writer),
+            .split => try patch_formatted.split.formatColor(a, &w_left.writer, &w_right.writer),
         }
 
         file.* = .{
