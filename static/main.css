@@ -184,7 +184,7 @@ ln {
 	}
 	&:target { background-color: #222;  }
 	&:empty { width: auto; }
-	&.add { background: #568; }
+	&.add { background: #346; }
 	&.del { background: #633; }
 	&.nul { background: #2228; height: 1em; margin: 0 2px; }
 	&.add:target { background: #23d; } /* TODO I don't like this color, please change me */

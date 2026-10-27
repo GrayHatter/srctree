@@ -25,10 +25,10 @@ blob, gist, patch {
 		background: #bdbdbd;
 		span { div.nul{ background: #5e5e5e; } div.block{ background: #85a4ff; color: #3c3836; } }
 		ln {
-			&.del { background: #a66 }
-			&.add { background: #686 }
-			&.del:target { background: #b88 }
-			&.add:target { background: #898 }
+			&.del { background: #c66; }
+			&.add { background: #69d; }
+			&.del:target { background: #b00; }
+			&.add:target { background: #06f; }
 			&.nul:target { background: #2228; }
 		}
 	}
@@ -68,7 +68,7 @@ td.linenos .special { color: #000000; background-color: #ffffc0;}
 span.linenos.special { color: #000000; background-color: #ffffc0;}
 .gd { color: #282828; background-color: #b11300 } .gi { color: #282828; background-color: #406c00 }
 .err { color: #282828; background-color: #b11300 } .hll { background-color: #ebdbb2 }
-.c { color: #928374;} .cp { color: #928374; } .cpf { color: #928374; } .c1 { color: #928374;}
+.c { color: #928374;} .cp { color: #928374; } .cpf { color: #928374; } .c1 { color: #eee;}
 .esc { color: #4a3c2a } .g { color: #4a3c2a } .k { color: #b11300 } .l { color: #4a3c2a } .n { color: #4a3c2a }
 .o { color: #4a3c2a } .x { color: #4a3c2a } .p { color: #4a3c2a } .ch { color: #928374; } .cm { color: #928374; }
 .ges { color: #4a3c2a; } .gr { color: #b11300 } .gh { color: #ebdbb2; } .go { color: #f2e5bc } .gp { color: #a89984 }
@@ -80,7 +80,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0;}
 .nv { color: #83a598 } .ow { color: #b11300 } .pm { color: #4a3c2a } .w { color: #4a3c2a } .mb { color: #d3869b }
 .mf { color: #d3869b } .mh { color: #d3869b } .mi { color: #d3869b } .mo { color: #d3869b } .sa { color: #406c00 }
 .sb { color: #406c00 } .sc { color: #406c00 } .dl { color: #406c00 } .sd { color: #406c00 } .s2 { color: #406c00 }
-.se { color: #912715 } .sh { color: #406c00 } .si { color: #406c00 } .sx { color: #406c00 } .sr { color: #406c00 }
+.se { color: #912715 } .sh { color: #062 } .si { color: #406c00 } .sx { color: #406c00 } .sr { color: #406c00 }
 .s1 { color: #406c00 } .ss { color: #406c00 } .bp { color: #912715 } .fm { color: #8ec07c } .vc { color: #83a598 }
 .vg { color: #83a598 } .vi { color: #83a598 } .vm { color: #83a598 } .il { color: #d3869b }
 .ge { color: #4a3c2a; } .cs { color: #ebdbb2; } .c-PreProc { color: #8ec07c;} .null { color: rebeccapurple; }
