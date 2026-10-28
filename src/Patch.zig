@@ -78,7 +78,7 @@ pub const Inlined = struct {
                     line_b[text.len] = 0;
                     const input: [:0]u8 = line_b[0..text.len :0];
                     for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
-                    syntax.highlightInternal(.zig, input, &writer, a) catch {
+                    syntax.zig.highlight(input, &writer, a) catch {
                         writer.writeAll(input) catch unreachable;
                     };
                     raw.text = writer.buffered();
@@ -181,7 +181,7 @@ pub const Split = struct {
                         line_b[text.len] = 0;
                         const input: [:0]u8 = line_b[0..text.len :0];
                         for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
-                        syntax.highlightInternal(.zig, input, &writer, a) catch {
+                        syntax.zig.highlight(input, &writer, a) catch {
                             writer.writeAll(input) catch unreachable;
                         };
                         raw.text = writer.buffered();
@@ -242,7 +242,7 @@ pub const Split = struct {
                         line_b[text.len] = 0;
                         const input: [:0]u8 = line_b[0..text.len :0];
                         for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
-                        syntax.highlightInternal(.zig, input, &writer, a) catch {
+                        syntax.zig.highlight(input, &writer, a) catch {
                             writer.writeAll(input) catch unreachable;
                         };
                         raw.text = writer.buffered();
