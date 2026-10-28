@@ -297,6 +297,8 @@ const robots_txt = verse.Robots.robotsTxt(&.{
     .{ .name = "ExaSearchBot", .allow = false },
     .{ .name = "PerplexityBot", .allow = false },
     .{ .name = "Reflectionbot", .allow = false },
+    .{ .name = "KeenableBot", .allow = false }, // Ignores robots.txt
+    .{ .name = "Keenable-User", .allow = false }, // Ignores robots.txt
     .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
 },
     // you can blame bingbot for ref/*/(tree|blob)
