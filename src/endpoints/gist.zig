@@ -113,8 +113,8 @@ fn toTemplate(files: []const Gist.File, a: Allocator, io: Io) ![]S.GistHtml.Gist
         w.writer.print("{f}", .{Abx.Html{ .text = file.name }}) catch return error.OutOfMemory;
         const file_name = try w.toOwnedSlice();
         var formatted: []const u8 = undefined;
-        if (Highlight.Language.guessFromName(file.name)) |lang| {
-            formatted = try Highlight.highlight(lang, file.blob, a, io);
+        if (syntax.Language.guessFromName(file.name)) |lang| {
+            formatted = try syntax.highlight(lang, file.blob, a, io);
         } else {
             w.writer.print("{f}", .{Abx.Html{ .text = file.blob }}) catch return error.Unknown;
 
@@ -178,6 +178,6 @@ const Error = Router.Error;
 const POST = Router.POST;
 const GET = Router.GET;
 
-const Highlight = @import("../syntax-highlight.zig");
+const syntax = @import("../syntax.zig");
 const Gist = @import("../types.zig").Gist;
 const search = @import("search.zig");

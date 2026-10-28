@@ -240,7 +240,7 @@ fn view(f: *Frame) Error!void {
 
     var r: Reader = .fixed(delta.message);
     var w: Writer.Allocating = try .initCapacity(f.alloc, delta.message.len);
-    Highlight.Markdown.translate(&r, &w.writer, f.alloc, f.io) catch |err| switch (err) {
+    syntax.Markdown.translate(&r, &w.writer, f.alloc, f.io) catch |err| switch (err) {
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
         error.InvalidMarkdown => try w.writer.print("{f}", .{abx.Html{ .text = delta.message }}),
     };
@@ -547,4 +547,4 @@ const delta_shared = @import("../delta.zig");
 const Types = @import("../../types.zig");
 const Delta = Types.Delta;
 const Humanize = @import("../../humanize.zig");
-const Highlight = @import("../../syntax-highlight.zig");
+const syntax = @import("../../syntax.zig");

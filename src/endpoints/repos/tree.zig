@@ -167,7 +167,7 @@ fn htmlReadme(text: []const u8, a: Allocator, io: Io) ![]E {
     var r: Reader = .fixed(text);
     const buf = try a.alloc(u8, text.len * 4);
     var w: Writer = .fixed(buf);
-    Highlight.Markdown.translate(&r, &w, a, io) catch |err| switch (err) {
+    syntax.Markdown.translate(&r, &w, a, io) catch |err| switch (err) {
         error.InvalidMarkdown => try w.print("{f}", .{Abx.Html{ .text = text }}),
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };
@@ -203,4 +203,4 @@ const PageData = verse.template.PageData;
 const Router = verse.Router;
 const Humanize = @import("../../humanize.zig");
 const Git = @import("../../git.zig");
-const Highlight = @import("../../syntax-highlight.zig");
+const syntax = @import("../../syntax.zig");

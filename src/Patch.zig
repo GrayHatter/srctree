@@ -24,14 +24,14 @@ pub const Formatted = union(Formatted.Flavor) {
 };
 
 pub const Inlined = struct {
-    lang: highlight.Language,
+    lang: syntax.Language,
     file_idx: u16,
     lines: []Diff.Line,
 
     pub fn fromParsed(lines: []Diff.Line, file_idx: usize, name: []const u8) Inlined {
         return .{
             .file_idx = @intCast(file_idx),
-            .lang = highlight.Language.guessFromName(name) orelse .txt,
+            .lang = syntax.Language.guessFromName(name) orelse .txt,
             .lines = lines,
         };
     }
@@ -78,7 +78,7 @@ pub const Inlined = struct {
                     line_b[text.len] = 0;
                     const input: [:0]u8 = line_b[0..text.len :0];
                     for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
-                    highlight.highlightInternal(.zig, input, &writer, a) catch {
+                    syntax.highlightInternal(.zig, input, &writer, a) catch {
                         writer.writeAll(input) catch unreachable;
                     };
                     raw.text = writer.buffered();
@@ -101,7 +101,7 @@ pub const Inlined = struct {
 };
 
 pub const Split = struct {
-    lang: highlight.Language,
+    lang: syntax.Language,
     file_idx: u16,
     left: []Diff.Line,
     right: []Diff.Line,
@@ -136,7 +136,7 @@ pub const Split = struct {
 
         return .{
             .file_idx = @intCast(file_idx),
-            .lang = highlight.Language.guessFromName(name) orelse .txt,
+            .lang = syntax.Language.guessFromName(name) orelse .txt,
             .left = try left.toOwnedSlice(a),
             .right = try right.toOwnedSlice(a),
         };
@@ -181,7 +181,7 @@ pub const Split = struct {
                         line_b[text.len] = 0;
                         const input: [:0]u8 = line_b[0..text.len :0];
                         for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
-                        highlight.highlightInternal(.zig, input, &writer, a) catch {
+                        syntax.highlightInternal(.zig, input, &writer, a) catch {
                             writer.writeAll(input) catch unreachable;
                         };
                         raw.text = writer.buffered();
@@ -242,7 +242,7 @@ pub const Split = struct {
                         line_b[text.len] = 0;
                         const input: [:0]u8 = line_b[0..text.len :0];
                         for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
-                        highlight.highlightInternal(.zig, input, &writer, a) catch {
+                        syntax.highlightInternal(.zig, input, &writer, a) catch {
                             writer.writeAll(input) catch unreachable;
                         };
                         raw.text = writer.buffered();
@@ -496,7 +496,7 @@ test "diffsSlice" {
 }
 
 const std = @import("std");
-const highlight = @import("syntax-highlight.zig");
+const syntax = @import("syntax.zig");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Io = std.Io;

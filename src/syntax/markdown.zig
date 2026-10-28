@@ -1034,7 +1034,7 @@ test "utox readme" {
     );
 }
 
-const syntax = @import("../syntax-highlight.zig");
+const syntax = @import("../syntax.zig");
 const Abx = @import("verse").Antibiotic;
 
 const std = @import("std");

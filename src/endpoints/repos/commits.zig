@@ -201,7 +201,7 @@ pub fn commitCtx(c: Commit, repo: []const u8, a: Allocator, io: Io) !S.CommitHtm
     //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     var r: Reader = .fixed(c.body);
     var w: Writer.Allocating = try .initCapacity(a, c.body.len);
-    Highlight.Markdown.translate(&r, &w.writer, a, io) catch |err| switch (err) {
+    syntax.Markdown.translate(&r, &w.writer, a, io) catch |err| switch (err) {
         error.InvalidMarkdown => w.writer.print("{f}", .{abx.Html{ .text = c.body }}) catch unreachable,
         error.OutOfMemory, error.WriteFailed => return error.ServerFault,
     };
@@ -387,7 +387,7 @@ const Datetime = @import("../../datetime.zig");
 const git = @import("../../git.zig");
 const Commit = git.Commit;
 const Sha = git.Sha;
-const Highlight = @import("../../syntax-highlight.zig");
+const syntax = @import("../../syntax.zig");
 const Humanize = @import("../../humanize.zig");
 const Patch = @import("../../Patch.zig");
 const Repo = @import("../../Repo.zig");

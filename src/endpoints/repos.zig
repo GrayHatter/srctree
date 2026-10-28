@@ -441,7 +441,6 @@ const ROUTE = verse.Router.ROUTE;
 const Humanize = @import("../humanize.zig");
 const Repo = @import("../Repo.zig");
 const Git = @import("../git.zig");
-const Highlight = @import("../syntax-highlight.zig");
 const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
 

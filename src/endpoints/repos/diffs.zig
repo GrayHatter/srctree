@@ -421,8 +421,8 @@ fn highlightLineRef(
 ) ![]u8 {
     const formatted = if (code.len == 0)
         "&nbsp;"
-    else if (Highlighting.Language.guessFromName(filename)) |lang|
-        try Highlighting.highlight(lang, code, a, io)
+    else if (syntax.Language.guessFromName(filename)) |lang|
+        try syntax.highlight(lang, code, a, io)
     else
         try a.print("{f}", .{abx.Html{ .text = code }});
 
@@ -967,7 +967,7 @@ const HTML = verse.HTML;
 const DOM = verse.DOM;
 
 const Git = @import("../../git.zig");
-const Highlighting = @import("../../syntax-highlight.zig");
+const syntax = @import("../../syntax.zig");
 const Humanize = @import("../../humanize.zig");
 const Repo = @import("../../Repo.zig");
 const endpt_repos = @import("../repos.zig");

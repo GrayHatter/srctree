@@ -119,8 +119,8 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     const blob_path = path_itr.path[0..path_itr.start_index];
 
     const blob_data = try getBlob(f, rd, repo, tree);
-    const colored_blob: []const u8 = if (Highlight.Language.guessFromName(blob_data.name)) |lang|
-        Highlight.highlight(lang, blob_data.data.blob, f.alloc, f.io) catch |err| B: {
+    const colored_blob: []const u8 = if (syntax.Language.guessFromName(blob_data.name)) |lang|
+        syntax.highlight(lang, blob_data.data.blob, f.alloc, f.io) catch |err| B: {
             log.warn("unable to add syntax highlighting because {}", .{err});
             break :B blob_data.data.blob;
         }
@@ -273,4 +273,4 @@ const PageData = verse.template.PageData;
 const Router = verse.Router;
 const Repo = @import("../../Repo.zig");
 const Git = @import("../../git.zig");
-const Highlight = @import("../../syntax-highlight.zig");
+const syntax = @import("../../syntax.zig");
