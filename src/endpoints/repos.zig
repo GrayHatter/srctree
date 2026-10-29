@@ -117,7 +117,7 @@ pub const Router = struct {
         var itr = Delta.searchRepo(rd.name, &.{
             .owner("me", false), .is("open", false), .repo(rd.name, false),
         }, f.io);
-        while (itr.next(f.alloc, f.io)) |dlt| {
+        while (itr.nextDelta(f.alloc, f.io)) |dlt| {
             defer dlt.raze(f.alloc);
             switch (dlt.attach) {
                 .diff => d_count += 1,

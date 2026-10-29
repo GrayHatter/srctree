@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <Build MetaHead _meta_head.html />
+  </head>
+  <body>
+    <Build BodyHeader _body_header.html />
+    <content class="search">
+      <search>
+        <form action="<Action default="search">" style="width:95%">
+          <input name="q" type="text" placeholder="Search [ repo:name only:deltas is:open ]" value="<Search ornull>" style="width:97%">
+          <button class="btn" href="new" style="width:10%" type="submit">Quick Search</button>
+          <button class="btn" href="new" style="width:10%" type="submit" formaction="search/deep">Deep Search</button>
+        </form>
+      </search>
+
+      <div style="display:block; width:100%">Found <CountFiles type="usize" /> files</div>
+
+      <searchresults>
+      <For SearchResults>
+      <!-- Verse scope bug -->
+      <Switch SearchFlavor>
+        <Case Repo><result>
+          <repo>
+            <Name />
+          </repo>
+        </result></Case>
+
+
+        <Case File>
+          <div>
+            <filename>Filename: <a href="/repo/<RepoName />/blob/<Filename />#L<Line type="usize" />"><Filename /></a></filename>
+            <code><Code /></code>
+          </div>
+        </Case>
+
+        <Case Commit>
+          <Name />
+        </Case>
+
+        <Case Delta>
+          <Name />
+        </Case>
+
+      </Switch>
+      </For>
+
+      </searchresults>
+      <searchmeta>
+      <With SearchMeta>
+
+        <list>
+        <span>Repos</span>
+        <For Repos>
+          <Title />
+        </For>
+        </list>
+
+        <list>
+        <span>Commits</span>
+        <For Commits>
+          <Title />
+        </For>
+        </list>
+
+        <list>
+        <span>Deltas</span>
+        <For Deltas>
+          <Title />
+        </For>
+        </list>
+
+        <list>
+        <span>Files</span>
+        <For Files>
+          <Name />
+        </For>
+        </list>
+
+      </With>
+      </searchmeta>
+
+    </content>
+  </body>
+</html>

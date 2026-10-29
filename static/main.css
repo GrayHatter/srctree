@@ -138,7 +138,12 @@ content {
 	&.fw { min-width: 97%; }
 	&.mw { width: 60vw; min-width: 1124px; margin: auto; }
 	&.lw { min-width: 1050px; text-align:left; }
-	&.search { min-width: 50rem; width: auto; }
+	&.search {
+		min-width: 50rem;
+		width: auto;
+		display: flex;
+		flex-flow: row wrap;
+	}
 	&.diff { display: flex; justify-content: flex-start; gap: 1em; width: unset; max-width: 96%; }
 }
 buttons { display: flex; justify-content: space-between; }
@@ -349,10 +354,13 @@ search {
 	padding: 0.4rem 1%;
 	display: flex;
 	gap: 1em;
+	width: 100%;
 	form { flex-grow: 1; display: flex; input { flex-grow: 1; } }
 }
 searchresults {
 	display:block;
+	min-width 60rem;
+	flex: 1 1 auto;
 	div {
 		display: block;
 		margin: 1rem 0;
@@ -375,6 +383,49 @@ searchresults {
 			white-space: break-spaces;
 			overflow: scroll;
 		}
+	}
+	result {
+		display: block;
+		margin: 1rem 2.5%;
+		padding: 0 1%;
+		text-align:left;
+		repo {
+			display: block;
+			background: #404040;
+			color: #a6a6a6;
+			border-radius: 3px 3px 0 0;
+			border: 1px gray solid;
+			border-bottom: 0px;
+			height: 1.5em;
+			padding: 4px 12px;
+		}
+		filename {
+			display: block;
+			background: #404040;
+			color: #a6a6a6;
+			border-radius: 3px 3px 0 0;
+			border: 1px gray solid;
+			border-bottom: 0px;
+			height: 1.5em;
+			padding: 4px 12px;
+		}
+		code {
+			background: #333;
+			border-radius: 0 0 3px 3px;
+			border: 1px gray solid;
+			border-top: 0px;
+			white-space: break-spaces;
+			overflow: scroll;
+		}
+
+	}
+}
+searchmeta {
+	display:block;
+	min-width: 15rem;
+	list {
+		display:block;
+		width: 100%;
 	}
 }
 deltalist {
@@ -635,6 +686,37 @@ treeview {
 	margin-top: 1rem;
 	padding: 0.5em;
 	text-align: left;
+}
+searchtree {
+	border-left: 1px gray solid;
+	flex: 1 1 0;
+	height: 100%;
+	margin-top: 1rem;
+	padding: 0.5em;
+	text-align: left;
+
+	/* //// */
+	padding: 0 8px 8px;
+	font-family: "Ubuntu Mono", monospace, sans-serif;
+	min-width: 8rem;
+	position: sticky;
+	top: 3rem;
+	bottom: 0;
+	span.tree, span.file, span.blob {
+		border-top: 1px solid gray;
+		margin: auto;
+		padding: 4px;
+		text-align: left;
+		display: flex;
+		justify-content: flex-start;
+		> a { min-width: 30%; display: inline-block; }
+		&:first-child { border-top: 0px solid gray; }
+		div { display: flex; justify-content: space-between; flex-grow: 1; }
+	}
+	label { border-top: 1px solid gray; display: flex; justify-content: center; }
+	span.tree > a::before { content: "📁"; padding-right: 8px; }
+	span.file > a::before { content: "📄"; padding-right: 8px; }
+	span.blob > a::before { content: "📄"; padding-right: 8px; }
 }
 blob, gist, patch {
 	text-align: left;

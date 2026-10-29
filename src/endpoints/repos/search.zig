@@ -8,7 +8,7 @@ pub const verse_routes = [_]Router.Match{
 
 pub const index = repoSearchQuick;
 
-const SearchHtml = T.PageData("repo/search.html");
+const SearchHtml = T.PageData("search.html");
 
 const SearchReq = struct {
     q: ?[]const u8,
@@ -21,36 +21,31 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     repo.loadData(f.alloc, f.io) catch return error.ServerFault;
 
     const udata = f.request.data.query.validate(SearchReq) catch return error.DataInvalid;
-    const commits, const files = if (udata.q) |s|
-        .{
-            searchCommits(s, &repo, count >> 2, f.alloc, f.io) catch return error.ServerFault,
-            search.searchFiles(s, &repo, count, f.alloc, f.io) catch |err| {
-                log.err("search file err {}", .{err});
-                return error.ServerFault;
-            },
-        }
-    else
+    _ = count;
+    const commits, const files = //if (udata.q) |s|
+        //        .{
+        //            searchCommits(s, &repo, count >> 2, f.alloc, f.io) catch return error.ServerFault,
+        //            search.searchFiles(s, &repo, count, f.alloc, f.io) catch |err| {
+        //                log.err("search file err {}", .{err});
+        //                return error.ServerFault;
+        //            },
+        //        }
+        //    else
         .{ &.{}, &.{} };
 
-    const dcount = rd.deltaCount(f);
+    //const dcount = rd.deltaCount(f);
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{
-            .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io),
-        } },
-        .repo_header = .{
-            .repo_name = .abx(rd.name),
-            .description = .abx(try f.alloc.dupe(u8, repo.description(f.alloc, f.io) catch "")),
-            .blame = null,
-            .git_uri = null,
-            .upstream = null,
-            .issue_count = dcount.issue,
-            .diff_count = dcount.diff,
-        },
-        .search = .abx(udata.q orelse &.{}),
-        .commits = commits,
+        .body_header = .{ .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io) },
         .count_files = files.len,
-        .files = files,
+        .search = .abx(udata.q orelse &.{}),
+        .search_results = &.{},
+        .search_meta = .{
+            .repos = &.{},
+            .commits = commits,
+            .files = files,
+            .deltas = &.{},
+        },
     });
 
     return f.sendPage(&page);
@@ -64,9 +59,15 @@ fn repoSearchDeep(f: *Frame) Router.Error!void {
     try repoSearch(f, 200000);
 }
 
-fn searchCommits(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, io: Io) ![]S.SearchHtml.Commits {
+fn searchCommits(
+    str: []const u8,
+    repo: *git.Repo,
+    limited: u32,
+    a: Allocator,
+    io: Io,
+) ![]S.SearchHtml.Meta.Commits {
     var limit: u32 = limited;
-    var commits: ArrayList(search.Hit.Commit) = .empty;
+    var commits: ArrayList(Search.Hit.Result.Commit) = .empty;
     defer commits.deinit(a);
     var commit = try repo.HEAD(a, io);
 
@@ -78,7 +79,7 @@ fn searchCommits(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, i
         commit = commit.toParent(0, repo, a, io) catch break;
     }
 
-    var hits: ArrayList(S.SearchHtml.Commits) = try .initCapacity(a, commits.items.len);
+    var hits: ArrayList(S.SearchHtml.Meta.Commits) = try .initCapacity(a, commits.items.len);
     for (hits.items) |hit| {
         _ = hit;
         //something
@@ -88,7 +89,7 @@ fn searchCommits(str: []const u8, repo: *git.Repo, limited: u32, a: Allocator, i
 }
 
 fn searchTree(
-    files: *ArrayList(search.Hit.File),
+    files: *ArrayList(Search.Hit.Result.File),
     tree: *git.Tree,
     repo: *git.Repo,
     root: []const u8,
@@ -200,6 +201,7 @@ const RepoEndpoint = @import("../repos.zig");
 const searchEP = @import("../search.zig");
 const RouteData = RepoEndpoint.RouteData;
 const git = @import("../../git.zig");
+const Search = @import("../../Search.zig");
 
 const verse = @import("verse");
 const T = verse.template;
@@ -209,4 +211,3 @@ const Frame = verse.Frame;
 const Router = verse.Router;
 const Match = Router.Match;
 const GET = Router.GET;
-const search = @import("../../search.zig");

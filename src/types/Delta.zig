@@ -213,29 +213,29 @@ pub const Iterator = struct {
         };
     }
 
-    pub fn next(self: *Iterator, a: Allocator, io: Io) ?Delta {
+    pub fn next(self: *Iterator, a: Allocator, io: Io) ?Search.Hit {
         const line = (self.dir.next(io) catch return null) orelse return null;
         if (line.kind != .file) return self.next(a, io);
         const name = cutSuffix(u8, line.name, ".delta") orelse return self.next(a, io);
         const i = lastIndexOf(u8, name, ".") orelse return self.next(a, io);
         const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a, io);
         const current = open(name[0..i], num, a, io) catch return self.next(a, io);
-        return current;
+        return .{ .result = .{ .delta = current } };
     }
 };
 
-pub const RepoIterator = search.RepoIterator(Index, Delta);
-pub const SearchIterator = search.Iterator(Iterator, Delta);
-pub const RepoSearchIterator = search.Iterator(RepoIterator, Delta);
+pub const RepoIterator = Search.RepoDeltaIterator(Index);
+pub const SearchIterator = Search.Iterator(Iterator);
+pub const RepoSearchIterator = Search.Iterator(RepoIterator);
 
-pub fn searchAll(rules: []const search.Rule, io: Io) SearchIterator {
+pub fn searchAll(rules: []const Search.Rule, io: Io) SearchIterator {
     return .{
         .rules = rules,
         .iterable = .init(io),
     };
 }
 
-pub fn searchRepo(repo: []const u8, rules: []const search.Rule, io: Io) RepoSearchIterator {
+pub fn searchRepo(repo: []const u8, rules: []const Search.Rule, io: Io) RepoSearchIterator {
     return .{
         .rules = rules,
         .iterable = .init(repo, io),
@@ -310,7 +310,7 @@ const parseInt = std.fmt.parseInt;
 const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();
 
-const search = @import("../search.zig");
+const Search = @import("../Search.zig");
 const types = @import("../types.zig");
 const Thread = types.Thread;
 const Message = types.Message;

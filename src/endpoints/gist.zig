@@ -134,9 +134,7 @@ fn toTemplate(files: []const Gist.File, a: Allocator, io: Io) ![]S.GistHtml.Gist
 fn view(vrs: *Frame) Error!void {
     // TODO move this back into context somehow
     const body_header: *const S.BodyHeaderHtml = vrs.template_data.get(S.BodyHeaderHtml) orelse
-        &S.BodyHeaderHtml{ .nav = .{
-            .inbox_count = search.inboxCount(vrs.user, vrs.alloc, vrs.io),
-        } };
+        &S.BodyHeaderHtml{ .inbox_count = search.inboxCount(vrs.user, vrs.alloc, vrs.io) };
 
     const hash = vrs.uri.next() orelse return error.InvalidURI;
     if (hash.len != 64) return error.DataInvalid;

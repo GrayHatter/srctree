@@ -85,6 +85,28 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
 
     //var messages: []S.CommentThreadHtml.Messages = &.{};
 
+    //
+    //
+    //
+    //
+    //
+
+    //const blob_data = try getBlob(f, rd, repo, tree);
+    //const colored_blob: []const u8 = if (Highlight.Language.guessFromFilename(blob_data.name)) |lang|
+    //    Highlight.highlight(lang, blob_data.data.blob, f.alloc, f.io) catch |err| B: {
+    //        log.warn("unable to add syntax highlighting because {}", .{err});
+    //        break :B blob_data.data.blob;
+    //    }
+    //else if (excludedExt(blob_data.name))
+    //    "This file type is currently unsupported"
+    //else
+    //    try f.alloc.print("{f}", .{abx.Html{ .text = blob_data.data.blob }});
+    //
+    //
+    //
+    //
+    //
+
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
@@ -112,10 +134,11 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
     var page = CommitPage.init(.{
         .repo = .safe(repo_name),
         .sha = .safe(current.sha.text().slice()),
-        .meta_head = .{ .title = .safe(page_title), .open_graph = .{ .title = .safe(og_title), .desc = .safe(og_desc) } },
-        .body_header = .{ .nav = .{
-            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-        } },
+        .meta_head = .{
+            .title = .safe(page_title),
+            .open_graph = .{ .title = .safe(og_title), .desc = .safe(og_desc) },
+        },
+        .body_header = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) },
         .repo_header = .{
             .repo_name = .abx(repo_name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),
@@ -347,9 +370,7 @@ fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: 
     const sha_text = if (sha) |s| s.text() else Sha.Text.zeros;
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .nav = .{
-            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-        } },
+        .body_header = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) },
         .commit_list = list,
         .after_commits = if (sha) |_| .{
             .repo_name = .safe(repo_name),

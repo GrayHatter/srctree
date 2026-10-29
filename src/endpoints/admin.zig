@@ -23,9 +23,8 @@ fn default(f: *Frame) Error!void {
     try f.requireValidUser();
 
     const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
-        &.{ .nav = .{
-            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-        } };
+        &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -68,9 +67,8 @@ pub fn settings(f: *Frame) Router.Error!void {
         };
     }
     const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
-        &.{ .nav = .{
-            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-        } };
+        &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -85,9 +83,8 @@ fn remotes(f: *Frame) Error!void {
     try f.requireValidUser();
 
     const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
-        &.{ .nav = .{
-            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-        } };
+        &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
     var page = AdminPage.init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = bhdr.*,
@@ -159,9 +156,8 @@ const Repo = struct {
         try f.requireValidUser();
 
         const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{
-                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-            } };
+            &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -176,9 +172,8 @@ const Repo = struct {
     fn delete(f: *Frame) Error!void {
         try f.requireValidUser();
         const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{
-                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-            } };
+            &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -196,9 +191,8 @@ const Repo = struct {
         try f.requireValidUser();
 
         const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{
-                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-            } };
+            &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,
@@ -243,9 +237,8 @@ const Repo = struct {
     fn clone(f: *Frame) Error!void {
         try f.requireValidUser();
         const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
-            &.{ .nav = .{
-                .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-            } };
+            &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
         var page = AdminPage.init(.{
             .meta_head = .{ .open_graph = .{} },
             .body_header = bhdr.*,

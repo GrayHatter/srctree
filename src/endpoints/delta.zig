@@ -61,14 +61,13 @@ pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     const raw_str = if (str.text.len > 0) str.text else str.text_cleaned;
 
-    const rules = try searchEP.genRules(raw_str, f.alloc);
+    var search: Search = Search.init(raw_str, f.alloc) catch unreachable; // FIXME
+    _ = &search;
 
-    var itr = Delta.searchRepo(rd.name, rules.items, f.io);
+    var itr = Delta.searchRepo(rd.name, search.rules.items, f.io);
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io),
-    } };
-    if (f.user) |usr| body_header.nav.nav_auth = .abx(usr.username.?);
+    var body_header: S.BodyHeaderHtml = .{ .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io) };
+    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
     f.template_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
 
     return list(f, Delta.RepoIterator, &itr, str);
@@ -147,9 +146,9 @@ pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Delt
     };
 }
 
-pub fn list(f: *Frame, Itr: type, itr: *search.Iterator(Itr, Delta), search_str: abx.Html) RouterError!void {
+pub fn list(f: *Frame, Itr: type, itr: *Search.Iterator(Itr), search_str: abx.Html) RouterError!void {
     var d_list: ArrayList(DeltaList) = .empty;
-    while (itr.next(f.alloc, f.io)) |deltaC| {
+    while (itr.nextDelta(f.alloc, f.io)) |deltaC| {
         var d = deltaC;
         if (d.state.embargoed) continue;
 
@@ -318,7 +317,7 @@ pub fn actionButtons(f: *Frame, delta: *const Delta) [2][]const u8 {
 const Repos = @import("repos.zig");
 const searchEP = @import("search.zig");
 const Types = @import("../types.zig");
-const search = @import("../search.zig");
+const Search = @import("../Search.zig");
 const Delta = Types.Delta;
 const Message = Types.Message;
 const Diff = Types.Diff;

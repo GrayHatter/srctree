@@ -226,15 +226,15 @@ fn builder(fr: *Frame, call: BuildFn) void {
         return resol(fr) catch {};
     }
 
-    var bh: S.BodyHeaderHtml = (fr.template_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{ .nav = .{
+    var bh: S.BodyHeaderHtml = (fr.template_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{
         .nav_auth = .safe("Error"),
         .inbox_count = search.inboxCount(fr.user, fr.alloc, fr.io),
-    } }).*;
+    }).*;
 
     if (fr.user) |usr| {
-        bh.nav.nav_auth = .abx(if (usr.username) |un| un else "Error No Username");
+        bh.nav_auth = .abx(if (usr.username) |un| un else "Error No Username");
     } else {
-        bh.nav.nav_auth = .safe("Public");
+        bh.nav_auth = .safe("Public");
     }
 
     fr.template_data.clone(S.BodyHeaderHtml, fr.alloc, bh) catch {};
@@ -306,11 +306,12 @@ const robots_txt = verse.Robots.robotsTxt(&.{
     .{ .name = "KeenableBot", .allow = false }, // Ignores robots.txt
     .{ .name = "Keenable-User", .allow = false }, // Ignores robots.txt
     .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
+    .{ .name = "KeenableBot", .allow = false }, // We can talk after you fix your site
 },
     // you can blame bingbot for ref/*/(tree|blob)
     .{ .extra_rules =
     \\Disallow: /*?*
-    \\Disallow: /repo/*/blame/* 
+    \\Disallow: /repo/*/blame/*
     \\Disallow: /repo/*/ref/*/tree/*
     \\Disallow: /repo/*/ref/*/blob/*
     \\

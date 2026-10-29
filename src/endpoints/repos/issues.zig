@@ -43,12 +43,8 @@ fn new(f: *Frame) Error!void {
     _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-    } };
-    if (f.user) |usr| {
-        body_header.nav.nav_auth = .abx(usr.username.?);
-    }
+    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
 
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -62,12 +58,9 @@ fn newRemote(f: *Frame) Error!void {
     _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-    } };
-    if (f.user) |usr| {
-        body_header.nav.nav_auth = .abx(usr.username.?);
-    }
+    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
+
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
@@ -81,12 +74,9 @@ fn edit(f: *Frame) Error!void {
     std.debug.print("{s}\n", .{f.uri.next().?});
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-    } };
-    if (f.user) |usr| {
-        body_header.nav.nav_auth = .abx(usr.username.?);
-    }
+    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
+
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
@@ -249,12 +239,8 @@ fn view(f: *Frame) Error!void {
     const username = if (f.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-    } };
-    if (f.user) |usr| {
-        body_header.nav.nav_auth = .abx(usr.username.?);
-    }
+    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
 
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     const created = try f.alloc.print("{f}", .{Humanize.unix(delta.created, now)});

@@ -98,10 +98,8 @@ fn pendingNew(f: *Frame) Error!void {
         .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-    } };
-    if (f.user) |usr| body_header.nav.nav_auth = .abx(usr.username.?);
+    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
     const host = try (f.request.host orelse return error.DataMissing).valid();
 
     const count = rd.deltaCount(f);
@@ -236,9 +234,8 @@ fn createError(f: *Frame, udata: DiffCreateReq, comptime err: ErrStrs) Error!voi
     const host = try (f.request.host orelse return error.DataMissing).valid();
     var page = DiffNewHtml.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .nav = .{
-            .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-        } },
+        .body_header = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) },
+
         .err = switch (err) {
             .remote_error => |str| .{ .error_string = .safe("Unable to fetch patch from remote (" ++ str ++ ")") },
             else => .{ .error_string = .safe("error") },
@@ -865,12 +862,9 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
         .inline_toggle = if (patch_view_mode == .inlined) .inlined else .split,
     };
 
-    var body_header: S.BodyHeaderHtml = .{ .nav = .{
-        .inbox_count = search.inboxCount(f.user, f.alloc, f.io),
-    } };
-
+    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
     if (f.user) |usr| {
-        body_header.nav.nav_auth = .abx(usr.username.?);
+        body_header.nav_auth = .abx(usr.username.?);
     }
     const count = rd.deltaCount(f);
     var page: DeltaPage = .init(.{
