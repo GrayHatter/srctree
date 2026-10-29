@@ -11,21 +11,6 @@ a {
 	text-decoration: none;
 	color: #FFFFEB;
 	&:visited { text-decoration: none; color: #FFFFEB; }
-	&.btn {
-		display: inline-block;
-		font-size: 108%;
-		font-weight: 600;
-		background-color: #222;
-		font-family: 'Titillium Web', sans-serif;
-		padding: 3px 14px;
-		border-top:  1px solid #888;
-		border-right: 1px solid #444;
-		border-bottom: 2px solid #444;
-		border-left: 1px solid #999;
-		border-radius: 4px;
-		white-space: nowrap;
-		&:hover, &.active { border-bottom: #880046 solid 2px; }
-	}
 	&.bare-link { color:#6cf; &:visited { color: #dbbbff; } }
 }
 div {
@@ -49,12 +34,13 @@ hint {
 }
 details:open > summary.hide { display: none; }
 .repo-header  {
+	background:#222;
 	display: flex;
+	height: 3rem;
 	justify-content: space-between;
 	position: sticky;
 	top:0;
-	background:#222;
-	z-index: 10;
+	z-index: 30;
 	> div { display: flex; justify-content: left; flex-wrap: wrap; gap: 0.4em;  }
 	h3 { font-family: 'Titillium Web', sans-serif; font-size: 220%; flex: 1 1 0; }
 	.description { font-size: 90%; color: #aaa; margin: auto 0; flex: 5 0 0; }
@@ -80,8 +66,33 @@ details:open > summary.hide { display: none; }
 	}
 }
 .muted { color: #bbb; font-family: 'Titillium Web', sans-serif; font-size: 80%; }
-.btns { display: flex; justify-content: flex-end; gap: 1em; }
-.act-btns { display: inline-block; margin: auto 0; text-align: right; }
+.btns {
+	display: flex;
+	justify-content: flex-end;
+	gap: 1em;
+}
+.btn {
+	display: inline-block;
+	font-size: 108%;
+	font-weight: 600;
+	background-color: #222;
+	font-family: 'Titillium Web', sans-serif;
+	padding: 3px 14px;
+	border-top:  1px solid #888;
+	border-right: 1px solid #444;
+	border-bottom: 2px solid #444;
+	border-left: 1px solid #999;
+	border-radius: 4px;
+	white-space: nowrap;
+	&:hover, &.active { border-bottom: #880046 solid 2px; }
+}
+.act-btns {
+	display: flex;
+	gap: 5px;
+	margin: auto 0;
+	text-align: right;
+	justify-content: end;
+}
 .ubtn {
 	border: 1px #444 solid;
 	border-top: #888 solid 1px;
@@ -167,7 +178,6 @@ code {
 		}
 	}
 }
-
 ln {
 	white-space: pre;
 	display: inline-block;
@@ -263,13 +273,17 @@ repo {
 	&.landing {
 		border-radius: 4px 4px 0 0;
 		intro {
-			border-radius: 4px 4px 0 0;
-			padding: 10px;
+			align-items: baseline;
 			background: #333;
+			border-radius: 4px 4px 0 0;
 			display: flex;
 			justify-content: space-between;
-			align-items: baseline;
+			padding: 10px;
+			position: sticky;
 			text-align: left;
+			top: 3rem;
+			margin: 0 0 3px 0;
+			z-index: 10;
 			span:first-child { min-width: 30%; }
 			span:nth-child(2) { display: flex; flex-grow:1; }
 		}
@@ -288,8 +302,13 @@ readme {
 		justify-content: space-between;
 		align-items: baseline;
 		text-align: left;
+		position: sticky;
+		top: 3rem;
 	}
-	.codeblock { white-space: pre; }
+	.codeblock {
+		white-space: pre;
+		padding: 4px 8px 8px 4px;
+	}
 	code {
 		width: 98%;
 		input[type=checkbox] { pointer-events: none; }
@@ -305,7 +324,7 @@ readme {
 	position: sticky;
 	top: 3rem;
 	bottom: 0;
-	span.tree, span.file {
+	span.tree, span.file, span.blob {
 		border-top: 1px solid gray;
 		margin: auto;
 		padding: 4px;
@@ -317,8 +336,9 @@ readme {
 		div { display: flex; justify-content: space-between; flex-grow: 1; }
 	}
 	label { border-top: 1px solid gray; display: flex; justify-content: center; }
-	span.tree > a::before { content: "📁"; padding-right: 8px;}
-	span.file > a::before { content: "📄"; padding-right: 8px;}
+	span.tree > a::before { content: "📁"; padding-right: 8px; }
+	span.file > a::before { content: "📄"; padding-right: 8px; }
+	span.blob > a::before { content: "📄"; padding-right: 8px; }
 }
 search {
 	font-family: 'Titillium Web', sans-serif;
@@ -609,12 +629,12 @@ span.coderef {
 	&.yellow { background: #333; }
 }
 treeview {
-	padding: 0.5em;
 	border-left: 1px gray solid;
 	flex: 1 1 0;
-	text-align: left;
 	height: 100%;
-	margin-top: 3rem;
+	margin-top: 1rem;
+	padding: 0.5em;
+	text-align: left;
 }
 blob, gist, patch {
 	text-align: left;
@@ -626,16 +646,16 @@ blob, gist, patch {
 		border: 1px gray solid;
 		border-bottom: gray solid 1px;
 		border-radius: 3px 3px 0 0;
-		height: 1.5em;
-		padding: 4px 12px;
 		display: flex;
-		height: 1.5rem;
+		height: 1.5em;
 		justify-content: space-between;
-		padding: 0 0 0.25rem 0;
-		width: 100%;
+		padding: 4px 12px;
+		position: sticky;
+		top: 3rem;
+		width: auto;
 	}
 	.codeblock {
-		padding: 0.5em 0.5em 0 0;
+		padding: 0 0.5em 0 0;
 		border: 1px gray solid;
 		border-top: 0px;
 		code { white-space: pre; }
@@ -752,16 +772,16 @@ blob, gist, patch {
 		width: 100%;
 	}
 }
-.blame-age-0 {  background-color: #ff5555aa;}
-.blame-age-1 {  background-color: #dd4444aa;}
-.blame-age-2 {  background-color: #bb2222aa;}
-.blame-age-3 {  background-color: #aa1111aa;}
-.blame-age-4 {  background-color: #990000aa;}
-.blame-age-5 {  background-color: #660000aa;}
-.blame-age-6 {  background-color: #330000aa;}
-.blame-age-7 {  background-color: #220000aa;}
-.blame-age-8 {  background-color: #110000cc;}
-.blame-age-old {  background-color: #110000ff;}
+.blame-age-0 {  background-color: #ff5555aa; }
+.blame-age-1 {  background-color: #dd4444aa; }
+.blame-age-2 {  background-color: #bb2222aa; }
+.blame-age-3 {  background-color: #aa1111aa; }
+.blame-age-4 {  background-color: #990000aa; }
+.blame-age-5 {  background-color: #660000aa; }
+.blame-age-6 {  background-color: #330000aa; }
+.blame-age-7 {  background-color: #220000aa; }
+.blame-age-8 {  background-color: #110000cc; }
+.blame-age-old {  background-color: #110000ff; }
 .toggle {
 	background: #333;
 	border-bottom: 1px solid #737373;
@@ -800,7 +820,6 @@ blob, gist, patch {
 .admin-content { display: none; textarea { min-width: 35rem; } }
 .admin-content.active { display: inline-block; background: #a112; height: 50vh; min-width: 30rem; }
 a.cistatus {
-
 	&.success { color: green; }
 	&.pending { color: yellow; }
 	&.failed { color: red; }
