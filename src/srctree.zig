@@ -185,6 +185,11 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
     return null;
 }
 
+inline fn scriptRequest(f: *Frame, _: *const verse.Request.UserAgent) ?BuildFn {
+    f.dumpDebugData(.{});
+    return null;
+}
+
 fn trafficFilter(fr: *Frame) ?BuildFn {
     if (global_config.server) |srv|
         if (!srv.block_scripted_traffic)
@@ -198,14 +203,15 @@ fn trafficFilter(fr: *Frame) ?BuildFn {
     }
 
     if (fr.request.user_agent) |*ua| {
-        switch (ua.agent) {
-            .bot => return botRequest(fr, ua),
-            .browser => return browserRequest(fr, ua),
+        return switch (ua.agent) {
+            .bot => botRequest(fr, ua),
+            .browser => browserRequest(fr, ua),
             .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/"))
-                return dropRequest(fr, "opera"),
-            .script => {},
-        }
-        return null;
+                dropRequest(fr, "opera")
+            else
+                null,
+            .script => scriptRequest(fr, ua),
+        };
     }
 
     log.err("No User agent for request\n\n\n\n", .{});
