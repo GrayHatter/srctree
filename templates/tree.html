@@ -16,14 +16,14 @@
         <div class="treelist">
           <With DotDot><tree><a href="../">..</a></tree></With>
           <For Trees>
-          <span class="tree"><a href="<Href />/"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
+          <span class="tree"><a href="/repo/<RepoName /><Prefix />/tree/<Href />/"><Name /></a><div><a href="/repo/<RepoName />/commit/<CommitSha />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
           <For Files>
-          <span class="file"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
+          <span class="file"><a href="/repo/<RepoName /><Prefix />/blob/<Href />"><Name /></a><div><a href="/repo/<RepoName />/commit/<CommitSha />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
           <With Hidden>
           <details>
             <summary class="muted hide"><Count type="usize" /> hidden files</summary>
             <For HiddenFiles>
-            <span class="<Class />"><a href="<Href />"><Name /></a><div><a href="<CommitHref />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
+            <span class="<Class />"><a href="/repo/<RepoName /><Prefix />/<Class />/<Href />"><Name /></a><div><a href="/repo/<RepoName />/commit/<CommitSha />"><CommitTitle /></a><span><CommitTime /></span></div></span></For>
           </details>
           </With>
         </div>

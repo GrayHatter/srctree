@@ -36,11 +36,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     const commit_hex = commit_text.slice();
     const commit_hex_short = commit_hex[0..8];
 
-    const prefix = if (rd.ref) |ref|
-        try ctx.alloc.print("/repo/{s}/ref/{s}", .{ rd.name, ref })
-    else
-        try ctx.alloc.print("/repo/{s}", .{rd.name});
-
+    const prefix = if (rd.ref) |ref| try ctx.alloc.print("/ref/{s}", .{ref}) else &.{};
     const path: ?[]const u8 = if (rd.path) |p| p.path else null;
 
     var list_trees: ArrayList(S.TreeHtml.Trees) = .empty;
@@ -55,39 +51,40 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
         for (blobs) |obj| {
             for (changed) |ch| {
                 if (std.mem.eql(u8, ch.name, obj.name)) {
-                    const sha_text = ch.sha.text();
-                    const chref = try ctx.alloc.print("/repo/{s}/commit/{s}", .{ rd.name, sha_text.slice()[0..8] });
+                    const sha_text = try ch.sha.textAlloc(ctx.alloc);
                     const ctime = try ctx.alloc.print("{f}", .{Humanize.unix(ch.timestamp, now)});
-                    const href: []const u8 = switch (obj.mode) {
-                        .file, .exec => try ctx.alloc.print("{s}/blob/{s}{s}", .{ prefix, path orelse "", obj.name }),
-                        .dir, .submodule => try ctx.alloc.print("{s}/tree/{s}{s}", .{ prefix, path orelse "", obj.name }),
-                    };
+                    const href: []const u8 = try ctx.alloc.print("{s}{s}", .{ path orelse "", obj.name });
                     if (filenameIsHidden(ch.name)) {
                         try list_hidden.append(ctx.alloc, .{
                             .name = .abx(ch.name),
+                            .repo_name = .safe(rd.name),
                             .href = .abx(href),
+                            .prefix = .abx(prefix),
                             .commit_title = .abx(ch.title),
-                            .commit_href = .safe(chref),
+                            .commit_sha = .safe(sha_text[0..8]),
                             .commit_time = .safe(ctime),
-                            .class = .safe(switch (obj.data) {
-                                .blob => "file",
-                                .tree => "tree",
-                                .unloaded => "tree",
+                            .class = .safe(switch (obj.mode) {
+                                .file, .exec => "blob",
+                                .dir, .submodule => "tree",
                             }),
                         });
                     } else switch (obj.mode) {
                         .file, .exec => try list_files.append(ctx.alloc, .{
                             .name = .abx(ch.name),
+                            .repo_name = .safe(rd.name),
                             .href = .abx(href),
+                            .prefix = .abx(prefix),
                             .commit_title = .abx(ch.title),
-                            .commit_href = .safe(chref),
+                            .commit_sha = .safe(sha_text[0..14]),
                             .commit_time = .safe(ctime),
                         }),
                         .dir, .submodule => try list_trees.append(ctx.alloc, .{
                             .name = .abx(ch.name),
+                            .repo_name = .safe(rd.name),
                             .href = .abx(href),
+                            .prefix = .abx(prefix),
                             .commit_title = .abx(ch.title),
-                            .commit_href = .safe(chref),
+                            .commit_sha = .safe(sha_text[0..14]),
                             .commit_time = .safe(ctime),
                         }),
                     }

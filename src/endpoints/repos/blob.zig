@@ -50,7 +50,7 @@ fn treeOrBlobAtRef(f: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) R
         .blob => return blobHtml(f, rd, repo, files),
         .tree => {
             if (!f.uri.isDir()) {
-                const uri = try f.alloc.print("/{s}/", .{f.uri.path});
+                const uri = try f.alloc.print("{s}/", .{f.uri.path});
                 return f.redirect(uri, .permanent_redirect);
             }
             var child = files.descend(path.path[path.index..], repo, f.alloc, f.io) catch |err| {

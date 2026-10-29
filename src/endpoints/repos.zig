@@ -399,8 +399,10 @@ fn list(f: *Frame) verse.Router.Error!void {
     }
 
     const repo_buttons: ?[]const u8 = if (f.user != null and f.user.?.valid())
-        \\<div class="act-btns"><a class="btn" href="/admin/repo/clone">New Upstream Repo</a></div>
-        \\<div class="act-btns"><a class="btn" href="/admin/repo/create">New Empty Repo</a></div>
+        \\<div class="act-btns">
+        \\<a class="btn" href="/admin/repo/clone">New Upstream Repo</a>
+        \\<a class="btn" href="/admin/repo/create">New Empty Repo</a>
+        \\</div>
     else
         null;
 
