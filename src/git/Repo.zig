@@ -48,6 +48,7 @@ pub const Config = struct {
 
     pub const SrcTree = struct {
         pinned: ?bool,
+        visibility: ?bool,
         heatmapexcluded: ?bool,
         anonpushenabled: ?bool,
     };

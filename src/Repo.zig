@@ -2,6 +2,7 @@ name: ?[]const u8 = null,
 git: Git.Repo,
 pinned: bool,
 ci: Ci = .{},
+vis: ?Vis.Select = null,
 
 const Repo = @This();
 
@@ -29,6 +30,14 @@ pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
         .git = git,
         .pinned = pinned,
     };
+}
+
+pub fn initVis(name: ?[]const u8, vis: Vis.Select, rdir: Io.Dir, io: Io) !?Repo {
+    const repo: Repo = .init(name, rdir, io);
+
+    if (repo.vis) |v| if (v != vis) return null;
+
+    return repo;
 }
 
 pub fn raze(r: *Repo, a: Allocator, io: Io) void {
