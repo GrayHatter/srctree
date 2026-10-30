@@ -6,7 +6,9 @@ pub const verse_routes = [_]Route.Match{
     Route.POST("settings", settingsPost),
 };
 
-pub const verse_endpoints = verse.Endpoints(.{Repo});
+pub const verse_endpoints = verse.Endpoints(.{
+    repo,
+});
 
 const AdminPage = template.PageData("admin.html");
 
@@ -14,7 +16,7 @@ pub fn index(f: *Frame) Error!void {
     try f.requireValidUser();
     if (f.request.data.post) |pd| {
         std.debug.print("{any}\n", .{pd.items});
-        return Repo.create(f);
+        return repo.create(f);
     }
     return default(f);
 }
@@ -94,15 +96,17 @@ fn remotes(f: *Frame) Error!void {
     try f.sendPage(&page);
 }
 
-const Repo = struct {
+const repo = struct {
     pub const verse_name = .repo;
     pub const verse_routes = [_]Route.Match{
         Route.GET("clone", clone),
         Route.GET("create", create),
         Route.GET("delete", delete),
+        Route.GET("settings", repoSettings),
         Route.POST("clone", clonePost),
         Route.POST("create", createPost),
         Route.POST("delete", deletePost),
+        Route.POST("settings", repoSettingsPost),
     };
 
     fn gitCreateRepo(a: Allocator, reponame: []const u8) !void {
@@ -250,6 +254,52 @@ const Repo = struct {
         });
         try f.sendPage(&page);
     }
+
+    fn repoSettings(f: *Frame) Error!void {
+        try f.requireValidUser();
+        const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
+            &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
+        var repos: std.ArrayList(S.AdminView.RepoSettings.Repos) = .empty;
+        _ = &repos;
+
+        var itr = Repo.iterateAll(.all, f.io) catch unreachable;
+        while (itr.next(f.io)) |nex_| {
+            var next = nex_ orelse break;
+            _ = &next;
+
+            try repos.append(f.alloc, .{ .name = .abx(next.name orelse "") });
+        } else |_| {}
+
+        var page = AdminPage.init(.{
+            .meta_head = .{ .open_graph = .{} },
+            .body_header = bhdr.*,
+            .active_admin = .repo_settings,
+            .admin_view = .{
+                .repo_settings = .{ .repos = repos.items },
+            },
+        });
+        try f.sendPage(&page);
+    }
+
+    fn repoSettingsPost(f: *Frame) Error!void {
+        try f.requireValidUser();
+        const bhdr: *const S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml) orelse
+            &.{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
+
+        var repos: std.ArrayList(S.AdminView.RepoSettings.Repos) = .empty;
+        _ = &repos;
+
+        var page = AdminPage.init(.{
+            .meta_head = .{ .open_graph = .{} },
+            .body_header = bhdr.*,
+            .active_admin = .repo_settings,
+            .admin_view = .{
+                .repo_settings = .{ .repos = repos.items },
+            },
+        });
+        try f.sendPage(&page);
+    }
 };
 
 const git = @import("../git.zig");
@@ -272,3 +322,4 @@ const Error = Route.Error;
 const Router = verse.Router;
 const config_ini = &@import("../main.zig").config_ini;
 const search = @import("search.zig");
+const Repo = @import("../Repo.zig");

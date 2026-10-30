@@ -5,7 +5,7 @@
   </head>
   <body>
     <Build BodyHeader _body_header.html />
-    <content class="fw">
+    <content class="admin">
       <div class="admin-actions">
       <ul>
         <Directive type="enum" name="ActiveAdmin" text="active" />
@@ -14,6 +14,7 @@
         <li class="<ActiveAdmin enum="repo_create" />"><a href="/admin/repo/create" />Create Repo</a></li>
         <li class="<ActiveAdmin enum="repo_clone" />"><a href="/admin/repo/clone" />Clone Repo</a></li>
         <li class="<ActiveAdmin enum="repo_delete" />"><a href="/admin/repo/delete" />Delete Repo</a></li>
+        <li class="<ActiveAdmin enum="repo_settings" />"><a href="/admin/repo/settings" />Repo Settings</a></li>
       </ul>
       </div>
       <Switch AdminView><Case Default><div class="admin-content active">
@@ -52,6 +53,12 @@
       <form action="/admin/repo/delete" method="POST">
         TODO list repos
         <button name="new repo">Delete Repo</button>
+      </form>
+      </div></Case><Case RepoSettings><div class="admin-content active">
+      <form action="/admin/repo/settings" method="POST">
+        <For Repos><Name /></For>
+
+        <button name="new repo">Settings Repo</button>
       </form>
       </div></Case></Switch>
     </content>

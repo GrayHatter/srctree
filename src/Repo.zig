@@ -11,6 +11,76 @@ pub var dirs: Dirs = .{};
 pub const Agent = @import("Repo/Agent.zig");
 pub const Ci = @import("Repo/Ci.zig");
 
+pub const Visibility = enum {
+    public,
+    unlisted,
+    private,
+    secret,
+
+    pub const len = @typeInfo(Visibility).@"enum".fields.len;
+
+    pub const Select = struct {
+        public: bool = false,
+        unlisted: bool = false,
+        private: bool = false,
+        secret: bool = false,
+
+        pub const default: Select = .public_only;
+
+        pub const public_only: Select = .{ .public = true };
+        pub const unlisted_only: Select = .{ .unlisted = true };
+        pub const private_only: Select = .{ .private = true };
+        pub const secret_only: Select = .{ .secret = true };
+        pub const all: Select = .{
+            .public = true,
+            .unlisted = true,
+            .private = true,
+            .secret = true,
+        };
+
+        pub fn fromStr(str: []const u8) ?Select {
+            if (eql(u8, str, "public")) return .public_only;
+            if (eql(u8, str, "unlisted")) return .public_only;
+            if (eql(u8, str, "private")) return .private_only;
+            if (eql(u8, str, "secret")) return .secret_only;
+            return null;
+        }
+    };
+
+    pub fn isVisible(v: Visibility, target: Select) bool {
+        return switch (v) {
+            .public => target.public,
+            .unlisted => target.unlisted,
+            .private => target.private,
+            .secret => target.secret,
+        };
+    }
+
+    /// public, but use with caution, might cause side channel leakage
+    pub fn fromConfig(name: []const u8) Visibility {
+        if (global_config.repos) |crepos| {
+            if (crepos.private_repos) |hr| {
+                // if you actually use null, I hate you!
+                var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
+                while (repo_itr.next()) |r| {
+                    if (eql(u8, name, r))
+                        return .private;
+                }
+            } else if (crepos.unlisted_repos) |hr| {
+                // if you actually use null, I hate you!
+                var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
+                while (repo_itr.next()) |r| {
+                    if (eql(u8, name, r))
+                        return .unlisted;
+                }
+            }
+        }
+        return .public;
+    }
+};
+
+const Vis = Visibility;
+
 pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
     var local: [8192]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&local);
@@ -20,8 +90,10 @@ pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
     try git.loadConfig(a, io);
 
     var pinned = false;
+    var vis: ?Vis.Select = null;
     if (git.config.?.srctree) |s| {
         if (s.pinned) |p| pinned = p;
+        if (s.visibility) |v| vis = Vis.Select.fromStr(v);
     }
     git.config = null;
     git.config_ini = null;
@@ -29,6 +101,7 @@ pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
         .name = name,
         .git = git,
         .pinned = pinned,
+        .vis = vis,
     };
 }
 
@@ -36,7 +109,6 @@ pub fn initVis(name: ?[]const u8, vis: Vis.Select, rdir: Io.Dir, io: Io) !?Repo 
     const repo: Repo = .init(name, rdir, io);
 
     if (repo.vis) |v| if (v != vis) return null;
-
     return repo;
 }
 
@@ -147,61 +219,6 @@ pub const Sort = struct {
 
     const tags = @import("endpoints/repos/tags.zig");
 };
-
-pub const Visibility = enum {
-    public,
-    unlisted,
-    private,
-    secret,
-
-    pub const len = @typeInfo(Visibility).@"enum".fields.len;
-
-    pub const Select = struct {
-        pub const public_only: Select = .{ .public = true };
-        pub const unlisted_only: Select = .{ .unlisted = true };
-        pub const private_only: Select = .{ .private = true };
-        pub const secret_only: Select = .{ .secret = true };
-        pub const all: Select = .{ .public = true, .unlisted = true, .private = true, .secret = true };
-        pub const default: Select = .public_only;
-
-        public: bool = false,
-        unlisted: bool = false,
-        private: bool = false,
-        secret: bool = false,
-    };
-
-    pub fn isVisible(v: Visibility, target: Select) bool {
-        return switch (v) {
-            .public => target.public,
-            .unlisted => target.unlisted,
-            .private => target.private,
-            .secret => target.secret,
-        };
-    }
-
-    /// public, but use with caution, might cause side channel leakage
-    pub fn fromConfig(name: []const u8) Visibility {
-        if (global_config.repos) |crepos| {
-            if (crepos.private_repos) |hr| {
-                // if you actually use null, I hate you!
-                var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
-                while (repo_itr.next()) |r| {
-                    if (eql(u8, name, r))
-                        return .private;
-                }
-            } else if (crepos.unlisted_repos) |hr| {
-                // if you actually use null, I hate you!
-                var repo_itr = std.mem.tokenizeAny(u8, hr, "\x00|;, \t");
-                while (repo_itr.next()) |r| {
-                    if (eql(u8, name, r))
-                        return .unlisted;
-                }
-            }
-        }
-        return .public;
-    }
-};
-const Vis = Visibility;
 
 pub const Iterator = struct {
     dir: Io.Dir,

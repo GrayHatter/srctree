@@ -25,7 +25,7 @@ div {
 	}
 }
 h1,h2,h3 { margin: 0; }
-summary { 
+summary {
 	display: block;
 	position: sticky;
 	top: 3rem;
@@ -148,7 +148,22 @@ content {
 		display: flex;
 		flex-flow: row wrap;
 	}
-	&.diff { display: flex; justify-content: flex-start; gap: 1em; width: unset; max-width: 96%; }
+	&.diff {
+		display: flex;
+		justify-content: flex-start;
+		gap: 1em;
+		width: unset;
+		max-width: 96%;
+	}
+	&.admin {
+		display: flex;
+		justify-content: flex-start;
+		gap: 1em;
+		width: unset;
+		max-width: 96%;
+
+
+	}
 }
 buttons { display: flex; justify-content: space-between; }
 lines { display: inline-block; font-family: monospace; text-align: right; width: 50px; }
@@ -899,12 +914,24 @@ blob, gist, patch {
 	min-width: 12rem;
 	background: #aaa2;
 	height: 50vh;
+	flex: 1 1 auto;
 	ul { font-size: 120%; padding: 0; margin: 0; }
 	li { background: #aaa2; padding: 0 2px; }
 	li.active { background: #a112; }
 }
-.admin-content { display: none; textarea { min-width: 35rem; } }
-.admin-content.active { display: inline-block; background: #a112; height: 50vh; min-width: 30rem; }
+.admin-content {
+	display: none;
+	textarea {
+		min-width: 35rem;
+	}
+}
+.admin-content.active {
+	display: inline-block;
+	background: #a112;
+	height: 50vh;
+	min-width: 30rem;
+	flex: 6 1 auto;
+}
 a.cistatus {
 	&.success { color: green; }
 	&.pending { color: yellow; }
