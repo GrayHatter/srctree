@@ -69,7 +69,7 @@ details:open > summary.hide { display: none; }
 		float:left;
 	}
 }
-.muted { color: #bbb; font-family: 'Titillium Web', sans-serif; font-size: 80%; }
+muted, .muted { color: #bbb; font-family: 'Titillium Web', sans-serif; font-size: 80%; }
 .btns {
 	display: flex;
 	justify-content: flex-end;
@@ -378,10 +378,10 @@ search {
 searchresults {
 	display:block;
 	min-width 60rem;
-	flex: 1 1 auto;
+	flex: 4 1 min-content;
+	margin: 0 0 0 2.5%;
 	div {
 		display: block;
-		margin: 1rem 0;
 		text-align:left;
 		filename {
 			display: block;
@@ -441,33 +441,52 @@ searchresults {
 searchmeta {
 	display:block;
 	min-width: 15rem;
+	flex: 1 2 auto;
 	list {
 		display:block;
 		width: 100%;
 	}
 }
+row {
+	border-bottom: #777 solid 1px;
+	background: #333;
+	display: flex;
+	margin: 0 0 0.5em 0;
+	padding: 0 0.2em 1px;
+	a {
+		border-bottom: 1px solid black;
+		display: flex;
+		justify-content: space-between;
+		margin: 0 0 1px 0;
+		padding: 1px 0;
+		text-align: left;
+		width: 100%;
+		&.closed > div.main { text-decoration: line-through; }
+		&:hover { background: #ddd2; }
+	}
+	index {
+		padding: 5px;
+		display: flex;
+		flex-direction: column;
+		margin: auto 0;
+		text-align: center;
+		min-width: 2em;
+	}
+	> div { margin: 0 1%; }
+	div.main { flex-grow: 1;  width: auto; }
+	.meta {
+		min-width: 35px;
+		display: flex;
+		flex-direction: column;
+		justify-content: space-evenly;
+	}
+	.muted { margin: 0 3px 0 0 ; display: inline-block; font-size: 1rem; }
+	desc { display: block; }
+}
 deltalist {
 	margin: 1rem 2.5%;
 	display: block;
 	min-height: 50px;
-	row {
-		color: white;
-		a {
-			display: flex;
-			justify-content: space-between;
-			margin: 4px;
-			padding: 4px;
-			border-bottom: 1px solid gray;
-			text-align: left;
-			&.closed > div.main { text-decoration: line-through; }
-			&:hover { background: #ddd2; }
-		}
-		> div { margin: 0 1%; }
-		div.main { flex-grow: 1; font-size: 124%; width: auto; }
-		.meta { width: auto; min-width: 35px; display: flex; flex-direction: column; }
-		.muted { margin: 0 3px 0 0 ; display: inline-block; font-size: 1rem; }
-		desc { display: block; }
-	}
 }
 .upstream { color: #bbb; font-size: 85%; margin: 0; font-family: 'Titillium Web', sans-serif; }
 li { display: block; list-style: none; }

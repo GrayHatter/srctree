@@ -161,28 +161,28 @@ pub fn deltaResult(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Se
         else => try a.print("/repo/{s}/issue", .{d.repo}),
     };
 
-    const meta: ?S.SearchFlavor.Delta.DeltaMeta = switch (d.attach) {
-        .issue => .{ .repo = .abx(d.repo), .flavor = .safe("issue") },
-        .diff => .{ .repo = .abx(d.repo), .flavor = .safe("diff") },
-        .remote => .{
-            .repo = .abx(d.repo),
-            .flavor = .safe(try a.print("Tracking remote issue from {f}", .{
-                abx.Html{ .text = d.attach_remote },
-            })),
-        },
-        else => null,
+    const flavor: []const u8 = switch (d.attach) {
+        .diff => "diff",
+        .issue, .remote => "issue",
+        else => "ukn",
     };
 
     // TODO implement seen
     return .{
         .index = .safe(try a.print("{x}", .{d.index})),
+        .flavor = .safe(flavor),
         .uri_base = .abx(uri),
         .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
         .comment_count = comments.count,
         .view_count = d.viewers.liveCount(io),
         .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
         .desc = .safe(if (msg.len == 0) "&nbsp;" else try a.print("{f}", .{abx.Html{ .text = msg }})),
-        .delta_meta = meta,
+        .delta_meta = switch (d.attach) {
+            .issue => .{ .repo = .abx(d.repo) },
+            .diff => .{ .repo = .abx(d.repo) },
+            .remote => .{ .repo = .abx(d.repo) },
+            else => null,
+        },
         .comment = .safe(svg.Icon.slice(if (comments.new) .comment else .comment_new, .{})),
         .viewers = .safe(svg.Icon.slice(.eye, .{})),
     };
