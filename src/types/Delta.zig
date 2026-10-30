@@ -165,7 +165,12 @@ pub fn setOpen(delta: *Delta, c: Comment, a: Allocator, io: Io) !Message {
     return m;
 }
 
-pub const CommentsMeta = struct { count: usize, new: bool };
+pub const CommentsMeta = struct {
+    count: usize,
+    new: bool,
+
+    pub const zero: CommentsMeta = .{ .count = 0, .new = false };
+};
 
 pub fn countComments(delta: Delta, io: Io) CommentsMeta {
     const thread = delta.thread orelse return .{ .count = 0, .new = false };
@@ -204,13 +209,19 @@ pub fn attached(d: *const Delta, a: Allocator, io: Io) !Attached {
 }
 
 pub const Iterator = struct {
+    fd: Io.Dir,
     dir: Io.Dir.Iterator,
 
     pub fn init(io: Io) Iterator {
         const dir: Io.Dir = types.iterableDir(.deltas, io) catch unreachable;
         return .{
+            .fd = dir,
             .dir = dir.iterate(),
         };
+    }
+
+    pub fn raze(itr: *const Iterator, io: Io) void {
+        itr.fd.close(io);
     }
 
     pub fn next(self: *Iterator, a: Allocator, io: Io) ?Search.Hit {
@@ -224,7 +235,11 @@ pub const Iterator = struct {
     }
 };
 
-pub const RepoIterator = Search.RepoDeltaIterator(Index);
+fn searchWrap(delta: Delta) Search.Hit.Result {
+    return .{ .delta = delta };
+}
+
+pub const RepoIterator = Search.RepoTypeIterator(Delta, Index, searchWrap);
 pub const SearchIterator = Search.Iterator(Iterator);
 pub const RepoSearchIterator = Search.Iterator(RepoIterator);
 

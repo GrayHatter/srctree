@@ -3,6 +3,8 @@ string: []const u8,
 rules: ArrayList(Rule),
 repos: ArrayList(Repo),
 hits: ArrayList(Hit),
+// Unstable API
+only: ?Magic.Only = null,
 
 const Search = @This();
 
@@ -62,10 +64,6 @@ pub const Hit = struct {
             line: u32,
             code: []const u8,
         };
-
-        pub const Data = struct {
-            _: void,
-        };
     };
 };
 
@@ -108,12 +106,6 @@ pub const Rule = struct {
         .invert = false,
     };
 
-    pub fn text(txt: []const u8) Rule {
-        return .{
-            .rule = .{ .raw = txt },
-        };
-    }
-
     pub fn is(str: []const u8, invert: bool) Rule {
         if (eql(u8, str, "open")) {
             return .{ .rule = .{ .is = .open } };
@@ -125,18 +117,27 @@ pub const Rule = struct {
         };
     }
 
-    pub fn repo(str: []const u8, invert: bool) Rule {
-        return .{
-            .rule = .{ .repo = str },
-            .invert = invert,
-        };
+    pub fn only(str: []const u8, inv: bool) Rule {
+        const E = @typeInfo(Magic.Only).@"enum";
+        inline for (E.field_names, E.field_values) |name, val| {
+            if (eql(u8, name, str)) return .{
+                .rule = .{ .only = @fromBackingInt(val) },
+                .invert = inv,
+            };
+        } else return .text(str, inv);
     }
 
-    pub fn owner(str: []const u8, invert: bool) Rule {
-        return .{
-            .rule = .{ .owner = str },
-            .invert = invert,
-        };
+    pub fn owner(str: []const u8, inv: bool) Rule {
+        return .{ .rule = .{ .owner = str }, .invert = inv };
+    }
+
+    // raw
+    pub fn text(txt: []const u8, inv: bool) Rule {
+        return .{ .rule = .{ .raw = txt }, .invert = inv };
+    }
+
+    pub fn repo(str: []const u8, inv: bool) Rule {
+        return .{ .rule = .{ .repo = str }, .invert = inv };
     }
 
     /// TODO(robinlinden) squote & dquote support
@@ -147,27 +148,25 @@ pub const Rule = struct {
         if (invert) s = s[1..];
 
         if (find(u8, s, ":")) |i| {
-            if (i == 0) return .text(s);
+            if (i == 0) return .text(s, invert);
             const match = s[i + 1 ..];
             const pre: []const u8 = s[0..i];
             if (eql(u8, pre, "is")) {
                 return .is(match, invert);
+            } else if (eql(u8, pre, "only")) {
+                return .only(match, invert);
             } else if (eql(u8, pre, "repo")) {
                 return .repo(match, invert);
             } else if (eql(u8, pre, "owner")) {
                 return .owner(match, invert);
-            } else {
-                return .{
-                    .rule = .{ .target = .{ .tag = pre, .text = match } },
-                    .invert = invert,
-                };
-            }
-        } else {
-            return .{
-                .rule = .{ .raw = s },
+            } else return .{
+                .rule = .{ .target = .{ .tag = pre, .text = match } },
                 .invert = invert,
             };
-        }
+        } else return .{
+            .rule = .{ .raw = s },
+            .invert = invert,
+        };
     }
 
     test parse {
@@ -258,15 +257,6 @@ pub fn Iterator(Itr: type) type {
         rules: []const Rule,
         // TODO better ABI
         iterable: Itr,
-        data: Data = .empty,
-
-        pub const Data = struct {
-            user: []const u8,
-
-            pub const empty: Data = .{
-                .user = &.{},
-            };
-        };
 
         const Self = @This();
 
@@ -281,36 +271,46 @@ pub fn Iterator(Itr: type) type {
 
         pub fn next(self: *Self, a: Allocator, io: Io) ?Hit {
             const current: Hit = self.iterable.next(a, io) orelse return null;
-            if (self.evalRules(current.result)) {
+            if (self.evalRules(&current.result)) {
                 return current;
             }
             return self.next(a, io);
         }
 
-        fn evalRules(self: Self, target: Hit.Result) bool {
-            for (self.rules) |r| {
-                if (self.eval(r.rule, target)) {
-                    if (r.invert) return false;
-                } else if (!r.invert) return false;
+        fn evalRules(self: Self, target: *const Hit.Result) bool {
+            log.debug("evalrules {} rules", .{self.rules.len});
+            for (self.rules, 0..) |r, i| {
+                const pass: bool = self.eval(r.rule, target);
+                log.debug(
+                    "    rule {d: >3}[{f}] {c}{}",
+                    .{ i, r.rule, if (r.invert) '!' else @as(u8, ' '), pass },
+                );
+                if (!pass) {
+                    if (r.invert) continue else return false;
+                } else continue;
             }
+            log.debug("evalrules pass", .{});
             return true;
         }
 
         /// TODO: I think this function might overrun for some inputs
         /// TODO: add support for int types
-        fn eval(self: Self, rule: Rule.Query, target: Hit.Result) bool {
-            log.debug("eval rule [{any}]", .{rule});
+        fn eval(self: Self, rule: Rule.Query, target: *const Hit.Result) bool {
             switch (rule) {
+                .is => |is| switch (is) {
+                    .open => return target.delta.state.isOpen(),
+                    .closed => return target.delta.state.closed,
+                },
                 .only => |only| switch (only) {
                     .diffs => {
                         log.debug("     rule is diff", .{});
-                        if (target != .delta) return false;
+                        if (target.* != .delta) return false;
                         if (target.delta.attach == .diff) return true;
                         return false;
                     },
                     .issues => {
-                        if (target != .delta) return false;
                         log.debug("     rule is issue", .{});
+                        if (target.* != .delta) return false;
                         if (target.delta.attach == .issue) return true;
                         // TODO better hack
                         if (target.delta.attach == .remote) return true;
@@ -322,31 +322,6 @@ pub fn Iterator(Itr: type) type {
                     .repos => return false,
                     .files => return false,
                 },
-                .is => |is| switch (is) {
-                    .open => return target.delta.state.isOpen(),
-                    .closed => return target.delta.state.closed,
-                },
-                .repo => |trepo| switch (target) {
-                    .repo => return eql(u8, target.repo.name orelse return false, trepo),
-                    .delta => return eql(u8, target.delta.repo, trepo),
-                    else => return false,
-                },
-                .target => |trgt| inline for (comptime std.meta.fieldNames(Hit.Result)) |name| {
-                    if (eql(u8, trgt.tag, name)) {
-                        if (@TypeOf(@field(target, name)) == []const u8) {
-                            if (find(u8, @field(target, name), trgt.text)) |_| {
-                                return true;
-                            }
-                        }
-                    }
-                } else return false,
-                .raw => |any| inline for (comptime std.meta.fieldNames(Hit.Result)) |name| {
-                    if (@TypeOf(@field(target, name)) == []const u8) {
-                        if (find(u8, @field(target, name), any)) |_| {
-                            return true;
-                        }
-                    }
-                } else return false,
                 .owner => |owner| if (@hasField(Hit.Result, "owner")) {
                     log.debug("     rule owner '{s}' '{s}'", .{ owner, self.data.user });
                     if (eql(u8, owner, "me") and eql(u8, self.data.user, target.owner))
@@ -357,16 +332,34 @@ pub fn Iterator(Itr: type) type {
                     log.debug("     " ++ @typeName(Hit.Result) ++ " has no owner [default true]", .{});
                     return true;
                 },
+                .raw => |any| inline for (comptime std.meta.fieldNames(Hit.Result)) |name| {
+                    if (@TypeOf(@field(target, name)) == []const u8) {
+                        if (find(u8, @field(target, name), any)) |_| {
+                            return true;
+                        }
+                    }
+                } else return false,
+                // null repos can't reach here anymore
+                .repo => return true,
+                .target => |trgt| inline for (comptime std.meta.fieldNames(Hit.Result)) |name| {
+                    if (eql(u8, trgt.tag, name)) {
+                        if (@TypeOf(@field(target, name)) == []const u8) {
+                            if (find(u8, @field(target, name), trgt.text)) |_| {
+                                return true;
+                            }
+                        }
+                    }
+                } else return false,
             }
         }
 
-        pub fn raze(_: Self) void {
-            comptime unreachable;
+        pub fn raze(s: Self, io: Io) void {
+            s.iterable.raze(io);
         }
     };
 }
 
-pub fn RepoDeltaIterator(Indexer: type) type {
+pub fn RepoTypeIterator(Type: type, Indexer: type, wrap: fn (Type) Hit.Result) type {
     return struct {
         index: usize = 0,
         repo: []const u8,
@@ -381,12 +374,12 @@ pub fn RepoDeltaIterator(Indexer: type) type {
             };
         }
 
+        pub fn raze(_: *const Self, _: Io) void {}
+
         pub fn next(self: *Self, a: Allocator, io: Io) ?Hit {
             while (self.index > 0) {
                 defer self.index -|= 1;
-                return .{ .result = .{
-                    .delta = Delta.open(self.repo, self.index, a, io) catch continue,
-                } };
+                return .{ .result = wrap(Type.open(self.repo, self.index, a, io) catch continue) };
             }
             return null;
         }
@@ -397,11 +390,21 @@ pub fn init(str: []const u8, a: Allocator) !Search {
     var rules: ArrayList(Rule) = .empty;
     var itr = splitScalar(u8, str, ' ');
     while (itr.next()) |r_line| {
-        var line = r_line;
-        line = trim(u8, line, " ");
+        const line = trim(u8, r_line, " ");
         if (line.len == 0) continue;
         try rules.append(a, .parse(line));
     }
+
+    var only: ?Magic.Only = null;
+    for (rules.items) |rule| switch (rule.rule) {
+        .only => |o| if (only) |_| {
+            return error.InvalidSearch;
+        } else {
+            only = o;
+        },
+        else => {},
+    };
+
     return .{
         .alloc = a,
         .string = str,
@@ -411,10 +414,55 @@ pub fn init(str: []const u8, a: Allocator) !Search {
     };
 }
 
-pub fn raze(search: *Search) void {
+pub fn raze(search: *Search, io: Io) void {
+    for (search.repos.items) |*rep| rep.raze(search.alloc, io);
     search.repos.deinit(search.alloc);
     search.rules.deinit(search.alloc);
     search.hits.deinit(search.alloc);
+}
+
+pub fn searchAll(search: *Search, io: Io) !void {
+    try search.populateRepos(io);
+    try search.searchDeltas(io);
+}
+
+fn populateRepos(search: *Search, io: Io) !void {
+    for (search.rules.items) |r| switch (r.rule) {
+        .repo => |name| {
+            if (r.invert) continue;
+            // TODO !.public_only
+            var repo = (Repo.open(name, .public_only, io) catch continue) orelse continue;
+            repo.name = search.alloc.dupe(u8, name) catch null;
+            try search.repos.append(search.alloc, repo);
+        },
+        else => continue,
+    };
+
+    if (search.repos.items.len > 0) return;
+    var repo_iter = Repo.allRepoIterator(.public_only, io) catch return;
+
+    while (repo_iter.next(io) catch return error.Unknown) |rep_| {
+        var repo = rep_;
+        if (!repo.pinned) {
+            repo.raze(search.alloc, io);
+            continue;
+        }
+        repo.name = search.alloc.dupe(u8, repo_iter.current_name.?) catch null;
+        try search.repos.append(search.alloc, repo);
+    }
+}
+
+pub fn searchDeltas(search: *Search, io: Io) !void {
+    for (search.repos.items) |*repo| {
+        log.debug("search delta in {s}", .{repo.name.?});
+        var itr = Delta.searchRepo(repo.name.?, search.rules.items, io);
+        defer itr.raze(io);
+        while (itr.nextDelta(search.alloc, io)) |delta| {
+            log.debug("delta {}", .{delta.index});
+            if (delta.state.embargoed) continue;
+            try search.appendHit(.{ .result = .{ .delta = delta } });
+        }
+    }
 }
 
 pub fn reposFor(rules: *const Search) ![]S.SearchHtml.SearchResults {
@@ -473,7 +521,7 @@ fn appendHit(search: *Search, hit: Hit) !void {
 
 const extra_lines: usize = 6;
 
-pub fn files(
+pub fn searchFiles(
     search: *Search,
     repo: *Repo,
     io: Io,
@@ -531,7 +579,7 @@ test Search {
     _ = &std.testing.refAllDecls(Search);
 
     var search: Search = try .init("repo:srctree owner:grayhatter verse", std.testing.allocator);
-    defer search.raze();
+    defer search.raze(std.testing.io);
 
     try std.testing.expectEqualDeep(Search{
         .alloc = std.testing.allocator,
@@ -549,7 +597,7 @@ test Search {
         .hits = .empty,
     }, search);
 
-    search.raze();
+    search.raze(std.testing.io);
     search = try .init("srctree", std.testing.allocator);
     try std.testing.expectEqualDeep(Search{
         .alloc = std.testing.allocator,

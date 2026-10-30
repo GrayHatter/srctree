@@ -46,6 +46,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
             .files = files,
             .deltas = &.{},
         },
+        .error_string = null,
     });
 
     return f.sendPage(&page);

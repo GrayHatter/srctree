@@ -2,7 +2,10 @@ pub const verse_name = .search;
 
 pub const verse_aliases = .{.inbox};
 
-pub const verse_routes = [_]Routes.Match{ ROUTE("search", index), ROUTE("inbox", inbox) };
+pub const verse_routes = [_]Routes.Match{
+    ROUTE("search", index),
+    ROUTE("inbox", inbox),
+};
 
 const SearchHtml = T.PageData("search.html");
 
@@ -23,7 +26,7 @@ pub fn inboxCount(user: ?verse.Auth.User, a: Allocator, io: Io) usize {
 
     if (Search.init(search_str, a)) |search| {
         var search_results = Delta.searchAll(search.rules.items, io);
-        search_results.data = if (user) |usr| .{ .user = usr.username orelse &.{} } else .empty;
+        defer search_results.raze(io);
         while (search_results.nextDelta(a, io)) |dlt| {
             inbox_count +|= 1;
             dlt.raze(a);
@@ -52,41 +55,39 @@ pub fn index(f: *Frame) Error!void {
     };
 
     // FIXME
-    var rules: ArrayList(Search.Rule) = .empty;
-    _ = &rules;
     //const rules = try genRules(query_str, f.alloc);
-    for (rules.items) |rule| switch (rule.rule) {
-        .repo => |repo| {
-            if (Repo.exists(repo, .public_only, f.io)) {}
-            var buf: [4096]u8 = undefined;
-            for (rules.items) |rl| switch (rl.rule) {
-                .only => |only| switch (only) {
-                    .issues => {
-                        const loc = try std.fmt.bufPrint(
-                            &buf,
-                            "/repo/{s}/issues/search?q={f}",
-                            .{ repo, Fmt{ .data = rules.items } },
-                        );
-                        f.redirect(loc, .found) catch unreachable;
-                    },
-                    .diffs => {
-                        const loc = try std.fmt.bufPrint(
-                            &buf,
-                            "/repo/{s}/diffs/search?q={f}",
-                            .{ repo, Fmt{ .data = rules.items } },
-                        );
-                        f.redirect(loc, .found) catch unreachable;
-                    },
-                    .deltas => {},
-                    .commits => {},
-                    .repos => {},
-                    .files => {},
-                },
-                else => {},
-            };
-        },
-        else => continue,
-    };
+    //for (rules.items) |rule| switch (rule.rule) {
+    //    .repo => |repo| {
+    //        if (Repo.exists(repo, .public_only, f.io)) {}
+    //        var buf: [4096]u8 = undefined;
+    //        for (rules.items) |rl| switch (rl.rule) {
+    //            .only => |only| switch (only) {
+    //                .issues => {
+    //                    const loc = try std.fmt.bufPrint(
+    //                        &buf,
+    //                        "/repo/{s}/issues/search?q={f}",
+    //                        .{ repo, Fmt{ .data = rules.items } },
+    //                    );
+    //                    f.redirect(loc, .found) catch unreachable;
+    //                },
+    //                .diffs => {
+    //                    const loc = try std.fmt.bufPrint(
+    //                        &buf,
+    //                        "/repo/{s}/diffs/search?q={f}",
+    //                        .{ repo, Fmt{ .data = rules.items } },
+    //                    );
+    //                    f.redirect(loc, .found) catch unreachable;
+    //                },
+    //                .deltas => {},
+    //                .commits => {},
+    //                .repos => {},
+    //                .files => {},
+    //            },
+    //            else => {},
+    //        };
+    //    },
+    //    else => continue,
+    //};
 
     return custom(f, query_str);
 }
@@ -110,12 +111,13 @@ fn fmtRules(rules: []const Search.Rule, w: *std.Io.Writer) !void {
     };
 }
 
-fn notImplemented(f: *Frame, search_str: []const u8) Error!void {
+fn errorPage(f: *Frame, search_str: []const u8, err: []const u8) Error!void {
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .inbox_count = inboxCount(f.user, f.alloc, f.io) },
         .count_files = 0,
         .search = .abx(search_str),
+        .error_string = .{ .string = .safe(err) },
         .search_results = &.{},
         .search_meta = .{
             .repos = &.{},
@@ -128,46 +130,49 @@ fn notImplemented(f: *Frame, search_str: []const u8) Error!void {
     return f.sendPage(&page);
 }
 
-fn custom(f: *Frame, search_str: []const u8) Error!void {
-    const search: Search = try .init(search_str, f.alloc);
+fn custom(f: *Frame, query_str: []const u8) Error!void {
+    const icount = inboxCount(f.user, f.alloc, f.io);
+
+    var search: Search = Search.init(query_str, f.alloc) catch
+        return errorPage(f, query_str, "Bad Search Terms");
+    defer search.raze(f.io);
     for (search.rules.items) |rule| log.warn("rule = {f}", .{rule});
 
-    var itr = Delta.searchAll(search.rules.items, f.io);
-    _ = &itr;
+    search.searchAll(f.io) catch return error.ServerFault;
+    log.err("repos = {}", .{search.repos.items.len});
+    log.err("hits = {}", .{search.hits.items.len});
 
-    const repos = try search.reposFor();
-    //const commits = try search.commits();
-    //const files = try search.files(undefined, f.alloc, f.io, 10);
-    //const deltas = try search.deltas();
-    _ = repos;
-    //_ = commits;
-    //_ = deltas;
+    //const repos   : ArrayList(S) = .empty;
+    //const commits : ArrayList(S) = .empty;
+    //const files   : ArrayList(S) = .empty;
+    //const deltas  : ArrayList(S) = .empty;
 
-    const results: []const S.SearchHtml.SearchResults = &[_]S.SearchHtml.SearchResults{
-        .{ .search_flavor = .{ .repo = .{ .name = .safe("srctree") } } },
+    var results: ArrayList(S.SearchHtml.SearchResults) = .empty;
+
+    for (search.hits.items) |hit| switch (hit.result) {
+        .repo => |repo| try results.append(f.alloc, .{ .search_flavor = .{
+            .repo = .{ .name = .safe(repo.name.?) },
+        } }),
+        .delta => |d| try results.append(f.alloc, .{
+            .search_flavor = .{ .delta = delta_endpoint.deltaResult(d, .zero, search.alloc, f.io) catch continue },
+        }),
+        .commit => {},
+        .file => {},
     };
 
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .inbox_count = inboxCount(f.user, f.alloc, f.io) },
-        //.repo_header = .{
-        //    .repo_name = .abx(rd.name),
-        //    .description = .abx(try f.alloc.dupe(u8, repo.description(f.alloc, f.io) catch "")),
-        //    .blame = null,
-        //    .git_uri = null,
-        //    .upstream = null,
-        //    .issue_count = dcount.issue,
-        //    .diff_count = dcount.diff,
-        //},
+        .body_header = .{ .inbox_count = icount },
         .count_files = 0,
-        .search = .abx(search_str),
-        .search_results = results,
+        .search = .abx(query_str),
+        .search_results = results.items,
         .search_meta = .{
             .repos = &.{},
             .files = &.{},
             .deltas = &.{},
             .commits = &.{},
         },
+        .error_string = null,
     });
 
     return f.sendPage(&page);
@@ -193,6 +198,7 @@ const ROUTE = Routes.ROUTE;
 const T = verse.template;
 const S = T.Structs;
 
+const delta_endpoint = @import("delta.zig");
 const Repo = @import("../Repo.zig");
 const Delta = @import("../types.zig").Delta;
 const Search = @import("../Search.zig");

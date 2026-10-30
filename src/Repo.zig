@@ -11,17 +11,19 @@ pub const Agent = @import("Repo/Agent.zig");
 pub const Ci = @import("Repo/Ci.zig");
 
 pub fn init(name: ?[]const u8, rdir: Io.Dir, io: Io) !Repo {
-    var git = try Git.Repo.init(rdir, io);
     var local: [8192]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&local);
-    try git.loadConfig(fba.allocator(), io);
-    defer git.config = null;
-    defer git.config_ini = null;
+    const a = fba.allocator();
+    var git = try Git.Repo.init(rdir, io);
+    errdefer git.raze(a, io);
+    try git.loadConfig(a, io);
 
     var pinned = false;
     if (git.config.?.srctree) |s| {
         if (s.pinned) |p| pinned = p;
     }
+    git.config = null;
+    git.config_ini = null;
     return .{
         .name = name,
         .git = git,
