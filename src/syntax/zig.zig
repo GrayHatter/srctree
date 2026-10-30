@@ -2,6 +2,11 @@ pub fn highlight(text: [:0]const u8, out: *Writer, a: Allocator) !void {
     const ast = try std.zig.Ast.parse(a, text, .{});
     const start_token: u32 = ast.firstToken(.root);
     const end_token = ast.lastToken(.root) + 1;
+    log.debug("start: '{any}' end '{any}'", .{ start_token, end_token });
+    // Hack for linewise comments (probably expects trimmed whitespace)
+    if (start_token == 0 and end_token == 1 and text.len > 3) {
+        try wrap("c1", text, out);
+    }
     var cursor: usize = ast.tokenStart(start_token);
     var indent: usize = 0;
     if (findLast(u8, ast.source[0..cursor], "\n")) |newline_index| {

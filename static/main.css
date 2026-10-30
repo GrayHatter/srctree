@@ -217,7 +217,6 @@ ln {
 		margin: 0 0.5em 0 0;
 	}
 	&:target { background-color: #222;  }
-	&:empty { width: auto; }
 	&.add { background: #346; }
 	&.del { background: #633; }
 	&.nul { background: #2228; height: 1em; margin: 0 2px; }

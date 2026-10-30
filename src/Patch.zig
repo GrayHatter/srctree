@@ -59,7 +59,7 @@ pub const Inlined = struct {
         var fnum_b: [10]u8 = undefined;
         var fnum: []const u8 = &.{};
         if (inl.file_idx > 0)
-            fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx}) catch unreachable;
+            fnum = try std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx});
 
         var line_b: [0x200]u8 = undefined;
         var write_b: [0x200]u8 = undefined;
@@ -74,12 +74,17 @@ pub const Inlined = struct {
                     // use raw.text to cover writer.len
                     std.debug.assert(raw.text.len < line_b.len);
                     const text = std.mem.trimStart(u8, raw.text, " \t\n");
+                    if (text.len == 0) {
+                        try writer.writeByte('\n');
+                        try fmtLine(line, fnum, w);
+                        continue;
+                    }
                     @memcpy(line_b[0..text.len], text);
                     line_b[text.len] = 0;
                     const input: [:0]u8 = line_b[0..text.len :0];
-                    for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
+                    for (0..raw.text.len - text.len) |_| try writer.writeByte(' ');
                     syntax.zig.highlight(input, &writer, a) catch {
-                        writer.writeAll(input) catch unreachable;
+                        try writer.writeAll(input);
                     };
                     raw.text = writer.buffered();
                     raw.clean = true;
@@ -93,7 +98,7 @@ pub const Inlined = struct {
         var fnum_b: [10]u8 = undefined;
         var fnum: []const u8 = &.{};
         if (inl.file_idx > 0)
-            fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx}) catch unreachable;
+            fnum = try std.fmt.bufPrint(&fnum_b, "F{d}", .{inl.file_idx});
 
         for (inl.lines) |line|
             try fmtLine(line, fnum, w);
@@ -162,7 +167,7 @@ pub const Split = struct {
             var fnum_b: [10]u8 = undefined;
             var fnum: []const u8 = &.{};
             if (split.file_idx > 0)
-                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+                fnum = try std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx});
 
             var line_b: [0x200]u8 = undefined;
             var write_b: [0x200]u8 = undefined;
@@ -177,12 +182,17 @@ pub const Split = struct {
                         // use raw.text to cover writer.len
                         std.debug.assert(raw.text.len < line_b.len);
                         const text = std.mem.trimStart(u8, raw.text, " \t\n");
+                        if (text.len == 0) {
+                            try writer.writeByte('\n');
+                            try fmtLine(line, fnum, w);
+                            continue;
+                        }
                         @memcpy(line_b[0..text.len], text);
                         line_b[text.len] = 0;
                         const input: [:0]u8 = line_b[0..text.len :0];
-                        for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
+                        for (0..raw.text.len - text.len) |_| try writer.writeByte(' ');
                         syntax.zig.highlight(input, &writer, a) catch {
-                            writer.writeAll(input) catch unreachable;
+                            try writer.writeAll(input);
                         };
                         raw.text = writer.buffered();
                         raw.clean = true;
@@ -196,7 +206,7 @@ pub const Split = struct {
             var fnum_b: [10]u8 = undefined;
             var fnum: []const u8 = &.{};
             if (split.file_idx > 0)
-                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+                fnum = try std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx});
 
             for (split.left) |left|
                 try fmtLine(left, fnum, w);
@@ -223,7 +233,7 @@ pub const Split = struct {
             var fnum_b: [10]u8 = undefined;
             var fnum: []const u8 = &.{};
             if (split.file_idx > 0)
-                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+                fnum = try std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx});
 
             var line_b: [0x200]u8 = undefined;
             var write_b: [0x200]u8 = undefined;
@@ -238,12 +248,17 @@ pub const Split = struct {
                         // use raw.text to cover writer.len
                         std.debug.assert(raw.text.len < line_b.len);
                         const text = std.mem.trimStart(u8, raw.text, " \t\n");
+                        if (text.len == 0) {
+                            try writer.writeByte('\n');
+                            try fmtLine(line, fnum, w);
+                            continue;
+                        }
                         @memcpy(line_b[0..text.len], text);
                         line_b[text.len] = 0;
                         const input: [:0]u8 = line_b[0..text.len :0];
-                        for (0..raw.text.len - text.len) |_| writer.writeByte(' ') catch unreachable;
+                        for (0..raw.text.len - text.len) |_| try writer.writeByte(' ');
                         syntax.zig.highlight(input, &writer, a) catch {
-                            writer.writeAll(input) catch unreachable;
+                            try writer.writeAll(input);
                         };
                         raw.text = writer.buffered();
                         raw.clean = true;
@@ -257,7 +272,7 @@ pub const Split = struct {
             var fnum_b: [10]u8 = undefined;
             var fnum: []const u8 = &.{};
             if (split.file_idx > 0)
-                fnum = std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx}) catch unreachable;
+                fnum = try std.fmt.bufPrint(&fnum_b, "F{d}", .{split.file_idx});
 
             for (split.right) |right|
                 try fmtLine(right, fnum, w);
