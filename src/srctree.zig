@@ -203,6 +203,7 @@ fn trafficFilter(fr: *Frame) ?BuildFn {
     }
 
     if (fr.request.user_agent) |*ua| {
+        if (find(u8, ua.string, "DXXSearch")) |_| return dropRequest(fr, "dxx crap");
         return switch (ua.agent) {
             .bot => botRequest(fr, ua),
             .browser => browserRequest(fr, ua),
@@ -307,6 +308,8 @@ const robots_txt = verse.Robots.robotsTxt(&.{
     .{ .name = "Keenable-User", .allow = false }, // Ignores robots.txt
     .{ .name = "CCBot", .allow = false }, // One day I'll learn to not assume good faith
     .{ .name = "KeenableBot", .allow = false }, // We can talk after you fix your site
+    //
+    .{ .name = "DXXSearch", .allow = false }, // if you run a bot like this, eat a dick!
 },
     // you can blame bingbot for ref/*/(tree|blob)
     .{ .extra_rules =
