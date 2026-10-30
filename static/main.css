@@ -25,7 +25,11 @@ div {
 	}
 }
 h1,h2,h3 { margin: 0; }
-summary { display: block; }
+summary { 
+	display: block;
+	position: sticky;
+	top: 3rem;
+}
 hint {
 	color: #bbb;
 	font-family: 'Titillium Web', sans-serif;
