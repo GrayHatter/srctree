@@ -123,7 +123,8 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
     const real_ua = ua.validate(f.request);
     if ((botdetect.score >= 1 or (real_ua.agent == .bot and
         real_ua.agent.bot.name == .other_malicious)) and
-        ua.agent.browser.version != 128)
+        ua.agent.browser.version != 128 and
+        !eql(u8, f.request.remote_addr, "127.0.0.1"))
     {
         return dropRequest(f, "Malicious score");
     }
