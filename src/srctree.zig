@@ -39,12 +39,12 @@ fn dropRequest(f: *Frame, comptime reason: []const u8) BuildFn {
     log.err("Dropping traffic: " ++ reason, .{});
     if (global_config.server) |srv| {
         if (srv.debug_blocked_traffic) {
-            f.dumpDebugData(.{});
+            f.dumpDebugData(.verbose);
             if (f.request.user_agent) |ua|
                 ua.dumpValidation(f.request);
         }
     } else {
-        f.dumpDebugData(.{});
+        f.dumpDebugData(.verbose);
         if (f.request.user_agent) |ua|
             ua.dumpValidation(f.request);
     }
@@ -78,7 +78,7 @@ inline fn botRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
         else => {
             if (global_config.server) |srv| {
                 if (srv.debug_blocked_traffic)
-                    f.dumpDebugData(.{});
+                    f.dumpDebugData(.verbose);
             }
 
             const ua_str = f.request.user_agent.?.string;
@@ -181,12 +181,12 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
             return dropRequest(f, "banned User agent");
     }
 
-    f.dumpDebugData(.{});
+    f.dumpDebugData(.verbose);
     return null;
 }
 
 inline fn scriptRequest(f: *Frame, _: *const verse.Request.UserAgent) ?BuildFn {
-    f.dumpDebugData(.{});
+    f.dumpDebugData(.verbose);
     return null;
 }
 
@@ -198,7 +198,7 @@ fn trafficFilter(fr: *Frame) ?BuildFn {
     if (fr.user != null) return null;
 
     if (eql(u8, fr.uri.path, "/robots.txt") or eql(u8, fr.uri.path, "robots.txt")) {
-        fr.dumpDebugData(.{});
+        fr.dumpDebugData(.verbose);
         return null;
     }
 
@@ -216,7 +216,7 @@ fn trafficFilter(fr: *Frame) ?BuildFn {
     }
 
     log.err("No User agent for request\n\n\n\n", .{});
-    fr.dumpDebugData(.{});
+    fr.dumpDebugData(.verbose);
     return null;
 }
 
@@ -264,7 +264,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
         error.DataMissing,
         => {
             std.debug.print("Abuse {} because {}\n", .{ fr.request, err });
-            fr.dumpDebugData(.{});
+            fr.dumpDebugData(.verbose);
             if (fr.request.data.post) |post_data| {
                 std.debug.print("post data => '''{s}'''\n", .{post_data.source});
             }

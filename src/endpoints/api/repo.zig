@@ -41,17 +41,17 @@ pub fn repo(ctx: *API.verse.Frame) API.Router.Error!void {
     var gitrepo = openRepo(req.name, ctx.alloc, ctx.io) catch |err| switch (err) {
         error.InvalidName => return error.Abuse,
         error.FileNotFound => {
-            return try ctx.sendJSON(.not_found, [0]Repo{});
+            return try ctx.sendJson(.not_found, [0]Repo{});
         },
         else => {
-            return try ctx.sendJSON(.service_unavailable, [0]Repo{});
+            return try ctx.sendJson(.service_unavailable, [0]Repo{});
         },
     };
     defer gitrepo.raze(ctx.alloc, ctx.io);
 
     const head = (gitrepo.HEAD(ctx.alloc, ctx.io) catch return error.Unknown).sha;
 
-    return try ctx.sendJSON(.ok, [1]Repo{.{
+    return try ctx.sendJson(.ok, [1]Repo{.{
         .name = req.name,
         .head = head.text().sha1[0..], // TODO FIXME
         .updated = "undefined",
@@ -74,10 +74,10 @@ pub fn repoBranches(ctx: *API.verse.Frame) API.Router.Error!void {
     var gitrepo = openRepo(req.name, ctx.alloc, ctx.io) catch |err| switch (err) {
         error.InvalidName => return error.Abuse,
         error.FileNotFound => {
-            return try ctx.sendJSON(.not_found, [0]RepoBranches{});
+            return try ctx.sendJson(.not_found, [0]RepoBranches{});
         },
         else => {
-            return try ctx.sendJSON(.service_unavailable, [0]RepoBranches{});
+            return try ctx.sendJson(.service_unavailable, [0]RepoBranches{});
         },
     };
     defer gitrepo.raze(ctx.alloc, ctx.io);
@@ -92,7 +92,7 @@ pub fn repoBranches(ctx: *API.verse.Frame) API.Router.Error!void {
         }
     }
 
-    return try ctx.sendJSON(.ok, [1]RepoBranches{.{
+    return try ctx.sendJson(.ok, [1]RepoBranches{.{
         .name = req.name,
         .updated = "undefined",
         .branches = branches.items[0..],
@@ -111,10 +111,10 @@ pub fn repoTags(ctx: *API.verse.Frame) API.Router.Error!void {
     var gitrepo = openRepo(req.name, ctx.alloc, ctx.io) catch |err| switch (err) {
         error.InvalidName => return error.Abuse,
         error.FileNotFound => {
-            return try ctx.sendJSON(.not_found, [0]RepoTags{});
+            return try ctx.sendJson(.not_found, [0]RepoTags{});
         },
         else => {
-            return try ctx.sendJSON(.service_unavailable, [0]RepoTags{});
+            return try ctx.sendJson(.service_unavailable, [0]RepoTags{});
         },
     };
     defer gitrepo.raze(ctx.alloc, ctx.io);
@@ -126,9 +126,9 @@ pub fn repoTags(ctx: *API.verse.Frame) API.Router.Error!void {
         }
     }
     if (tstack.items.len == 0) {
-        return try ctx.sendJSON(.ok, [1]RepoTags{.{ .name = req.name, .updated = "undefined", .tags = &.{} }});
+        return try ctx.sendJson(.ok, [1]RepoTags{.{ .name = req.name, .updated = "undefined", .tags = &.{} }});
     }
-    return try ctx.sendJSON(.ok, [1]RepoTags{.{
+    return try ctx.sendJson(.ok, [1]RepoTags{.{
         .name = req.name,
         .updated = "undefined",
         .tags = tstack.items,

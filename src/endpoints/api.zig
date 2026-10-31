@@ -40,7 +40,7 @@ const Diff = struct {
 };
 
 fn diff(vrs: *Frame) Router.Error!void {
-    return try vrs.sendJSON(.ok, [0]Diff{});
+    return try vrs.sendJson(.ok, [0]Diff{});
 }
 
 const HeartBeat = struct {
@@ -48,7 +48,7 @@ const HeartBeat = struct {
 };
 
 fn heartbeat(vrs: *Frame) Router.Error!void {
-    return try vrs.sendJSON(.ok, HeartBeat{ .nice = 69 });
+    return try vrs.sendJson(.ok, HeartBeat{ .nice = 69 });
 }
 
 const Issue = struct {
@@ -56,7 +56,7 @@ const Issue = struct {
 };
 
 fn issue(vrs: *Frame) Router.Error!void {
-    return try vrs.sendJSON(.ok, [0]Issue{});
+    return try vrs.sendJson(.ok, [0]Issue{});
 }
 
 /// Likely to be renamed
@@ -75,7 +75,7 @@ const Network = struct {
 };
 
 fn network(vrs: *Frame) Router.Error!void {
-    return try vrs.sendJSON(.ok, Network{ .networks = [0].{} });
+    return try vrs.sendJson(.ok, Network{ .networks = [0].{} });
 }
 
 const Patch = struct {
@@ -83,7 +83,7 @@ const Patch = struct {
 };
 
 fn patch(vrs: *Frame) Router.Error!void {
-    return try vrs.sendJSON(.ok, Patch{ .patch = [0].{} });
+    return try vrs.sendJson(.ok, Patch{ .patch = [0].{} });
 }
 
 const Flex = struct {
@@ -95,7 +95,7 @@ const Flex = struct {
 };
 
 fn flex(vrs: *Frame) Router.Error!void {
-    return try vrs.sendJSON(.ok, [0]Flex{});
+    return try vrs.sendJson(.ok, [0]Flex{});
 }
 
 const User = struct {
@@ -104,7 +104,7 @@ const User = struct {
 };
 
 fn user(vrs: *Frame) Router.Error!void {
-    return try vrs.sendJSON(.ok, [0]User{});
+    return try vrs.sendJson(.ok, [0]User{});
 }
 
 const std = @import("std");
