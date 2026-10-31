@@ -13,16 +13,15 @@ const SearchReq = struct {
     q: ?[]const u8,
 };
 
-fn inbox(ctx: *Frame) Error!void {
-    return custom(ctx, "owner:me is:open");
+const default_search = "only:deltas is:open owner:me";
+fn inbox(f: *Frame) Error!void {
+    const search_str = if (f.user) |_| default_search else default_search[0..19];
+    return custom(f, search_str);
 }
 
 pub fn inboxCount(user: ?verse.Auth.User, a: Allocator, io: Io) usize {
     var inbox_count: usize = 0;
-    const search_str = if (user) |_|
-        "is:open owner:me"
-    else
-        "is:open";
+    const search_str = if (user) |_| default_search else default_search[0..19];
 
     if (Search.init(search_str, a)) |search| {
         var search_results = Delta.searchAll(search.rules.items, io);
@@ -116,7 +115,7 @@ fn errorPage(f: *Frame, search_str: []const u8, err: []const u8) Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = (f.template_data.get(S.BodyHeaderHtml) orelse
             &S.BodyHeaderHtml{ .inbox_count = inboxCount(f.user, f.alloc, f.io) }).*,
-        .count_files = 0,
+        .result_count = 0,
         .search = .abx(search_str),
         .error_string = .{ .string = .safe(err) },
         .search_results = &.{},
@@ -131,6 +130,9 @@ fn errorPage(f: *Frame, search_str: []const u8, err: []const u8) Error!void {
     return f.sendPage(&page);
 }
 
+const MetaRepo = S.SearchHtml.SearchMeta.Repos;
+const MetaDelta = S.SearchHtml.SearchMeta.Deltas;
+
 fn custom(f: *Frame, query_str: []const u8) Error!void {
     var search: Search = Search.init(query_str, f.alloc) catch
         return errorPage(f, query_str, "Bad Search Terms");
@@ -141,10 +143,10 @@ fn custom(f: *Frame, query_str: []const u8) Error!void {
     log.err("repos = {}", .{search.repos.items.len});
     log.err("hits = {}", .{search.hits.items.len});
 
-    //const repos   : ArrayList(S) = .empty;
+    var repos: ArrayList(MetaRepo) = .empty;
     //const commits : ArrayList(S) = .empty;
     //const files   : ArrayList(S) = .empty;
-    //const deltas  : ArrayList(S) = .empty;
+    var deltas: ArrayList(MetaDelta) = .empty;
 
     var results: ArrayList(S.SearchHtml.SearchResults) = .empty;
 
@@ -159,18 +161,36 @@ fn custom(f: *Frame, query_str: []const u8) Error!void {
         .file => {},
     };
 
+    {
+        var itr = search.meta.repos.iterator();
+        while (itr.next()) |next| {
+            try repos.append(f.alloc, .{ .name = .safe(next.key_ptr.*), .count = next.value_ptr.* });
+        }
+    }
+
+    {
+        var itr = search.meta.deltas.iterator();
+        while (itr.next()) |next| {
+            try deltas.append(f.alloc, .{ .name = .safe(next.key_ptr.*), .count = next.value_ptr.* });
+        }
+    }
+
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = (f.template_data.get(S.BodyHeaderHtml) orelse
             &S.BodyHeaderHtml{ .inbox_count = inboxCount(f.user, f.alloc, f.io) }).*,
-        .count_files = 0,
+        .result_count = search.hits.items.len,
         .search = .abx(query_str),
         .search_results = results.items,
         .search_meta = .{
-            .repos = &.{},
+            .repos = repos.items,
+            .deltas = deltas.items,
             .files = &.{},
-            .deltas = &.{},
             .commits = &.{},
+            .file_exclusion = if (search.full_term_count == 0)
+                .safe("<br>File text search requires<br> at least one search term")
+            else
+                null,
         },
         .error_string = null,
     });

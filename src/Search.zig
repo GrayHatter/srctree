@@ -1,10 +1,18 @@
 alloc: Allocator,
 string: []const u8,
 rules: ArrayList(Rule),
+full_term_count: usize = 0,
 repos: ArrayList(Repo),
 hits: ArrayList(Hit),
 // Unstable API
 only: ?Magic.Only = null,
+meta: struct {
+    repos: HashMap(usize) = .empty,
+    deltas: HashMap(usize) = .empty,
+    commits: HashMap(usize) = .empty,
+
+    const HashMap = std.hash_map.StringHashMapUnmanaged;
+} = .{},
 
 const Search = @This();
 
@@ -395,6 +403,8 @@ pub fn init(str: []const u8, a: Allocator) !Search {
         try rules.append(a, .parse(line));
     }
 
+    var term_count: usize = 0;
+
     var only: ?Magic.Only = null;
     for (rules.items) |rule| switch (rule.rule) {
         .only => |o| if (only) |_| {
@@ -402,6 +412,7 @@ pub fn init(str: []const u8, a: Allocator) !Search {
         } else {
             only = o;
         },
+        .raw, .target => term_count += 1,
         else => {},
     };
 
@@ -409,6 +420,7 @@ pub fn init(str: []const u8, a: Allocator) !Search {
         .alloc = a,
         .string = str,
         .rules = rules,
+        .full_term_count = term_count,
         .repos = .empty,
         .hits = .empty,
     };
@@ -460,7 +472,10 @@ pub fn searchDeltas(search: *Search, io: Io) !void {
         while (itr.nextDelta(search.alloc, io)) |delta| {
             log.debug("delta {}", .{delta.index});
             if (delta.state.embargoed) continue;
-            try search.appendHit(.{ .result = .{ .delta = delta } });
+            try search.appendHit(
+                .{ .result = .{ .delta = delta } },
+                .{ .repo = repo.name.? },
+            );
         }
     }
 }
@@ -502,21 +517,53 @@ pub fn searchTree(
             },
             .blob => |b| {
                 if (find(u8, b.data.blob, search_str)) |idx|
-                    try search.appendHit(.{ .result = .{ .file = .{
-                        .path = path,
-                        .sha = b.sha,
-                        .idx = idx,
-                        .line = @truncate(countScalar(u8, b.data.blob[0..idx], '\n')),
-                        .code = b.data.blob,
-                    } } });
+                    try search.appendHit(.{ .result = .{
+                        .file = .{
+                            .path = path,
+                            .sha = b.sha,
+                            .idx = idx,
+                            .line = @truncate(countScalar(u8, b.data.blob[0..idx], '\n')),
+                            .code = b.data.blob,
+                        },
+                    } }, .{ .repo = "todo file repo name" });
             },
             .commit, .tag => return error.CorruptedRepo,
         }
     }
 }
 
-fn appendHit(search: *Search, hit: Hit) !void {
+const From = union(enum) {
+    repo: []const u8,
+};
+
+fn appendHit(search: *Search, hit: Hit, from: From) !void {
     try search.hits.append(search.alloc, hit);
+    switch (from) {
+        .repo => |name| {
+            const ptr = try search.meta.repos.getOrPut(search.alloc, name);
+            if (!ptr.found_existing) {
+                ptr.key_ptr.* = name;
+                ptr.value_ptr.* = 0;
+            }
+            ptr.value_ptr.* +|= 1;
+        },
+    }
+    switch (hit.result) {
+        .repo => {},
+        .commit => {},
+        .file => {},
+        .delta => |d| switch (d.attach) {
+            inline else => |tag| {
+                const name = @tagName(tag);
+                const ptr = try search.meta.deltas.getOrPut(search.alloc, name);
+                if (!ptr.found_existing) {
+                    ptr.key_ptr.* = name;
+                    ptr.value_ptr.* = 0;
+                }
+                ptr.value_ptr.* +|= 1;
+            },
+        },
+    }
 }
 
 const extra_lines: usize = 6;
@@ -593,6 +640,7 @@ test Search {
             .capacity = 3,
             .pointer_stability = .{},
         },
+        .full_term_count = 1,
         .repos = .empty,
         .hits = .empty,
     }, search);
@@ -609,6 +657,7 @@ test Search {
             .capacity = 3,
             .pointer_stability = .{},
         },
+        .full_term_count = 1,
         .repos = .empty,
         .hits = .empty,
     }, search);

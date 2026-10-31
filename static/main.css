@@ -147,6 +147,7 @@ content {
 		width: auto;
 		display: flex;
 		flex-flow: row wrap;
+		gap: 1rem;
 	}
 	&.diff {
 		display: flex;
@@ -161,8 +162,6 @@ content {
 		gap: 1em;
 		width: unset;
 		max-width: 96%;
-
-
 	}
 }
 buttons { display: flex; justify-content: space-between; }
@@ -378,7 +377,7 @@ search {
 searchresults {
 	display:block;
 	min-width 60rem;
-	flex: 4 1 min-content;
+	flex: 7 1 min-content;
 	margin: 0 0 0 2.5%;
 	div {
 		display: block;
@@ -439,12 +438,16 @@ searchresults {
 	}
 }
 searchmeta {
+	border-left: 1px solid #888;
 	display:block;
-	min-width: 15rem;
 	flex: 1 2 auto;
+	margin: 0 2.5% 0 0 ;
+	min-width: 15rem;
 	list {
 		display:block;
 		width: 100%;
+		margin: 2rem 0;
+		border-bottom: 1px #888 solid;
 	}
 }
 row {

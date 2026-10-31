@@ -37,7 +37,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io) },
-        .count_files = files.len,
+        .result_count = files.len,
         .search = .abx(udata.q orelse &.{}),
         .search_results = &.{},
         .search_meta = .{

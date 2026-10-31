@@ -14,7 +14,7 @@
         </form>
       </search>
 
-      <div style="display:block; width:100%">Found <CountFiles type="usize" /> files</div>
+      <div style="display:block; width:100%">Found <ResultCount type="usize" /> Results</div>
 
       <With ErrorString><div class="error"><String/ ></div></With>
 
@@ -71,7 +71,7 @@
         <list>
         <span>Repos</span>
         <For Repos>
-          <Title />
+          <div><Name /> -- <Count type="usize" /></div>
         </For>
         </list>
 
@@ -85,12 +85,13 @@
         <list>
         <span>Deltas</span>
         <For Deltas>
-          <Title />
+          <div><Name /> -- <Count type="usize" /></div>
         </For>
         </list>
 
         <list>
         <span>Files</span>
+        <FileExclusion ornull />
         <For Files>
           <Name />
         </For>
