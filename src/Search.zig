@@ -18,6 +18,7 @@ const Search = @This();
 
 pub const Magic = enum {
     is,
+    kind,
     only,
     owner,
     raw,
@@ -29,14 +30,25 @@ pub const Magic = enum {
         closed,
     };
 
-    pub const Only = enum {
-        repos,
+    pub const Kind = enum {
         commits,
-        files,
         deltas,
-        issues,
         diffs,
+        files,
+        issues,
+        repos,
     };
+
+    pub const Only = Kind;
+
+    //pub const Only = enum {
+    //    repos,
+    //    commits,
+    //    files,
+    //    deltas,
+    //    issues,
+    //    diffs,
+    //};
 };
 
 pub const Hit = struct {
@@ -81,6 +93,7 @@ pub const Rule = struct {
 
     pub const Query = union(Magic) {
         is: Magic.Is,
+        kind: Magic.Kind,
         only: Magic.Only,
         owner: []const u8,
         raw: []const u8,
@@ -94,12 +107,13 @@ pub const Rule = struct {
 
         pub fn format(q: Query, w: *Writer) !void {
             switch (q) {
-                .raw => |s| try w.print("{s}", .{s}),
-                .target => |t| try w.print("{s}:{s}", .{ t.tag, t.text }),
                 .is => |i| try w.print("is:{s}", .{@tagName(i)}),
-                .repo => |rp| try w.print("repo:{s}", .{rp}),
-                .owner => |o| try w.print("owner:{s}", .{o}),
+                .kind => |k| try w.print("kind:{s}", .{@tagName(k)}),
                 .only => |o| try w.print("only:{s}", .{@tagName(o)}),
+                .owner => |o| try w.print("owner:{s}", .{o}),
+                .raw => |s| try w.print("{s}", .{s}),
+                .repo => |rp| try w.print("repo:{s}", .{rp}),
+                .target => |t| try w.print("[{s}]:{s}", .{ t.tag, t.text }),
             }
         }
     };
@@ -125,10 +139,20 @@ pub const Rule = struct {
         };
     }
 
+    pub fn kind(str: []const u8, inv: bool) Rule {
+        const E = @typeInfo(Magic.Kind).@"enum";
+        inline for (E.field_names, E.field_values) |name, val| {
+            if (startsWith(u8, name, str)) return .{
+                .rule = .{ .kind = @fromBackingInt(val) },
+                .invert = inv,
+            };
+        } else return .text(str, inv);
+    }
+
     pub fn only(str: []const u8, inv: bool) Rule {
         const E = @typeInfo(Magic.Only).@"enum";
         inline for (E.field_names, E.field_values) |name, val| {
-            if (eql(u8, name, str)) return .{
+            if (startsWith(u8, name, str)) return .{
                 .rule = .{ .only = @fromBackingInt(val) },
                 .invert = inv,
             };
@@ -159,8 +183,18 @@ pub const Rule = struct {
             if (i == 0) return .text(s, invert);
             const match = s[i + 1 ..];
             const pre: []const u8 = s[0..i];
+
+            comptime {
+                std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 7);
+                // Don't forget to extend the if tree
+            }
+
             if (eql(u8, pre, "is")) {
                 return .is(match, invert);
+            } else if (eql(u8, pre, "kind")) {
+                return .kind(match, invert);
+            } else if (eql(u8, pre, "rude")) {
+                return .kind(match, !invert);
             } else if (eql(u8, pre, "only")) {
                 return .only(match, invert);
             } else if (eql(u8, pre, "repo")) {
@@ -205,6 +239,16 @@ pub const Rule = struct {
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .repo = "verse" }, .invert = true }, r9);
         const r10 = parse("!repo:verse");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .repo = "verse" }, .invert = true }, r10);
+
+        const r11 = parse("kind:issues");
+        try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues } }, r11);
+        const r12 = parse("kind:issue");
+        try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues } }, r12);
+
+        const r13 = parse("rude:issues");
+        try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = true }, r13);
+        const r14 = parse("!rude:issues");
+        try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = false }, r14);
     }
 
     pub fn format(r: Rule, w: *Writer) !void {
@@ -288,77 +332,92 @@ pub fn Iterator(Itr: type) type {
         fn evalRules(self: Self, target: *const Hit.Result) bool {
             log.debug("evalrules {} rules", .{self.rules.len});
             for (self.rules, 0..) |r, i| {
-                const pass: bool = self.eval(r.rule, target);
+                const matches: bool = self.evalTarget(r.rule, target);
                 log.debug(
                     "    rule {d: >3}[{f}] {c}{}",
-                    .{ i, r.rule, if (r.invert) '!' else @as(u8, ' '), pass },
+                    .{ i, r.rule, if (r.invert) '!' else @as(u8, ' '), matches },
                 );
-                if (!pass) {
+                if (matches) {
+                    if (r.invert) return false else continue;
+                } else {
                     if (r.invert) continue else return false;
-                } else continue;
+                }
             }
             log.debug("evalrules pass", .{});
             return true;
         }
 
-        /// TODO: I think this function might overrun for some inputs
-        /// TODO: add support for int types
-        fn eval(self: Self, rule: Rule.Query, target: *const Hit.Result) bool {
+        fn evalTarget(self: Self, rule: Rule.Query, hitr: *const Hit.Result) bool {
+            switch (hitr.*) {
+                .commit => return self.evalCommit(rule, &hitr.commit),
+                .delta => return self.evalDelta(rule, &hitr.delta),
+                .file => return self.evalFile(rule, &hitr.file),
+                .repo => return self.evalRepo(rule, &hitr.repo),
+            }
+        }
+
+        fn evalCommit(self: Self, rule: Rule.Query, commit: *const Hit.Result.Commit) bool {
+            _ = self;
+            _ = rule;
+            _ = commit;
+            return true;
+        }
+
+        fn evalDelta(self: Self, rule: Rule.Query, delta: *const Delta) bool {
             switch (rule) {
                 .is => |is| switch (is) {
-                    .open => return target.delta.state.isOpen(),
-                    .closed => return target.delta.state.closed,
+                    .open => return delta.state.isOpen(),
+                    .closed => return delta.state.closed,
                 },
-                .only => |only| switch (only) {
-                    .diffs => {
-                        log.debug("     rule is diff", .{});
-                        if (target.* != .delta) return false;
-                        if (target.delta.attach == .diff) return true;
-                        return false;
-                    },
-                    .issues => {
-                        log.debug("     rule is issue", .{});
-                        if (target.* != .delta) return false;
-                        if (target.delta.attach == .issue) return true;
-                        // TODO better hack
-                        if (target.delta.attach == .remote) return true;
-                        return false;
-                    },
+                .kind, .only => |kind| switch (kind) {
+                    .diffs => return delta.attach == .diff,
+                    .issues => return (delta.attach == .issue or delta.attach == .remote),
                     .deltas => return true,
-                    // TODO
                     .commits => return false,
                     .repos => return false,
                     .files => return false,
                 },
                 .owner => |owner| if (@hasField(Hit.Result, "owner")) {
                     log.debug("     rule owner '{s}' '{s}'", .{ owner, self.data.user });
-                    if (eql(u8, owner, "me") and eql(u8, self.data.user, target.owner))
+                    if (eql(u8, owner, "me") and eql(u8, self.data.user, delta.owner))
                         return true
                     else
-                        return eql(u8, self.data.user, target.owner);
+                        return eql(u8, self.data.user, delta.owner);
                 } else {
                     log.debug("     " ++ @typeName(Hit.Result) ++ " has no owner [default true]", .{});
                     return true;
                 },
-                .raw => |any| inline for (comptime std.meta.fieldNames(Hit.Result)) |name| {
-                    if (@TypeOf(@field(target, name)) == []const u8) {
-                        if (find(u8, @field(target, name), any)) |_| {
-                            return true;
-                        }
+                .raw => |raw| inline for (comptime std.meta.fieldNames(Delta)) |name| {
+                    if (@TypeOf(@field(delta, name)) == []const u8) {
+                        if (find(u8, @field(delta, name), raw)) |_| return true;
                     }
                 } else return false,
                 // null repos can't reach here anymore
                 .repo => return true,
-                .target => |trgt| inline for (comptime std.meta.fieldNames(Hit.Result)) |name| {
+                .target => |trgt| inline for (comptime std.meta.fieldNames(Delta)) |name| {
                     if (eql(u8, trgt.tag, name)) {
-                        if (@TypeOf(@field(target, name)) == []const u8) {
-                            if (find(u8, @field(target, name), trgt.text)) |_| {
+                        if (@TypeOf(@field(delta, name)) == []const u8) {
+                            if (find(u8, @field(delta, name), trgt.text)) |_| {
                                 return true;
                             }
                         }
                     }
                 } else return false,
             }
+        }
+
+        fn evalFile(self: Self, rule: Rule.Query, commit: *const Hit.Result.File) bool {
+            _ = self;
+            _ = rule;
+            _ = commit;
+            return true;
+        }
+
+        fn evalRepo(self: Self, rule: Rule.Query, commit: *const Repo) bool {
+            _ = self;
+            _ = rule;
+            _ = commit;
+            return true;
         }
 
         pub fn raze(s: Self, io: Io) void {

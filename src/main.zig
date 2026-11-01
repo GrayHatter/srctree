@@ -10,6 +10,7 @@ pub const std_options: std.Options = .{
         .{ .scope = .git_objects, .level = .info },
         .{ .scope = .git_commit, .level = .info },
         .{ .scope = .types_search, .level = .info },
+        .{ .scope = .search, .level = .info },
     },
 };
 

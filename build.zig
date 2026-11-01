@@ -23,7 +23,6 @@ pub fn build(b: *std.Build) void {
         .templates = findTemplates("templates", b, b.allocator, b.graph.io) catch unreachable,
         .ua_validation = true,
         .abx_required = true,
-        .@"accept-lang-heat" = "",
     });
     const verse_mod = verse.module("verse");
 

@@ -8,7 +8,7 @@
     <content class="search">
       <search>
         <form action="<Action default="search">" style="width:95%">
-          <input name="q" type="text" placeholder="Search [ repo:name only:deltas is:open ]" value="<Search ornull>" style="width:97%">
+          <input id="searchbox" name="q" type="text" placeholder="Search [ repo:name only:deltas is:open ]" value="<Search ornull>" style="width:97%">
           <button class="btn" href="new" style="width:10%" type="submit">Quick Search</button>
           <button class="btn" href="new" style="width:10%" type="submit" formaction="search/deep">Deep Search</button>
         </form>
@@ -17,7 +17,6 @@
       <div style="display:block; width:100%">Found <ResultCount type="usize" /> Results</div>
 
       <With ErrorString><div class="error"><String/ ></div></With>
-
 
       <searchresults>
       <For SearchResults>
@@ -85,7 +84,7 @@
         <list>
         <span>Deltas</span>
         <For Deltas>
-          <div><Name /> -- <Count type="usize" /></div>
+        <div><Name /> -- <Count type="usize" /></div><button class=add data-value="kind:<Name />">+</button><button class=del data-value="rude:<Name />">-</button>
         </For>
         </list>
 
@@ -96,6 +95,25 @@
           <Name />
         </For>
         </list>
+
+        <script>
+          const span = document.getElementById('clickSpan');
+          const searchbox = document.getElementById('searchbox');
+          document.querySelectorAll('list > .add').forEach((elm) => {
+            elm.addEventListener('click', (e) => {
+              const rule = " " + elm.dataset.value;
+              if (!searchbox.value.includes(rule)) searchbox.value += rule;
+              searchbox.focus();
+            });
+          });
+          document.querySelectorAll('list > .del').forEach((elm) => {
+            elm.addEventListener('click', (e) => {
+              const rule = " " + elm.dataset.value;
+              if (!searchbox.value.includes(rule)) searchbox.value += rule;
+              searchbox.focus();
+            });
+          });
+        </script>
 
       </With>
       </searchmeta>
