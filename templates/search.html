@@ -70,14 +70,14 @@
         <list>
         <span>Repos</span>
         <For Repos>
-          <div><Name /> -- <Count type="usize" /></div>
+          <div><Name /> -- <Count type="usize" /></div><button class=add data-value="repo:<Name />">+</button><button class=del data-value="!repo:<Name />">-</button>
         </For>
         </list>
 
         <list>
         <span>Commits</span>
         <For Commits>
-          <Title />
+          <Name /><button class=add data-value="!title:<Name />">+</button><button class=del data-value="!title:<Name />">-</button>
         </For>
         </list>
 
@@ -92,7 +92,7 @@
         <span>Files</span>
         <FileExclusion ornull />
         <For Files>
-          <Name />
+          <Name /><button class=add data-value="kind:<Name />">+</button><button class=del data-value="rude:<Name />">-</button>
         </For>
         </list>
 

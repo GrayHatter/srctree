@@ -393,7 +393,7 @@ pub fn Iterator(Itr: type) type {
                     }
                 } else return false,
                 // null repos can't reach here anymore
-                .repo => return true,
+                .repo => |repo| return eql(u8, delta.repo, repo),
                 .target => |trgt| inline for (comptime std.meta.fieldNames(Delta)) |name| {
                     if (eql(u8, trgt.tag, name)) {
                         if (@TypeOf(@field(delta, name)) == []const u8) {
