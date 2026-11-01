@@ -70,29 +70,27 @@
         <list>
         <span>Repos</span>
         <For Repos>
-          <div><Name /> -- <Count type="usize" /></div><button class=add data-value="repo:<Name />">+</button><button class=del data-value="!repo:<Name />">-</button>
+          <div><Name /> -- <Count type="usize" /></div><button class="add jsreq" data-value="repo:<Name />">+</button><button class="del jsreq" data-value="!repo:<Name />">-</button>
         </For>
         </list>
 
         <list>
         <span>Commits</span>
         <For Commits>
-          <Name /><button class=add data-value="!title:<Name />">+</button><button class=del data-value="!title:<Name />">-</button>
-        </For>
+          <Name /><button class="add jsreq" data-value="!title:<Name />">+</button><button class="del jsreq" data-value="!title:<Name />">-</button> </For>
         </list>
 
         <list>
         <span>Deltas</span>
         <For Deltas>
-        <div><Name /> -- <Count type="usize" /></div><button class=add data-value="kind:<Name />">+</button><button class=del data-value="rude:<Name />">-</button>
+        <div><Name /> -- <Count type="usize" /></div><button class="add jsreq" data-value="kind:<Name />">+</button><button class="del jsreq" data-value="rude:<Name />">-</button>
         </For>
         </list>
 
         <list>
         <span>Files</span>
         <FileExclusion ornull />
-        <For Files>
-          <Name /><button class=add data-value="kind:<Name />">+</button><button class=del data-value="rude:<Name />">-</button>
+        <For Files> <Name /><button class="add jsreq" data-value="kind:<Name />">+</button><button class="del jsreq" data-value="rude:<Name />">-</button>
         </For>
         </list>
 
@@ -100,6 +98,7 @@
           const span = document.getElementById('clickSpan');
           const searchbox = document.getElementById('searchbox');
           document.querySelectorAll('list > .add').forEach((elm) => {
+            elm.classList.remove("jsreq");
             elm.addEventListener('click', (e) => {
               const rule = " " + elm.dataset.value;
               if (!searchbox.value.includes(rule)) searchbox.value += rule;
@@ -107,6 +106,7 @@
             });
           });
           document.querySelectorAll('list > .del').forEach((elm) => {
+            elm.classList.remove("jsreq");
             elm.addEventListener('click', (e) => {
               const rule = " " + elm.dataset.value;
               if (!searchbox.value.includes(rule)) searchbox.value += rule;

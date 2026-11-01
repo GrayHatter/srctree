@@ -90,6 +90,9 @@ muted, .muted { color: #bbb; font-family: 'Titillium Web', sans-serif; font-size
 	white-space: nowrap;
 	&:hover, &.active { border-bottom: #880046 solid 2px; }
 }
+.jsreq {
+	display: none !important;
+}
 .act-btns {
 	display: flex;
 	gap: 5px;
