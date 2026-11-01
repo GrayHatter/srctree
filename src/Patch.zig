@@ -418,7 +418,7 @@ pub fn formatted(name: []const u8, diff: []const u8, file_idx: usize, flavor: Fo
             '@' => {
                 hdr = lineNumberFromHeader(line) catch {
                     log.err("{s}", .{diff});
-                    unreachable;
+                    return error.Unknown;
                 };
                 linenum_l, linenum_r = hdr.split();
                 try lines.append(a, .{ .hdr = hdr });
