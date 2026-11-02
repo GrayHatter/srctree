@@ -37,7 +37,7 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
     const commit_hex_short = commit_hex[0..8];
 
     const prefix = if (rd.ref) |ref| try ctx.alloc.print("/ref/{s}", .{ref}) else &.{};
-    const path: ?[]const u8 = if (rd.path) |p| p.path else null;
+    const path: []const u8 = if (rd.path) |p| p.path else &.{};
 
     var list_trees: ArrayList(S.TreeHtml.Trees) = .empty;
     var list_files: ArrayList(S.TreeHtml.Files) = .empty;
@@ -53,7 +53,10 @@ pub fn tree(ctx: *Frame, rd: RouteData, repo: *Git.Repo, files: *Git.Tree) Route
                 if (std.mem.eql(u8, ch.name, obj.name)) {
                     const sha_text = try ch.sha.textAlloc(ctx.alloc);
                     const ctime = try ctx.alloc.print("{f}", .{Humanize.unix(ch.timestamp, now)});
-                    const href: []const u8 = try ctx.alloc.print("{s}{s}", .{ path orelse "", obj.name });
+                    const href: []const u8 = try ctx.alloc.print("{s}{s}", .{
+                        if (path.len > 1 and path[0] == '/') path[1..] else path,
+                        obj.name,
+                    });
                     if (filenameIsHidden(ch.name)) {
                         try list_hidden.append(ctx.alloc, .{
                             .name = .abx(ch.name),
