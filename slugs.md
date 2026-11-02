@@ -24,4 +24,4 @@ optimized for any size diff - all browser features work as expected
 large commit don't hide content
 all content shown
 searching not required to view content
-
+doesn't think numbers are "problematic"
