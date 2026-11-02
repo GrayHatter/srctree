@@ -57,22 +57,6 @@ pub fn addComment(
     return msg;
 }
 
-pub fn searchPage(f: *Frame, str: abx.Html) RouterError!void {
-    const rd = RouteData.init(f) orelse return error.ServerFault;
-    const raw_str = if (str.text.len > 0) str.text else str.text_cleaned;
-
-    var search: Search = Search.init(raw_str, f.alloc) catch unreachable; // FIXME
-    _ = &search;
-
-    var itr = Delta.searchRepo(rd.name, search.rules.items, f.io);
-
-    var body_header: S.BodyHeaderHtml = .{ .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io) };
-    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
-    f.template_data.add(S.BodyHeaderHtml, f.alloc, &body_header) catch {};
-
-    return list(f, Delta.RepoIterator, &itr, str);
-}
-
 pub fn incrView(d: *Delta, f: *Frame) !void {
     if (f.request.user_agent) |ua| switch (ua.agent) {
         .script,
@@ -186,33 +170,6 @@ pub fn deltaResult(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Se
         .comment = .safe(svg.Icon.slice(if (comments.new) .comment else .comment_new, .{})),
         .viewers = .safe(svg.Icon.slice(.eye, .{})),
     };
-}
-
-pub fn list(f: *Frame, Itr: type, itr: *Search.Iterator(Itr), search_str: abx.Html) RouterError!void {
-    var d_list: ArrayList(DeltaList) = .empty;
-    while (itr.nextDelta(f.alloc, f.io)) |deltaC| {
-        var d = deltaC;
-        if (d.state.embargoed) continue;
-
-        _ = d.loadThread(f.alloc, f.io) catch return error.ServerFault;
-        const cmtsmeta = d.countComments(f.io);
-        try d_list.append(f.alloc, try deltaList(d, cmtsmeta, f.alloc, f.io));
-    }
-
-    var og_title_b: [256]u8 = undefined;
-    const meta_head = S.MetaHeadHtml{ .open_graph = .{
-        .title = .safe(bufPrint(&og_title_b, "{} open issues", .{d_list.items.len}) catch unreachable),
-    } };
-
-    var page = DeltaListHtml.init(.{
-        .meta_head = meta_head,
-        .body_header = f.template_data.get(S.BodyHeaderHtml).?.*,
-        //.search_action = uri_base,
-        .delta_list = try d_list.toOwnedSlice(f.alloc),
-        .search = search_str,
-    });
-
-    try f.sendPage(&page);
 }
 
 const MsgData = struct {

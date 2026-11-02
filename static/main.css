@@ -30,11 +30,26 @@ summary {
 	position: sticky;
 	top: 3rem;
 }
+p {
+	text-align: left;
+	margin-top: 0;
+}
+ul {
+	text-align: left;
+	padding-left: 1rem;
+	li {
+		margin: 0 0 0.35em;
+	}
+}
+
 hint {
 	color: #bbb;
 	font-family: 'Titillium Web', sans-serif;
 	font-size: 80%;
 	&.right { margin: 0 0.5em; text-align:right; }
+}
+details {
+	padding: 0 0.5rem;
 }
 details:open > summary.hide { display: none; }
 .repo-header  {
@@ -145,13 +160,6 @@ content {
 	&.fw { min-width: 97%; }
 	&.mw { width: 60vw; min-width: 1124px; margin: auto; }
 	&.lw { min-width: 1050px; text-align:left; }
-	&.search {
-		min-width: 50rem;
-		width: auto;
-		display: flex;
-		flex-flow: row wrap;
-		gap: 1rem;
-	}
 	&.diff {
 		display: flex;
 		justify-content: flex-start;
@@ -366,6 +374,11 @@ readme {
 	span.blob > a::before { content: "📄"; padding-right: 8px; }
 }
 search {
+	min-width: 50rem;
+	width: auto;
+	display: flex;
+	flex-flow: row wrap;
+	gap: 1rem;
 	font-family: 'Titillium Web', sans-serif;
 	margin: 0 2.5%;
 	background: #333;
@@ -374,84 +387,90 @@ search {
 	padding: 0.4rem 1%;
 	display: flex;
 	gap: 1em;
-	width: 100%;
 	form { flex-grow: 1; display: flex; input { flex-grow: 1; } }
 }
 searchresults {
-	display:block;
-	min-width 60rem;
-	flex: 7 1 min-content;
-	margin: 0 0 0 2.5%;
-	div {
-		display: block;
-		text-align:left;
-		filename {
+	display: flex;
+	margin: 0 2.5%;
+	gap: 1em;
+	results {
+		min-width 60rem;
+		flex: 5 1 70%;
+		div {
 			display: block;
-			background: #404040;
-			color: #a6a6a6;
-			border-radius: 3px 3px 0 0;
-			border: 1px gray solid;
-			border-bottom: 0px;
-			height: 1.5em;
-			padding: 4px 12px;
+			text-align:left;
+			filename {
+				display: block;
+				background: #404040;
+				color: #a6a6a6;
+				border-radius: 3px 3px 0 0;
+				border: 1px gray solid;
+				border-bottom: 0px;
+				height: 1.5em;
+				padding: 4px 12px;
+			}
+			code {
+				background: #333;
+				border-radius: 0 0 3px 3px;
+				border: 1px gray solid;
+				border-top: 0px;
+				white-space: break-spaces;
+				overflow: scroll;
+			}
 		}
-		code {
-			background: #333;
-			border-radius: 0 0 3px 3px;
-			border: 1px gray solid;
-			border-top: 0px;
-			white-space: break-spaces;
-			overflow: scroll;
-		}
-	}
-	result {
-		display: block;
-		margin: 1rem 2.5%;
-		padding: 0 1%;
-		text-align:left;
-		repo {
+		result {
 			display: block;
-			background: #404040;
-			color: #a6a6a6;
-			border-radius: 3px 3px 0 0;
-			border: 1px gray solid;
-			border-bottom: 0px;
-			height: 1.5em;
-			padding: 4px 12px;
-		}
-		filename {
-			display: block;
-			background: #404040;
-			color: #a6a6a6;
-			border-radius: 3px 3px 0 0;
-			border: 1px gray solid;
-			border-bottom: 0px;
-			height: 1.5em;
-			padding: 4px 12px;
-		}
-		code {
-			background: #333;
-			border-radius: 0 0 3px 3px;
-			border: 1px gray solid;
-			border-top: 0px;
-			white-space: break-spaces;
-			overflow: scroll;
-		}
+			margin: 1rem 2.5%;
+			padding: 0 1%;
+			text-align:left;
+			repo {
+				display: block;
+				background: #404040;
+				color: #a6a6a6;
+				border-radius: 3px 3px 0 0;
+				border: 1px gray solid;
+				border-bottom: 0px;
+				height: 1.5em;
+				padding: 4px 12px;
+			}
+			filename {
+				display: block;
+				background: #404040;
+				color: #a6a6a6;
+				border-radius: 3px 3px 0 0;
+				border: 1px gray solid;
+				border-bottom: 0px;
+				height: 1.5em;
+				padding: 4px 12px;
+			}
+			code {
+				background: #333;
+				border-radius: 0 0 3px 3px;
+				border: 1px gray solid;
+				border-top: 0px;
+				white-space: break-spaces;
+				overflow: scroll;
+			}
 
+		}
 	}
-}
-searchmeta {
-	border-left: 1px solid #888;
-	display:block;
-	flex: 1 2 auto;
-	margin: 0 2.5% 0 0 ;
-	min-width: 15rem;
-	list {
+	searchmeta {
+		border-left: 1px solid #888;
 		display:block;
-		width: 100%;
-		margin: 2rem 0;
-		border-bottom: 1px #888 solid;
+		flex: 1 2 18rem;
+		min-width: 10rem;
+		list {
+			display:block;
+			width: 100%;
+			margin: 2rem 0;
+			border-bottom: 1px #888 solid;
+		}
+		row {
+			margin: 0 0.5em;
+			padding: 0 0.2em 1px;
+		}
 	}
+
 }
 row {
 	border-bottom: #777 solid 1px;

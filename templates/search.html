@@ -5,7 +5,7 @@
   </head>
   <body>
     <Build BodyHeader _body_header.html />
-    <content class="search">
+    <content>
       <search>
         <form action="<Action default="search">" style="width:95%">
           <input id="searchbox" name="q" type="text" placeholder="Search [ repo:name only:deltas is:open ]" value="<Search ornull>" style="width:97%">
@@ -19,13 +19,12 @@
       <With ErrorString><div class="error"><String/ ></div></With>
 
       <searchresults>
+      <results>
       <For SearchResults>
       <!-- Verse scope bug -->
       <Switch SearchFlavor>
         <Case Repo><result>
-          <repo>
-            <Name />
-          </repo>
+          <repo><Name /></repo>
         </result></Case>
 
 
@@ -37,7 +36,10 @@
         </Case>
 
         <Case Commit>
-          <Name />
+        <row>
+        <span class=muted><RepoName />: </span>
+        <a href="/repo/<RepoName />/commit/<Sha />"><Sha /> : <Title /></a>
+        </row>
         </Case>
 
         <Case Delta>
@@ -62,42 +64,87 @@
 
       </Switch>
       </For>
+      </results>
 
-      </searchresults>
-      <searchmeta>
-      <With SearchMeta>
+      <With SearchMeta><searchmeta>
+        <list>
+        <span>Deltas</span>
+        <For Deltas>
+        <row>
+          <div><Name /> -- <Count type="usize" /></div>
+          <buttons>
+          <button class="add jsreq" data-value="kind:<Name />">+</button>
+          <button class="del jsreq" data-value="rude:<Name />">-</button>
+        </row>
+        </For>
+        </list>
 
         <list>
         <span>Repos</span>
         <For Repos>
-          <div><Name /> -- <Count type="usize" /></div><button class="add jsreq" data-value="repo:<Name />">+</button><button class="del jsreq" data-value="!repo:<Name />">-</button>
+        <row>
+          <div><a href="/repo/<Name />"><Name /> -- <Count type="usize" /></a></div>
+          <buttons>
+            <button class="add jsreq" data-value="repo:<Name />">+</button>
+            <button class="del jsreq" data-value="!repo:<Name />">-</button>
+          </buttons>
+        </row>
         </For>
         </list>
 
         <list>
         <span>Commits</span>
         <For Commits>
-          <Name /><button class="add jsreq" data-value="!title:<Name />">+</button><button class="del jsreq" data-value="!title:<Name />">-</button> </For>
-        </list>
-
-        <list>
-        <span>Deltas</span>
-        <For Deltas>
-        <div><Name /> -- <Count type="usize" /></div><button class="add jsreq" data-value="kind:<Name />">+</button><button class="del jsreq" data-value="rude:<Name />">-</button>
+        <row>
+          <Name />
+          <buttons>
+            <button class="add jsreq" data-value="!title:<Name />">+</button>
+            <button class="del jsreq" data-value="!title:<Name />">-</button>
+          </buttons>
+        </row>
         </For>
         </list>
 
         <list>
         <span>Files</span>
         <FileExclusion ornull />
-        <For Files> <Name /><button class="add jsreq" data-value="kind:<Name />">+</button><button class="del jsreq" data-value="rude:<Name />">-</button>
+        <For Files>
+        <row>
+          <Name />
+          <buttons>
+            <button class="add jsreq" data-value="kind:<Name />">+</button>
+            <button class="del jsreq" data-value="rude:<Name />">-</button>
+          </buttons>
+        </row>
         </For>
         </list>
 
+        <details style="font-size:85%;">
+          <summary class=muted>
+            Show Some Search Hints &amp; Tips.
+          </summary>
+          <p>
+            srctree search looks nearly everywhere by default. A single search
+            query will search for any of the terms across Issues, Diffs, Commit
+            comments, (use deltas if you want to search all kinds of change
+            threads), search commit messages can also be searched. All of that in
+            addition to full text search within repositories.
+          </p>
+          <p>
+            Srctree also supports a number of magic terms; i.a.
+          </p>
+          <ul>
+            <li><span class=coderef>repo:&lt;repo name&gt;</span> (search with in this repo, exclusive. Use multiple times for many repos)</li>
+            <li><span class=coderef>kind:&lt;term&gt;</span> (include a specific type, like issuse or diffs)</li>
+            <li><span class=coderef>only:&lt;term&gt;</span> (a specific type, including others)</li>
+            <li><span class=coderef>is:(open|closed)</span> require a state</li>
+            <li><span class=coderef>owner:&lt;name&gt;</span> search for a connected name; e.g. <span class=coderef>owner:grayhatter</span> will match both the listed committer and/or author in a commit, or the creator of an issue.</li>
+          </ul>
+        </details>
         <script>
           const span = document.getElementById('clickSpan');
           const searchbox = document.getElementById('searchbox');
-          document.querySelectorAll('list > .add').forEach((elm) => {
+          document.querySelectorAll('list row .add').forEach((elm) => {
             elm.classList.remove("jsreq");
             elm.addEventListener('click', (e) => {
               const rule = " " + elm.dataset.value;
@@ -105,7 +152,7 @@
               searchbox.focus();
             });
           });
-          document.querySelectorAll('list > .del').forEach((elm) => {
+          document.querySelectorAll('list row .del').forEach((elm) => {
             elm.classList.remove("jsreq");
             elm.addEventListener('click', (e) => {
               const rule = " " + elm.dataset.value;
@@ -114,10 +161,9 @@
             });
           });
         </script>
+      </searchmeta></With>
 
-      </With>
-      </searchmeta>
-
+      </searchresults>
     </content>
   </body>
 </html>

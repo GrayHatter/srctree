@@ -442,12 +442,8 @@ pub fn formatted(name: []const u8, diff: []const u8, file_idx: usize, flavor: Fo
     const diff_lines = try lines.toOwnedSlice(a);
 
     switch (flavor) {
-        .inlined => return .{
-            .inlined = .fromParsed(diff_lines, file_idx, name),
-        },
-        .split => return .{
-            .split = try .fromInlined(diff_lines, file_idx, name, a),
-        },
+        .inlined => return .{ .inlined = .fromParsed(diff_lines, file_idx, name) },
+        .split => return .{ .split = try .fromInlined(diff_lines, file_idx, name, a) },
     }
 }
 

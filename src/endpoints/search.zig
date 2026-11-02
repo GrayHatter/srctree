@@ -133,7 +133,7 @@ fn errorPage(f: *Frame, search_str: []const u8, err: []const u8) Error!void {
 const MetaRepo = S.SearchHtml.SearchMeta.Repos;
 const MetaDelta = S.SearchHtml.SearchMeta.Deltas;
 
-fn custom(f: *Frame, query_str: []const u8) Error!void {
+pub fn custom(f: *Frame, query_str: []const u8) Error!void {
     var search: Search = Search.init(query_str, f.alloc) catch
         return errorPage(f, query_str, "Bad Search Terms");
     defer search.raze(f.io);
@@ -143,6 +143,13 @@ fn custom(f: *Frame, query_str: []const u8) Error!void {
     log.err("repos = {}", .{search.repos.items.len});
     log.err("hits = {}", .{search.hits.items.len});
 
+    var show_meta: bool = true;
+    if (search.only) |_| {
+        if (search.repo) |_| {
+            show_meta = false;
+        }
+    }
+
     var repos: ArrayList(MetaRepo) = .empty;
     //const commits : ArrayList(S) = .empty;
     //const files   : ArrayList(S) = .empty;
@@ -150,28 +157,35 @@ fn custom(f: *Frame, query_str: []const u8) Error!void {
 
     var results: ArrayList(S.SearchHtml.SearchResults) = .empty;
 
-    for (search.hits.items) |hit| switch (hit.result) {
+    for (search.hits.items) |*hit| switch (hit.result) {
         .repo => |repo| try results.append(f.alloc, .{ .search_flavor = .{
             .repo = .{ .name = .safe(repo.name.?) },
         } }),
         .delta => |d| try results.append(f.alloc, .{
             .search_flavor = .{ .delta = delta_endpoint.deltaResult(d, .zero, search.alloc, f.io) catch continue },
         }),
-        .commit => {},
+        .commit => |*c| try results.append(f.alloc, .{
+            .search_flavor = .{ .commit = .{
+                .repo_name = .safe(c.repo_name),
+                .sha = .safe(c.sha.slice()[0..10]),
+                .title = .abx(c.title),
+            } },
+        }),
         .file => {},
     };
 
-    {
-        var itr = search.meta.repos.iterator();
-        while (itr.next()) |next| {
-            try repos.append(f.alloc, .{ .name = .safe(next.key_ptr.*), .count = next.value_ptr.* });
+    if (show_meta) {
+        {
+            var itr = search.meta.repos.iterator();
+            while (itr.next()) |next| {
+                try repos.append(f.alloc, .{ .name = .safe(next.key_ptr.*), .count = next.value_ptr.* });
+            }
         }
-    }
-
-    {
-        var itr = search.meta.deltas.iterator();
-        while (itr.next()) |next| {
-            try deltas.append(f.alloc, .{ .name = .safe(next.key_ptr.*), .count = next.value_ptr.* });
+        {
+            var itr = search.meta.deltas.iterator();
+            while (itr.next()) |next| {
+                try deltas.append(f.alloc, .{ .name = .safe(next.key_ptr.*), .count = next.value_ptr.* });
+            }
         }
     }
 
@@ -182,9 +196,9 @@ fn custom(f: *Frame, query_str: []const u8) Error!void {
         .result_count = search.hits.items.len,
         .search = .abx(query_str),
         .search_results = results.items,
-        .search_meta = .{
-            .repos = repos.items,
+        .search_meta = if (!show_meta) null else .{
             .deltas = deltas.items,
+            .repos = repos.items,
             .files = &.{},
             .commits = &.{},
             .file_exclusion = if (search.full_term_count == 0)

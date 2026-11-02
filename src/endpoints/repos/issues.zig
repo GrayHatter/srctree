@@ -298,15 +298,15 @@ fn view(f: *Frame) Error!void {
 fn list(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     var default_search_buf: [0xFF]u8 = undefined;
-    const def_search = try bufPrint(&default_search_buf, "repo:{s} is:issue is:open", .{rd.name});
-    return delta_shared.searchPage(f, .safe(def_search));
+    const def_search = try bufPrint(&default_search_buf, "repo:{s} only:issues is:open", .{rd.name});
+    return search.custom(f, def_search);
 }
 
 fn isearch(f: *Frame) Error!void {
     const udata = f.request.data.query.validate(struct { q: []const u8 }) catch return error.DataInvalid;
     if (udata.q.len == 0) return list(f);
     log.warn("issue search q {s}", .{udata.q});
-    return delta_shared.searchPage(f, .abx(udata.q));
+    return search.custom(f, udata.q);
 }
 
 pub const RemoteForge = enum {

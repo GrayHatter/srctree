@@ -314,7 +314,10 @@ pub const Commiterator = struct {
         a: Allocator,
         io: Io,
     ) !?Sha {
-        if (left.parent[1] != null or right.parent[1] != null) @panic("not implemented");
+        if (left.parent[1] != null or right.parent[1] != null) {
+            log.err("Committerator error! Branching repos not yet implemented", .{});
+            return null;
+        }
         var l_parent = try left.toParent(0, itr.repo, a, io);
         defer l_parent.raze(a);
         var r_parent = try right.toParent(0, itr.repo, a, io);

@@ -5,7 +5,8 @@ full_term_count: usize = 0,
 repos: ArrayList(Repo),
 hits: ArrayList(Hit),
 // Unstable API
-only: ?Magic.Only = null,
+only: ?Magic.Only,
+repo: ?*Repo,
 meta: struct {
     repos: HashMap(usize) = .empty,
     deltas: HashMap(usize) = .empty,
@@ -69,11 +70,18 @@ pub const Hit = struct {
         };
 
         pub const Commit = struct {
-            sha: git.Sha,
-            idx: usize,
+            repo_name: []const u8,
+            sha: git.Sha.Text,
+            title: []const u8,
+            body: []const u8 = &.{},
 
-            pub fn init(s: git.Sha, idx: usize) Commit {
-                return .{ .sha = s, .idx = idx };
+            pub fn init(c: *const git.Commit, repo_name: []const u8) Commit {
+                return .{
+                    .repo_name = repo_name,
+                    .sha = c.sha.text(),
+                    .title = c.title,
+                    .body = c.body,
+                };
             }
         };
 
@@ -482,6 +490,8 @@ pub fn init(str: []const u8, a: Allocator) !Search {
         .full_term_count = term_count,
         .repos = .empty,
         .hits = .empty,
+        .only = only,
+        .repo = null,
     };
 }
 
@@ -493,11 +503,26 @@ pub fn raze(search: *Search, io: Io) void {
 }
 
 pub fn searchAll(search: *Search, io: Io) !void {
-    try search.populateRepos(io);
-    try search.searchDeltas(io);
+    if (search.only) |only| {
+        _ = only;
+    }
+    if (search.repos.items.len == 0) {
+        try search.populateRepos(io);
+    }
+    search.searchRepos(io) catch |err| {
+        log.err("Search Delta error {} (continuing)", .{err});
+    };
+    search.searchDeltas(io) catch |err| {
+        log.err("Search Delta error {} (continuing)", .{err});
+    };
+    if (search.full_term_count > 0) {
+        search.searchCommits({}, io) catch |err| {
+            log.err("Search Commit error {} (continuing)", .{err});
+        };
+    }
 }
 
-fn populateRepos(search: *Search, io: Io) !void {
+pub fn populateRepos(search: *Search, io: Io) !void {
     for (search.rules.items) |r| switch (r.rule) {
         .repo => |name| {
             if (r.invert) continue;
@@ -509,6 +534,7 @@ fn populateRepos(search: *Search, io: Io) !void {
         else => continue,
     };
 
+    if (search.repos.items.len == 1) search.repo = &search.repos.items[0];
     if (search.repos.items.len > 0) return;
     var repo_iter = Repo.allRepoIterator(.public_only, io) catch return;
 
@@ -520,6 +546,59 @@ fn populateRepos(search: *Search, io: Io) !void {
         }
         repo.name = search.alloc.dupe(u8, repo_iter.current_name.?) catch null;
         try search.repos.append(search.alloc, repo);
+    }
+
+    if (search.repos.items.len == 1) search.repo = &search.repos.items[0];
+}
+
+pub fn searchRepos(search: *Search, io: Io) !void {
+    // TODO Search repo names
+    // TODO Search Readmes
+    _ = search;
+    _ = io;
+}
+
+pub fn searchCommits(search: *Search, age: void, io: Io) !void {
+    _ = age;
+    for (search.repos.items) |*repo| {
+        log.debug("search commits in {s}", .{repo.name.?});
+        repo.git.loadData(search.alloc, io) catch |err| {
+            log.err("Unable to load repo {s} [{}]", .{ repo.name.?, err });
+        };
+        const head = try repo.git.HEAD(search.alloc, io);
+        var itr = head.iterate(&repo.git);
+        var limit: u16 = if (search.only != null and search.only.? == .commits) 1000 else 200;
+        while (itr.next(search.alloc, io) catch null) |cmt| {
+            log.debug("commit {f}", .{cmt.sha.text()});
+            if (limit == 0) break;
+            limit -|= 1;
+            var matching: bool = true;
+            var owner: ?bool = null;
+            for (search.rules.items) |r| {
+                switch (r.rule) {
+                    .raw => |raw| if (matching) {
+                        if (find(u8, cmt.title, raw)) |_| {
+                            matching = false;
+                        }
+                    },
+                    .owner => |own| if (owner == null or !owner.?) {
+                        if (find(u8, cmt.author.name, own)) |_| {
+                            owner = true;
+                        } else if (find(u8, cmt.committer.name, own)) |_| {
+                            owner = true;
+                        } else owner = false;
+                    },
+                    .target => {},
+                    .is, .kind, .only, .repo => {},
+                }
+            }
+            if (!matching and (owner == null or owner.?)) {
+                try search.appendHit(
+                    .{ .result = .{ .commit = .init(&cmt, repo.name.?) } },
+                    .{ .repo = repo.name.? },
+                );
+            } else cmt.raze(search.alloc);
+        }
     }
 }
 
@@ -702,6 +781,8 @@ test Search {
         .full_term_count = 1,
         .repos = .empty,
         .hits = .empty,
+        .only = null,
+        .repo = null,
     }, search);
 
     search.raze(std.testing.io);
@@ -719,6 +800,8 @@ test Search {
         .full_term_count = 1,
         .repos = .empty,
         .hits = .empty,
+        .only = null,
+        .repo = null,
     }, search);
 }
 
