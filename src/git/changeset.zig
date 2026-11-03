@@ -6,13 +6,14 @@ timestamp: i64,
 const ChangeSet = @This();
 
 pub const Error = error{
-    OutOfMemory,
     Canceled,
     Io,
-    ObjectCorrupt,
-    ObjectMissing,
-    ObjectInvalid,
     NotATree,
+    ObjectCorrupt,
+    ObjectInvalid,
+    ObjectMissing,
+    OutOfMemory,
+    StreamTooLong,
 };
 
 pub fn init(a: Allocator, name: []const u8, commit: *const Commit) error{OutOfMemory}!ChangeSet {
@@ -24,7 +25,13 @@ pub fn init(a: Allocator, name: []const u8, commit: *const Commit) error{OutOfMe
     };
 }
 
-pub fn fromCommit(starting_tree: *const Tree, repo: *const Repo, root_commit: *const Commit, a: Allocator, io: Io) Error![]ChangeSet {
+pub fn fromCommit(
+    starting_tree: *const Tree,
+    repo: *const Repo,
+    root_commit: *const Commit,
+    a: Allocator,
+    io: Io,
+) Error![]ChangeSet {
     const count = starting_tree.count();
     const search_list: []?Blob = try a.alloc(?Blob, count);
     defer a.free(search_list);
@@ -46,7 +53,11 @@ pub fn fromCommit(starting_tree: *const Tree, repo: *const Repo, root_commit: *c
         error.OutOfMemory => return error.OutOfMemory,
         error.ObjectCorrupt => return error.ObjectCorrupt,
         error.ObjectInvalid => return error.ObjectInvalid,
-        error.ShaNotFound, error.FileNotFound, error.ObjectMissing => return error.ObjectMissing,
+        error.StreamTooLong => return error.StreamTooLong,
+        error.ShaNotFound,
+        error.FileNotFound,
+        error.ObjectMissing,
+        => return error.ObjectMissing,
         error.NotATree => return error.NotATree,
         error.CurrentTree => starting_tree.*,
         error.InvalidTreeSha,
@@ -92,6 +103,7 @@ pub fn fromCommit(starting_tree: *const Tree, repo: *const Repo, root_commit: *c
             error.OutOfMemory => return error.OutOfMemory,
             error.NotACommit, error.ObjectCorrupt => return error.ObjectCorrupt,
             error.FileNotFound, error.ShaNotFound, error.ObjectMissing => return error.ObjectMissing,
+            error.StreamTooLong => return error.StreamTooLong,
             error.SystemResources,
             error.AccessDenied,
             error.PermissionDenied,
@@ -132,6 +144,7 @@ pub fn fromCommit(starting_tree: *const Tree, repo: *const Repo, root_commit: *c
             error.OutOfMemory => return error.OutOfMemory,
             error.ObjectCorrupt => return error.ObjectCorrupt,
             error.ObjectMissing => return error.ObjectMissing,
+            error.StreamTooLong => return error.StreamTooLong,
             error.SystemResources,
             error.AccessDenied,
             error.PermissionDenied,

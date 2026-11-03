@@ -248,7 +248,11 @@ fn parseObjHeader(reader: *Reader) PackedObject.Header {
     return h;
 }
 
-fn loadBlob(reader: *Reader, a: Allocator, _: Io) ![]u8 {
+fn loadBlob(reader: *Reader, a: Allocator, _: Io) error{
+    ReadFailed,
+    OutOfMemory,
+    StreamTooLong,
+}![]u8 {
     var z_b: [zlib.max_window_len]u8 = undefined;
     var zl: std.compress.flate.Decompress = .init(reader, .zlib, &z_b);
     return try zl.reader.allocRemaining(a, .limited(0xffffff));
@@ -359,11 +363,11 @@ pub fn loadData(self: Pack, offset: usize, objs: *const Objects, a: Allocator, i
     return .{
         .header = h,
         .data = switch (h.kind) {
-            .commit, .tree, .blob, .tag => loadBlob(&reader, a, io) catch return error.PackCorrupt,
+            .commit, .tree, .blob, .tag => try loadBlob(&reader, a, io),
             .ofs_delta => return try self.loadDeltaOffset(&reader, offset, objs, a, io),
             .ref_delta => return try self.loadDeltaRef(&reader, offset, objs, a, io),
             .invalid => {
-                log.err("obj type ({}) not implemenedn", .{h.kind});
+                log.err("obj type ({}) not implemented", .{h.kind});
                 return error.ObjectInvalid;
             },
         },
@@ -392,12 +396,13 @@ pub fn raze(self: Pack) void {
 }
 
 pub const Error = Reader.Error || error{
+    Ambiguous,
+    ObjectInvalid,
+    ObjectMissing,
     OutOfMemory,
     PackCorrupt,
     PackRef,
-    Ambiguous,
-    ObjectMissing,
-    ObjectInvalid,
+    StreamTooLong,
 };
 
 const Sha = @import("Sha.zig");

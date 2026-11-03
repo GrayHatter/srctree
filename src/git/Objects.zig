@@ -76,12 +76,13 @@ fn findFile(objs: Objects, sha: Sha, io: Io) LoadError!Io.File {
 
 pub const LoadError = error{
     Ambiguous,
-    OtherFileSys,
+    ObjectCorrupt,
     ObjectInvalid,
     ObjectMissing,
-    ObjectCorrupt,
+    OtherFileSys,
     OutOfMemory,
     ShaNotFound,
+    StreamTooLong,
 } || Dir.OpenError;
 
 fn loadFile(objs: Objects, sha: Sha, a: Allocator, io: Io) LoadError!Any {
@@ -129,6 +130,7 @@ fn loadFromPacks(objs: Objects, sha: Sha, a: Allocator, io: Io) LoadError!?Any {
             error.ObjectMissing => error.ObjectMissing,
             error.ObjectInvalid => error.ObjectInvalid,
             error.DeltaRef, error.DeltaOffset => unreachable,
+            error.StreamTooLong => error.StreamTooLong,
             error.PackCorrupt => unreachable,
             error.EndOfStream => unreachable,
             error.ReadFailed => unreachable,
