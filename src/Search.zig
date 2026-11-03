@@ -5,6 +5,7 @@ rules: ArrayList(Rule),
 full_term_count: usize = 0,
 repos: ArrayList(Repo),
 hits: ArrayList(Hit),
+excluded: Exclude = .empty,
 // Unstable API
 only: ?Magic.Only,
 repo: ?*Repo,
@@ -41,6 +42,7 @@ pub const Magic = enum {
         files,
         issues,
         repos,
+        filenames,
     };
 
     pub const Only = Kind;
@@ -89,9 +91,10 @@ pub const Hit = struct {
         };
 
         pub const File = struct {
+            repo_name: []const u8,
             path: []const u8,
-            sha: git.Sha,
-            idx: usize,
+            sha: git.Sha.Text,
+            hit_idx: usize,
             line: u32,
             code: []const u8,
         };
@@ -287,9 +290,11 @@ pub const Rule = struct {
 const Exclude = struct {
     list: ArrayList([]const u8),
 
-    pub const new: Exclude = .{ .list = .empty };
+    pub const empty: Exclude = .{
+        .list = .empty,
+    };
 
-    fn excluded(e: *Exclude, path: []const u8) bool {
+    fn checkSkip(e: *Exclude, path: []const u8) bool {
         for (e.list.items) |ex| {
             if (startsWith(u8, path, ex)) return true;
         }
@@ -403,6 +408,7 @@ pub fn Iterator(Itr: type) type {
                     .commits => return false,
                     .repos => return false,
                     .files => return false,
+                    .filenames => return false,
                 },
                 .owner => |owner| if (@hasField(Hit.Result, "owner")) {
                     log.debug("     rule owner '{s}' '{s}'", .{ owner, self.data.user });
@@ -539,6 +545,10 @@ pub fn searchAll(search: *Search, io: Io) !void {
         search.searchCommits({}, io) catch |err| {
             log.err("Search Commit error {} (continuing)", .{err});
         };
+
+        search.searchTrees(io) catch |err| {
+            log.err("Search Commit error {} (continuing)", .{err});
+        };
     }
 }
 
@@ -642,51 +652,127 @@ pub fn reposFor(rules: *const Search) ![]S.SearchHtml.SearchResults {
     return &.{};
 }
 
-pub fn searchTree(
+pub fn searchTrees(search: *Search, io: Io) !void {
+    var limit: u32 = if (search.only != null and search.only.? == .commits) 2000 else 500;
+
+    for (search.repos.items) |*repo| {
+        log.debug("search tree in {s}", .{repo.name.?});
+        repo.git.loadData(search.alloc, io) catch |err| {
+            log.err("Unable to load repo {s} [{}]", .{ repo.name.?, err });
+        };
+
+        const head = try repo.git.HEAD(search.alloc, io);
+        const tree = try head.loadTree(&repo.git, search.alloc, io);
+        try search.searchTree(&tree, repo, &.{}, &limit, io);
+    }
+}
+
+fn searchTree(
     search: *Search,
-    tree: *git.Tree,
-    repo: *git.Repo,
-    root: []const u8,
-    search_str: []const u8,
-    ex: *Exclude,
+    tree: *const git.Tree,
+    repo: *Repo,
+    root_path: []const u8,
     limit: *u32,
     io: Io,
 ) !void {
     var itr = tree.iterate();
     while (itr.next()) |obj| {
         if (limit.* == 0) break;
-        const path = if (root.len > 0)
-            try search.alloc.print("{s}/{s}", .{ root, obj.name })
-        else
-            obj.name;
-        log.debug("searching {s}\n", .{path});
-        if (ex.excluded(path)) {
-            if (root.len > 0) search.alloc.free(path);
+        std.debug.assert(root_path.len == 0 or root_path[root_path.len - 1] == '/');
+        const path = try search.alloc.print("{s}{s}/", .{ root_path, obj.name });
+        log.debug("tree search {s} -> {s}", .{ repo.name.?, path });
+        if (search.excluded.checkSkip(path)) {
+            // TODO optimize this alloc
+            search.alloc.free(path);
             continue;
         }
         limit.* -|= 1;
-        var object = try repo.objects.load(obj.sha, search.alloc, io);
+        var object = repo.git.objects.load(obj.sha, search.alloc, io) catch |err| switch (err) {
+            error.OutOfMemory => return error.OutOfMemory,
+            error.ShaNotFound,
+            error.ObjectMissing,
+            error.ObjectCorrupt,
+            error.ObjectInvalid,
+            error.FileNotFound,
+            error.NameTooLong,
+            error.BadPathName,
+            => return error.CorruptRepo,
+            error.StreamTooLong => continue,
+            error.Canceled => return,
+            error.SystemResources,
+            error.AccessDenied,
+            error.PermissionDenied,
+            error.NoDevice,
+            error.ProcessFdQuotaExceeded,
+            error.SystemFdQuotaExceeded,
+            error.NetworkNotFound,
+            error.SymLinkLoop,
+            error.OtherFileSys,
+            => return error.Io,
+            error.Ambiguous => unreachable, // corrupted repo?
+            error.NotDir => unreachable,
+            error.Unexpected => unreachable,
+        };
         switch (object) {
-            .tree => |*t| search.searchTree(t, repo, path, search_str, ex, limit, io) catch |err| {
+            .tree => |*t| for (search.rules.items) |r| {
+                switch (r.rule) {
+                    .owner => {}, // TODO check repo owners file
+                    .only => |only| if (only != .filenames) return,
+                    .raw => |raw| if (find(u8, path, raw)) |_| {
+                        try search.appendHit(.{ .result = .{
+                            .file = .{
+                                .repo_name = repo.name.?,
+                                .path = path,
+                                .sha = t.sha.text(),
+                                .hit_idx = 0,
+                                .line = 0,
+                                .code = &.{},
+                            },
+                        } }, .{ .repo = repo.name.? });
+                    },
+                    .is, .kind, .repo, .target => {},
+                }
+            } else search.searchTree(t, repo, path, limit, io) catch |err| {
                 log.err("search error {}", .{err});
-                limit.* /= 2;
                 continue;
             },
-            .blob => |b| {
-                if (find(u8, b.data.blob, search_str)) |idx|
-                    try search.appendHit(.{ .result = .{
-                        .file = .{
-                            .path = path,
-                            .sha = b.sha,
-                            .idx = idx,
-                            .line = @truncate(countScalar(u8, b.data.blob[0..idx], '\n')),
-                            .code = b.data.blob,
-                        },
-                    } }, .{ .repo = "todo file repo name" });
-            },
+            .blob => |*b| for (search.rules.items) |r| {
+                switch (r.rule) {
+                    .owner => {}, // TODO check repo owners file
+                    .only => |only| if (only == .filenames) continue,
+                    .raw => |raw| if (find(u8, path, raw)) |_| {
+                        try search.appendHit(.{ .result = .{
+                            .file = .{
+                                .repo_name = repo.name.?,
+                                .path = path,
+                                .sha = b.sha.text(),
+                                .hit_idx = 0,
+                                .line = 0,
+                                .code = &.{},
+                            },
+                        } }, .{ .repo = repo.name.? });
+                    },
+                    .is, .kind, .repo, .target => {},
+                }
+            } else try search.searchInBlob(repo, path, b),
+
             .commit, .tag => return error.CorruptedRepo,
         }
     }
+}
+
+fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !void {
+    if (find(u8, b.data.blob, "anstehusnaotehn")) |idx|
+        try search.appendHit(.{ .result = .{
+            .file = .{
+                .repo_name = repo.name.?,
+                .path = path,
+                .sha = b.sha.text(),
+                .hit_idx = idx,
+                .line = @truncate(countScalar(u8, b.data.blob[0..idx], '\n')),
+                .code = b.data.blob,
+            },
+        } }, .{ .repo = path[0 .. path.len - 1] });
 }
 
 const From = union(enum) {
@@ -736,30 +822,29 @@ pub fn searchFiles(
     defer file_list.deinit(search.alloc);
     var commit = try repo.git.HEAD(search.alloc, io);
     var tree: git.Tree = try commit.loadTree(&repo.git, search.alloc, io);
-    var excludes: Exclude = .new;
+    var excludes: Exclude = .empty;
     try excludes.fromRepo(&repo.git, &tree, search.alloc, io);
     try excludes.fromSearch(search.string, search.alloc);
     defer excludes.list.deinit(search.alloc);
     for (excludes.list.items) |ex| log.info("tree exclude {s}", .{ex});
     // TODO real tokenization
-    const string = search.string[0 .. findScalarPos(u8, search.string, 0, ' ') orelse search.string.len];
-    try search.searchTree(&tree, &repo.git, "", string, &excludes, &limit, io);
+    try search.searchTree(&tree, repo, &.{}, &limit, io);
 
     var hits: ArrayList(S.SearchFlavor.File) = try .initCapacity(search.alloc, file_list.items.len);
     for (file_list.items) |hit| {
-        var start: usize = hit.idx;
+        var start: usize = hit.hit_idx;
         var before: usize = extra_lines;
         while (start > 0 and before > 0) : (start -|= 1) {
             if (hit.code[start] == '\n') before -|= 1;
         }
-        var end: usize = hit.idx;
+        var end: usize = hit.hit_idx;
         var after: usize = extra_lines;
         while (end < hit.code.len and after > 0) : (end += 1) {
             if (hit.code[end] == '\n') after -|= 1;
         }
         if (start > 0) start += 2;
         const code = hit.code[start .. end - 1];
-        var line_number = hit.line + 1 - countScalar(u8, code[0 .. hit.idx - start], '\n');
+        var line_number = hit.line + 1 - countScalar(u8, code[0 .. hit.hit_idx - start], '\n');
         var writer: Writer.Allocating = try .initCapacity(search.alloc, code.len * 2);
         var source = std.mem.splitScalar(u8, code, '\n');
         while (source.next()) |line| {
