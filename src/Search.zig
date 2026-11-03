@@ -13,6 +13,7 @@ meta: struct {
     repos: HashMap(usize) = .empty,
     deltas: HashMap(usize) = .empty,
     commits: HashMap(usize) = .empty,
+    files: HashMap(usize) = .empty,
 
     const HashMap = std.hash_map.StringHashMapUnmanaged;
 } = .{},
@@ -728,7 +729,7 @@ fn searchTree(
                                 .line = 0,
                                 .code = &.{},
                             },
-                        } }, .{ .repo = repo.name.? });
+                        } }, .{ .filename = .{ .repo = repo.name.?, .path = path } });
                     },
                     .is, .kind, .repo, .target => {},
                 }
@@ -744,13 +745,13 @@ fn searchTree(
                         try search.appendHit(.{ .result = .{
                             .file = .{
                                 .repo_name = repo.name.?,
-                                .path = path,
+                                .path = path[0 .. path.len - 1],
                                 .sha = b.sha.text(),
                                 .hit_idx = 0,
                                 .line = 0,
                                 .code = &.{},
                             },
-                        } }, .{ .repo = repo.name.? });
+                        } }, .{ .filename = .{ .repo = repo.name.?, .path = path[0 .. path.len - 1] } });
                     },
                     .is, .kind, .repo, .target => {},
                 }
@@ -777,6 +778,10 @@ fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !v
 
 const From = union(enum) {
     repo: []const u8,
+    filename: struct {
+        path: []const u8,
+        repo: []const u8,
+    },
 };
 
 fn appendHit(search: *Search, hit: Hit, from: From) !void {
@@ -790,7 +795,23 @@ fn appendHit(search: *Search, hit: Hit, from: From) !void {
             }
             ptr.value_ptr.* +|= 1;
         },
+        .filename => |fnm| {
+            const rptr = try search.meta.repos.getOrPut(search.alloc, fnm.repo);
+            if (!rptr.found_existing) {
+                rptr.key_ptr.* = fnm.repo;
+                rptr.value_ptr.* = 0;
+            }
+            rptr.value_ptr.* +|= 1;
+
+            const fptr = try search.meta.files.getOrPut(search.alloc, fnm.path);
+            if (!fptr.found_existing) {
+                fptr.key_ptr.* = fnm.path;
+                fptr.value_ptr.* = 0;
+            }
+            fptr.value_ptr.* +|= 1;
+        },
     }
+
     switch (hit.result) {
         .repo => {},
         .commit => {},
@@ -857,7 +878,7 @@ pub fn searchFiles(
             .repo_name = .safe(repo.name orelse ""),
             .filename = .abx(hit.path),
             .line = hit.line + 1,
-            .code = .safe(writer.written()),
+            .code = .{ .lines = .safe(writer.written()) },
         });
     }
 

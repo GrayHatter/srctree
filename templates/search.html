@@ -31,8 +31,8 @@
         <Case File>
         <row class=file>
           <div>
-            <filename>Filename: <a href="/repo/<RepoName />/blob/<Filename />#L<Line type="usize" />"><Filename /></a></filename>
-            <code><Code /></code>
+            <filename><span class=muted><RepoName /></span>: <a href="/repo/<RepoName />/blob/<Filename />#L<Line type="usize" />"><Filename /></a></filename>
+              <With Code><code><Lines /></code></With>
           </div>
         </row>
         </Case>
@@ -41,7 +41,7 @@
         <row class=commit>
         <details>
           <summary>
-            <left><a href="/repo/<RepoName />/commit/<Sha />"><Sha /></a> : <Title /></left>
+            <left><a class=muted href="/repo/<RepoName />/commit/<Sha />"><Sha /></a> : <Title /></left>
           </summary>
           <Body />
         </details>
@@ -117,10 +117,10 @@
         <FileExclusion ornull />
         <For Files>
         <row>
-          <Name />
+          <div><Name /> -- <Count type="usize" /></div>
           <buttons>
-            <button class="add jsreq" data-value="kind:<Name />">+</button>
-            <button class="del jsreq" data-value="rude:<Name />">-</button>
+            <button class="add jsreq" data-value="filename:<Name />">+</button>
+            <button class="del jsreq" data-value="!filename:<Name />">-</button>
           </buttons>
         </row>
         </For>

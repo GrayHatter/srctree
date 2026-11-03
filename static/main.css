@@ -10,8 +10,9 @@ body { margin: 0 auto 10rem; }
 a {
 	text-decoration: none;
 	color: #FFFFEB;
-	&:visited { text-decoration: none; color: #FFFFEB; }
+	&:visited { text-decoration: none; color: #ffe; }
 	&.bare-link { color:#6cf; &:visited { color: #dbbbff; } }
+	&.muted:visited { text-decoration: none; color: #bbb; }
 }
 div {
 	vertical-align: bottom;
@@ -403,14 +404,7 @@ searchresults {
 				flex: 2 1 auto;
 			}
 			filename {
-				display: block;
-				background: #404040;
-				color: #a6a6a6;
-				border-radius: 3px 3px 0 0;
-				border: 1px gray solid;
-				border-bottom: 0px;
-				height: 1.5em;
-				padding: 4px 12px;
+				color: #aaa;
 			}
 			code {
 				background: #333;
@@ -446,15 +440,6 @@ searchresults {
 				height: 1.5em;
 				padding: 4px 12px;
 			}
-			code {
-				background: #333;
-				border-radius: 0 0 3px 3px;
-				border: 1px gray solid;
-				border-top: 0px;
-				white-space: break-spaces;
-				overflow: scroll;
-			}
-
 		}
 	}
 	searchmeta {
@@ -508,7 +493,6 @@ row {
 			justify-content: space-between;
 		}
 	}
-	> div { margin: 0 1%; }
 	.meta {
 		min-width: 35px;
 		display: flex;

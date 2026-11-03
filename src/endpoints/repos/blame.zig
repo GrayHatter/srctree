@@ -12,10 +12,11 @@ const style_blocks: [10][]const u8 = .{
     " blame-age-8",
     " blame-age-old",
 };
+
 pub fn blame(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     std.debug.assert(rd.verb.? == .blame);
-    const blame_file = (rd.path orelse return error.InvalidURI).path[rd.path.?.index..];
+    const blame_file = (rd.path orelse return error.InvalidURI).path[rd.path.?.index + 1 ..];
 
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
     var repo = (Repo.openGit(rd.name, vis, f.io) catch return error.Unknown) orelse return error.ServerFault;

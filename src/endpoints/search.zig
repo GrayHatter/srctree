@@ -132,6 +132,7 @@ fn errorPage(f: *Frame, search_str: []const u8, err: []const u8) Error!void {
 
 const MetaRepo = S.SearchHtml.SearchMeta.Repos;
 const MetaDelta = S.SearchHtml.SearchMeta.Deltas;
+const MetaFile = S.SearchHtml.SearchMeta.Files;
 
 pub fn custom(f: *Frame, query_str: []const u8) Error!void {
     var search: Search = Search.init(query_str, .quick, f.alloc) catch
@@ -174,7 +175,7 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
                     // TODO ref/sha/name
                     //.sha = .safe(path.sha.slice()[0..10]),
                     .filename = .abx(path.path),
-                    .code = .abx(path.code),
+                    .code = if (path.code.len > 0) .{ .lines = .abx(path.code) } else null,
                     .line = path.line,
                 },
             },
@@ -182,9 +183,9 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
     };
 
     var repos: ArrayList(MetaRepo) = .empty;
-    //const commits : ArrayList(S) = .empty;
-    //const files   : ArrayList(S) = .empty;
     var deltas: ArrayList(MetaDelta) = .empty;
+    //const commits : ArrayList(S) = .empty;
+    var files: ArrayList(MetaFile) = .empty;
     if (show_meta) {
         {
             var itr = search.meta.repos.iterator();
@@ -198,6 +199,15 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
                 try deltas.append(f.alloc, .{ .name = .safe(next.key_ptr.*), .count = next.value_ptr.* });
             }
         }
+        {
+            var itr = search.meta.files.iterator();
+            while (itr.next()) |next| {
+                try files.append(f.alloc, .{
+                    .name = .safe(next.key_ptr.*),
+                    .count = next.value_ptr.*,
+                });
+            }
+        }
     }
 
     var page: SearchHtml = .init(.{
@@ -208,10 +218,10 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
         .search = .abx(query_str),
         .search_results = results.items,
         .search_meta = if (!show_meta) null else .{
-            .deltas = deltas.items,
             .repos = repos.items,
-            .files = &.{},
+            .deltas = deltas.items,
             .commits = &.{},
+            .files = files.items,
             .file_exclusion = if (search.full_term_count == 0)
                 .safe("<br>File text search requires<br> at least one search term")
             else
