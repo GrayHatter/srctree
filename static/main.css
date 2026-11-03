@@ -399,6 +399,9 @@ searchresults {
 		div {
 			display: block;
 			text-align:left;
+			&.main {
+				flex: 2 1 auto;
+			}
 			filename {
 				display: block;
 				background: #404040;
@@ -478,7 +481,8 @@ row {
 	display: flex;
 	margin: 0 0 0.5em 0;
 	padding: 0 0.2em 1px;
-	a {
+	justify-content: space-between;
+	> * {
 		border-bottom: 1px solid black;
 		display: flex;
 		justify-content: space-between;
@@ -497,15 +501,26 @@ row {
 		text-align: center;
 		min-width: 2em;
 	}
+	details {
+		width: 100%;
+		summary {
+			display: flex;
+			justify-content: space-between;
+		}
+	}
 	> div { margin: 0 1%; }
-	div.main { flex-grow: 1;  width: auto; }
 	.meta {
 		min-width: 35px;
 		display: flex;
 		flex-direction: column;
 		justify-content: space-evenly;
 	}
-	.muted { margin: 0 3px 0 0 ; display: inline-block; font-size: 1rem; }
+	.muted {
+		margin: 0 3px 1px 0 ;
+		display: inline-block;
+		font-size: 1rem;
+		width: auto;
+	}
 	desc { display: block; }
 }
 deltalist {
@@ -712,34 +727,26 @@ comment {
 	}
 	.reply { text-align: right; float: right; }
 }
-div.coderef {
+div.coderef, span.coderef {
 	border-top: 1px solid black;
+	border-right: 1px solid #737373;
+	border-bottom: 1px solid #737373;
 	border-left: 1px solid black;
 	border-radius: 6px;
-	border-bottom: 1px solid #737373;
-	border-right: 1px solid #737373;
-	margin: 0 10px;
-	padding: 2px 15px;
 	background: #333;
 	white-space: pre;
 	&.red { background: #433; }
 	&.green { background: #343; }
 	&.yellow { background: #333; }
 }
+div.coderef {
+	margin: 0 10px;
+	padding: 2px 15px;
+}
 span.coderef {
 	display: inline-block;
-	border-top: 1px solid black;
-	border-left: 1px solid black;
-	border-radius: 6px;
-	border-bottom: 1px solid #737373;
-	border-right: 1px solid #737373;
 	margin: 0;
 	padding: 1px 3px;
-	background: #333;
-	white-space: pre;
-	&.red { background: #433; }
-	&.green { background: #343; }
-	&.yellow { background: #333; }
 }
 treeview {
 	border-left: 1px gray solid;
@@ -748,37 +755,6 @@ treeview {
 	margin-top: 1rem;
 	padding: 0.5em;
 	text-align: left;
-}
-searchtree {
-	border-left: 1px gray solid;
-	flex: 1 1 0;
-	height: 100%;
-	margin-top: 1rem;
-	padding: 0.5em;
-	text-align: left;
-
-	/* //// */
-	padding: 0 8px 8px;
-	font-family: "Ubuntu Mono", monospace, sans-serif;
-	min-width: 8rem;
-	position: sticky;
-	top: 3rem;
-	bottom: 0;
-	span.tree, span.file, span.blob {
-		border-top: 1px solid gray;
-		margin: auto;
-		padding: 4px;
-		text-align: left;
-		display: flex;
-		justify-content: flex-start;
-		> a { min-width: 30%; display: inline-block; }
-		&:first-child { border-top: 0px solid gray; }
-		div { display: flex; justify-content: space-between; flex-grow: 1; }
-	}
-	label { border-top: 1px solid gray; display: flex; justify-content: center; }
-	span.tree > a::before { content: "📁"; padding-right: 8px; }
-	span.file > a::before { content: "📄"; padding-right: 8px; }
-	span.blob > a::before { content: "📄"; padding-right: 8px; }
 }
 blob, gist, patch {
 	text-align: left;

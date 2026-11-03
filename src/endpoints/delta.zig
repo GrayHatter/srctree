@@ -1,7 +1,3 @@
-const DeltaListHtml = T.PageData("delta-list.html");
-const DeltaList = S.DeltaListHtml.DeltaList;
-const DeltaMeta = S.DeltaListHtml.DeltaList.DeltaMeta;
-
 pub const AddCommentReq = struct {
     comment: []const u8,
     did: []const u8,
@@ -86,48 +82,6 @@ pub fn incrView(d: *Delta, f: *Frame) !void {
         d.viewers.inc(f.io);
     }
     d.commit(f.io) catch {};
-}
-
-pub fn deltaList(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.DeltaListHtml.DeltaList {
-    const msg = d.message[0..@min(
-        d.message.len,
-        findPos(u8, d.message, 256, " ") orelse d.message.len,
-        find(u8, d.message, "```") orelse d.message.len,
-    )];
-
-    // TODO injectable if d.repo is unsanitized
-    const uri = switch (d.attach) {
-        .issue => try a.print("/repo/{s}/issue", .{d.repo}),
-        .diff => try a.print("/repo/{s}/diff", .{d.repo}),
-        .remote => try a.print("/repo/{s}/issue", .{d.repo}),
-        else => try a.print("/repo/{s}/issue", .{d.repo}),
-    };
-
-    const meta: ?DeltaMeta = switch (d.attach) {
-        .issue => .{ .repo = .abx(d.repo), .flavor = .safe("issue") },
-        .diff => .{ .repo = .abx(d.repo), .flavor = .safe("diff") },
-        .remote => .{
-            .repo = .abx(d.repo),
-            .flavor = .safe(try a.print("Tracking remote issue from {f}", .{
-                abx.Html{ .text = d.attach_remote },
-            })),
-        },
-        else => null,
-    };
-
-    // TODO implement seen
-    return .{
-        .index = .safe(try a.print("{x}", .{d.index})),
-        .uri_base = .abx(uri),
-        .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
-        .comment_count = comments.count,
-        .view_count = d.viewers.liveCount(io),
-        .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
-        .desc = .safe(if (msg.len == 0) "&nbsp;" else try a.print("{f}", .{abx.Html{ .text = msg }})),
-        .delta_meta = meta,
-        .comment = .safe(svg.Icon.slice(if (comments.new) .comment else .comment_new, .{})),
-        .viewers = .safe(svg.Icon.slice(.eye, .{})),
-    };
 }
 
 pub fn deltaResult(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.SearchFlavor.Delta {

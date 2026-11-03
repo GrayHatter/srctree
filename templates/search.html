@@ -14,7 +14,7 @@
         </form>
       </search>
 
-      <div style="display:block; width:100%">Found <ResultCount type="usize" /> Results</div>
+      <div style="display:block; width:100%" class=muted>Found <ResultCount type="usize" /> Results</div>
 
       <With ErrorString><div class="error"><String/ ></div></With>
 
@@ -23,27 +23,34 @@
       <For SearchResults>
       <!-- Verse scope bug -->
       <Switch SearchFlavor>
-        <Case Repo><result>
+        <Case Repo><row class=repo>
           <repo><Name /></repo>
-        </result></Case>
+        </row></Case>
 
 
         <Case File>
+        <row class=file>
           <div>
             <filename>Filename: <a href="/repo/<RepoName />/blob/<Filename />#L<Line type="usize" />"><Filename /></a></filename>
             <code><Code /></code>
           </div>
+        </row>
         </Case>
 
         <Case Commit>
-        <row>
-        <span class=muted><RepoName />: </span>
-        <a href="/repo/<RepoName />/commit/<Sha />"><Sha /> : <Title /></a>
+        <row class=commit>
+        <details>
+          <summary>
+            <left><a href="/repo/<RepoName />/commit/<Sha />"><Sha /></a> : <Title /></left>
+          </summary>
+          <Body />
+        </details>
+        <span class=muted><RepoName /></span>
         </row>
         </Case>
 
         <Case Delta>
-        <row>
+        <row class=delta>
           <a href="<UriBase />/<Index />" class="<Style />">
             <index>
               <id>0x<Index /></id>
@@ -55,8 +62,8 @@
               <desc class="muted"><Desc default="&nbsp;" /></desc>
             </div>
             <div class="meta">
-            <span><Comment />&nbsp;<CommentCount type="usize" /></span>
-            <span><Viewers />&nbsp;<ViewCount type="usize" /></span>
+              <span><Comment />&nbsp;<CommentCount type="usize" /></span>
+              <span><Viewers />&nbsp;<ViewCount type="usize" /></span>
             </div>
           </a>
         </row>
@@ -140,6 +147,7 @@
             <li><span class=coderef>is:(open|closed)</span> require a state</li>
             <li><span class=coderef>owner:&lt;name&gt;</span> search for a connected name; e.g. <span class=coderef>owner:grayhatter</span> will match both the listed committer and/or author in a commit, or the creator of an issue.</li>
           </ul>
+          <p></p>
         </details>
         <script>
           const span = document.getElementById('clickSpan');

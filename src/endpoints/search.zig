@@ -169,6 +169,7 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
                 .repo_name = .safe(c.repo_name),
                 .sha = .safe(c.sha.slice()[0..10]),
                 .title = .abx(c.title),
+                .body = .abx(c.body),
             } },
         }),
         .file => {},
