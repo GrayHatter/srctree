@@ -1,4 +1,5 @@
 alloc: Allocator,
+depth: Depth,
 string: []const u8,
 rules: ArrayList(Rule),
 full_term_count: usize = 0,
@@ -16,6 +17,8 @@ meta: struct {
 } = .{},
 
 const Search = @This();
+
+pub const Depth = enum { quick, deep };
 
 pub const Magic = enum {
     is,
@@ -54,7 +57,7 @@ pub const Magic = enum {
 
 pub const Hit = struct {
     result: Result,
-    liveness: usize = 0,
+    liveness: Liveness = .zero,
 
     pub const Result = union(Result.Name) {
         commit: Commit,
@@ -93,6 +96,27 @@ pub const Hit = struct {
             code: []const u8,
         };
     };
+
+    /// Liveness assumes the power curve (80/20) represents the importance of a search
+    /// hit. Creation = 1000, interaction = 200, views = 10, anonviews = 1
+    pub const Liveness = enum(isize) {
+        min = std.math.minInt(isize),
+        zero = 0,
+        any_view = 1,
+        user_view = 10,
+        engagement = 200,
+        created = 1000,
+        max = std.math.maxInt(isize),
+        _,
+
+        pub fn add(lv: *Liveness, new: Liveness) void {
+            lv.* = @fromBackingInt(@backingInt(lv.*) +| @backingInt(new));
+        }
+
+        pub fn sub(lv: *Liveness, new: Liveness) void {
+            lv.* = @fromBackingInt(@backingInt(lv.*) -| @backingInt(new));
+        }
+    };
 };
 
 pub const Rule = struct {
@@ -124,11 +148,6 @@ pub const Rule = struct {
                 .target => |t| try w.print("[{s}]:{s}", .{ t.tag, t.text }),
             }
         }
-    };
-
-    pub const State = enum {
-        open,
-        closed,
     };
 
     pub const empty: Rule = .{
@@ -461,7 +480,7 @@ pub fn RepoTypeIterator(Type: type, Indexer: type, wrap: fn (Type) Hit.Result) t
     };
 }
 
-pub fn init(str: []const u8, a: Allocator) !Search {
+pub fn init(str: []const u8, d: Depth, a: Allocator) !Search {
     var rules: ArrayList(Rule) = .empty;
     var itr = splitScalar(u8, str, ' ');
     while (itr.next()) |r_line| {
@@ -485,6 +504,7 @@ pub fn init(str: []const u8, a: Allocator) !Search {
 
     return .{
         .alloc = a,
+        .depth = d,
         .string = str,
         .rules = rules,
         .full_term_count = term_count,
@@ -507,7 +527,7 @@ pub fn searchAll(search: *Search, io: Io) !void {
         _ = only;
     }
     if (search.repos.items.len == 0) {
-        try search.populateRepos(io);
+        try search.populateRepos(.public_only, io);
     }
     search.searchRepos(io) catch |err| {
         log.err("Search Delta error {} (continuing)", .{err});
@@ -522,12 +542,11 @@ pub fn searchAll(search: *Search, io: Io) !void {
     }
 }
 
-pub fn populateRepos(search: *Search, io: Io) !void {
+pub fn populateRepos(search: *Search, vis: Repo.Visibility.Select, io: Io) !void {
     for (search.rules.items) |r| switch (r.rule) {
         .repo => |name| {
             if (r.invert) continue;
-            // TODO !.public_only
-            var repo = (Repo.open(name, .public_only, io) catch continue) orelse continue;
+            var repo = (Repo.open(name, vis, io) catch continue) orelse continue;
             repo.name = search.alloc.dupe(u8, name) catch null;
             try search.repos.append(search.alloc, repo);
         },
@@ -536,7 +555,7 @@ pub fn populateRepos(search: *Search, io: Io) !void {
 
     if (search.repos.items.len == 1) search.repo = &search.repos.items[0];
     if (search.repos.items.len > 0) return;
-    var repo_iter = Repo.allRepoIterator(.public_only, io) catch return;
+    var repo_iter = Repo.allRepoIterator(vis, io) catch return;
 
     while (repo_iter.next(io) catch return error.Unknown) |rep_| {
         var repo = rep_;
@@ -763,11 +782,12 @@ pub fn searchFiles(
 test Search {
     _ = &std.testing.refAllDecls(Search);
 
-    var search: Search = try .init("repo:srctree owner:grayhatter verse", std.testing.allocator);
+    var search: Search = try .init("repo:srctree owner:grayhatter verse", .deep, std.testing.allocator);
     defer search.raze(std.testing.io);
 
     try std.testing.expectEqualDeep(Search{
         .alloc = std.testing.allocator,
+        .depth = .deep,
         .string = "repo:srctree owner:grayhatter verse",
         .rules = .{
             .items = @constCast(&[_]Rule{
@@ -786,9 +806,10 @@ test Search {
     }, search);
 
     search.raze(std.testing.io);
-    search = try .init("srctree", std.testing.allocator);
+    search = try .init("srctree", .quick, std.testing.allocator);
     try std.testing.expectEqualDeep(Search{
         .alloc = std.testing.allocator,
+        .depth = .quick,
         .string = "srctree",
         .rules = .{
             .items = @constCast(&[_]Rule{

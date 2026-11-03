@@ -23,7 +23,7 @@ pub fn inboxCount(user: ?verse.Auth.User, a: Allocator, io: Io) usize {
     var inbox_count: usize = 0;
     const search_str = if (user) |_| default_search else default_search[0..19];
 
-    if (Search.init(search_str, a)) |search| {
+    if (Search.init(search_str, .quick, a)) |search| {
         var search_results = Delta.searchAll(search.rules.items, io);
         defer search_results.raze(io);
         while (search_results.nextDelta(a, io)) |dlt| {
@@ -134,7 +134,7 @@ const MetaRepo = S.SearchHtml.SearchMeta.Repos;
 const MetaDelta = S.SearchHtml.SearchMeta.Deltas;
 
 pub fn custom(f: *Frame, query_str: []const u8) Error!void {
-    var search: Search = Search.init(query_str, f.alloc) catch
+    var search: Search = Search.init(query_str, .quick, f.alloc) catch
         return errorPage(f, query_str, "Bad Search Terms");
     defer search.raze(f.io);
     for (search.rules.items) |rule| log.warn("rule = {f}", .{rule});
