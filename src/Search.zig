@@ -10,6 +10,7 @@ excluded: Exclude = .empty,
 only: ?Magic.Only,
 repo: ?*Repo,
 meta: struct {
+    checked: usize = 0,
     repos: HashMap(usize) = .empty,
     deltas: HashMap(usize) = .empty,
     commits: HashMap(usize) = .empty,
@@ -570,7 +571,7 @@ pub fn populateRepos(search: *Search, vis: Repo.Visibility.Select, io: Io) !void
 
     while (repo_iter.next(io) catch return error.Unknown) |rep_| {
         var repo = rep_;
-        if (!repo.pinned) {
+        if (!repo.pinned and search.depth == .quick) {
             repo.raze(search.alloc, io);
             continue;
         }
@@ -582,13 +583,16 @@ pub fn populateRepos(search: *Search, vis: Repo.Visibility.Select, io: Io) !void
 }
 
 pub fn searchRepos(search: *Search, io: Io) !void {
+    const checked: usize = 0;
+    defer search.meta.checked +|= checked;
     // TODO Search repo names
     // TODO Search Readmes
-    _ = search;
     _ = io;
 }
 
 pub fn searchCommits(search: *Search, age: void, io: Io) !void {
+    var checked: usize = 0;
+    defer search.meta.checked +|= checked;
     _ = age;
     for (search.repos.items) |*repo| {
         log.debug("search commits in {s}", .{repo.name.?});
@@ -605,6 +609,7 @@ pub fn searchCommits(search: *Search, age: void, io: Io) !void {
             var matching: bool = true;
             var owner: ?bool = null;
             for (search.rules.items) |r| {
+                checked +|= 1;
                 switch (r.rule) {
                     .raw => |raw| if (matching) {
                         if (find(u8, cmt.title, raw)) |_| {
@@ -633,11 +638,14 @@ pub fn searchCommits(search: *Search, age: void, io: Io) !void {
 }
 
 pub fn searchDeltas(search: *Search, io: Io) !void {
+    var checked: usize = 0;
+    defer search.meta.checked +|= checked;
     for (search.repos.items) |*repo| {
         log.debug("search delta in {s}", .{repo.name.?});
         var itr = Delta.searchRepo(repo.name.?, search.rules.items, io);
         defer itr.raze(io);
         while (itr.nextDelta(search.alloc, io)) |delta| {
+            checked +|= 1;
             log.debug("delta {}", .{delta.index});
             if (delta.state.embargoed) continue;
             try search.appendHit(
@@ -676,6 +684,8 @@ fn searchTree(
     limit: *u32,
     io: Io,
 ) !void {
+    var checked: usize = 0;
+    defer search.meta.checked +|= checked;
     var itr = tree.iterate();
     while (itr.next()) |obj| {
         if (limit.* == 0) break;
@@ -716,6 +726,7 @@ fn searchTree(
         };
         switch (object) {
             .tree => |*t| for (search.rules.items) |r| {
+                checked +|= 1;
                 switch (r.rule) {
                     .owner => {}, // TODO check repo owners file
                     .only => |only| if (only != .filenames) return,

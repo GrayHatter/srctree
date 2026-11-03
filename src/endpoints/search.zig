@@ -116,6 +116,7 @@ fn errorPage(f: *Frame, search_str: []const u8, err: []const u8) Error!void {
         .body_header = (f.template_data.get(S.BodyHeaderHtml) orelse
             &S.BodyHeaderHtml{ .inbox_count = inboxCount(f.user, f.alloc, f.io) }).*,
         .result_count = 0,
+        .checked_count = 0,
         .search = .abx(search_str),
         .error_string = .{ .string = .safe(err) },
         .search_results = &.{},
@@ -142,7 +143,6 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
 
     search.searchAll(f.io) catch return error.ServerFault;
     log.err("repos = {}", .{search.repos.items.len});
-    log.err("hits = {}", .{search.hits.items.len});
 
     var show_meta: bool = true;
     if (search.only) |_| {
@@ -215,6 +215,7 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
         .body_header = (f.template_data.get(S.BodyHeaderHtml) orelse
             &S.BodyHeaderHtml{ .inbox_count = inboxCount(f.user, f.alloc, f.io) }).*,
         .result_count = search.hits.items.len,
+        .checked_count = search.meta.checked,
         .search = .abx(query_str),
         .search_results = results.items,
         .search_meta = if (!show_meta) null else .{

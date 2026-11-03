@@ -38,6 +38,7 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
         .meta_head = .{ .open_graph = .{} },
         .body_header = .{ .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io) },
         .result_count = files.len,
+        .checked_count = files.len,
         .search = .abx(udata.q orelse &.{}),
         .search_results = &.{},
         .search_meta = .{
