@@ -119,6 +119,7 @@ pub const Hit = struct {
 pub const Rule = struct {
     rule: Query,
     invert: bool = false,
+    len: u16 = 0,
 
     pub const Query = union(Magic) {
         is: Magic.Is,
@@ -258,10 +259,11 @@ pub const Rule = struct {
         const invert = str[0] == '-' or str[0] == '!';
         if (invert) s = s[1..];
 
-        if (find(u8, s, ":")) |i| {
+        if (findScalar(u8, s, ':')) |i| {
             if (i == 0) return .text(s, invert);
-            const match = s[i + 1 ..];
             const pre: []const u8 = s[0..i];
+            const match = parseFromOpen(s[i + 1 ..]);
+            if (match.len > 0 and match[0] == ' ') return .empty;
 
             comptime {
                 std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 7);
@@ -328,6 +330,22 @@ pub const Rule = struct {
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = true }, r13);
         const r14 = parse("!rude:issues");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = false }, r14);
+
+        const r15 = parse("kind:'issues'");
+        try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = false }, r15);
+        const r16 = parse("!kind:'issues'");
+        try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = true }, r16);
+
+        const r17 = parse("something_else:'issues or diffs'  ");
+        try std.testing.expectEqualDeep(Rule{
+            .rule = .{ .target = .{ .tag = "something_else", .text = "issues or diffs" } },
+            .invert = false,
+        }, r17);
+        const r18 = parse("!something_else:'issues or diffs'  ");
+        try std.testing.expectEqualDeep(Rule{
+            .rule = .{ .target = .{ .tag = "something_else", .text = "issues or diffs" } },
+            .invert = true,
+        }, r18);
     }
 
     pub fn format(r: Rule, w: *Writer) !void {
@@ -535,13 +553,34 @@ pub fn RepoTypeIterator(Type: type, Indexer: type, wrap: fn (Type) Hit.Result) t
     };
 }
 
-pub fn init(str: []const u8, d: Depth, a: Allocator) !Search {
+pub fn init(string: []const u8, d: Depth, a: Allocator) !Search {
     var rules: ArrayList(Rule) = .empty;
-    var itr = splitScalar(u8, str, ' ');
-    while (itr.next()) |r_line| {
-        const line = trim(u8, r_line, " ");
-        if (line.len == 0) continue;
-        try rules.append(a, .parse(line));
+
+    var str = string;
+    while (str.len > 2) {
+        const r = Rule.parse(str);
+        log.debug("init {} '{s}' rule {any}", .{ str.len, str, r });
+
+        switch (r.rule) {
+            .raw => |raw| {
+                if (raw.len == 0) break;
+                str = str[raw.len..];
+            },
+            .is => |is| switch (is) {
+                .open => str = str[7..],
+                .closed => str = str[9..],
+            },
+            .repo => |repo| str = str[5 + repo.len ..],
+            .owner => |owner| str = str[6 + owner.len ..],
+            .only => |only| str = str[5 + @tagName(only).len ..],
+            .kind => |kind| str = str[5 + @tagName(kind).len ..],
+            .target => |target| {
+                str = str[target.tag.len + 1 + target.text.len ..];
+            },
+        }
+        try rules.append(a, r);
+
+        str = trim(u8, str, " \t");
     }
 
     var term_count: usize = 0;
@@ -560,7 +599,7 @@ pub fn init(str: []const u8, d: Depth, a: Allocator) !Search {
     return .{
         .alloc = a,
         .depth = d,
-        .string = str,
+        .string = string,
         .rules = rules,
         .full_term_count = term_count,
         .repos = .empty,
