@@ -48,15 +48,6 @@ pub const Magic = enum {
     };
 
     pub const Only = Kind;
-
-    //pub const Only = enum {
-    //    repos,
-    //    commits,
-    //    files,
-    //    deltas,
-    //    issues,
-    //    diffs,
-    //};
 };
 
 pub const Hit = struct {
@@ -205,7 +196,62 @@ pub const Rule = struct {
         return .{ .rule = .{ .repo = str }, .invert = inv };
     }
 
-    /// TODO(robinlinden) squote & dquote support
+    //pub const ValidOpen = enum(u8) {
+    //    squote = '\'',
+    //    dquote = '"',
+    //    bracket = '[',
+    //    parenth = '(',
+    //    angle = '<',
+    //    curly = '{',
+    //};
+
+    fn open(in: u8) u8 {
+        return switch (in) {
+            '\'' => '\'',
+            '"' => '"',
+            '[' => ']',
+            '(' => ')',
+            '<' => '>',
+            '{' => '}',
+            else => ' ',
+            // TODO extra review
+            ' ' => 0,
+        };
+    }
+
+    fn parseFromOpen(str: []const u8) []const u8 {
+        if (str.len < 4) return str;
+        const chr = open(str[0]);
+        const end = findScalarPos(u8, str, 1, chr) orelse return str;
+
+        return if (chr == ' ') str[0..end] else str[1..end];
+    }
+
+    test parseFromOpen {
+        try std.testing.expectEqualStrings("", parseFromOpen(""));
+        try std.testing.expectEqualStrings("1", parseFromOpen("1"));
+        try std.testing.expectEqualStrings("12", parseFromOpen("12"));
+        try std.testing.expectEqualStrings("'1'", parseFromOpen("'1'"));
+        try std.testing.expectEqualStrings("word", parseFromOpen("\"word\""));
+        try std.testing.expectEqualStrings("word", parseFromOpen("'word'"));
+        try std.testing.expectEqualStrings("word", parseFromOpen("[word]"));
+        try std.testing.expectEqualStrings("word word", parseFromOpen("[word word]"));
+        try std.testing.expectEqualStrings("word", parseFromOpen("{word}"));
+        try std.testing.expectEqualStrings("word word2", parseFromOpen("{word word2}"));
+        try std.testing.expectEqualStrings("word", parseFromOpen("<word>"));
+        try std.testing.expectEqualStrings("word word3", parseFromOpen("<word word3>"));
+        try std.testing.expectEqualStrings("word ", parseFromOpen("(word )"));
+        try std.testing.expectEqualStrings("wordword word 4", parseFromOpen("(wordword word 4)"));
+
+        try std.testing.expectEqualStrings("first", parseFromOpen("first second third forth)"));
+        try std.testing.expectEqualStrings(" second third forth)", parseFromOpen(" second third forth)"));
+        try std.testing.expectEqualStrings("second", parseFromOpen("second third forth)"));
+        try std.testing.expectEqualStrings("third", parseFromOpen("third forth)"));
+        try std.testing.expectEqualStrings("forth)", parseFromOpen("forth)"));
+
+        try std.testing.expectEqualStrings(" first second third forth", parseFromOpen(" first second third forth"));
+    }
+
     pub fn parse(str: []const u8) Rule {
         if (str.len < 3) return .empty;
         var s = str;
