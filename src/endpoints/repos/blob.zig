@@ -119,17 +119,11 @@ fn blobHtml(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Er
     const blob_path = path_itr.path[0..path_itr.start_index];
 
     const blob_data = try getBlob(f, rd, repo, tree);
-    const colored_blob: []const u8 = if (syntax.Language.guessFromName(blob_data.name)) |lang|
-        syntax.highlight(lang, blob_data.data.blob, f.alloc, f.io) catch |err| B: {
-            log.warn("unable to add syntax highlighting because {}", .{err});
-            break :B blob_data.data.blob;
-        }
-    else if (excludedExt(blob_data.name))
+    const wrapped: []const u8 = if (excludedExt(blob_data.name))
         "This file type is currently unsupported"
     else
-        try f.alloc.print("{f}", .{abx.Html{ .text = blob_data.data.blob }});
+        try syntax.guessAndColorAndWrap(blob_data.name, blob_data.data.blob, f.alloc, f.io);
 
-    const wrapped = try wrapLineNumbers(f.alloc, colored_blob);
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
@@ -205,22 +199,6 @@ fn excludedExt(name: []const u8) bool {
         if (std.mem.endsWith(u8, name, un)) return true;
     }
     return false;
-}
-
-fn wrapLineNumbers(a: Allocator, text: []const u8) ![]u8 {
-    var r: Io.Reader = .fixed(text);
-    var w: Io.Writer.Allocating = try .initCapacity(a, text.len * 2);
-    var number: usize = 0;
-    while (r.takeSentinel('\n')) |line| {
-        number += 1;
-        try w.writer.print(
-            \\<ln num="{0d}" id="L{0d}">{1s}</ln>
-            \\
-        , .{ number, line });
-    } else |err| switch (err) {
-        error.EndOfStream => return try w.toOwnedSlice(),
-        else => unreachable,
-    }
 }
 
 const NewRepoPage = verse.template.PageData("repo-new.html");

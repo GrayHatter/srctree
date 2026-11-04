@@ -90,6 +90,36 @@ pub const Language = enum {
     }
 };
 
+pub fn wrapLineNumbers(a: Allocator, text: []const u8) error{OutOfMemory}![]u8 {
+    var r: Io.Reader = .fixed(text);
+    var w: Io.Writer.Allocating = try .initCapacity(a, text.len * 2);
+    var number: usize = 0;
+    while (r.takeSentinel('\n')) |line| {
+        number += 1;
+        w.writer.print(
+            \\<ln num="{0d}" id="L{0d}">{1s}</ln>
+            \\
+        , .{ number, line }) catch return error.OutOfMemory;
+    } else |err| switch (err) {
+        error.EndOfStream => return try w.toOwnedSlice(),
+        else => unreachable,
+    }
+}
+
+pub fn guessAndColorAndWrap(name: []const u8, blob: []const u8, a: Allocator, io: Io) error{OutOfMemory}![]u8 {
+    const colored = try guessAndColor(name, blob, a, io);
+    return try wrapLineNumbers(a, colored);
+}
+
+pub fn guessAndColor(name: []const u8, blob: []const u8, a: Allocator, io: Io) error{OutOfMemory}![]u8 {
+    const lang = Language.guessFromName(name) orelse
+        return try a.print("{f}", .{abx.Html.abx(blob)});
+    return highlight(lang, blob, a, io) catch |err| {
+        log.warn("unable to add syntax highlighting because {}", .{err});
+        return try a.print("{f}", .{abx.Html.abx(blob)});
+    };
+}
+
 pub fn translate(r: *Reader, w: Writer, lang: Language, a: Allocator) !void {
     return switch (lang) {
         .bash,
@@ -315,3 +345,6 @@ const startsWith = std.mem.startsWith;
 const eql = std.mem.eql;
 const findLast = std.mem.findLast;
 const findScalarPos = std.mem.findScalarPos;
+
+const verse = @import("verse");
+const abx = verse.Antibiotic;
