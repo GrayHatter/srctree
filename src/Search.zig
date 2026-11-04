@@ -790,7 +790,7 @@ fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !v
                 .line_count = @truncate(found_line + line_count),
                 .code = b.data.blob,
             },
-        } }, .{ .repo = path });
+        } }, .{ .filename = .{ .repo = repo.name.?, .path = path } });
     }
 }
 
