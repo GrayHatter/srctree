@@ -177,7 +177,7 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
                     .filename = .abx(path.path),
                     .code = if (path.code.len == 0) null else .{
                         .line_count = path.line_count,
-                        .lines = .abx(path.code),
+                        .lines = .safe(try syntax.guessAndColorAndWrap(path.path, path.code, f.alloc, f.io)),
                         .language = .safe((syntax.Language.guessFromName(path.path) orelse syntax.Language.txt).toString()),
                     },
                     .line = path.line,
