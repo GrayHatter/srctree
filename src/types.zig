@@ -10,6 +10,7 @@ pub const Gist = @import("types/Gist.zig");
 pub const Issue = @import("types/Issue.zig");
 pub const Message = @import("types/Message.zig");
 pub const Network = @import("types/Network.zig");
+pub const RepoMeta = @import("types/RepoMeta.zig");
 pub const Tags = @import("types/Tags.zig");
 pub const Thread = @import("types/Thread.zig");
 pub const User = @import("types/User.zig");
@@ -21,6 +22,7 @@ pub const Sha1Hex = [40]u8;
 pub const Sha1Bin = [20]u8;
 pub const Sha256Hex = [64]u8;
 pub const Sha256Bin = [32]u8;
+
 pub const Timestamp = i64;
 
 pub const Storage = Io.Dir;
@@ -92,6 +94,18 @@ pub fn iterableDir(comptime type_name: @EnumLiteral(), io: Io) !Io.Dir {
     });
 }
 
+pub fn loadReaderFmt(
+    comptime type_name: @EnumLiteral(),
+    comptime fmt: []const u8,
+    data: anytype,
+    a: Allocator,
+    io: Io,
+) !Io.Reader {
+    var buf: [2048]u8 = undefined;
+    const name = try std.fmt.bufPrint(&buf, fmt ++ @tagName(type_name), data);
+    return loadDataReader(type_name, name, a, io) catch return error.FSFault;
+}
+
 fn openFile(comptime type_name: @EnumLiteral(), filename: []const u8, io: Io) !Io.File {
     var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
     defer type_dir.close(io);
@@ -130,6 +144,14 @@ pub fn loadDataHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, a: 
     var buf: [@sizeOf(DefaultHash) * 2 + 1 + @tagName(type_name).len]u8 = undefined;
     const filename = print(&buf, "{x}." ++ @tagName(type_name), .{&hash}) catch unreachable;
     return loadDataReader(type_name, filename, a, io);
+}
+
+pub fn commitFmt(comptime type_name: @EnumLiteral(), comptime fmt: []const u8, data: anytype, io: Io) !Io.File {
+    var buf: [2048]u8 = undefined;
+    const name = try std.fmt.bufPrint(&buf, fmt ++ @tagName(type_name), data);
+    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
+    defer type_dir.close(io);
+    return try type_dir.createFile(io, name, .{});
 }
 
 pub fn commit(comptime type_name: @EnumLiteral(), name: []const u8, io: Io) !Io.File {
@@ -529,6 +551,7 @@ test {
     _ = &Issue;
     _ = &Message;
     _ = &Network;
+    _ = &RepoMeta;
     _ = &Tags;
     _ = &Thread;
     _ = &User;

@@ -1,6 +1,6 @@
 index: usize,
-created: i64 = 0,
-updated: i64 = 0,
+created: types.Timestamp = 0,
+updated: types.Timestamp = 0,
 repo: []const u8,
 title: []const u8,
 message: []const u8,
@@ -82,7 +82,7 @@ pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
 
     var buf: [2048]u8 = undefined;
     const filename = try bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
-    var reader = types.loadDataReader(.deltas, filename, a, io) catch return error.FSFault;
+    var reader = types.loadDataReader(type_prefix, filename, a, io) catch return error.FSFault;
     return readerFn(&reader);
 }
 
@@ -91,7 +91,7 @@ pub fn commit(delta: Delta, io: Io) !void {
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ delta.repo, delta.index });
-    const file = try types.commit(.deltas, filename, io);
+    const file = try types.commit(type_prefix, filename, io);
     defer file.close(io);
     var w_b: [2048]u8 = undefined;
     var fd_writer = file.writer(io, &w_b);
@@ -213,7 +213,7 @@ pub const Iterator = struct {
     dir: Io.Dir.Iterator,
 
     pub fn init(io: Io) Iterator {
-        const dir: Io.Dir = types.iterableDir(.deltas, io) catch unreachable;
+        const dir: Io.Dir = types.iterableDir(type_prefix, io) catch unreachable;
         return .{
             .fd = dir,
             .dir = dir.iterate(),

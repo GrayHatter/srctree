@@ -19,12 +19,21 @@ const Index = types.Index(type_prefix);
 pub fn new(T: type, src: *const T, io: Io) !Thread {
     const max: usize = try Index.next(io);
     const now = Io.Clock.real.now(io).toSeconds();
-    const thread = Thread{
+
+    var thread = Thread{
         .index = max,
-        .delta_hash = src.hash,
         .created = now,
         .updated = now,
+        .delta_hash = undefined,
     };
+
+    switch (T) {
+        types.Delta => thread.delta_hash = src.hash,
+        types.CI => thread.delta_hash = src.hash,
+        types.RepoMeta => thread.delta_hash = @splat('0'),
+        else => @compileError("Thread doesn't know how to support '" ++ @typeName(T) ++ "'\n"),
+    }
+
     try thread.commit(io);
     return thread;
 }
