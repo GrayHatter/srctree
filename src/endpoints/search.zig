@@ -175,7 +175,11 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
                     // TODO ref/sha/name
                     //.sha = .safe(path.sha.slice()[0..10]),
                     .filename = .abx(path.path),
-                    .code = if (path.code.len > 0) .{ .lines = .abx(path.code) } else null,
+                    .code = if (path.code.len == 0) null else .{
+                        .line_count = path.line_count,
+                        .lines = .abx(path.code),
+                        .language = .safe((syntax.Language.guessFromName(path.path) orelse syntax.Language.txt).toString()),
+                    },
                     .line = path.line,
                 },
             },
@@ -258,3 +262,4 @@ const delta_endpoint = @import("delta.zig");
 const Repo = @import("../Repo.zig");
 const Delta = @import("../types.zig").Delta;
 const Search = @import("../Search.zig");
+const syntax = @import("../syntax.zig");

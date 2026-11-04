@@ -98,6 +98,7 @@ pub const Hit = struct {
             sha: git.Sha.Text,
             hit_idx: usize,
             line: u32,
+            line_count: u32,
             code: []const u8,
         };
     };
@@ -738,6 +739,7 @@ fn searchTree(
                                 .sha = t.sha.text(),
                                 .hit_idx = 0,
                                 .line = 0,
+                                .line_count = 0,
                                 .code = &.{},
                             },
                         } }, .{ .filename = .{ .repo = repo.name.?, .path = path } });
@@ -760,13 +762,14 @@ fn searchTree(
                                 .sha = b.sha.text(),
                                 .hit_idx = 0,
                                 .line = 0,
+                                .line_count = 0,
                                 .code = &.{},
                             },
                         } }, .{ .filename = .{ .repo = repo.name.?, .path = path[0 .. path.len - 1] } });
                     },
                     .is, .kind, .repo, .target => {},
                 }
-            } else try search.searchInBlob(repo, path, b),
+            } else try search.searchInBlob(repo, path[0 .. path.len - 1], b),
 
             .commit, .tag => return error.CorruptedRepo,
         }
@@ -774,17 +777,21 @@ fn searchTree(
 }
 
 fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !void {
-    if (find(u8, b.data.blob, "anstehusnaotehn")) |idx|
+    if (find(u8, b.data.blob, "anstehusnaotehn")) |idx| {
+        const found_line = countScalar(u8, b.data.blob[0..idx], '\n');
+        const line_count = countScalar(u8, b.data.blob[idx..], '\n');
         try search.appendHit(.{ .result = .{
             .file = .{
                 .repo_name = repo.name.?,
                 .path = path,
                 .sha = b.sha.text(),
                 .hit_idx = idx,
-                .line = @truncate(countScalar(u8, b.data.blob[0..idx], '\n')),
+                .line = @truncate(found_line),
+                .line_count = @truncate(found_line + line_count),
                 .code = b.data.blob,
             },
-        } }, .{ .repo = path[0 .. path.len - 1] });
+        } }, .{ .repo = path });
+    }
 }
 
 const From = union(enum) {
@@ -876,7 +883,9 @@ pub fn searchFiles(
         }
         if (start > 0) start += 2;
         const code = hit.code[start .. end - 1];
-        var line_number = hit.line + 1 - countScalar(u8, code[0 .. hit.hit_idx - start], '\n');
+        const start_number = countScalar(u8, code[0 .. hit.hit_idx - start], '\n');
+        const file_lines = countScalar(u8, code[hit.hit_idx - start ..], '\n');
+        var line_number = hit.line + 1 - start_number;
         var writer: Writer.Allocating = try .initCapacity(search.alloc, code.len * 2);
         var source = std.mem.splitScalar(u8, code, '\n');
         while (source.next()) |line| {
@@ -889,7 +898,11 @@ pub fn searchFiles(
             .repo_name = .safe(repo.name orelse ""),
             .filename = .abx(hit.path),
             .line = hit.line + 1,
-            .code = .{ .lines = .safe(writer.written()) },
+            .code = .{
+                .lines = .safe(writer.written()),
+                .line_count = file_lines + start_number,
+                .language = .safe((syntax.Language.guessFromName(hit.path) orelse syntax.Language.txt).toString()),
+            },
         });
     }
 
@@ -967,6 +980,7 @@ const log = std.log.scoped(.search);
 const git = @import("git.zig");
 const Repo = @import("Repo.zig");
 const Delta = @import("types.zig").Delta;
+const syntax = @import("syntax.zig");
 
 const findPos = std.mem.findPos;
 const findScalarPos = std.mem.findScalarPos;

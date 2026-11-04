@@ -20,7 +20,7 @@ pub const Language = enum {
     vim,
     zig,
 
-    pub fn toString(l: Language) ![]const u8 {
+    pub fn toString(l: Language) []const u8 {
         return switch (l) {
             .bash, .sh => "sh",
             .c => "c",
@@ -259,7 +259,7 @@ pub const PygmentizeError = error{
 
 pub fn highlightPygmentize(lang: Language, text: []const u8, a: Allocator, io: Io) PygmentizeError![]u8 {
     var child = try std.process.spawn(io, .{
-        .argv = &[_][]const u8{ "pygmentize", "-f", "html", "-l", try lang.toString() },
+        .argv = &[_][]const u8{ "pygmentize", "-f", "html", "-l", lang.toString() },
         .expand_arg0 = .no_expand,
         .environ_map = &.init(a),
         .cwd = .inherit,

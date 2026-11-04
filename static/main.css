@@ -447,6 +447,7 @@ searchresults {
 		display:block;
 		flex: 1 2 18rem;
 		min-width: 10rem;
+		font-size: 95%;
 		list {
 			display:block;
 			width: 100%;
@@ -456,6 +457,19 @@ searchresults {
 		row {
 			margin: 0 0.5em;
 			padding: 0 0.2em 1px;
+		}
+		buttons {
+			flex: 1 5 auto;
+			button {
+				border-bottom: black 1px solid;
+				font-size: unset;
+				font-weight: unset;
+				height: 1.5em;
+				line-height: 0;
+				padding: 0;
+				margin: 1px;
+				width: 1.5em;
+			}
 		}
 	}
 
@@ -506,6 +520,7 @@ row {
 		width: auto;
 	}
 	desc { display: block; }
+	summary.muted.hide { width: 100%; }
 }
 deltalist {
 	margin: 1rem 2.5%;
