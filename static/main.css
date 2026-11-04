@@ -405,6 +405,11 @@ searchresults {
 			}
 			filename {
 				color: #aaa;
+				position: sticky;
+				display: inline-block;
+				top: 0;
+				background-color: #333;
+				width: 100%;
 			}
 			code {
 				background: #333;
