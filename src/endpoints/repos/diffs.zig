@@ -295,9 +295,8 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
     for (diffs, files, 0..) |diff, *file, file_idx| {
         const body = diff.changes orelse continue;
 
-        const dstat = patch.patchStat();
         const stat = try a.print("added: {}, removed: {}, total {}", .{
-            dstat.additions, dstat.deletions, dstat.total,
+            diff.stat.additions, diff.stat.deletions, diff.stat.total,
         });
         //<div class="<DClass />"><ln num="<Num type="usize" />" id="LL<Num type="usize" />" href="#LL<Num type="usize" />"><Line /></ln></div>
         const name = if (diff.filename) |name| try a.print("{s}", .{name}) else switch (diff.header.change) {

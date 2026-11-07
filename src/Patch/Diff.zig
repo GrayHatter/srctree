@@ -373,8 +373,8 @@ pub fn init(r: *Reader) !Diff {
         .blob = blob[0..len],
         .header = undefined,
         .stat = .{
-            .additions = add -| 1,
-            .deletions = del -| 1,
+            .additions = add,
+            .deletions = del,
             .total = @as(isize, add) - @as(isize, del),
         },
     };
