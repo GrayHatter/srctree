@@ -1,10 +1,15 @@
-mtls_fp: [40]u8 = @splat(0),
+mtls_fingerprint_str: [40]u8 = @splat(0),
 not_before: i64,
 not_after: i64,
 kind: Type = .user,
 username: Types.VarString(256) = .{},
 
 pub const User = @This();
+
+pub const empty: User = .{
+    .not_before = 0,
+    .not_after = 0,
+};
 
 pub const Type = enum {
     user,
@@ -15,25 +20,30 @@ pub const Type = enum {
 pub const type_prefix = .users;
 pub const type_version: usize = 1;
 
-const typeio = Types.readerWriter(User, .{ .not_before = 0, .not_after = 0 });
-const writerFn = typeio.write;
-const readerFn = typeio.read;
+const TypeIo = Types.TypedIo(User);
+
+pub fn typeIdent(u: User, w: *Io.Writer) !void {
+    try w.print("{s}", .{u.mtls_fingerprint_str});
+}
 
 pub fn findMTLSFingerprint(fp: []const u8, a: Allocator, io: Io) !User {
     if (fp.len != 40) return error.InvalidFingerprint;
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{s}.user", .{fp});
-    var reader = try Types.loadDataReader(.users, filename, a, io);
-    return readerFn(&reader);
+    var u: User = .empty;
+    u.mtls_fingerprint_str = fp[0..40].*;
+    var reader = try TypeIo.loadData(&u, a, io);
+    defer reader.file.close(io);
+    TypeIo.read(&u, &reader.interface);
+    return u;
 }
 
-pub fn open(username: []const u8, a: Allocator, io: Io) !User {
+pub fn findByUsername(username: []const u8, a: Allocator, io: Io) !User {
     for (username) |c| if (!std.ascii.isLower(c)) return error.InvalidUsername;
 
     var buf: [2048]u8 = undefined;
     const filename = try std.fmt.bufPrint(&buf, "{s}.user", .{username});
-    var reader = try Types.loadDataReader(.users, filename, a, io);
-    return readerFn(&reader);
+    var reader = try TypeIo.loadData(.users, filename, a, io);
+    defer reader.file.close(io);
+    return TypeIo.read.read(&reader);
 }
 
 pub fn new() !User {
@@ -41,14 +51,11 @@ pub fn new() !User {
     return error.NotImplemnted;
 }
 
-pub fn commit(u: User) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{s}.user", .{&u.mtls_fp});
-    const file = try Types.commit(.users, filename);
-    defer file.close();
+pub fn commit(u: *const User, io: Io) !void {
+    const file = try TypeIo.commit(u, io);
 
     var writer = file.writer();
-    try writerFn(&u, &writer);
+    try TypeIo.write.write(&u, &writer);
 }
 
 test "reader/writer" {
@@ -57,17 +64,17 @@ test "reader/writer" {
     defer writer.deinit();
 
     const this: User = .{
-        .mtls_fp = "ABCDEFGHIJKLMNOPQURSTUVWXYZabcdefghijklm".*,
+        .mtls_fingerprint_str = "ABCDEFGHIJKLMNOPQURSTUVWXYZabcdefghijklm".*,
         .username = .init("grayhatter"),
         .not_before = 0,
         .not_after = 999999999,
         .kind = .system,
     };
-    try writerFn(&this, &writer.writer);
+    try TypeIo.write(&this, &writer.writer);
 
     const expected =
         \\# users/1
-        \\mtls_fp: ABCDEFGHIJKLMNOPQURSTUVWXYZabcdefghijklm
+        \\mtls_fingerprint_str: ABCDEFGHIJKLMNOPQURSTUVWXYZabcdefghijklm
         \\not_before: 0
         \\not_after: 999999999
         \\kind: system
@@ -82,7 +89,8 @@ test "reader/writer" {
 
     {
         var reader: Io.Reader = .fixed(writer.written());
-        var read_this = readerFn(&reader);
+        var read_this: User = .empty;
+        TypeIo.read(&read_this, &reader);
         try std.testing.expectEqualStrings(this.username.slice(), read_this.username.slice());
         // lol sorry about this
         read_this.username = this.username;
@@ -91,7 +99,8 @@ test "reader/writer" {
 
     {
         var reader: Io.Reader = .fixed(expected_var);
-        var from_expected_this = readerFn(&reader);
+        var from_expected_this: User = .empty;
+        TypeIo.read(&from_expected_this, &reader);
         try std.testing.expectEqualStrings(this.username.slice(), from_expected_this.username.slice());
         // lol sorry about this
         from_expected_this.username = this.username;
@@ -100,6 +109,7 @@ test "reader/writer" {
 }
 
 const std = @import("std");
+const log = std.log.scoped(.srctypes_mtlsuser);
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;

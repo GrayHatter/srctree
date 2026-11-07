@@ -3,7 +3,7 @@ created: types.Timestamp = 0,
 updated: types.Timestamp = 0,
 repo: []const u8,
 title: []const u8,
-message: []const u8,
+message: []const u8 = &.{},
 author: ?[]const u8 = null,
 //owner: []const u8 = &.{},
 thread_id: usize = 0,
@@ -11,13 +11,13 @@ tags_id: usize = 0,
 
 state: State = .default,
 viewers: Viewers = .empty,
+thread: Thread = .empty,
 // TODO fix when unions are supported
-attach: Attach = .nos,
+attach: Attachment.Kind = .nos,
 attach_target: usize = 0,
 attach_remote: []const u8 = &.{},
 
 hash: types.DefaultHash = @splat(0),
-thread: ?*Thread = null,
 
 pub const Delta = @This();
 
@@ -31,35 +31,38 @@ pub const blank: Delta = .{
 pub const type_prefix = .deltas;
 pub const type_version = 0;
 
-pub const State = @import("common.zig").State;
+pub const RepoIterator = Search.RepoTypeIterator(Delta, TypeIo.Index, searchWrap);
+pub const SearchIterator = Search.Iterator(Iterator);
+pub const RepoSearchIterator = Search.Iterator(RepoIterator);
+pub const TypeIo = types.TypedIo(Delta);
 
-pub const Attach = enum(u8) {
-    nos = 0,
-    diff = 1,
-    issue = 2,
-    commit = 3,
-    line = 4,
-    remote = 5,
-};
-
-/// unstable api
-pub const Attachment = union(Attach) {
+pub const Attachment = union(Kind) {
     nos,
     diff: types.Diff,
     issue,
     commit: []const u8,
     line: []const u8,
     remote: []const u8,
+
+    pub const Kind = enum(u8) {
+        nos = 0,
+        diff = 1,
+        issue = 2,
+        commit = 3,
+        line = 4,
+        remote = 5,
+    };
 };
 
-const typeio = types.readerWriter(Delta, .blank);
-const writerFn = typeio.write;
-const readerFn = typeio.read;
-const Index = types.Index(type_prefix);
+pub const Attached = union(enum) {
+    nos,
+    diff: Diff,
+};
 
 pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const u8, io: Io) !Delta {
     const now = Io.Clock.real.now(io).toSeconds();
-    const max: usize = try Index.scoped.next(repo, io);
+    const max: usize = try TypeIo.Index.scoped.next(repo, io);
+
     var d = Delta{
         .index = max,
         .created = now,
@@ -70,52 +73,32 @@ pub fn new(repo: []const u8, title: []const u8, msg: []const u8, author: []const
         .author = author,
     };
 
-    var thread: Thread = try .new(Delta, &d, io);
-    try thread.commit(io);
-    d.thread_id = thread.index;
+    d.thread = try .new(Delta, &d, io);
+    d.viewers = try .new(Delta, &d, io);
     return d;
 }
 
 pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Delta {
-    const max = Index.scoped.current(repo, io) catch return error.FSFault;
+    log.debug("open Delta '{s}' .. {}", .{ repo, index });
+    std.debug.assert(repo.len > 0);
+    const max = TypeIo.Index.scoped.current(repo, io) catch @panic("IndexError");
     if (index > max) return error.DeltaDoesNotExist;
 
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{s}.{x}.delta", .{ repo, index });
-    var reader = types.loadDataReader(type_prefix, filename, a, io) catch return error.FSFault;
-    return readerFn(&reader);
+    var d: Delta = .blank;
+    d.index = index;
+    d.repo = repo;
+    var reader = TypeIo.loadData(&d, a, io) catch return error.FSError;
+    defer reader.file.close(io);
+    TypeIo.read(&d, &reader.interface);
+    return d;
 }
 
 pub fn commit(delta: Delta, io: Io) !void {
-    if (delta.thread) |thr| thr.commit(io) catch {}; // Save thread as best effort
-
-    var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{s}.{x}.delta", .{ delta.repo, delta.index });
-    const file = try types.commit(type_prefix, filename, io);
-    defer file.close(io);
-    var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(io, &w_b);
-    try writerFn(&delta, &fd_writer.interface);
-}
-
-pub fn loadThread(delta: *Delta, a: Allocator, io: Io) !*Thread {
-    if (delta.thread) |thr| return thr;
-    const t = try a.create(Thread);
-    t.* = Thread.open(delta.thread_id, a, io) catch |err| t: {
-        log.err("Error loading thread!! {}", .{err});
-        log.err(" old thread_id {};", .{delta.thread_id});
-        const thread = Thread.new(Delta, delta, io) catch |err2| {
-            log.err(" unable to create new {}", .{err2});
-            return error.UnableToLoadThread;
-        };
-        log.err("new thread_id {}", .{thread.index});
-        delta.thread_id = thread.index;
-        try delta.commit(io);
-        break :t thread;
-    };
-
-    delta.thread = t;
-    return t;
+    delta.thread.commit(io) catch
+        log.err("unable to save thread on delta 0x{x}", .{delta.index});
+    delta.viewers.commit(io) catch
+        log.err("unable to save viewers on delta 0x{x}", .{delta.index});
+    try TypeIo.commit(&delta, io);
 }
 
 pub const Comment = struct {
@@ -123,32 +106,15 @@ pub const Comment = struct {
     message: []const u8,
 };
 
-pub fn addComment(delta: *Delta, c: Comment, a: Allocator, io: Io) !Message {
-    var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
-    const msg = try thread.addComment(c.author, c.message, a, io);
-    try thread.commit(io);
-    delta.updated = Io.Clock.real.now(io).toSeconds();
-    try delta.commit(io);
-    return msg;
-}
-
-pub fn addMessage(delta: *Delta, m: Message, a: Allocator, io: Io) !void {
-    var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
-    try thread.addMessage(m, a, io);
-    delta.updated = thread.updated;
-    try delta.commit(io);
-}
-
 fn setCommon(delta: *Delta, comptime fmt: []const u8, c: Comment, a: Allocator, io: Io) !Message {
-    var thread: *Thread = delta.thread orelse try delta.loadThread(a, io);
     var m: ?Message = null;
     if (c.message.len > 0)
-        m = try thread.addComment(c.author, c.message, a, io);
+        m = try delta.thread.addComment(c.author, c.message, a, io);
 
     var b: [4096]u8 = undefined;
     const state_msg = try bufPrint(&b, fmt ++ " by {s}", .{c.author});
-    try thread.addMessage(try .new(.state_change, delta.index, c.author, state_msg, io), a, io);
-    delta.updated = thread.updated;
+    try delta.thread.addMessage(try .new(.state_change, delta.index, c.author, state_msg, io), a, io);
+    delta.updated = delta.thread.updated;
     try delta.commit(io);
     return m orelse return error.NoMessage;
 }
@@ -172,31 +138,6 @@ pub const CommentsMeta = struct {
     pub const zero: CommentsMeta = .{ .count = 0, .new = false };
 };
 
-pub fn countComments(delta: Delta, io: Io) CommentsMeta {
-    const thread = delta.thread orelse return .{ .count = 0, .new = false };
-    const ts = Io.Clock.real.now(io).toSeconds() - 86400;
-    var cmtnew: bool = false;
-    var cmtlen: usize = 0;
-    for (thread.messages.items) |m| switch (m.kind) {
-        .comment => {
-            cmtnew = cmtnew or m.updated > ts;
-            cmtlen += 1;
-        },
-        .diff_update => cmtnew = cmtnew or m.updated > ts,
-        .state_change => cmtnew = cmtnew or m.updated > ts,
-    };
-    return .{ .count = cmtlen, .new = cmtnew };
-}
-
-pub fn raze(_: Delta, _: std.mem.Allocator) void {
-    // TODO implement raze
-}
-
-pub const Attached = union(enum) {
-    nos,
-    diff: Diff,
-};
-
 pub fn attached(d: *const Delta, a: Allocator, io: Io) !Attached {
     return switch (d.attach) {
         .nos => .nos,
@@ -213,7 +154,7 @@ pub const Iterator = struct {
     dir: Io.Dir.Iterator,
 
     pub fn init(io: Io) Iterator {
-        const dir: Io.Dir = types.iterableDir(type_prefix, io) catch unreachable;
+        const dir: Io.Dir = TypeIo.iterableDir(io) catch unreachable;
         return .{
             .fd = dir,
             .dir = dir.iterate(),
@@ -227,10 +168,13 @@ pub const Iterator = struct {
     pub fn next(self: *Iterator, a: Allocator, io: Io) ?Search.Hit {
         const line = (self.dir.next(io) catch return null) orelse return null;
         if (line.kind != .file) return self.next(a, io);
-        const name = cutSuffix(u8, line.name, ".delta") orelse return self.next(a, io);
-        const i = lastIndexOf(u8, name, ".") orelse return self.next(a, io);
-        const num = parseInt(usize, name[i + 1 ..], 16) catch return self.next(a, io);
-        const current = open(name[0..i], num, a, io) catch return self.next(a, io);
+        log.debug("delta itr '{s}'", .{line.name});
+        const cut = cutSuffix(u8, line.name, ".deltas") orelse return self.next(a, io);
+        const i = findLast(u8, cut, ".") orelse return self.next(a, io);
+        const num_str = cut[i + 1 ..];
+        const name = cut[0..i];
+        const num = parseInt(usize, num_str, 16) catch return self.next(a, io);
+        const current = open(name, num, a, io) catch return self.next(a, io);
         return .{ .result = .{ .delta = current } };
     }
 };
@@ -239,10 +183,9 @@ fn searchWrap(delta: Delta) Search.Hit.Result {
     return .{ .delta = delta };
 }
 
-pub const RepoIterator = Search.RepoTypeIterator(Delta, Index, searchWrap);
-pub const SearchIterator = Search.Iterator(Iterator);
-pub const RepoSearchIterator = Search.Iterator(RepoIterator);
-
+pub fn typeIdent(d: Delta, w: *Io.Writer) !void {
+    try w.print("{s}.{x}", .{ d.repo, d.index });
+}
 pub fn searchAll(rules: []const Search.Rule, io: Io) SearchIterator {
     return .{
         .rules = rules,
@@ -264,37 +207,47 @@ test Delta {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try types.init((try tempdir.dir.createDirPathOpen(io, "delta", .{ .open_options = .{ .iterate = true } })), io);
+    try types.init(
+        (try tempdir.dir.createDirPathOpen(io, "deltas", .{ .open_options = .{ .iterate = true } })),
+        io,
+    );
 
-    var d = try Delta.new("repo_name", "title", "message", "author", io);
+    var d: Delta = try .new("repo_name", "title", "message", "author", io);
+    d.index = 0x10;
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
-    d.created = Io.Clock.real.now(io).toSeconds() & mask;
-    d.updated = Io.Clock.real.now(io).toSeconds() & mask;
+    const nowish = Io.Clock.real.now(io).toSeconds() & mask;
+    d.created = nowish;
+    d.updated = nowish;
     d.state.locked = true;
+
+    d.thread.src_hash = @splat('9');
+    d.thread.updated = nowish;
+    d.viewers.src = @splat('D');
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
-    try writerFn(&d, &writer.writer);
+    try TypeIo.write(&d, &writer.writer);
 
     const v1_text: []const u8 =
         \\# deltas/0
-        \\index: 1
+        \\index: 16
         \\created: 1744830464
         \\updated: 1744830464
         \\repo: repo_name
         \\title: title
         \\message: message
         \\author: author
-        \\thread_id: 1
+        \\thread_id: 0
         \\tags_id: 0
         \\state.closed: false
         \\state.draft: false
         \\state.embargoed: false
         \\state.locked: true
         \\state.removed: false
-        \\viewers: hash=0000000000000000000000000000000000000000000000000000000000000000 count=0 time=0
+        \\viewers: hash=4444444444444444444444444444444444444444444444444444444444444444 count=0 time=0
+        \\thread: idx=1 count=0 updated=1744830464 hash=3939393939393939393939393939393939393939393939393939393939393939
         \\attach: nos
         \\attach_target: 0
         \\hash: 0000000000000000000000000000000000000000000000000000000000000000
@@ -305,19 +258,24 @@ test Delta {
     try std.testing.expectEqualStrings(v1_text, writer.written());
 
     var r: Io.Reader = .fixed(writer.written());
-    const read = readerFn(&r);
+
+    d.thread.created = 0;
+    var read: Delta = .blank;
+    read.repo = "repo_name";
+    read.index = 1;
+    TypeIo.read(&read, &r);
     try std.testing.expectEqualDeep(d, read);
 }
 
 const std = @import("std");
 const builtin = @import("builtin");
-const log = std.log.scoped(.srctree_type_delta);
+const log = std.log.scoped(.srctypes_delta);
 const Allocator = std.mem.Allocator;
 const fs = std.fs;
 const Io = std.Io;
 const Writer = Io.Writer;
-const lastIndexOf = std.mem.lastIndexOf;
-const indexOf = std.mem.indexOf;
+const findLast = std.mem.findLast;
+const find = std.mem.find;
 const endsWith = std.mem.endsWith;
 const cutSuffix = std.mem.cutSuffix;
 const eql = std.mem.eql;
@@ -325,6 +283,7 @@ const parseInt = std.fmt.parseInt;
 const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();
 
+const State = @import("common.zig").State;
 const Search = @import("../Search.zig");
 const types = @import("../types.zig");
 const Thread = types.Thread;

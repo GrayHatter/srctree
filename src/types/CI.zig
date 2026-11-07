@@ -15,6 +15,11 @@ pub const CI = @This();
 pub const Hash = types.DefaultHash;
 pub const Step = @import("CI/Step.zig");
 
+pub const empty: CI = .{
+    .index = 0,
+    .repo = &.{},
+};
+
 pub const Result = enum(u8) {
     unknown,
     pending,
@@ -30,13 +35,14 @@ pub const Result = enum(u8) {
 pub const type_prefix = .continuous_integration;
 pub const type_version = 0;
 
-const typeio = types.readerWriter(CI, .{ .index = 0, .repo = &.{} });
-const writerFn = typeio.write;
-const readerFn = typeio.read;
-const Index = types.Index(type_prefix);
+const TypeIo = types.TypedIo(CI);
+
+pub fn typeIdent(ci: CI, w: *Io.Writer) !void {
+    try w.print("{x}", .{ci.index});
+}
 
 pub fn new(repo: []const u8, trigger: []const u8, src_hash: Hash, io: Io) !CI {
-    const max: usize = try Index.next(io);
+    const max: usize = try TypeIo.Index.next(io);
     const now = Io.Clock.real.now(io).toSeconds();
     var ci = CI{
         .index = max,
@@ -57,10 +63,10 @@ pub fn new(repo: []const u8, trigger: []const u8, src_hash: Hash, io: Io) !CI {
 }
 
 pub fn open(index: usize, a: Allocator, io: Io) !CI {
-    const max = Index.current(io) catch return error.FSFault;
+    const max = TypeIo.Index.current(io) catch return error.FSFault;
     if (index > max) return error.CIDoesNotExist;
-    const reader = try Index.readerByIndex(index, a, io);
-    var ci: CI = try readerFn(&reader);
+    const reader = try TypeIo.Index.readerByIndex(index, a, io);
+    var ci: CI = try TypeIo.read(&reader);
 
     while (reader.takeDelimiterInclusive('\n') catch null) |line| {
         if (std.mem.cutPrefix(u8, line[0 .. line.len - 1], "step: ")) |prefix| {
@@ -76,15 +82,14 @@ pub fn addStep(ci: *CI, step: Step, a: Allocator) !void {
 }
 
 pub fn commit(ci: *const CI, io: Io) !void {
-    const file = try Index.createFile(ci.index, io);
-    defer file.close(io);
+    var writer = try TypeIo.commitExtra(ci, io);
+    defer writer.file.close(io);
     var w_b: [4096]u8 = undefined;
-    var writer = file.writer(io, &w_b);
-    try writerFn(ci, &writer.interface);
+    writer.interface.buffer = &w_b;
 
     for (ci.steps.items) |step| {
-        try writer.interface.print("{f}\n", .{step});
         step.commit(io) catch continue;
+        try writer.interface.print("{f}\n", .{step});
     }
     try writer.interface.flush();
 }
@@ -126,7 +131,7 @@ test CI {
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
-    try writerFn(&ci, &writer.writer);
+    try TypeIo.write(&ci, &writer.writer);
 
     const v1_text: []const u8 =
         \\# continuous_integration/0
@@ -146,7 +151,8 @@ test CI {
     try std.testing.expectEqualStrings(v1_text, writer.written());
 
     var r: Io.Reader = .fixed(writer.written());
-    const read = readerFn(&r);
+    var read: CI = .empty;
+    TypeIo.read(&read, &r);
     try std.testing.expectEqualDeep(ci, read);
 }
 

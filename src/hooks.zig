@@ -59,7 +59,6 @@ pub fn main(init: std.process.Init) !u8 {
                         log.err("error: Server environ not set up correctly", .{});
                         return 1;
                     },
-                    error.NoSpaceLeft => unreachable,
                     error.NotImplemented => unreachable,
                     //error.TargetExists => {
                     //    log.err("error: Target ref already exists.", .{});
@@ -69,7 +68,7 @@ pub fn main(init: std.process.Init) !u8 {
                         log.err("error: You are unable to push to this ref", .{});
                         return 1;
                     },
-                    error.FSFault => unreachable,
+                    error.FSError => unreachable,
                     error.DeltaDoesNotExist => {
                         log.err("error: Destination diff doesn't exist, or push isn't enabled for this repo/branch", .{});
                         return 1;

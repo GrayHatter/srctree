@@ -76,7 +76,7 @@ pub const Ack = struct {
 
             var sub_b: [2048]u8 = undefined;
             const subject = try bufPrint(&sub_b, "New Comment on #{} in {s} from {s}", .{
-                idx, repo, msg.author orelse "[no author given]",
+                idx, repo, if (msg.author.len > 0) msg.author else "[no author given]",
             });
             var body_b: [2048]u8 = undefined;
             const body = try bufPrint(&body_b, "https://srctree.gr.ht{s}", .{url});

@@ -16,8 +16,9 @@ pub fn addComment(
     valid: AddCommentReq,
     f: *Frame,
 ) RouterError!?Message {
-    var delta = Delta.open(repo, id, f.alloc, f.io) catch
-        return error.Unknown;
+    var delta = Delta.open(repo, id, f.alloc, f.io) catch return error.ServerFault;
+    delta.thread.load(f.alloc, f.io) catch return error.ServerFault;
+    defer delta.commit(f.io) catch log.err("unable to commit delta", .{});
 
     const user = if (f.user) |usr| usr.username.? else "public";
     var msg: ?Message = null;
@@ -40,8 +41,9 @@ pub fn addComment(
             else => return error.ServerFault,
         };
     } else {
-        msg = delta.addComment(
-            .{ .author = user, .message = valid.comment },
+        msg = delta.thread.addComment(
+            user,
+            valid.comment,
             f.alloc,
             f.io,
         ) catch return error.ServerFault;
@@ -54,37 +56,26 @@ pub fn addComment(
 }
 
 pub fn incrView(d: *Delta, f: *Frame) !void {
-    if (f.request.user_agent) |ua| switch (ua.agent) {
-        .script,
-        .bot,
-        .unknown,
-        => return,
+    const ua = f.request.user_agent orelse return;
+    switch (ua.agent) {
+        .script, .bot, .unknown => return,
         .browser => {},
+    }
+
+    const username: []const u8 = if (f.user) |usr|
+        (usr.username orelse "[null]")
+    else
+        f.request.remote_addr;
+
+    d.viewers.view(username, f.alloc, f.io) catch |err| {
+        log.err("unable to add view on delta {} {} '{s}' [{any}]", .{
+            d.index, err, username, d.viewers,
+        });
     };
-
-    if (d.viewers.time == 0) {
-        d.viewers.promoteFrom(Delta, f.alloc, f.io) catch |err| {
-            log.err("unable to promote viewers on delta {} {} [{any}]", .{ d.index, err, d.viewers });
-        };
-        d.viewers.inc(f.io);
-        d.commit(f.io) catch |err| {
-            log.err("unable to commit delta {} {}", .{ d.index, err });
-        };
-    }
-
-    if (f.user) |usr| {
-        d.viewers.view(usr.username orelse &.{}, f.alloc, f.io) catch |err| {
-            log.err("unable to add view on delta {} {} '{s}' [{any}]", .{
-                d.index, err, usr.username orelse "[null]", d.viewers,
-            });
-        };
-    } else {
-        d.viewers.inc(f.io);
-    }
     d.commit(f.io) catch {};
 }
 
-pub fn deltaResult(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.SearchFlavor.Delta {
+pub fn deltaResult(d: *const Delta, a: Allocator) !S.SearchFlavor.Delta {
     const msg = d.message[0..@min(
         d.message.len,
         findPos(u8, d.message, 256, " ") orelse d.message.len,
@@ -111,8 +102,8 @@ pub fn deltaResult(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Se
         .flavor = .safe(flavor),
         .uri_base = .abx(uri),
         .title = .abx(if (d.title.len == 0) "[No Title]" else d.title),
-        .comment_count = comments.count,
-        .view_count = d.viewers.liveCount(io),
+        .comment_count = d.thread.count,
+        .view_count = d.viewers.count,
         .style = if (d.state.isOpen()) .safe("") else .safe("closed"),
         .desc = .safe(if (msg.len == 0) "&nbsp;" else try a.print("{f}", .{abx.Html{ .text = msg }})),
         .delta_meta = switch (d.attach) {
@@ -121,7 +112,8 @@ pub fn deltaResult(d: Delta, comments: CommentsMeta, a: Allocator, io: Io) !S.Se
             .remote => .{ .repo = .abx(d.repo) },
             else => null,
         },
-        .comment = .safe(svg.Icon.slice(if (comments.new) .comment else .comment_new, .{})),
+        // TODO comment liveness
+        .comment = .safe(svg.Icon.slice(if (false) .comment else .comment_new, .{})),
         .viewers = .safe(svg.Icon.slice(.eye, .{})),
     };
 }
@@ -197,19 +189,19 @@ pub fn genThreadMessages(
     io: Io,
 ) ![]Messages {
     const now: i64 = Io.Clock.real.now(io).toSeconds();
-    const thread = delta.loadThread(a, io) catch |err| {
+    delta.thread.load(a, io) catch |err| {
         log.err("Unable to load comments for thread {} {}", .{ delta.index, err });
         return error.ServerFault;
     };
-    if (thread.messages.items.len == 0) return &.{};
-    const messages = try a.alloc(S.CommentThreadHtml.Messages, thread.messages.items.len);
-    for (thread.messages.items, messages) |msg, *html| {
+    if (delta.thread.messages.items.len == 0) return &.{};
+    const messages = try a.alloc(S.CommentThreadHtml.Messages, delta.thread.messages.items.len);
+    for (delta.thread.messages.items, messages) |msg, *html| {
         const date = try a.print("{f}", .{Humanize.unix(msg.updated, now)});
         const msg_hash = try a.print("{x}", .{msg.hash[0..10]});
         const systag, const body = try decodeMessage(msg, repo, patch, a, io);
         html.* = switch (msg.kind) {
             .comment => .{
-                .author = .abx(try a.dupe(u8, msg.author orelse "[no author]")),
+                .author = .abx(try a.dupe(u8, if (msg.author.len > 0) msg.author else "[no author]")),
                 .date = .safe(date),
                 .system_tag = if (systag) |st| .safe(st) else null,
                 .message = .safe(body),
@@ -218,7 +210,7 @@ pub fn genThreadMessages(
                 .sub_thread = null,
             },
             .diff_update => .{
-                .author = .abx(try a.dupe(u8, msg.author orelse "[no author]")),
+                .author = .abx(try a.dupe(u8, if (msg.author.len > 0) msg.author else "[no author]")),
                 .date = .safe(date),
                 .message = .abx(msg.message),
                 .edit = null,
@@ -227,7 +219,7 @@ pub fn genThreadMessages(
             },
             .state_change => .{
                 .class = .safe("system"),
-                .author = .abx(try a.dupe(u8, msg.author orelse "[no author]")),
+                .author = .abx(try a.dupe(u8, if (msg.author.len > 0) msg.author else "[no author]")),
                 .date = .safe(date),
                 .message = .abx(msg.message),
                 .edit = null,

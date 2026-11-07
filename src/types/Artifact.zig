@@ -4,9 +4,9 @@ filename: []const u8,
 state: State = .default,
 created: i64 = 0,
 updated: i64 = 0,
-source_commit_hash: DefaultHash = @splat(0),
-artifact_hash: DefaultHash = @splat(0),
-blob: []const u8 = &.{},
+source_commit_hash: Hash = @splat(0),
+artifact_hash: Hash = @splat(0),
+blob: []u8 = &.{},
 
 const Artifact = @This();
 
@@ -15,24 +15,28 @@ pub const type_version = 0;
 
 const State = @import("common.zig").State;
 
-const typeio = Types.readerWriter(Artifact, .{
+const TypeIo = types.TypedIo(Artifact);
+
+pub fn typeIdent(a: Artifact, w: *Io.Writer) !void {
+    try w.print("{d}", .{a.index});
+}
+
+pub const blank: Artifact = .{
     .index = 0,
     .filename = &.{},
     .repo = &.{},
-});
-const writerFn = typeio.write;
-const readerFn = typeio.read;
-const Index = Types.Index(type_prefix);
+};
 
-pub fn new(repo: []const u8, filename: []const u8, blob: []const u8, src_hash: DefaultHash, io: Io) !Artifact {
-    const idx: usize = try Index.scoped.next(repo, io);
+pub fn new(repo: []const u8, filename: []const u8, blob: []u8, src_hash: Hash, io: Io) !Artifact {
+    const idx: usize = try TypeIo.Index.scoped.next(repo, io);
+    const now = Io.Clock.real.now(io).toSeconds();
     var art = Artifact{
         .index = idx,
         .repo = repo,
         .filename = filename,
         .state = .default,
-        .created = Io.Clock.real.now(io).toSeconds(),
-        .updated = Io.Clock.real.now(io).toSeconds(),
+        .created = now,
+        .updated = now,
         .source_commit_hash = src_hash,
         .blob = blob,
     };
@@ -41,37 +45,36 @@ pub fn new(repo: []const u8, filename: []const u8, blob: []const u8, src_hash: D
     return art;
 }
 
-pub fn commit(art_: Artifact, io: Io) !void {
+pub fn commit(art_: *const Artifact, io: Io) !void {
     // Yes, I feel bad about this
-    var art = art_;
-    art.blob.len = 0;
+    var art = art_.*;
+    const blob = art_.blob;
+    art.blob = &.{};
 
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{s}.{x}." ++ @tagName(type_prefix), .{ art.repo, art.index });
-    const file = try Types.commit(type_prefix, filename, io);
-    defer file.close(io);
-
+    var writer = try TypeIo.commitExtra(&art, io);
+    defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(io, &w_b);
-    try writerFn(&art, &fd_writer.interface);
-
-    try fd_writer.interface.writeAll(art_.blob);
-    try fd_writer.interface.flush();
+    writer.interface.buffer = &w_b;
+    try writer.interface.writeAll(blob);
+    try writer.interface.flush();
 }
 
 pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Artifact {
-    const max = Index.scoped.current(repo, io) catch return error.FSFault;
+    const max = TypeIo.Index.scoped.current(repo, io) catch return error.FSFault;
     if (index > max) return error.DeltaDoesNotExist;
 
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{s}.{x}." ++ @tagName(type_prefix), .{ repo, index });
-    var reader = Types.loadDataReader(.deltas, filename, a, io) catch return error.FSFault;
+    var artifact: Artifact = .blank;
 
-    const artifact = readerFn(&reader);
+    artifact.index = index;
+    artifact.repo = repo;
 
-    if (find(u8, reader.buffer, "\n\n")) |start| {
+    var reader = TypeIo.loadData(&artifact, a, io) catch return error.FSFault;
+    defer reader.file.close(io);
+    TypeIo.read(&artifact, &reader);
+
+    if (find(u8, reader.interface.buffer, "\n\n")) |start| {
         // FIXME check position in reader
-        artifact.blob = reader.buffer[start + 2 ..];
+        artifact.blob = reader.interface.buffer[start + 2 ..];
     }
 }
 
@@ -84,9 +87,10 @@ test Artifact {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
+    try types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
 
-    var art = try Artifact.new("srctree", "blob.txt", "this is the blob", @splat('A'), io);
+    var art = try Artifact.new("srctree", "blob.txt", @constCast("this is the blob"), @splat('A'), io);
+    art.index = 0x10;
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
@@ -94,14 +98,13 @@ test Artifact {
     art.updated = Io.Clock.real.now(io).toSeconds() & mask;
     try art.commit(io);
 
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{s}.{x}." ++ @tagName(type_prefix), .{ art.repo, art.index });
-    var reader = try Types.loadDataReader(type_prefix, filename, a, io);
-    defer a.free(reader.buffer);
+    var reader = try TypeIo.loadData(&art, a, io);
+    defer reader.file.close(io);
+    defer a.free(reader.interface.buffer);
 
     const expected =
         \\# artifact/0
-        \\index: 1
+        \\index: 16
         \\repo: srctree
         \\filename: blob.txt
         \\state.closed: false
@@ -117,7 +120,7 @@ test Artifact {
         \\this is the blob
     ;
 
-    try std.testing.expectEqualStrings(expected, reader.buffered());
+    try std.testing.expectEqualStrings(expected, reader.interface.buffered());
 }
 
 const std = @import("std");
@@ -129,6 +132,6 @@ const bufPrint = std.fmt.bufPrint;
 const asBytes = std.mem.asBytes;
 const find = std.mem.find;
 const parseInt = std.fmt.parseInt;
-const DefaultHash = Types.DefaultHash;
+const Hash = types.DefaultHash;
 
-const Types = @import("../types.zig");
+const types = @import("../types.zig");

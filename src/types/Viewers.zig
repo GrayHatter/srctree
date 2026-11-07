@@ -1,17 +1,15 @@
-src: Types.DefaultHash,
-time: i64,
+src: Hash,
+time: i64 = 0,
 count: usize = 0,
-
-viewers: ArrayList(View),
+viewers: ArrayList(View) = .empty,
 
 const Viewers = @This();
 
-pub const empty: Viewers = .{
-    .src = @splat(0),
-    .time = 0,
-    .count = 0,
-    .viewers = .empty,
-};
+pub const empty: Viewers = .{ .src = @splat(0) };
+pub const type_prefix = .viewers;
+pub const type_version: usize = 0;
+pub const TypeIo = types.TypedIo(Viewers);
+pub const Hash = types.DefaultHash;
 
 pub const View = struct {
     name: []const u8,
@@ -36,36 +34,12 @@ pub const View = struct {
     }
 };
 
-pub const type_prefix = .viewers;
-pub const type_version: usize = 0;
+pub fn new(T: type, src: *const T, io: Io) !Viewers {
+    var viewers: Viewers = .empty;
 
-const typeio = Types.readerWriter(Viewers, .empty);
-const writerFn = typeio.write;
-const readerFn = typeio.read;
-const Index = Types.Index(type_prefix);
-
-pub fn new(src: Types.DefaultHash, viewer: []const u8, a: Allocator, io: Io) !Viewers {
-    const views = try a.dupe(View, &.{
-        .{ .name = viewer, .time = Io.Clock.real.now(io).toSeconds() },
-    });
-    var v: Viewers = .{
-        .src = src,
-        .time = views[0].time,
-        .viewers = .{
-            .items = views,
-            .capacity = 1,
-            .pointer_stability = .{},
-        },
-    };
-
-    try v.commit(io);
-    return v;
-}
-
-pub fn newFrom(T: type, src: *const T, viewer: []const u8, a: Allocator, io: Io) !Viewers {
     switch (T) {
-        Types.Delta => {
-            var h = Types.DefaultHasher.init(.{});
+        types.Delta => {
+            var h = types.DefaultHasher.init(.{});
             h.update(asBytes(&src.index));
             h.update(asBytes(&src.created));
             // may change
@@ -73,46 +47,43 @@ pub fn newFrom(T: type, src: *const T, viewer: []const u8, a: Allocator, io: Io)
             h.update(src.title);
             h.update(src.author orelse "");
             h.update(src.message);
-            var hash: Types.DefaultHash = undefined;
-            h.final(&hash);
-            return .new(hash, viewer, a, io);
+            h.final(&viewers.src);
         },
+        void => viewers.src = @splat('T'),
         else => @compileError(@typeName(T) ++ " isn't implemented for Viewers.newFrom()"),
     }
+
+    try viewers.commitNow(io);
+    return viewers;
 }
 
-/// Experimental API
-pub fn promoteFrom(v: *Viewers, T: type, a: Allocator, io: Io) !void {
-    var parent: *T = @fieldParentPtr("viewers", v);
+pub fn load(v: *Viewers, a: Allocator, io: Io) !void {
+    var reader = try TypeIo.loadData(v, a, io);
+    defer reader.file.close(io);
+    TypeIo.read(v, &reader.interface);
 
-    parent.viewers = try newFrom(T, parent, "", a, io);
-}
-
-pub fn open(src: Types.DefaultHash, a: Allocator, io: Io) !Viewers {
-    var reader = try Types.loadDataHashId(type_prefix, src, a, io);
-    var v: Viewers = readerFn(&reader);
-
-    while (reader.takeSentinel('\n')) |line| {
+    while (reader.interface.takeSentinel('\n')) |line| {
         try v.viewers.append(a, View.parse(line) catch {
-            log.err("line parse error in {x}", .{src});
+            log.err("line parse error in {x}", .{v.src});
             continue;
         });
     } else |err| switch (err) {
-        error.EndOfStream => return v,
+        error.EndOfStream => return,
         error.ReadFailed => unreachable, // TODO validate{},
         error.StreamTooLong => unreachable, // TODO validate
     }
-    return v;
 }
 
-pub fn commit(v: Viewers, io: Io) !void {
-    if (v.count == 0) return;
+pub fn commit(v: *const Viewers, io: Io) !void {
+    if (v.count == 0 or v.viewers.items.len == 0) return;
+    try v.commitNow(io);
+}
 
-    const file = try Types.commitHashId(type_prefix, v.src, io);
-    defer file.close(io);
+fn commitNow(v: *const Viewers, io: Io) !void {
+    var writer = try TypeIo.commitExtra(v, io);
+    defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;
-    var writer = file.writer(io, &w_b);
-    try writerFn(&v, &writer.interface);
+    writer.interface.buffer = &w_b;
 
     for (v.viewers.items) |viewer| {
         try writer.interface.print("{}:{s}\n", .{ viewer.time, viewer.name });
@@ -120,18 +91,9 @@ pub fn commit(v: Viewers, io: Io) !void {
     try writer.interface.flush();
 }
 
-pub fn inc(v: *Viewers, io: Io) void {
-    v.count +|= 1;
-    v.time = Io.Clock.real.now(io).toSeconds();
-    v.commit(io) catch |err| {
-        log.err("unable to commit viewers {} {any}", .{ err, v.src });
-    };
-}
-
 pub fn view(v: *Viewers, name: []const u8, a: Allocator, io: Io) !void {
     if (v.viewers.items.len == 0) {
-        const copy = try open(v.src, a, io);
-        v.viewers = copy.viewers;
+        try v.load(a, io);
     }
 
     v.count +|= 1;
@@ -141,19 +103,12 @@ pub fn view(v: *Viewers, name: []const u8, a: Allocator, io: Io) !void {
     try v.commit(io);
 }
 
-pub fn liveCount(v: *const Viewers, io: Io) usize {
-    if (v.time == 0) return v.count;
-    var b: [1024]u8 = undefined;
-    var fba: std.heap.FixedBufferAllocator = .init(&b);
-    var reader = Types.loadDataHashId(type_prefix, v.src, fba.allocator(), io) catch |err| {
-        log.err("unable to update viewer count {x} {}", .{ v.src, err });
-        return v.count;
-    };
-    return readerFn(&reader).count;
+pub fn typeIdent(v: Viewers, w: *Io.Writer) !void {
+    try w.print("{x}", .{v.src});
 }
 
 pub fn format(v: *const Viewers, w: *Io.Writer) !void {
-    try w.print("hash={x} count={} time={}", .{ v.src, v.count, v.time });
+    try w.print("hash={x} count={d} time={d}", .{ v.src, v.count, v.time });
 }
 
 test format {
@@ -163,7 +118,6 @@ test format {
         .src = @splat('B'),
         .count = 7,
         .time = 69420,
-        .viewers = .empty,
     }, &w);
 
     const text = "hash=4242424242424242424242424242424242424242424242424242424242424242 count=7 time=69420";
@@ -174,7 +128,7 @@ pub fn fromLine(line: [:'\n']const u8) !Viewers {
     var r: Io.Reader = .fixed(line);
     var next = try r.takeDelimiter(' ') orelse return error.InvalidLine;
     var hash: []const u8 = &.{};
-    if (std.mem.cutPrefix(u8, next, "hash=")) |h| {
+    if (cutPrefix(u8, next, "hash=")) |h| {
         hash = h;
     } else return error.InvalidLine;
     var src: [32]u8 = @splat(0);
@@ -188,13 +142,13 @@ pub fn fromLine(line: [:'\n']const u8) !Viewers {
 
     var count: []const u8 = &.{};
     next = try r.takeDelimiter(' ') orelse return error.InvalidLine;
-    if (std.mem.cutPrefix(u8, next, "count=")) |c| {
+    if (cutPrefix(u8, next, "count=")) |c| {
         count = c;
     } else return error.InvalidLine;
 
     var time: []const u8 = &.{};
     next = try r.takeDelimiter(' ') orelse return error.InvalidLine;
-    if (std.mem.cutPrefix(u8, next, "time=")) |t| {
+    if (cutPrefix(u8, next, "time=")) |t| {
         time = t;
     } else return error.InvalidLine;
 
@@ -213,31 +167,39 @@ test fromLine {
         .src = @splat('B'),
         .count = 7,
         .time = 69420,
-        .viewers = .empty,
     }, v);
 }
 
 test Viewers {
-    const a = std.testing.allocator;
+    const test_a = std.testing.allocator;
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(
+    try types.init(
         (try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } })),
         io,
     );
 
     const mask: i64 = ~@as(i64, 0x7ffffff);
+    var arena: std.heap.ArenaAllocator = .init(test_a);
+    defer arena.deinit();
+    const a = arena.allocator();
+
     const real = Io.Clock.real.now(io).toSeconds();
     const now = real & mask;
-    var viewers = try Viewers.new(@splat('v'), "grayhatter", a, io);
+
+    var viewers: Viewers = try .new(void, &{}, io);
     defer viewers.viewers.deinit(a);
+    viewers.time = now;
+
+    try viewers.view("grayhatter", a, io);
+
     viewers.time = now;
     viewers.viewers.items[0].time = now;
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
-    try writerFn(&viewers, &writer.writer);
+    try TypeIo.write(&viewers, &writer.writer);
 
     for (viewers.viewers.items) |viewer|
         try writer.writer.print("{}:{s}\n", .{ viewer.time, viewer.name });
@@ -245,9 +207,9 @@ test Viewers {
 
     const v1_text: []const u8 =
         \\# viewers/0
-        \\src: 7676767676767676767676767676767676767676767676767676767676767676
+        \\src: 5454545454545454545454545454545454545454545454545454545454545454
         \\time: 1744830464
-        \\count: 0
+        \\count: 1
         \\
         \\1744830464:grayhatter
         \\
@@ -256,7 +218,8 @@ test Viewers {
     try std.testing.expectEqualStrings(v1_text, writer.written());
 
     var r: Io.Reader = .fixed(writer.written());
-    const read = readerFn(&r);
+    var read: Viewers = .empty;
+    TypeIo.read(&read, &r);
     try std.testing.expectEqual(viewers.src, read.src);
 }
 
@@ -268,5 +231,5 @@ const Io = std.Io;
 const findScalar = std.mem.findScalar;
 const parseInt = std.fmt.parseInt;
 const asBytes = std.mem.asBytes;
-
-const Types = @import("../types.zig");
+const cutPrefix = std.mem.cutPrefix;
+const types = @import("../types.zig");

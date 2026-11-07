@@ -118,7 +118,6 @@ pub const Router = struct {
             .owner("me", false), .is("open", false), .repo(rd.name, false),
         }, f.io);
         while (itr.nextDelta(f.alloc, f.io)) |dlt| {
-            defer dlt.raze(f.alloc);
             switch (dlt.attach) {
                 .diff => d_count += 1,
                 .issue => i_count += 1,

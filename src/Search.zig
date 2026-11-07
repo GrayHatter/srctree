@@ -535,6 +535,7 @@ pub fn RepoTypeIterator(Type: type, Indexer: type, wrap: fn (Type) Hit.Result) t
         pub const Index = Indexer;
 
         pub fn init(repo: []const u8, io: Io) Self {
+            std.debug.assert(repo.len > 0);
             return .{
                 .repo = repo,
                 .index = Index.scoped.current(repo, io) catch 0,

@@ -157,12 +157,15 @@ pub const Artifacts = struct {
             log.err("Unable to stat docs {}", .{err});
             return;
         };
-        const dest = types.iterableDir(.artifiact, io) catch unreachable;
-        const repo_dir = dest.createDirPathOpen(io, repo.name.?, .{}) catch unreachable;
-        zig_out.renamePreserve("docs", repo_dir, "docs", io) catch |err| {
-            if (err == error.NotDir) return; // expected
-            log.err("unable to inject cache {}", .{err});
-        };
+
+        _ = repo;
+        unreachable; // TODO
+        //const dest = types.TypedIo(types.Artifact).iterableDir(.artifiact, io) catch unreachable;
+        //const repo_dir = dest.createDirPathOpen(io, repo.name.?, .{}) catch unreachable;
+        //zig_out.renamePreserve("docs", repo_dir, "docs", io) catch |err| {
+        //    if (err == error.NotDir) return; // expected
+        //    log.err("unable to inject cache {}", .{err});
+        //};
     }
 };
 
@@ -347,7 +350,7 @@ pub const Cache = struct {
     }
 };
 
-test {
+test Ci {
     const a = std.testing.allocator;
     const io = std.testing.io;
     var tdir = std.testing.tmpDir(.{ .iterate = true });

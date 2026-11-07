@@ -1,32 +1,60 @@
-hash: Types.DefaultHash = @splat(0),
+hash: Hash = @splat(0),
 created: i64 = 0,
 updated: i64 = 0,
 owner: []const u8 = &.{},
 file_count: usize = 0,
-files: []const File = &.{},
+files: []File = &.{},
 
 const Gist = @This();
+
+const Hash = types.DefaultHash;
 
 pub const type_prefix = .gist;
 pub const type_version: usize = 0;
 
 pub const File = struct {
-    pub const type_prefix = .gist_file;
-    pub const type_version = 0;
     name: []const u8,
+    created: i64,
+    hash: Hash = @splat(0),
     blob: []const u8,
 
-    pub fn init(name: []const u8, blob: []const u8) !File {
+    pub const empty: File = .{ .name = &.{}, .blob = &.{} };
+
+    pub const type_prefix = .gist_file;
+    pub const type_version = 0;
+    pub const type_skip_fields: [1][]const u8 = .{"blob"};
+
+    const TypeIo = types.TypedIo(File);
+
+    pub fn typeIdent(f: File, w: *Io.Writer) !void {
+        try w.print("{x}", .{f.hash});
+    }
+
+    fn init(name: []const u8, blob: []const u8) !File {
         if (name.len == 0) return error.InvalidName;
         if (indexOf(u8, name, "\n") != null) return error.InvalidName;
         return .{
             .name = name,
             .blob = blob,
+            .created = 0,
         };
     }
 
-    pub fn open(file: *File, name: [64]u8, a: Allocator, io: Io) !void {
-        var reader = try Types.loadDataReader(.gist_files, name ++ ".gist-file", a, io);
+    pub fn new(name: []const u8, blob: []const u8, io: Io) !File {
+        if (name.len == 0) return error.InvalidName;
+        if (indexOf(u8, name, "\n") != null) return error.InvalidName;
+        const f: File = .{
+            .name = name,
+            .blob = blob,
+            .created = Io.Clock.real.now(io).toSeconds(),
+        };
+        try f.commit(io);
+        return f;
+    }
+
+    pub fn open(file: *File, a: Allocator, io: Io) !void {
+        var reader = try File.TypeIo.loadData(file, a, io);
+        defer reader.file.close(io);
 
         file.* = File.readerFn(&reader);
         if (indexOf(u8, reader.buffer, file.name)) |idx| {
@@ -34,38 +62,33 @@ pub const File = struct {
         }
     }
 
-    pub fn commit(file: File, io: Io) ![64]u8 {
-        const name = file.filename();
-        const data_file = try Types.commit(.gist_files, &name, io);
-        defer data_file.close(io);
-        var w_b: [2048]u8 = undefined;
-        var data_writer = data_file.writer(io, &w_b);
-        try File.writerFn(&file, &data_writer.interface);
-        return name[0..64].*;
-    }
-
-    pub fn filename(f: File) [74]u8 {
-        var output: [74]u8 = @as([64]u8, @splat(0)) ++ ".gist-file".*;
+    fn genHash(f: *File) void {
         var sha = Sha256.init(.{});
         sha.update(f.name);
         sha.update(f.blob);
-        var bin: [32]u8 = undefined;
-        sha.final(&bin);
-        _ = bufPrint(&output, "{x}", .{&bin}) catch unreachable;
-        return output;
+
+        sha.update(&std.mem.toBytes(f.created));
+        sha.final(&f.hash);
     }
 
-    const fRW = Types.readerWriter(File, .{ .name = &.{}, .blob = &.{} });
+    pub fn commit(file: *const File, io: Io) !void {
+        var writer = try File.TypeIo.commitExtra(file, io);
+        defer writer.file.close(io);
+        var w_b: [2048]u8 = undefined;
+        writer.interface.buffer = &w_b;
 
-    const writerFn = fRW.write;
-    const readerFn = fRW.read;
+        try writer.interface.writeAll(file.blob);
+        try writer.interface.flush();
+    }
 };
 
-const RW = Types.readerWriter(Gist, .{});
-const writerFn = RW.write;
-const readerFn = RW.read;
+const TypeIo = types.TypedIo(Gist); //, "{s}.");
 
-pub fn new(owner: []const u8, files: []const File, io: Io) ![64]u8 {
+pub fn typeIdent(g: Gist, w: *Io.Writer) !void {
+    try w.print("{x}", .{g.hash});
+}
+
+pub fn new(owner: []const u8, files: []File, io: Io) !Gist {
     var gist = Gist{
         .owner = owner,
         .created = Io.Clock.real.now(io).toSeconds(),
@@ -74,23 +97,23 @@ pub fn new(owner: []const u8, files: []const File, io: Io) ![64]u8 {
         .files = files,
     };
 
-    var buf: [64]u8 = undefined;
-    const hash = gist.genHash();
-    const filename = try bufPrint(&buf, "{x}", .{hash});
+    gist.genHash();
     try gist.commit(io);
-    return filename[0..64].*;
+    return gist;
 }
 
-pub fn open(hash: [64]u8, a: Allocator, io: Io) !Gist {
-    var reader = try Types.loadDataReader(.gist, hash ++ ".gist", a, io);
-    var gist = readerFn(&reader);
+pub fn open(hash: Hash, a: Allocator, io: Io) !Gist {
+    var gist: Gist = .empty;
+    gist.hash = hash;
+    var reader = try TypeIo.loadDataReader(a, io);
+    TypeIo.read(&gist, &reader);
 
-    if (indexOf(u8, reader.buffer, "\n\n")) |start| {
-        std.debug.assert(std.mem.count(u8, reader.buffer[start + 2 ..], "\n") == gist.file_count + 1);
+    if (indexOf(u8, reader.interface.buffer, "\n\n")) |start| {
+        std.debug.assert(std.mem.count(u8, reader.interface.buffer[start + 2 ..], "\n") == gist.file_count + 1);
         const gist_files = try a.alloc(File, gist.file_count);
         gist.files = gist_files;
 
-        var itr = std.mem.splitScalar(u8, reader.buffer[start + 2 ..], '\n');
+        var itr = std.mem.splitScalar(u8, reader.interface.buffer[start + 2 ..], '\n');
         var next = itr.next();
         for (gist_files) |*file| {
             if (next == null) return error.InvalidGist;
@@ -102,35 +125,33 @@ pub fn open(hash: [64]u8, a: Allocator, io: Io) !Gist {
     return gist;
 }
 
-pub fn commit(gist: *Gist, io: Io) !void {
-    var buf: [69]u8 = undefined;
-    const hash = gist.genHash();
-    const filename = try bufPrint(&buf, "{x}.gist", .{hash});
-    const file = try Types.commit(.gist, filename, io);
-    defer file.close(io);
+pub fn commit(gist: *const Gist, io: Io) !void {
+    var writer = try TypeIo.commitExtra(gist, io);
+    defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;
-    var writer = file.writer(io, &w_b);
-    try writerFn(gist, &writer.interface);
+    writer.interface.buffer = &w_b;
 
-    for (gist.files) |gistfile| {
-        const f_name = try gistfile.commit(io);
-        try writer.interface.print("{s}\n", .{f_name[0..64]});
+    for (gist.files) |file| {
+        try file.commit(io);
+        try writer.interface.print("{x}\n", .{&file.hash});
     }
-    try writer.interface.print("\n", .{});
     try writer.interface.flush();
 }
 
-pub fn genHash(gist: *Gist) *const Types.DefaultHash {
-    var sha = Sha256.init(.{});
-    sha.update(gist.owner);
-    sha.update(std.mem.asBytes(&gist.created));
-    for (gist.files) |file| {
-        // TODO sanitize file.name
-        sha.update(file.name);
-        sha.update(file.blob);
+pub fn genHash(gist: *Gist) void {
+    for (gist.hash) |c| {
+        if (c != 0) break;
+    } else {
+        var sha = Sha256.init(.{});
+        sha.update(gist.owner);
+        sha.update(std.mem.asBytes(&gist.created));
+        for (gist.files) |file| {
+            // TODO sanitize file.name
+            sha.update(file.name);
+            sha.update(file.blob);
+        }
+        sha.final(&gist.hash);
     }
-    sha.final(&gist.hash);
-    return &gist.hash;
 }
 
 test {
@@ -138,7 +159,7 @@ test {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
+    try types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
     const mask: i64 = ~@as(i64, 0x7ffffff);
 
     var gist: Gist = .{
@@ -146,9 +167,9 @@ test {
         .updated = Io.Clock.now(.real, io).toSeconds() & mask,
         .owner = "user",
         .file_count = 3,
-        .files = &[_]File{
-            .{ .name = "first.txt", .blob = "no text here\n\n\n\n" },
-            .{ .name = "second.png", .blob = "no text here\n\n\n\n" },
+        .files = @constCast(&[_]File{
+            .{ .name = "first.txt", .blob = "no text here\n\n\n\n", .created = 0 },
+            .{ .name = "second.png", .blob = "no text here\n\n\n\n", .created = 0 },
             .{
                 .name = "third.zig",
                 .blob =
@@ -158,25 +179,25 @@ test {
                 \\}
                 \\
                 ,
+                .created = 0,
             },
-        },
+        }),
     };
     _ = gist.genHash();
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
-    try writerFn(&gist, &writer.writer);
+    try TypeIo.write(&gist, &writer.writer);
 
-    for (gist.files) |gistfile| {
-        const name = gistfile.filename();
-        const data_file = try Types.commit(.gist_files, &name, io);
-        defer data_file.close(io);
+    for (gist.files) |*file| {
+        file.genHash();
+        var gf_writer = try File.TypeIo.commitExtra(file, io);
+        defer gf_writer.file.close(io);
         var w_b: [2048]u8 = undefined;
-        var data_writer = data_file.writer(io, &w_b);
-        try File.writerFn(&gistfile, &data_writer.interface);
-        try writer.writer.print("{s}\n", .{name[0..64]});
+        gf_writer.interface.buffer = &w_b;
+        try File.TypeIo.write(file, &gf_writer.interface);
+        try writer.writer.print("{x}\n", .{file.hash});
     }
-    try writer.writer.print("\n", .{});
 
     const v0_text =
         \\# gist/0
@@ -186,22 +207,20 @@ test {
         \\owner: user
         \\file_count: 3
         \\
-        \\2064fe14850af6a4c42cb24ce340a9e7cda60c937efe5545cd854d51396cc418
-        \\6c049fefa69c6d3982e73a68bb74bac8cf9f583a108dbf8b678d2ae35b73989a
-        \\7760e15c9f68c25848bfbad6d45c5ad870bfbea5a749e502bb2a6ee7a13b39d5
-        \\
+        \\312bd76f48ab5bb20cda64974a351d8dbb2a66e4dc3c87bdeff8ddc44c879488
+        \\712c5d25cdd635f68a870a2184433ceee9aaacb408395fb84612b3d1961ba5e5
+        \\1b90d2209e8edbe3ba257505f509a4c1718890691eb46d9ac3e6649abe0fb77b
         \\
     ;
     try std.testing.expectEqualStrings(v0_text, writer.written());
 
     try gist.commit(io);
 
-    var buf: [69]u8 = undefined;
-    const filename = try bufPrint(&buf, "{x}.gist", .{&gist.hash});
-    const reader = try Types.loadDataReader(.gist, filename, a, io);
-    defer a.free(reader.buffer);
+    const reader = try TypeIo.loadData(&gist, a, io);
+    defer reader.file.close(io);
+    defer a.free(reader.interface.buffer);
 
-    try std.testing.expectEqualStrings(v0_text, reader.buffer);
+    try std.testing.expectEqualStrings(v0_text, reader.interface.buffer);
     //try std.testing.expectEqualDeep(gist, readerFn(&reader.interface));
 }
 
@@ -214,4 +233,4 @@ const bufPrint = std.fmt.bufPrint;
 const endian = builtin.cpu.arch.endian();
 const Sha256 = std.crypto.hash.sha2.Sha256;
 
-const Types = @import("../types.zig");
+const types = @import("../types.zig");

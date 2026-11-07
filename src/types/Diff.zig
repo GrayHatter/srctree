@@ -4,15 +4,33 @@ created: i64,
 updated: i64,
 number: usize = 0,
 revision: usize = 0,
-delta_hash: Types.DefaultHash,
+delta_hash: Hash,
 author: []const u8,
 source_uri: ?[]const u8,
 patch: Flavor,
 
 const Diff = @This();
 
+const Hash = types.DefaultHash;
+
 pub const type_prefix = .diffs;
 pub const type_version: usize = 1;
+
+pub const empty: Diff = .{
+    .index = 0,
+    .created = 0,
+    .updated = 0,
+    .author = &.{},
+    .source_uri = &.{},
+    .delta_hash = undefined,
+    .patch = .{ .bytes = undefined },
+};
+
+const TypeIo = types.TypedIo(Diff);
+
+pub fn typeIdent(d: Diff, w: *Io.Writer) !void {
+    try w.print("{x}", .{d.index});
+}
 
 // TODO reimplement as packed struct once supported by Types.readerWriter
 pub const State = enum(usize) {
@@ -57,21 +75,8 @@ pub const Flavor = union(enum) {
     pub const empty: Flavor = .{ .bytes = &.{} };
 };
 
-const typeio = Types.readerWriter(Diff, .{
-    .index = 0,
-    .created = 0,
-    .updated = 0,
-    .author = &.{},
-    .source_uri = &.{},
-    .delta_hash = undefined,
-    .patch = .{ .bytes = undefined },
-});
-const writerFn = typeio.write;
-const readerFn = typeio.read;
-const Index = Types.Index(type_prefix);
-
 pub fn new(delta: *Delta, author: []const u8, flavor: Flavor, a: Allocator, io: Io) !Diff {
-    const idx: usize = try Index.next(io);
+    const idx: usize = try TypeIo.Index.next(io);
     const d = Diff{
         .index = idx,
         .state = .nos,
@@ -103,37 +108,36 @@ pub fn new(delta: *Delta, author: []const u8, flavor: Flavor, a: Allocator, io: 
     else
         try a.print("diff patch was created {}", .{idx});
 
-    try delta.addMessage(try .new(.diff_update, idx, author, msg, io), a, io);
+    try delta.thread.addMessage(try .new(.diff_update, idx, author, msg, io), a, io);
     return d;
 }
 
 pub fn open(index: usize, a: Allocator, io: Io) !?Diff {
-    const max = try Index.current(io);
+    const max = try TypeIo.Index.current(io);
     if (index > max) return null;
 
-    var buf: [512]u8 = undefined;
-    const filename = try print(&buf, "{x}.diff", .{index});
-    var reader = try Types.loadDataReader(.diffs, filename, a, io);
-    var d: Diff = readerFn(&reader);
+    var d: Diff = .empty;
+    d.index = index;
+    var reader = try TypeIo.loadData(&d, a, io);
+    defer reader.file.close(io);
+    TypeIo.read(&d, &reader.interface);
 
     // TODO reader.buffered();
-    if (find(u8, reader.buffer, "\n\n")) |start| {
-        d.patch = .{ .bytes = reader.buffer[start..] };
+    if (find(u8, reader.interface.buffer, "\n\n")) |start| {
+        d.patch = .{ .bytes = reader.interface.buffer[start..] };
     } else d.patch = .empty;
 
     return d;
 }
 
-pub fn commit(d: Diff, io: Io) !void {
-    var buf: [512]u8 = undefined;
-    const filename = try print(&buf, "{x}.diff", .{d.index});
-    const file = try Types.commit(.diffs, filename, io);
-    defer file.close(io);
+pub fn commit(d: *const Diff, io: Io) !void {
+    var writer = try TypeIo.commitExtra(d, io);
+    defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(io, &w_b);
-    try writerFn(&d, &fd_writer.interface);
-    if (d.patch == .bytes) try fd_writer.interface.writeAll(std.mem.trimStart(u8, d.patch.bytes, "\n"));
-    try fd_writer.interface.flush();
+    writer.interface.buffer = &w_b;
+
+    if (d.patch == .bytes) try writer.interface.writeAll(std.mem.trimStart(u8, d.patch.bytes, "\n"));
+    try writer.interface.flush();
 }
 
 pub const Revision = enum(usize) {
@@ -198,5 +202,5 @@ const maxInt = std.math.maxInt;
 
 const git = @import("../git.zig");
 const Patch = @import("../Patch.zig");
-const Types = @import("../types.zig");
+const types = @import("../types.zig");
 const Delta = @import("Delta.zig");

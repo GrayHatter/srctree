@@ -63,12 +63,13 @@ fn gistPost(frame: *Frame) Error!void {
             name = try frame.alloc.print("filename{}.txt", .{i});
         }
 
-        file.* = Gist.File.init(name, fblob) catch return error.DataInvalid;
+        file.* = Gist.File.new(name, fblob, frame.io) catch return error.DataInvalid;
     }
 
-    const hash_str: [64]u8 = Gist.new(username, files, frame.io) catch return error.Unknown;
+    const gist = Gist.new(username, files, frame.io) catch return error.Unknown;
 
-    return frame.redirect("/gist/" ++ hash_str, .see_other) catch unreachable;
+    const dest = try frame.alloc.print("/gist/{x}", .{gist.hash});
+    return frame.redirect(dest, .see_other) catch unreachable;
 }
 
 fn new(ctx: *Frame) Error!void {
@@ -131,29 +132,30 @@ fn toTemplate(files: []const Gist.File, a: Allocator, io: Io) ![]S.GistHtml.Gist
     return out;
 }
 
-fn view(vrs: *Frame) Error!void {
+fn view(_: *Frame) Error!void {
     // TODO move this back into context somehow
-    const body_header: *const S.BodyHeaderHtml = vrs.template_data.get(S.BodyHeaderHtml) orelse
-        &S.BodyHeaderHtml{ .inbox_count = search.inboxCount(vrs.user, vrs.alloc, vrs.io) };
+    //const body_header: *const S.BodyHeaderHtml = vrs.template_data.get(S.BodyHeaderHtml) orelse
+    //    &S.BodyHeaderHtml{ .inbox_count = search.inboxCount(vrs.user, vrs.alloc, vrs.io) };
 
-    const hash = vrs.uri.next() orelse return error.InvalidURI;
-    if (hash.len != 64) return error.DataInvalid;
+    //const hash = vrs.uri.next() orelse return error.InvalidURI;
+    //if (hash.len != 64) return error.DataInvalid;
 
-    const gist = Gist.open(hash[0..64].*, vrs.alloc, vrs.io) catch return error.InvalidURI;
-    const files = toTemplate(gist.files, vrs.alloc, vrs.io) catch return error.Unknown;
-    var page = GistPage.init(.{
-        .meta_head = .{ .open_graph = .{
-            .title = .safe(try vrs.alloc.print("A perfect paste from {f}", .{Abx.Html{ .text = gist.owner }})),
-            .desc = .safe(if (gist.file_count == 1)
-                try vrs.alloc.print("{f}", .{Abx.Html{ .text = gist.files[0].name }})
-            else
-                try vrs.alloc.print("{} files", .{gist.file_count})),
-        } },
-        .body_header = body_header.*,
-        .gist_files = files,
-    });
+    //const gist = Gist.open(hash[0..64].*, vrs.alloc, vrs.io) catch return error.InvalidURI;
+    //const files = toTemplate(gist.files, vrs.alloc, vrs.io) catch return error.Unknown;
+    //var page = GistPage.init(.{
+    //    .meta_head = .{ .open_graph = .{
+    //        .title = .safe(try vrs.alloc.print("A perfect paste from {f}", .{Abx.Html{ .text = gist.owner }})),
+    //        .desc = .safe(if (gist.file_count == 1)
+    //            try vrs.alloc.print("{f}", .{Abx.Html{ .text = gist.files[0].name }})
+    //        else
+    //            try vrs.alloc.print("{} files", .{gist.file_count})),
+    //    } },
+    //    .body_header = body_header.*,
+    //    .gist_files = files,
+    //});
 
-    return vrs.sendPage(&page);
+    //return vrs.sendPage(&page);
+    unreachable;
 }
 
 test {

@@ -22,16 +22,15 @@ fn inbox(f: *Frame) Error!void {
 pub fn inboxCount(user: ?verse.Auth.User, a: Allocator, io: Io) usize {
     var inbox_count: usize = 0;
     const search_str = if (user) |_| default_search else default_search[0..19];
-
     if (Search.init(search_str, .quick, a)) |search| {
         var search_results = Delta.searchAll(search.rules.items, io);
         defer search_results.raze(io);
-        while (search_results.nextDelta(a, io)) |dlt| {
+        while (search_results.nextDelta(a, io)) |_| {
             inbox_count +|= 1;
-            dlt.raze(a);
         }
     } else |_| {}
 
+    log.debug("inbox counted {}", .{inbox_count});
     return inbox_count;
 }
 
@@ -157,8 +156,8 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
         .repo => |repo| try results.append(f.alloc, .{ .search_flavor = .{
             .repo = .{ .name = .safe(repo.name.?) },
         } }),
-        .delta => |d| try results.append(f.alloc, .{
-            .search_flavor = .{ .delta = delta_endpoint.deltaResult(d, .zero, search.alloc, f.io) catch continue },
+        .delta => |*d| try results.append(f.alloc, .{
+            .search_flavor = .{ .delta = delta_endpoint.deltaResult(d, f.alloc) catch continue },
         }),
         .commit => |*c| try results.append(f.alloc, .{
             .search_flavor = .{ .commit = .{

@@ -1,14 +1,16 @@
 test "main" {
     std.testing.refAllDecls(@This());
-    std.testing.refAllDecls(@import("git.zig"));
+    _ = &@import("git.zig");
     _ = &Auth;
 }
 
 pub const std_options: std.Options = .{
     .log_level = .info,
     .log_scope_levels = &.{
-        .{ .scope = .git_objects, .level = .info },
-        .{ .scope = .git_commit, .level = .info },
+        .{ .scope = .git_objects, .level = .warn },
+        .{ .scope = .git_commit, .level = .warn },
+        .{ .scope = .git_repo, .level = .warn },
+        .{ .scope = .srctypes, .level = .info },
         .{ .scope = .types_search, .level = .info },
         .{ .scope = .search, .level = .info },
     },

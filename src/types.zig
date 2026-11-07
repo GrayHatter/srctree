@@ -1,13 +1,10 @@
 const types = @This();
 
-pub const common = @import("types/common.zig");
-
 pub const Artifact = @import("types/Artifact.zig");
 pub const CI = @import("types/CI.zig");
 pub const Delta = @import("types/Delta.zig");
 pub const Diff = @import("types/Diff.zig");
 pub const Gist = @import("types/Gist.zig");
-pub const Issue = @import("types/Issue.zig");
 pub const Message = @import("types/Message.zig");
 pub const Network = @import("types/Network.zig");
 pub const RepoMeta = @import("types/RepoMeta.zig");
@@ -15,6 +12,8 @@ pub const Tags = @import("types/Tags.zig");
 pub const Thread = @import("types/Thread.zig");
 pub const User = @import("types/User.zig");
 pub const Viewers = @import("types/Viewers.zig");
+
+pub const State = common.State;
 
 pub const DefaultHash = [DefaultHasher.digest_length]u8;
 pub const DefaultHasher = std.crypto.hash.sha2.Sha256;
@@ -73,8 +72,8 @@ pub fn currentPathAlloc(a: Allocator, io: Io) ![]u8 {
 pub fn init(dir: Storage, io: Io) !void {
     storage_dir = dir;
     inline for (.{
-        Artifact, CI,     Delta, Diff,    Gist, Issue, Message,
-        Network,  Thread, User,  Viewers,
+        Artifact, CI,      Delta,  Diff, Gist,
+        Message,  Network, Thread, User, Viewers,
     }) |inc| {
         if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
             try inc.initType(try dir.createDirPathOpen(io, inc.TYPE_PREFIX, .{
@@ -88,232 +87,255 @@ pub fn raze(io: Io) void {
     storage_dir.close(io);
 }
 
-pub fn iterableDir(comptime type_name: @EnumLiteral(), io: Io) !Io.Dir {
-    return try storage_dir.createDirPathOpen(io, @tagName(type_name), .{
-        .open_options = .{ .iterate = true },
-    });
-}
-
-pub fn loadReaderFmt(
-    comptime type_name: @EnumLiteral(),
-    comptime fmt: []const u8,
-    data: anytype,
-    a: Allocator,
-    io: Io,
-) !Io.Reader {
-    var buf: [2048]u8 = undefined;
-    const name = try std.fmt.bufPrint(&buf, fmt ++ @tagName(type_name), data);
-    return loadDataReader(type_name, name, a, io) catch return error.FSFault;
-}
-
-fn openFile(comptime type_name: @EnumLiteral(), filename: []const u8, io: Io) !Io.File {
-    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
-    defer type_dir.close(io);
-    return try type_dir.openFile(io, filename, .{});
-}
-
-fn createFile(comptime type_name: @EnumLiteral(), filename: []const u8, io: Io) !Io.File {
-    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
-    defer type_dir.close(io);
-    return try type_dir.createFile(io, filename, .{});
-}
-
-pub fn loadDataAlloc(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) ![]u8 {
-    const file = try openFile(type_name, name, io);
-    defer file.close(io);
-    const stat = try file.stat(io);
-    const buf = try a.alloc(u8, stat.size);
-    errdefer a.free(buf);
-    var reader = file.reader(io, buf);
-    try reader.interface.fill(stat.size);
-    return buf;
-}
-
-pub fn loadDataReader(comptime type_name: @EnumLiteral(), name: []const u8, a: Allocator, io: Io) !Io.Reader {
-    const file = try openFile(type_name, name, io);
-    defer file.close(io);
-    const stat = try file.stat(io);
-    const buf = try a.alloc(u8, stat.size);
-    errdefer a.free(buf);
-    var reader = file.reader(io, buf);
-    try reader.interface.fill(stat.size);
-    return .fixed(reader.interface.buffer);
-}
-
-pub fn loadDataHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, a: Allocator, io: Io) !Io.Reader {
-    var buf: [@sizeOf(DefaultHash) * 2 + 1 + @tagName(type_name).len]u8 = undefined;
-    const filename = print(&buf, "{x}." ++ @tagName(type_name), .{&hash}) catch unreachable;
-    return loadDataReader(type_name, filename, a, io);
-}
-
-pub fn commitFmt(comptime type_name: @EnumLiteral(), comptime fmt: []const u8, data: anytype, io: Io) !Io.File {
-    var buf: [2048]u8 = undefined;
-    const name = try std.fmt.bufPrint(&buf, fmt ++ @tagName(type_name), data);
-    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
-    defer type_dir.close(io);
-    return try type_dir.createFile(io, name, .{});
-}
-
-pub fn commit(comptime type_name: @EnumLiteral(), name: []const u8, io: Io) !Io.File {
-    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
-    defer type_dir.close(io);
-    return try type_dir.createFile(io, name, .{});
-}
-
-pub fn commitHashId(comptime type_name: @EnumLiteral(), hash: DefaultHash, io: Io) !Io.File {
-    var buf: [@sizeOf(DefaultHash) * 2 + 1 + @tagName(type_name).len]u8 = undefined;
-    const filename = print(&buf, "{x}." ++ @tagName(type_name), .{&hash}) catch unreachable;
-    var type_dir = try storage_dir.createDirPathOpen(io, @tagName(type_name), .{});
-    defer type_dir.close(io);
-    return try type_dir.createFile(io, filename, .{});
-}
-
-pub fn Index(type_name: @EnumLiteral()) type {
-    return struct {
-        var mutex: std.Io.Mutex = .init;
-        pub const name = "_" ++ @tagName(type_name) ++ ".index";
-        pub const pathfmt = "repo_scoped/{s}/" ++ name;
-
-        pub fn current(io: Io) !usize {
-            try mutex.lock(io);
-            defer mutex.unlock(io);
-            var index_file = storage_dir.openFile(io, name, .{}) catch |err| switch (err) {
-                error.FileNotFound => {
-                    var new_file = try storage_dir.createFile(io, name, .{});
-                    defer new_file.close(io);
-                    try increment(new_file, 0, io);
-                    return 0;
-                },
-                else => return err,
-            };
-            defer index_file.close(io);
-            var r_b: [10]u8 = undefined;
-            var fd_reader = index_file.reader(io, &r_b);
-            const reader = &fd_reader.interface;
-            const idx = reader.takeInt(usize, .big) catch 0;
-            return idx;
-        }
-
-        fn increment(fd: Io.File, idx: usize, io: Io) !void {
-            var writer = fd.writer(io, &.{});
-            try writer.interface.writeInt(usize, idx, .big);
-            try writer.interface.flush();
-        }
-
-        pub fn next(io: Io) !usize {
-            try mutex.lock(io);
-            defer mutex.unlock(io);
-            var index_file = try storage_dir.createFile(io, name, .{ .read = true, .truncate = false });
-            defer index_file.close(io);
-            var r_b: [10]u8 = undefined;
-            var reader = index_file.reader(io, &r_b);
-            var idx = reader.interface.takeInt(usize, .big) catch 0;
-            idx += 1;
-            try increment(index_file, idx, io);
-            return idx;
-        }
-
-        pub fn openFile(idx: usize, io: Io) !Io.File {
-            var buf: [4096]u8 = undefined;
-            const filename = try print(&buf, "{x}." ++ @tagName(type_name), .{idx});
-            return try types.openFile(type_name, filename, io);
-        }
-
-        pub fn createFile(idx: usize, io: Io) !Io.File {
-            var buf: [4096]u8 = undefined;
-            const filename = try print(&buf, "{x}." ++ @tagName(type_name), .{idx});
-            return try types.createFile(type_name, filename, io);
-        }
-
-        pub fn readerByIndex(idx: usize, a: Allocator, io: Io) !Io.Reader {
-            const file = try @This().fileByIndex(idx, io);
-            defer file.close(io);
-            const stat = try file.stat(io);
-            const buf = try a.alloc(u8, stat.size);
-            errdefer a.free(buf);
-            var reader = file.reader(io, buf);
-            try reader.interface.fill(stat.size);
-            return .fixed(reader.interface.buffer);
-        }
-
-        pub const scoped = struct {
-            var pbuf: [2048]u8 = undefined;
-
-            pub fn current(scope: []const u8, io: Io) !usize {
-                try mutex.lock(io);
-                defer mutex.unlock(io);
-                const ename = try print(&pbuf, "_{s}.{s}", .{ scope, name[1..] });
-                var index_file = storage_dir.openFile(io, ename, .{}) catch |err| switch (err) {
-                    error.FileNotFound => {
-                        var new_file = try storage_dir.createFile(io, ename, .{});
-                        defer new_file.close(io);
-                        try increment(new_file, 0, io);
-                        return 0;
-                    },
-                    else => return err,
-                };
-                defer index_file.close(io);
-                var r_b: [10]u8 = undefined;
-                var fd_reader = index_file.reader(io, &r_b);
-                var reader = &fd_reader.interface;
-                const idx = reader.takeInt(usize, .big) catch 0;
-                return idx;
-            }
-
-            pub fn next(scope: []const u8, io: Io) !usize {
-                try mutex.lock(io);
-                defer mutex.unlock(io);
-                const ename = try print(&pbuf, "_{s}.{s}", .{ scope, name[1..] });
-                var index_file = try storage_dir.createFile(io, ename, .{ .read = true, .truncate = false });
-                defer index_file.close(io);
-                var r_b: [10]u8 = undefined;
-                var reader = index_file.reader(io, &r_b);
-                var idx = reader.interface.takeInt(usize, .big) catch 0;
-                idx += 1;
-                try increment(index_file, idx, io);
-                return idx;
-            }
-
-            pub fn fileByIndex(repo: []const u8, idx: usize, io: Io) !Io.File {
-                var buf: [4096]u8 = undefined;
-                const filename = try print(&buf, "{s}.{x}." ++ @tagName(type_name), .{ repo, idx });
-                return try types.openFile(type_name, filename, io);
-            }
-
-            pub fn readerByIndex(repo: []const u8, idx: usize, a: Allocator, io: Io) !Io.Reader {
-                const file = try @This().fileByIndex(repo, idx, io);
-                defer file.close(io);
-                const stat = try file.stat(io);
-                const buf = try a.alloc(u8, stat.size);
-                errdefer a.free(buf);
-                var reader = file.reader(io, buf);
-                try reader.interface.fill(stat.size);
-                return .fixed(reader.interface.buffer);
-            }
-        };
-    };
-}
-
 pub fn split(line: []u8) ?struct { []u8, [:'\n']u8 } {
     const idx = indexOf(u8, line, ": ") orelse return null;
     return .{ line[0..idx], line[idx + 2 .. line.len - 1 :'\n'] };
 }
 
-pub fn readerWriter(BaseType: type, default: BaseType) type {
+pub const CommitError = error{
+    Canceled,
+    FSError,
+    NoSpaceLeft,
+    WriteFailed,
+};
+
+pub const ReadError = error{
+    EndOfStream,
+    FSError,
+    OutOfMemory,
+    ReadFailed,
+};
+
+pub fn TypedIo(BaseType: type) type {
     return struct {
-        pub fn read(r: *Io.Reader) BaseType {
-            return readStruct(BaseType, default, "", r);
+        pub const TypeIo = @This();
+
+        pub const type_prefix: @EnumLiteral() = if (@hasDecl(BaseType, "type_prefix"))
+            BaseType.type_prefix
+        else
+            @compileError("Type needs a type_prefix enum literal");
+
+        const fmtstr = "{f}." ++ @tagName(type_prefix);
+
+        pub const Index = struct {
+            pub const tidx_name = "_" ++ @tagName(type_prefix) ++ ".index";
+            var mutex: std.Io.Mutex = .init;
+
+            fn writeIndex(fd: Io.File, idx: usize, io: Io) CommitError!void {
+                var writer = fd.writer(io, &.{});
+                try writer.interface.writeInt(usize, idx, .big);
+                try writer.interface.flush();
+            }
+
+            fn takeInt(_: *Io.Reader) usize {}
+
+            pub fn new(io: Io) CommitError!usize {
+                log.info(@typeName(BaseType) ++ ".Index.next not found, creating", .{});
+                var new_file = createIndexFile(io) catch @panic("CreateIndexPanic");
+                defer new_file.close(io);
+                try writeIndex(new_file, 1, io);
+                return 1;
+            }
+
+            pub fn current(io: Io) CommitError!usize {
+                try mutex.lock(io);
+                defer mutex.unlock(io);
+
+                var index_file = openIndexFile(io) catch |err| switch (err) {
+                    error.FileNotFound => return new(io),
+                    else => {
+                        log.err(@typeName(BaseType) ++ ".Index.scoped.next not found {}", .{err});
+                        return error.FSError;
+                    },
+                };
+                defer index_file.close(io);
+                var r_b: [10]u8 = undefined;
+                var fd_reader = index_file.reader(io, &r_b);
+                const reader = &fd_reader.interface;
+                const idx = reader.takeInt(usize, .big) catch 0;
+                return idx;
+            }
+
+            pub fn next(io: Io) CommitError!usize {
+                try mutex.lock(io);
+                defer mutex.unlock(io);
+
+                var index_file = openIndexFile(io) catch |err| idxf: {
+                    log.info(@typeName(BaseType) ++ ".Index.next failed {}", .{err});
+                    break :idxf createIndexFile(io) catch return error.FSError;
+                };
+                defer index_file.close(io);
+                var r_b: [10]u8 = undefined;
+                var reader = index_file.reader(io, &r_b);
+                var idx = reader.interface.takeInt(usize, .big) catch 0;
+                idx += 1;
+                try writeIndex(index_file, idx, io);
+                return idx;
+            }
+
+            fn openIndexFile(io: Io) !Io.File {
+                log.debug("openIndexFile '{s}' -> '{s}'", .{ @typeName(BaseType), tidx_name });
+                return try storage_dir.openFile(io, tidx_name, .{ .mode = .read_write });
+            }
+
+            fn createIndexFile(io: Io) !Io.File {
+                log.debug("createIndexFile '{s}' -> '{s}'", .{ @typeName(BaseType), tidx_name });
+                return try storage_dir.createFile(io, tidx_name, .{});
+            }
+
+            pub const scoped = struct {
+                var pbuf: [2048]u8 = undefined;
+
+                fn sname(scope: []const u8) []const u8 {
+                    return print(&pbuf, "_{s}." ++ tidx_name[1..], .{scope}) catch unreachable;
+                }
+
+                fn new(scope: []const u8, io: Io) CommitError!usize {
+                    log.err(@typeName(BaseType) ++ ".Index.scoped.next not found, creating", .{});
+                    var new_file = storage_dir.createFile(io, sname(scope), .{}) catch @panic("CreateIndexPanic");
+                    defer new_file.close(io);
+                    try writeIndex(new_file, 1, io);
+                    return 1;
+                }
+
+                pub fn current(scope: []const u8, io: Io) CommitError!usize {
+                    try mutex.lock(io);
+                    defer mutex.unlock(io);
+
+                    const index_file = storage_dir.openFile(io, sname(scope), .{}) catch |err| switch (err) {
+                        error.FileNotFound => return scoped.new(scope, io),
+                        else => {
+                            log.err(@typeName(BaseType) ++ ".Index.scoped.next not found {}", .{err});
+                            return error.FSError;
+                        },
+                    };
+                    defer index_file.close(io);
+                    var r_b: [10]u8 = undefined;
+                    var fd_reader = index_file.reader(io, &r_b);
+                    var reader = &fd_reader.interface;
+                    const idx = reader.takeInt(usize, .big) catch 0;
+                    return idx;
+                }
+
+                pub fn next(scope: []const u8, io: Io) CommitError!usize {
+                    try mutex.lock(io);
+                    defer mutex.unlock(io);
+
+                    var index_file = storage_dir.openFile(io, sname(scope), .{ .mode = .read_write }) catch |err| switch (err) {
+                        error.FileNotFound => {
+                            log.debug(@typeName(BaseType) ++ ".Index.next failed {}", .{err});
+                            var new_file = storage_dir.createFile(io, sname(scope), .{}) catch @panic("CreateIndexPanic");
+                            defer new_file.close(io);
+                            try writeIndex(new_file, 0, io);
+                            return 0;
+                        },
+                        else => {
+                            log.err(@typeName(BaseType) ++ ".Index.next failed {}", .{err});
+                            return error.FSError;
+                        },
+                    };
+                    defer index_file.close(io);
+                    var r_b: [10]u8 = undefined;
+                    var reader = index_file.reader(io, &r_b);
+                    var idx = reader.interface.takeInt(usize, .big) catch 0;
+                    idx += 1;
+                    try writeIndex(index_file, idx, io);
+                    return idx;
+                }
+            };
+        };
+
+        pub fn read(data: *BaseType, r: *Io.Reader) void {
+            return readStruct(BaseType, data, &.{}, r);
         }
 
-        fn readStruct(T: type, sub_default: T, comptime prefix: []const u8, r: *Io.Reader) T {
-            var output: T = sub_default;
+        pub fn write(t: *const BaseType, w: *Writer) error{WriteFailed}!void {
+            log.debug("writing '{s}'", .{@typeName(BaseType)});
+            if (@hasDecl(BaseType, "type_prefix") and @hasDecl(BaseType, "type_version")) {
+                try w.print("# {s}/{d}\n", .{ @tagName(BaseType.type_prefix), BaseType.type_version });
+            }
+
+            try writeStruct(BaseType, t, "", w);
+            try w.writeAll("\n");
+            try w.flush();
+        }
+
+        pub fn iterableDir(io: Io) !Io.Dir {
+            return try storage_dir.createDirPathOpen(io, @tagName(type_prefix), .{
+                .open_options = .{ .iterate = true },
+            });
+        }
+
+        pub fn loadData(data: *const BaseType, a: Allocator, io: Io) ReadError!Io.File.Reader {
+            log.debug("loadData '{s}'", .{@typeName(BaseType)});
+            const file = openFile(data, io) catch |err| {
+                log.debug(@typeName(BaseType) ++ " loadData failed: {}", .{err});
+                return error.FSError;
+            };
+            const stat = file.stat(io) catch return error.FSError;
+            const buf = try a.alloc(u8, stat.size);
+            errdefer a.free(buf);
+            log.debug("loadData alloc '{}'", .{stat.size});
+            var reader = file.reader(io, buf);
+            try reader.interface.fill(stat.size);
+            return reader;
+        }
+
+        pub fn commit(data: *const BaseType, io: Io) CommitError!void {
+            const file = try commitExtra(data, io);
+            defer file.file.close(io);
+        }
+
+        /// Doesn't close file descriptor
+        pub fn commitExtra(data: *const BaseType, io: Io) CommitError!Io.File.Writer {
+            const file = createFile(data, io) catch return error.FSError;
+
+            var buf: [2048]u8 = undefined;
+            var writer = file.writer(io, &buf);
+            write(data, &writer.interface) catch @panic("TODO");
+            try writer.interface.flush();
+            writer.interface.buffer = &.{};
+            return writer;
+        }
+
+        fn typedDir(io: Io) !Io.Dir {
+            return try storage_dir.createDirPathOpen(io, @tagName(type_prefix), .{});
+        }
+
+        fn openFile(data: *const BaseType, io: Io) !Io.File {
+            var type_dir = try typedDir(io);
+            defer type_dir.close(io);
+            return try openFileScoped(data, type_dir, io);
+        }
+
+        fn openFileScoped(data: *const BaseType, dest_dir: Io.Dir, io: Io) !Io.File {
+            var buf: [2048]u8 = undefined;
+            const name = try print(&buf, fmtstr, .{alt(data.*, .typeIdent)});
+            log.debug("openFileScoped '{s}' -> '{s}'", .{ @typeName(BaseType), name });
+            return try dest_dir.openFile(io, name, .{});
+        }
+
+        fn createFile(data: *const BaseType, io: Io) !Io.File {
+            var type_dir = try typedDir(io);
+            defer type_dir.close(io);
+            return createFileScoped(data, type_dir, io);
+        }
+
+        fn createFileScoped(data: *const BaseType, dest_dir: Io.Dir, io: Io) !Io.File {
+            var buf: [2048]u8 = undefined;
+            const name = try print(&buf, fmtstr, .{alt(data.*, .typeIdent)});
+            log.debug("createFileScoped '{s}' -> '{s}'", .{ @typeName(BaseType), name });
+            return try dest_dir.createFile(io, name, .{});
+        }
+
+        fn readStruct(T: type, output: *T, comptime subtype_prefix: []const u8, r: *Io.Reader) void {
             while (r.takeDelimiterInclusive('\n')) |line| {
-                if (line.len == 1 and line[0] == '\n') return output;
+                if (line.len == 1 and line[0] == '\n') return;
                 const name: []u8, const value: [:'\n']u8 = split(line) orelse continue;
                 const S = @typeInfo(T).@"struct";
                 inline for (S.field_names, S.field_types) |fname, ftype| {
                     const dst = &@field(output, fname);
-                    const prefixed_name = if (prefix.len > 0) prefix ++ "." ++ fname else fname;
+                    const prefixed_name = if (subtype_prefix.len > 0) subtype_prefix ++ "." ++ fname else fname;
                     if (eql(u8, name, prefixed_name)) switch (ftype) {
                         DefaultHash => if (value.len == 64) {
                             var hex: []const u8 = value;
@@ -343,11 +365,11 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         VarString(128) => dst.* = VarString(128).init(value),
                         VarString(256) => dst.* = VarString(256).init(value),
                         Viewers => dst.* = Viewers.fromLine(value) catch .empty,
-                        Delta.Attach => dst.* = stringToEnum(ftype, value) orelse dst.*,
+                        Thread => dst.* = Thread.fromLine(value) catch unreachable,
+                        Delta.Attachment.Kind => dst.* = stringToEnum(ftype, value) orelse dst.*,
                         User.Type => dst.* = stringToEnum(ftype, value) orelse dst.*,
                         CI.Step => dst.* = stringToEnum(ftype, value) orelse dst.*,
                         CI.Result => dst.* = stringToEnum(ftype, value) orelse dst.*,
-                        Issue.Status => dst.* = stringToEnum(ftype, value) orelse dst.*,
 
                         std.debug.SafetyLock => unreachable,
                         std.debug.SafetyLock.State => unreachable,
@@ -358,7 +380,6 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         ArrayList(Message), // Managed internally by Threads
                         ArrayList(Viewers.View), // Managed internally by Viewers
                         ArrayList(CI.Step), // Managed internally by CI
-                        ?*Thread,
                         => if (comptime type_debugging) log.info(
                             "building {s} reader skipped `{s}: {s}` (intentionally skipped)",
                             .{ @typeName(T), fname, @typeName(ftype) },
@@ -367,7 +388,7 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                             .@"enum" => |enumT| {
                                 if (enumT.mode == .nonexhaustive)
                                     @compileError(
-                                        prefix ++
+                                        subtype_prefix ++
                                             prefixed_name ++
                                             @typeName(ftype) ++
                                             @typeName(BaseType) ++
@@ -388,11 +409,10 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                     } else if (startsWith(u8, name, fname) and
                         name.len > fname.len and
                         name[fname.len] == '.') switch (@typeInfo(ftype)) {
-                        .@"struct" => if (custom_types.contains(ftype)) {
+                        .@"struct" => if (comptime custom_types.contains(ftype)) {
                             const save = r.seek;
                             r.seek -|= line.len;
-                            dst.* =
-                                readStruct(ftype, dst.*, fname, r);
+                            readStruct(ftype, dst, fname, r);
                             r.seek = save;
                         } else if (comptime type_debugging) log.err(
                             "building {s} reader skipped `{s}: {s}` (not enabled)",
@@ -408,23 +428,12 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                 error.EndOfStream => {},
                 else => log.err("incomplete read on {s} {}", .{ @typeName(T), err }),
             }
-
-            return output;
-        }
-
-        pub fn write(t: *const BaseType, w: *Writer) error{WriteFailed}!void {
-            if (@hasDecl(BaseType, "type_prefix") and @hasDecl(BaseType, "type_version")) {
-                try w.print("# {s}/{d}\n", .{ @tagName(BaseType.type_prefix), BaseType.type_version });
-            }
-
-            try writeStruct(BaseType, t, "", w);
-            try w.writeAll("\n");
-            try w.flush();
         }
 
         fn writeStruct(T: type, t: *const T, comptime name: []const u8, w: *Writer) error{WriteFailed}!void {
             const S = @typeInfo(T).@"struct";
             all: inline for (S.field_names, S.field_types) |fname, ftype| {
+                // TODO remove this hack
                 if (comptime @hasDecl(BaseType, "type_skip_fields")) {
                     inline for (BaseType.type_skip_fields) |skip| {
                         if (comptime eql(u8, skip, fname)) continue :all;
@@ -471,11 +480,11 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                         .{ fname, if (src.*) "true" else "false" },
                     ),
                     Viewers => try w.print("{s}: {f}\n", .{ fname, src.* }),
-                    Delta.Attach => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
+                    Thread => try w.print("{s}: {f}\n", .{ fname, src.* }),
+                    Delta.Attachment.Kind => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
                     User.Type => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
                     CI.Step => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
                     CI.Result => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
-                    Issue.Status => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
 
                     ?Io.File,
                     ?Io.Writer,
@@ -483,7 +492,6 @@ pub fn readerWriter(BaseType: type, default: BaseType) type {
                     ArrayList(Message), // Managed internally by Threads
                     ArrayList(Viewers.View), // Managed internally by Viewers
                     ArrayList(CI.Step), // Managed internally by CI
-                    ?*Thread,
                     => if (comptime type_debugging) log.warn(
                         "building {s} writer skipped `{s}: {s}` (intentionally skipped)",
                         .{ @typeName(T), fname, @typeName(ftype) },
@@ -541,14 +549,13 @@ pub const testing = struct {
     }
 };
 
-test {
+test types {
     _ = &common;
     _ = &Artifact;
     _ = &CI;
     _ = &Delta;
     _ = &Diff;
     _ = &Gist;
-    _ = &Issue;
     _ = &Message;
     _ = &Network;
     _ = &RepoMeta;
@@ -558,14 +565,15 @@ test {
     _ = &Viewers;
 }
 
+const common = @import("types/common.zig");
 const std = @import("std");
+const log = std.log.scoped(.srctypes);
 const ArrayList = std.ArrayList;
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
 const Writer = Io.Writer;
 const Reader = Io.File.Reader;
 const fs = std.fs;
-const log = std.log.scoped(.srctree_type);
 const parseInt = std.fmt.parseInt;
 const indexOf = std.mem.indexOf;
 const splitScalar = std.mem.splitScalar;
@@ -574,5 +582,6 @@ const startsWith = std.mem.startsWith;
 const print = std.fmt.bufPrint;
 const stringToEnum = std.meta.stringToEnum;
 const git = @import("git.zig");
+const alt = std.fmt.alt;
 
 const type_debugging = false;

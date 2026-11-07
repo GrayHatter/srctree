@@ -745,8 +745,7 @@ fn view(f: *Frame) Error!void {
     const idx = isHex(delta_id) orelse return error.ServerFault;
 
     var delta = Delta.open(rd.name, idx, f.alloc, f.io) catch |err| switch (err) {
-        error.FSFault => return error.ServerFault,
-        error.NoSpaceLeft => return error.Unknown,
+        error.FSError => return error.ServerFault,
         error.DeltaDoesNotExist => return error.InvalidURI,
     };
 

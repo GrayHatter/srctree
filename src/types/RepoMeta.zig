@@ -2,70 +2,44 @@ name: []const u8,
 title: []const u8 = &.{},
 updated: types.Timestamp = 0,
 visibility: Repo.Visibility = .public,
-thread_id: usize = 0,
-
+thread: Thread = .empty,
 viewers: Viewers = .empty,
-thread: ?*Thread = null,
 
 pub const RepoMeta = @This();
 
-pub const blank: RepoMeta = .{
+pub const empty: RepoMeta = .{
     .name = &.{},
 };
 
 pub const type_prefix = .repo_meta;
 pub const type_version = 0;
 
-const typeio = types.readerWriter(RepoMeta, .blank);
-const writerFn = typeio.write;
-const readerFn = typeio.read;
+const TypeIo = types.TypedIo(RepoMeta); //, "{s}.");
+
+pub fn typeIdent(rm: RepoMeta, w: *Io.Writer) !void {
+    try w.print("{s}", .{rm.name});
+}
 
 pub fn new(repo: []const u8, title: []const u8, io: Io) !RepoMeta {
-    var d = RepoMeta{
+    return .{
         .name = repo,
         .title = title,
         .updated = Io.Clock.real.now(io).toSeconds(),
     };
-
-    var thread: Thread = try .new(RepoMeta, &d, io);
-    try thread.commit(io);
-    d.thread_id = thread.index;
-    return d;
 }
 
-pub fn open(repo: []const u8, a: Allocator, io: Io) !RepoMeta {
-    var reader = try types.loadReaderFmt(type_prefix, "{s}.", .{repo}, a, io);
-    return readerFn(&reader);
+pub fn open(name: []const u8, a: Allocator, io: Io) !RepoMeta {
+    var rm: RepoMeta = .empty;
+    rm.name = name;
+    var reader = try TypeIo.loadData(&rm, a, io);
+    defer reader.file.close(io);
+    TypeIo.read(&rm, &reader.interface);
+    return rm;
 }
 
-pub fn commit(rm: RepoMeta, io: Io) !void {
-    if (rm.thread) |thr| thr.commit(io) catch {}; // Save thread as best effort
-
-    const file = try types.commitFmt(type_prefix, "{s}.", .{rm.name}, io);
-    defer file.close(io);
-    var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(io, &w_b);
-    try writerFn(&rm, &fd_writer.interface);
-}
-
-pub fn loadThread(rm: *RepoMeta, a: Allocator, io: Io) !*Thread {
-    if (rm.thread) |thr| return thr;
-    const t = try a.create(Thread);
-    t.* = Thread.open(rm.thread_id, a, io) catch |err| t: {
-        log.err("Error loading thread!! {}", .{err});
-        log.err(" old thread_id {};", .{rm.thread_id});
-        const thread = Thread.new(RepoMeta, rm, io) catch |err2| {
-            log.err(" unable to create new {}", .{err2});
-            return error.UnableToLoadThread;
-        };
-        log.err("new thread_id {}", .{thread.index});
-        rm.thread_id = thread.index;
-        try rm.commit(io);
-        break :t thread;
-    };
-
-    rm.thread = t;
-    return t;
+pub fn commit(rm: *const RepoMeta, io: Io) !void {
+    rm.thread.commit(io) catch {}; // Save thread as best effort
+    try TypeIo.commit(rm, io);
 }
 
 test RepoMeta {
@@ -85,7 +59,7 @@ test RepoMeta {
 
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
-    try writerFn(&d, &writer.writer);
+    try TypeIo.write(&d, &writer.writer);
 
     const v1_text: []const u8 =
         \\# repo_meta/0
@@ -93,7 +67,7 @@ test RepoMeta {
         \\title: title
         \\updated: 1744830464
         \\visibility: public
-        \\thread_id: 1
+        \\thread: idx=0 count=0 updated=0 hash=0000000000000000000000000000000000000000000000000000000000000000
         \\viewers: hash=0000000000000000000000000000000000000000000000000000000000000000 count=0 time=0
         \\
         \\
@@ -102,7 +76,10 @@ test RepoMeta {
     try std.testing.expectEqualStrings(v1_text, writer.written());
 
     var r: Io.Reader = .fixed(writer.written());
-    const read = readerFn(&r);
+    var read: RepoMeta = .empty;
+    read.name = "repo_name";
+
+    TypeIo.read(&read, &r);
     try std.testing.expectEqualDeep(d, read);
 }
 

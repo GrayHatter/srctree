@@ -1,11 +1,11 @@
-hash: DefaultHash,
+hash: Hash,
 state: State = .default,
 target: usize,
 kind: Kind,
 created: i64 = 0,
 updated: i64 = 0,
 src_tz: i32 = 0,
-author: ?[]const u8 = null,
+author: []const u8 = &.{},
 //sub_thread: usize = 0,
 // TODO stabilize or replace this hack
 extra0: usize = 0,
@@ -13,6 +13,8 @@ extra0: usize = 0,
 message: []const u8,
 
 const Message = @This();
+
+const Hash = types.DefaultHash;
 
 pub const empty: Message = .{
     .hash = @splat(0),
@@ -34,9 +36,11 @@ pub const type_prefix = .messages;
 pub const type_version = 0;
 pub const type_skip_fields: [1][]const u8 = .{"message"};
 
-const typeio = Types.readerWriter(Message, .empty);
-const writerFn = typeio.write;
-const readerFn = typeio.read;
+const TypeIo = types.TypedIo(Message);
+
+pub fn typeIdent(m: Message, w: *Io.Writer) !void {
+    try w.print("{x}", .{m.hash});
+}
 
 pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8, io: Io) !Message {
     var m = Message{
@@ -49,38 +53,45 @@ pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8, io: 
         .author = author,
         .message = message,
     };
-    _ = m.genHash();
+    m.genHash();
+    log.debug("new message {any}", .{m});
     try m.commit(io);
     return m;
 }
 
-pub fn commit(msg: Message, io: Io) !void {
-    var buf: [2048]u8 = undefined;
-    const filename = try bufPrint(&buf, "{x}.message", .{&msg.hash});
-    const file = try Types.commit(.message, filename, io);
-    defer file.close(io);
+pub fn commit(msg: *const Message, io: Io) !void {
+    var writer = try TypeIo.commitExtra(msg, io);
+    defer writer.file.close(io);
+    var w_b: [2048]u8 = undefined;
+    writer.interface.buffer = &w_b;
 
     std.debug.assert(!std.mem.eql(u8, msg.hash[0..], &@as([32]u8, @splat(0))));
-    var w_b: [2048]u8 = undefined;
-    var fd_writer = file.writer(io, &w_b);
-    try writerFn(&msg, &fd_writer.interface);
-    try fd_writer.interface.writeAll(msg.message);
-    try fd_writer.interface.flush();
+    try writer.interface.writeAll(msg.message);
+    try writer.interface.flush();
 }
 
-pub fn open(hash: DefaultHash, a: Allocator, io: Io) !Message {
-    var reader = try Types.loadDataHashId(.message, hash, a, io);
-    var msg = readerFn(&reader);
+fn fromHash(hash: Hash) Message {
+    var m: Message = .empty;
+    m.hash = hash;
+    return m;
+}
+
+pub fn open(hash: Hash, a: Allocator, io: Io) !Message {
+    log.debug("Message.open '{x}'", .{hash});
+    var msg: Message = .fromHash(hash);
+    var reader = try TypeIo.loadData(&msg, a, io);
+    defer reader.file.close(io);
+    TypeIo.read(&msg, &reader.interface);
 
     if (msg.message.len == 0) {
-        if (find(u8, reader.buffer, "\n\n")) |start| {
-            msg.message = reader.buffer[start + 2 ..];
+        if (find(u8, reader.interface.buffer, "\n\n")) |start| {
+            msg.message = reader.interface.buffer[start + 2 ..];
         }
     }
     return msg;
 }
 
-pub fn genHash(msg: *Message) *const DefaultHash {
+pub fn genHash(msg: *Message) void {
     std.debug.assert(std.mem.eql(u8, msg.hash[0..], @as([32]u8, @splat(0))[0..]));
     var h = Sha256.init(.{});
     h.update(asBytes(&msg.state));
@@ -90,21 +101,20 @@ pub fn genHash(msg: *Message) *const DefaultHash {
     h.update(asBytes(&@backingInt(msg.kind)));
     switch (msg.kind) {
         .comment => {
-            h.update(msg.author orelse "");
+            h.update(msg.author);
             h.update(msg.message);
         },
         .diff_update => {
-            h.update(msg.author orelse "");
+            h.update(msg.author);
             // Message is required for diff patch updates
             h.update(msg.message);
         },
         .state_change => {
-            h.update(msg.author orelse "");
+            h.update(msg.author);
             h.update(msg.message);
         },
     }
     h.final(&msg.hash);
-    return &msg.hash;
 }
 
 test "comment" {
@@ -119,33 +129,28 @@ test "comment" {
         .hash = @splat(0),
     };
 
-    const hash = c.genHash();
+    c.genHash();
     try std.testing.expectEqualSlices(u8, &[_]u8{
         0xA0, 0x2D, 0xAB, 0x93, 0x4D, 0x06, 0xAB, 0xDF, 0x94, 0xCB, 0x24, 0xC9, 0x8D, 0x07, 0xB1, 0xA0,
         0xC0, 0x2B, 0x12, 0xBE, 0xF3, 0x92, 0x23, 0x49, 0xC5, 0x34, 0x26, 0x9D, 0x0E, 0x34, 0x0A, 0x6E,
-    }, hash);
+    }, &c.hash);
 
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init(try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } }), io);
+    try types.init(try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } }), io);
 
     var buf: [2048]u8 = undefined;
-    const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{hash});
+    const filename = try std.fmt.bufPrint(&buf, "{x}.message", .{&c.hash});
     try std.testing.expectEqualStrings(
         "a02dab934d06abdf94cb24c98d07b1a0c02b12bef3922349c534269d0e340a6e.message",
         filename,
     );
 
-    {
-        var file = try Types.commit(.message, filename, io);
-        defer file.close(io);
-        var w_b: [2048]u8 = undefined;
-        var writer = file.writer(io, &w_b);
-        try writerFn(&c, &writer.interface);
-    }
+    try TypeIo.commit(&c, io);
 
-    const reader = try Types.loadDataReader(.message, filename, a, io);
-    defer a.free(reader.buffer);
+    const reader = try TypeIo.loadData(&c, a, io);
+    defer reader.file.close(io);
+    defer a.free(reader.interface.buffer);
 
     const expected =
         \\# messages/0
@@ -166,7 +171,7 @@ test "comment" {
         \\
     ;
 
-    try std.testing.expectEqualStrings(expected, reader.buffer);
+    try std.testing.expectEqualStrings(expected, reader.interface.buffer);
 }
 
 test Message {
@@ -174,7 +179,7 @@ test Message {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try Types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
+    try types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
 
     var c = try Message.new(.comment, 0, "author", "message", io);
 
@@ -188,7 +193,7 @@ test Message {
     try c.commit(io);
     var writer = std.Io.Writer.Allocating.init(a);
     defer writer.deinit();
-    try writerFn(&c, &writer.writer);
+    try TypeIo.write(&c, &writer.writer);
 
     var b: [4086]u8 = undefined;
     var fba: std.heap.FixedBufferAllocator = .init(&b);
@@ -219,6 +224,7 @@ test Message {
 }
 
 const std = @import("std");
+const log = std.log.scoped(.srctypes_messages);
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const Io = std.Io;
@@ -227,7 +233,6 @@ const Sha256 = std.crypto.hash.sha2.Sha256;
 const bufPrint = std.fmt.bufPrint;
 const asBytes = std.mem.asBytes;
 const find = std.mem.find;
-const DefaultHash = Types.DefaultHash;
 
 const Humanize = @import("../humanize.zig");
-const Types = @import("../types.zig");
+const types = @import("../types.zig");
