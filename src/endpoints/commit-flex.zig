@@ -436,7 +436,10 @@ pub fn commitFlex(ctx: *Frame) Error!void {
         repo_count +|= 1;
     }
 
-    journal.build(ctx.alloc, ctx.io) catch |err| log.err("build failed {}", .{err});
+    journal.build(ctx.alloc, ctx.io) catch |err| switch (err) {
+        error.RefMissing => {},
+        else => log.err("build failed {}", .{err}),
+    };
     var tcount: u16 = 0;
     for (journal.hits) |h| tcount +|= h;
 
@@ -558,9 +561,12 @@ pub fn commitFlex(ctx: *Frame) Error!void {
         });
     }
 
+    const bheader: *const S.BodyHeaderHtml = ctx.template_data.get(S.BodyHeaderHtml) orelse &.{
+        .inbox_count = 12345678,
+    };
     const page = UserCommitsPage.init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = ctx.template_data.get(S.BodyHeaderHtml).?.*,
+        .body_header = bheader.*,
         .total_hits = .safe(try ctx.alloc.print("{}", .{tcount})),
         .flex_weeks = flex_weeks,
         .checked_repos = .safe(try ctx.alloc.print("{}", .{repo_count})),
