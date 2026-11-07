@@ -80,4 +80,4 @@ pub fn printAlloc(self: Humanize, a: std.mem.Allocator) ![]u8 {
 }
 
 const std = @import("std");
-const DT = @import("datetime.zig");
+const DT = @import("DateTime.zig");

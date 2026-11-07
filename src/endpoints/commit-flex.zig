@@ -579,7 +579,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const log = std.log.scoped(.commit_flex);
 
-const DateTime = @import("../datetime.zig");
+const DateTime = @import("../DateTime.zig");
 const Git = @import("../git.zig");
 const Repo = @import("../Repo.zig");
 
