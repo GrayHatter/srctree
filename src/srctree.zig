@@ -187,8 +187,15 @@ inline fn browserRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn
     return null;
 }
 
-inline fn scriptRequest(f: *Frame, _: *const verse.Request.UserAgent) ?BuildFn {
+inline fn scriptRequest(f: *Frame, ua: *const verse.Request.UserAgent) ?BuildFn {
     f.dumpDebugData(.verbose);
+
+    if (startsWith(u8, ua.string, "Opera/"))
+        return dropRequest(f, "opera");
+
+    if (startsWith(u8, ua.string, "\""))
+        return dropRequest(f, "lol, you played yourself");
+
     return null;
 }
 
@@ -209,11 +216,7 @@ fn trafficFilter(fr: *Frame) ?BuildFn {
         return switch (ua.agent) {
             .bot => botRequest(fr, ua),
             .browser => browserRequest(fr, ua),
-            .unknown => if (startsWith(u8, fr.request.user_agent.?.string, "Opera/"))
-                dropRequest(fr, "opera")
-            else
-                null,
-            .script => scriptRequest(fr, ua),
+            .script, .unknown => scriptRequest(fr, ua),
         };
     }
 
