@@ -280,7 +280,7 @@ pub fn directReply(ctx: *Frame) Error!void {
 }
 
 pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.PatchHtml {
-    patch.parse(a) catch |err| {
+    const diffs = patch.parse(a) catch |err| {
         if (find(u8, patch.blob, "\nMerge: ") == null) {
             log.err("Unable to parse normal diff -> err: {any}", .{err});
             return err;
@@ -290,7 +290,6 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
         }
     };
 
-    const diffs = patch.diffs orelse unreachable;
     const files = try a.alloc(S.PatchHtml.Files, diffs.len);
     errdefer a.free(files);
     for (diffs, files, 0..) |diff, *file, file_idx| {
@@ -489,7 +488,7 @@ fn resolveLineRefRepo(
 fn resolveLineRefDiff(
     line: []const u8,
     filename: []const u8,
-    diff: *Patch.Diff,
+    diff: *const Patch.Diff,
     line_ref: LineRef,
     fpos: usize,
     a: Allocator,
@@ -683,7 +682,7 @@ pub fn simpleComment(line: []const u8, writer: *Writer, io: Io) !void {
 
 pub fn translateComment(
     comment: []const u8,
-    patch: Patch,
+    diffs: []const Patch.Diff,
     repo: *const Git.Repo,
     writer: *Writer,
     a: Allocator,
@@ -691,7 +690,6 @@ pub fn translateComment(
 ) !bool {
     var found_ref = false;
     var itr = splitScalar(u8, comment, '\n');
-    const diffs: []Patch.Diff = patch.diffs orelse &.{};
     while (itr.next()) |line_| : (writer.writeAll("<br>\n") catch unreachable) {
         const line = std.mem.trim(u8, line_, "\r ");
         for (diffs) |*diff| {
@@ -771,7 +769,8 @@ fn view(f: *Frame) Error!void {
         },
     }
     // TODO remove delta_id from call
-    return viewDiffRevision(f, &delta, revision, delta_id);
+    return viewDiffRevision(f, &delta, revision, delta_id) catch unreachable; // TODO FIXME
+
 }
 
 fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8) Error!void {
@@ -845,9 +844,9 @@ fn viewDiffRevision(f: *Frame, delta: *Delta, rev: ?u64, delta_index: []const u8
             }
         } else log.err("Provided patch was empty", .{});
 
-        messages = try delta_shared.genThreadMessages(delta, &repo, &patch, .{
+        messages = delta_shared.genThreadMessages(delta, &repo, &patch, .{
             .edit = f.user != null,
-        }, f.alloc, f.io);
+        }, f.alloc, f.io) catch return error.ServerFault;
     } else |_| {
         log.err("Unable to find attached patch/diff", .{});
     }

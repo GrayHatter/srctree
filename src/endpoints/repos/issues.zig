@@ -219,14 +219,14 @@ fn view(f: *Frame) Error!void {
 
     try delta_shared.incrView(&delta, f);
 
-    const messages = try delta_shared.genThreadMessages(
+    const messages = delta_shared.genThreadMessages(
         &delta,
         &repo,
         null,
         .{ .edit = f.user != null },
         f.alloc,
         f.io,
-    );
+    ) catch return error.ServerFault;
 
     var r: Reader = .fixed(delta.message);
     var w: Writer.Allocating = try .initCapacity(f.alloc, delta.message.len);

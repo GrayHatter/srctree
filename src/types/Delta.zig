@@ -142,7 +142,7 @@ pub fn attached(d: *const Delta, a: Allocator, io: Io) !Attached {
     return switch (d.attach) {
         .nos => .nos,
         .commit => unreachable,
-        .diff => .{ .diff = (try Diff.open(d.attach_target, a, io)) orelse return error.Missing },
+        .diff => .{ .diff = (try Diff.open(d.attach_target, a, io)) },
         .issue => unreachable,
         .line => unreachable,
         .remote => unreachable,

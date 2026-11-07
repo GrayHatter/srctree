@@ -1,5 +1,4 @@
 blob: []const u8,
-diffs: ?[]Diff = null,
 /// srctree metadata
 revision: ?u64 = null,
 
@@ -304,6 +303,9 @@ pub const Stat = struct {
 };
 
 pub fn init(patch: []const u8) Patch {
+    if (findPos(u8, patch, 0, "diff")) |i| {
+        return .{ .blob = patch[i..] };
+    }
     return .{ .blob = patch };
 }
 
@@ -317,27 +319,35 @@ pub const ParseError = error{
     Empty,
 };
 
-pub fn parse(self: *Patch, a: Allocator) ParseError!void {
-    if (self.diffs != null) return; // Assume successful parsing
-    const diff_count = count(u8, self.blob, "\ndiff --git a/") +
-        @as(usize, if (startsWith(u8, self.blob, "diff --git a/")) 1 else 0);
-
+pub fn parse(p: *const Patch, a: Allocator) ParseError![]Diff {
+    var r: Reader = .fixed(p.blob);
+    var diff_count: usize = 0;
+    while (r.takeSentinel('\n')) |line| {
+        if (startsWith(u8, line, "diff --git a/")) {
+            diff_count += 1;
+        }
+    } else |e| switch (e) {
+        error.EndOfStream => {},
+        else => unreachable,
+    }
     if (diff_count == 0) return error.Empty;
-    self.diffs = try a.alloc(Diff, diff_count);
-    errdefer {
-        a.free(self.diffs.?);
-        self.diffs = null;
+    r.seek = 0;
+
+    const diffs: []Diff = try a.alloc(Diff, diff_count);
+    errdefer a.free(diffs);
+
+    var idx: usize = 0;
+    while (r.peekSentinel('\n')) |line| {
+        if (startsWith(u8, line, "diff --git a/")) {
+            diffs[idx] = try Diff.init(&r);
+            idx += 1;
+        } else r.toss(line.len + 1);
+        std.debug.assert(idx <= diffs.len);
+    } else |e| switch (e) {
+        error.EndOfStream => {},
+        else => unreachable,
     }
-    var start: usize = findPos(u8, self.blob, 0, "diff --git a/") orelse {
-        return error.Invalid;
-    };
-    var end: usize = start;
-    for (self.diffs.?) |*diff| {
-        assert(self.blob[start] != '\n');
-        end = if (findPos(u8, self.blob, start + 1, "\ndiff --git a/")) |s| s + 1 else self.blob.len;
-        diff.* = try Diff.init(self.blob[start..end]);
-        start = end;
-    }
+    return diffs;
 }
 
 pub fn patchStat(p: Patch) Stat {
@@ -457,8 +467,7 @@ test "simple rename" {
         \\
     ;
     var patch = Patch.init(rn_patch);
-    try patch.parse(a);
-    const diffs: []Diff = patch.diffs.?;
+    const diffs: []Diff = try patch.parse(a);
     defer a.free(diffs);
     try std.testing.expectEqual(1, diffs.len);
 }
@@ -495,11 +504,8 @@ test "diffsSlice" {
     ;
     const a_patch = try a.dupe(u8, s_patch);
     defer a.free(a_patch);
-    var p = Patch{
-        .blob = a_patch,
-    };
-    try p.parse(a);
-    const diffs = p.diffs.?;
+    var p = Patch{ .blob = a_patch };
+    const diffs = try p.parse(a);
     defer a.free(diffs);
     try std.testing.expect(diffs.len == 2);
     const h = diffs[1];

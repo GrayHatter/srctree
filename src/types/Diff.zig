@@ -112,9 +112,9 @@ pub fn new(delta: *Delta, author: []const u8, flavor: Flavor, a: Allocator, io: 
     return d;
 }
 
-pub fn open(index: usize, a: Allocator, io: Io) !?Diff {
+pub fn open(index: usize, a: Allocator, io: Io) !Diff {
     const max = try TypeIo.Index.current(io);
-    if (index > max) return null;
+    if (index > max) return error.NotFound;
 
     var d: Diff = .empty;
     d.index = index;

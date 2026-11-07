@@ -230,7 +230,7 @@ pub const diffs = struct {
             .nos, .diff => {},
             else => @panic("not implemented"),
         }
-        var diff: Diff = try Diff.open(delta.attach_target, a, io) orelse return error.DiffMissing;
+        var diff: Diff = try Diff.open(delta.attach_target, a, io);
         diff.revision +%= 1;
         diff.commit(io) catch {};
 

@@ -58,8 +58,8 @@ pub const Line = union(enum) {
 };
 
 pub const Stat = struct {
-    additions: usize,
-    deletions: usize,
+    additions: u32,
+    deletions: u32,
     total: isize,
 };
 
@@ -293,8 +293,6 @@ pub const Header = struct {
 /// I'm so sorry for these crimes... in my defense, I got distracted
 /// while refactoring :<
 pub fn parse(diff: *Diff) !?[]const u8 {
-    assert(startsWith(u8, diff.blob, "diff --git a/"));
-
     var reader: Reader = .fixed(diff.blob);
     _ = try reader.takeDelimiterInclusive('\n');
     const header: Header = try .parse(&reader);
@@ -331,7 +329,7 @@ pub fn parse(diff: *Diff) !?[]const u8 {
 
         // Block headers
         if (reader.peekDelimiterInclusive('\n')) |block| {
-            if (!startsWith(u8, block, "@@ -") or indexOf(u8, block, " @@") == null)
+            if (!startsWith(u8, block, "@@ -") or find(u8, block, " @@") == null)
                 return error.BlockHeaderMissing;
         } else |err| switch (err) {
             error.EndOfStream => return reader.buffered(),
@@ -343,14 +341,41 @@ pub fn parse(diff: *Diff) !?[]const u8 {
     return reader.buffered();
 }
 
-pub fn init(blob: []const u8) !Diff {
+pub fn init(r: *Reader) !Diff {
+    const blob = r.buffered();
+    var len: usize = 0;
+    var add: u32 = 0;
+    var del: u32 = 0;
+    var header: bool = false;
+    while (r.peekSentinel('\n')) |line| {
+        if (startsWith(u8, line, "diff --git a/")) {
+            if (header) break;
+        }
+        len += line.len + 1;
+        r.toss(line.len + 1);
+
+        if (!header and startsWith(u8, line, "---")) continue;
+        if (!header and startsWith(u8, line, "+++")) continue;
+        if (line.len > 0) switch (line[0]) {
+            '@' => if (!header) {
+                header = true;
+            },
+            '+' => add += 1,
+            '-' => del += 1,
+            else => {},
+        };
+    } else |e| switch (e) {
+        error.EndOfStream => {},
+        else => unreachable,
+    }
+
     var d: Diff = .{
-        .blob = blob,
+        .blob = blob[0..len],
         .header = undefined,
         .stat = .{
-            .additions = count(u8, blob, "\n+"),
-            .deletions = count(u8, blob, "\n-"),
-            .total = @intCast(count(u8, blob, "\n+") -| count(u8, blob, "\n-")),
+            .additions = add -| 1,
+            .deletions = del -| 1,
+            .total = @as(isize, add) - @as(isize, del),
         },
     };
     d.changes = d.parse() catch {
@@ -361,20 +386,20 @@ pub fn init(blob: []const u8) !Diff {
 }
 
 /// Leaks
-pub fn blocksAlloc(diff: *Diff, a: Allocator) ![]const []const u8 {
+pub fn blocksAlloc(diff: *const Diff, a: Allocator) ![]const []const u8 {
     var acount = count(u8, diff.changes.?, "\n@@");
     if (startsWith(u8, diff.changes.?, "@@")) acount += 1 else acount += 0;
-    diff.blocks = try a.alloc([]const u8, acount);
+    const blocks = try a.alloc([]const u8, acount);
     var i: usize = 0;
-    var pos: usize = indexOf(u8, diff.changes.?, "@@") orelse return diff.blocks.?;
-    while (indexOf(u8, diff.changes.?[pos + 1 ..], "\n@@")) |end| {
-        diff.blocks.?[i] = diff.changes.?[pos..][0 .. end + 1];
+    var pos: usize = find(u8, diff.changes.?, "@@") orelse return blocks;
+    while (find(u8, diff.changes.?[pos + 1 ..], "\n@@")) |end| {
+        blocks[i] = diff.changes.?[pos..][0 .. end + 1];
         pos += end + 2;
         i += 1;
     }
-    diff.blocks.?[i] = diff.changes.?[pos..];
+    blocks[i] = diff.changes.?[pos..];
 
-    return diff.blocks.?;
+    return blocks;
 }
 
 test init {
@@ -384,7 +409,8 @@ test init {
         \\index 0000000..e69de29
         \\
     ;
-    const diff = try init(blob);
+    var r: Reader = .fixed(blob);
+    const diff = try init(&r);
 
     try std.testing.expectEqualDeep(Diff{
         .blob = blob,
@@ -410,7 +436,7 @@ const startsWith = std.mem.startsWith;
 const endsWith = std.mem.endsWith;
 const assert = std.debug.assert;
 const eql = std.mem.eql;
-const indexOf = std.mem.indexOf;
+const find = std.mem.find;
 const log = std.log.scoped(.git_patch);
 const verse = @import("verse");
 const abx = verse.Antibiotic;

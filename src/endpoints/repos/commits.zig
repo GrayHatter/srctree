@@ -63,14 +63,11 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
     const patch_view_mode = getAndUpdatePatchView(f) catch .inlined;
 
     var git_agent = repo.agent(f.alloc);
-    var diff = git_agent.show(current.sha, f.io) catch |err| switch (err) {
+    const diff = git_agent.show(current.sha, f.io) catch |err| switch (err) {
         //error.StdoutStreamTooLong => return f.sendDefaultErrorPage(.internal_server_error),
         else => return error.Unknown,
     };
 
-    if (find(u8, diff, "diff")) |i| {
-        diff = diff[i..];
-    }
     var patch: Patch = .init(diff);
 
     //for ([_]Comment{ .{

@@ -124,58 +124,64 @@ const MsgData = struct {
 };
 
 /// TODO prove safe
-fn decodeMessage(msg: Message, repo: *const Repo, patch: ?*const Patch, a: Allocator, io: Io) !MsgData {
+fn decodeMessage(
+    msg: Message,
+    repo: *const Repo,
+    diffs: []const Patch.Diff,
+    rev: ?usize,
+    a: Allocator,
+    io: Io,
+) !MsgData {
     var systag: ?[]const u8 = null;
     var comment_body: []const u8 = "";
-    if (patch) |p| {
-        var comment_diff: Diff = undefined;
-        var comment_patch = p.*;
-
-        const comment_rev: enum { older, current, newer } = if (p.revision) |r| if (msg.extra0 < r)
-            .older
-        else if (msg.extra0 > r)
-            .newer
-        else
-            .current else .current;
-
-        systag = switch (comment_rev) {
-            .older => "<div class=\"sysmsg\">Comment on previous revision.</div>\n",
-            .newer => "<div class=\"sysmsg green\">Comment on newer revision.</div>\n",
-            .current => null,
-        };
-        switch (comment_rev) {
-            .older, .newer => {
-                comment_diff = (Diff.open(msg.extra0, a, io) catch
-                    return error.ServerFault) orelse return error.ServerFault;
-                comment_patch = .init(comment_diff.patch.bytes);
-                comment_patch.parse(a) catch {
-                    return .{
-                        "<div class=\"sysmsg red\">Unable to parse invalid patch.</div>\n",
-                        try a.print("{f}", .{abx.Html{ .text = if (msg.message.len > 0)
-                            msg.message
-                        else
-                            "[Empty Message]" }}),
-                    };
-                };
-            },
-            .current => {},
-        }
+    if (diffs.len == 0) {
         var w: Io.Writer.Allocating = .init(a);
         const writer = &w.writer;
-        const found = diffs_ep.translateComment(msg.message, comment_patch, repo, writer, a, io) catch
-            return error.ServerFault;
-        if (!found) systag = null;
-        comment_body = try w.toOwnedSlice();
-    } else {
-        var w: Io.Writer.Allocating = .init(a);
-        const writer = &w.writer;
-        _ = diffs_ep.translateComment(msg.message, .{ .diffs = &.{}, .blob = &.{} }, repo, writer, a, io) catch
+        _ = diffs_ep.translateComment(msg.message, &.{}, repo, writer, a, io) catch
             return error.ServerFault;
         comment_body = try w.toOwnedSlice();
         //comment_body = try (a, "{f}", .{abx.Html{
         //    .text = msg.message orelse "[Empty Message]",
         //}});
+        return .{ systag, comment_body };
     }
+
+    var comment_diffs: []const Patch.Diff = diffs;
+
+    const comment_rev: enum { older, current, newer } = if (rev) |r| if (msg.extra0 < r)
+        .older
+    else if (msg.extra0 > r)
+        .newer
+    else
+        .current else .current;
+
+    systag = switch (comment_rev) {
+        .older => "<div class=\"sysmsg\">Comment on previous revision.</div>\n",
+        .newer => "<div class=\"sysmsg green\">Comment on newer revision.</div>\n",
+        .current => null,
+    };
+    switch (comment_rev) {
+        .older, .newer => {
+            const comment_diff = Diff.open(msg.extra0, a, io) catch return error.ServerFault;
+            const comment_patch: Patch = .init(comment_diff.patch.bytes);
+            comment_diffs = comment_patch.parse(a) catch {
+                return .{
+                    "<div class=\"sysmsg red\">Unable to parse invalid patch.</div>\n",
+                    try a.print("{f}", .{abx.Html{ .text = if (msg.message.len > 0)
+                        msg.message
+                    else
+                        "[Empty Message]" }}),
+                };
+            };
+        },
+        .current => {},
+    }
+    var w: Io.Writer.Allocating = .init(a);
+    const writer = &w.writer;
+    const found = diffs_ep.translateComment(msg.message, comment_diffs, repo, writer, a, io) catch
+        return error.ServerFault;
+    if (!found) systag = null;
+    comment_body = try w.toOwnedSlice();
     return .{ systag, comment_body };
 }
 
@@ -198,7 +204,9 @@ pub fn genThreadMessages(
     for (delta.thread.messages.items, messages) |msg, *html| {
         const date = try a.print("{f}", .{Humanize.unix(msg.updated, now)});
         const msg_hash = try a.print("{x}", .{msg.hash[0..10]});
-        const systag, const body = try decodeMessage(msg, repo, patch, a, io);
+        const diffs: []const Patch.Diff = if (patch) |p| try p.parse(a) else &.{};
+        const rev: ?usize = if (patch) |p| p.revision else null;
+        const systag, const body = try decodeMessage(msg, repo, diffs, rev, a, io);
         html.* = switch (msg.kind) {
             .comment => .{
                 .author = .abx(try a.dupe(u8, if (msg.author.len > 0) msg.author else "[no author]")),
