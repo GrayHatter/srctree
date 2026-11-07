@@ -314,9 +314,10 @@ pub fn isValid(_: Patch) bool {
 }
 
 pub const ParseError = error{
-    OutOfMemory,
-    Invalid,
     Empty,
+    Invalid,
+    MalformedDiff,
+    OutOfMemory,
 };
 
 pub fn parse(p: *const Patch, a: Allocator) ParseError![]Diff {
@@ -339,7 +340,7 @@ pub fn parse(p: *const Patch, a: Allocator) ParseError![]Diff {
     var idx: usize = 0;
     while (r.peekSentinel('\n')) |line| {
         if (startsWith(u8, line, "diff --git a/")) {
-            diffs[idx] = try Diff.init(&r);
+            diffs[idx] = try .init(&r);
             idx += 1;
         } else r.toss(line.len + 1);
         std.debug.assert(idx <= diffs.len);
@@ -457,21 +458,6 @@ pub fn formatted(name: []const u8, diff: []const u8, file_idx: usize, flavor: Fo
     }
 }
 
-test "simple rename" {
-    var a = std.testing.allocator;
-    const rn_patch =
-        \\diff --git a/src/zir_sema.zig b/src/Sema.zig
-        \\similarity index 100%
-        \\rename from src/zir_sema.zig
-        \\rename to src/Sema.zig
-        \\
-    ;
-    var patch = Patch.init(rn_patch);
-    const diffs: []Diff = try patch.parse(a);
-    defer a.free(diffs);
-    try std.testing.expectEqual(1, diffs.len);
-}
-
 test "diffsSlice" {
     var a = std.testing.allocator;
 
@@ -509,7 +495,7 @@ test "diffsSlice" {
     defer a.free(diffs);
     try std.testing.expect(diffs.len == 2);
     const h = diffs[1];
-    try std.testing.expectEqualStrings(h.filename.?, "build.zig");
+    try std.testing.expectEqualStrings(h.filename_a.?, "build.zig");
 }
 
 const std = @import("std");

@@ -293,19 +293,14 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
     const files = try a.alloc(S.PatchHtml.Files, diffs.len);
     errdefer a.free(files);
     for (diffs, files, 0..) |diff, *file, file_idx| {
-        const body = diff.changes orelse continue;
-
         const stat = try a.print("added: {}, removed: {}, total {}", .{
             diff.stat.additions, diff.stat.deletions, diff.stat.total,
         });
         //<div class="<DClass />"><ln num="<Num type="usize" />" id="LL<Num type="usize" />" href="#LL<Num type="usize" />"><Line /></ln></div>
-        const name = if (diff.filename) |name| try a.print("{s}", .{name}) else switch (diff.header.change) {
-            .deletion => "File Was Deleted",
-            else => "File Was Added",
-        };
-        const patch_formatted = try Patch.formatted(name, body, file_idx, view_mode, a);
-        var w_left: Io.Writer.Allocating = try .initCapacity(a, body.len);
-        var w_right: Io.Writer.Allocating = try .initCapacity(a, body.len);
+        const name = try a.print("{s}", .{diff.filename_a orelse diff.filename_b orelse "File Was Deleted"});
+        const patch_formatted = try Patch.formatted(name, diff.bytes[diff.header.bytes.len..], file_idx, view_mode, a);
+        var w_left: Io.Writer.Allocating = try .initCapacity(a, diff.bytes.len);
+        var w_right: Io.Writer.Allocating = try .initCapacity(a, diff.bytes.len);
 
         switch (view_mode) {
             .inlined => try patch_formatted.inlined.formatColor(a, &w_left.writer),
@@ -692,7 +687,7 @@ pub fn translateComment(
     while (itr.next()) |line_| : (writer.writeAll("<br>\n") catch unreachable) {
         const line = std.mem.trim(u8, line_, "\r ");
         for (diffs) |*diff| {
-            const filename = diff.filename orelse continue;
+            const filename = diff.filename_b orelse diff.filename_a orelse continue;
             // Files changed in the diff can be bare referenced without a prefix.
             if (find(u8, line, filename)) |filepos| {
                 if (findAnyPos(u8, line, filepos, "#:@")) |h| {
