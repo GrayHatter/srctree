@@ -1,12 +1,12 @@
 // Default to Unix Epoch
 timestamp: i96,
-year: usize,
+year: Year,
 month: Month,
 day: Day,
-weekday: u3,
-hours: u6,
-minutes: u6,
-seconds: u6,
+weekday: u8,
+hour: u8,
+minute: u8,
+second: u8,
 tz: ?Tz = null,
 
 flags: Flags = .default,
@@ -15,15 +15,21 @@ const DateTime = @This();
 
 pub const unix_epoch: DateTime = .{
     .timestamp = 0,
-    .years = 1970,
+    .year = .unix_epoch,
     .month = 1,
     .day = 1,
     .weekday = 4,
-    .hours = 0,
-    .minutes = 0,
-    .seconds = 0,
+    .hour = 0,
+    .minute = 0,
+    .second = 0,
     .tz = null,
     .flags = .default,
+};
+
+// TODO fix to i64
+pub const Year = enum(u64) {
+    unix_epoch = 1970,
+    _,
 };
 
 pub const Month = enum(u4) {
@@ -165,11 +171,11 @@ pub fn today(io: std.Io) DateTime {
 }
 
 pub fn truncateTime(time: *DateTime) void {
-    const new_offset = @as(i64, time.hours) * 3600 + @as(i64, time.minutes) * 60 + time.seconds;
+    const new_offset = @as(i64, time.hour) * 3600 + @as(i64, time.minute) * 60 + time.second;
     time.timestamp -|= new_offset;
-    time.hours = 0;
-    time.minutes = 0;
-    time.seconds = 0;
+    time.hour = 0;
+    time.minute = 0;
+    time.second = 0;
     time.flags.has_time = false;
 }
 
@@ -248,13 +254,13 @@ pub fn fromEpochTz(sts: i96, tzz: ?Tz) DateTime {
     return .{
         .timestamp = sts,
         .tz = if (tzz) |_| tz else null,
-        .year = years,
+        .year = @fromBackingInt(years),
         .month = month,
         .day = month_day,
         .weekday = weekday,
-        .hours = hours,
-        .minutes = minutes,
-        .seconds = seconds,
+        .hour = hours,
+        .minute = minutes,
+        .second = seconds,
     };
 }
 
@@ -295,7 +301,7 @@ pub fn sub(datetime: *DateTime, scale: Scale) void {
 pub fn fmtTime(self: DateTime, w: *Writer) !void {
     return w.print(
         "{:0>2}:{:0>2}:{:0>2}",
-        .{ self.hours, self.minutes, self.seconds },
+        .{ self.hour, self.minute, self.second },
     );
 }
 
@@ -316,7 +322,7 @@ pub fn fmtYMD(self: DateTime, w: *Writer) !void {
 pub fn fmtDTime(self: DateTime, w: *Writer) !void {
     return w.print(
         "{s} {:0>2}:{:0>2}:{:0>2}",
-        .{ Names.Day[self.weekday], self.hours, self.minutes, self.seconds },
+        .{ Names.Day[self.weekday], self.hour, self.minute, self.second },
     );
 }
 
@@ -330,7 +336,7 @@ pub fn format(self: DateTime, w: *Writer) !void {
     if (self.flags.has_time) {
         try w.print(
             "{:0>2}:{:0>2}:{:0>2}",
-            .{ self.hours, self.minutes, self.seconds },
+            .{ self.hour, self.minute, self.second },
         );
     }
 }
@@ -357,65 +363,65 @@ test "today" {
     try std.testing.expectEqual(this.month, today_.month);
     try std.testing.expectEqual(this.day, today_.day);
     try std.testing.expectEqual(this.weekday, today_.weekday);
-    try std.testing.expectEqual(today_.hours, 0);
-    try std.testing.expectEqual(today_.minutes, 0);
-    try std.testing.expectEqual(today_.seconds, 0);
+    try std.testing.expectEqual(today_.hour, 0);
+    try std.testing.expectEqual(today_.minute, 0);
+    try std.testing.expectEqual(today_.second, 0);
 }
 
 test "datetime" {
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 0,
-        .year = 1970,
-        .month = @fromBackingInt(@intCast(1)),
-        .day = @fromBackingInt(@intCast(1)),
+        .year = @fromBackingInt(1970),
+        .month = @fromBackingInt(1),
+        .day = @fromBackingInt(1),
         .weekday = 4,
-        .hours = 0,
-        .minutes = 0,
-        .seconds = 0,
+        .hour = 0,
+        .minute = 0,
+        .second = 0,
     }, DateTime.fromEpoch(0));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1697312998,
-        .year = 2023,
-        .month = @fromBackingInt(@intCast(10)),
-        .day = @fromBackingInt(@intCast(14)),
+        .year = @fromBackingInt(2023),
+        .month = @fromBackingInt(10),
+        .day = @fromBackingInt(14),
         .weekday = 6,
-        .hours = 19,
-        .minutes = 49,
-        .seconds = 58,
+        .hour = 19,
+        .minute = 49,
+        .second = 58,
     }, DateTime.fromEpoch(1697312998));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148799,
-        .year = 1998,
-        .month = @fromBackingInt(@intCast(12)),
-        .day = @fromBackingInt(@intCast(31)),
+        .year = @fromBackingInt(1998),
+        .month = @fromBackingInt(12),
+        .day = @fromBackingInt(31),
         .weekday = 4,
-        .hours = 23,
-        .minutes = 59,
-        .seconds = 59,
+        .hour = 23,
+        .minute = 59,
+        .second = 59,
     }, DateTime.fromEpoch(915148799));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 915148800,
-        .year = 1999,
-        .month = @fromBackingInt(@intCast(1)),
-        .day = @fromBackingInt(@intCast(1)),
+        .year = @fromBackingInt(1999),
+        .month = @fromBackingInt(1),
+        .day = @fromBackingInt(1),
         .weekday = 5,
-        .hours = 0,
-        .minutes = 0,
-        .seconds = 0,
+        .hour = 0,
+        .minute = 0,
+        .second = 0,
     }, DateTime.fromEpoch(915148800));
 
     try std.testing.expectEqualDeep(DateTime{
         .timestamp = 1002131014,
-        .year = 2001,
-        .month = @fromBackingInt(@intCast(10)),
-        .day = @fromBackingInt(@intCast(3)),
+        .year = @fromBackingInt(2001),
+        .month = @fromBackingInt(10),
+        .day = @fromBackingInt(3),
         .weekday = 3,
-        .hours = 17,
-        .minutes = 43,
-        .seconds = 34,
+        .hour = 17,
+        .minute = 43,
+        .second = 34,
     }, DateTime.fromEpoch(1002131014));
 }
 
