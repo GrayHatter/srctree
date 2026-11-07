@@ -318,7 +318,7 @@ pub fn patchStruct(a: Allocator, patch: *Patch, view_mode: PatchViewMode) !S.Pat
             .diff_stat = .safe(stat),
             .filename = .abx(name),
             .patch_view = switch (view_mode) {
-                .inlined => .{ .inlined = .{ .diff_lines = w_left.written() } },
+                .inlined => .{ .inlined = .{ .diff_lines_both = w_left.written() } },
                 .split => .{ .split = .{
                     .diff_lines_left = w_left.written(),
                     .diff_lines_right = w_right.written(),

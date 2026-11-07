@@ -20,13 +20,14 @@
           </data>
         </commit>
       </With>
+
       <div class=btns>
-      <a class=btn href="/repo/<Repo />/ref/<Sha>/">View At This Commit</a>
-      <Directive type="enum" name="InlineToggle" text="active" />
-      <div><span class="toggle">
-        <a class="<InlineToggle enum="inlined" />" href="?inline=true">inline</a>
-        <a class="<InlineToggle enum="split" />" href="?inline=false">split</a>
-      </span></div>
+        <Directive type="enum" name="InlineToggle" text="active" />
+        <div><span class="toggle">
+          <a class="<InlineToggle enum="inlined" />" href="?inline=true">inline</a>
+          <a class="<InlineToggle enum="split" />" href="?inline=false">split</a>
+        </span></div>
+        <a class=btn href="/repo/<Repo />/ref/<Sha>/">View At This Commit</a>
       </div>
 
       <Build Comments _comment_thread.html />

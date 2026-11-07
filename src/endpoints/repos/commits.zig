@@ -85,28 +85,6 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
 
     //var messages: []S.CommentThreadHtml.Messages = &.{};
 
-    //
-    //
-    //
-    //
-    //
-
-    //const blob_data = try getBlob(f, rd, repo, tree);
-    //const colored_blob: []const u8 = if (Highlight.Language.guessFromFilename(blob_data.name)) |lang|
-    //    Highlight.highlight(lang, blob_data.data.blob, f.alloc, f.io) catch |err| B: {
-    //        log.warn("unable to add syntax highlighting because {}", .{err});
-    //        break :B blob_data.data.blob;
-    //    }
-    //else if (excludedExt(blob_data.name))
-    //    "This file type is currently unsupported"
-    //else
-    //    try f.alloc.print("{f}", .{abx.Html{ .text = blob_data.data.blob }});
-    //
-    //
-    //
-    //
-    //
-
     const upstream: ?S.BaseRepoHeaderHtml.Upstream = if (repo.findRemote("upstream")) |up| .{
         .href = .safe(try f.alloc.print("{f}", .{std.fmt.alt(up, .formatLink)})),
     } else null;
@@ -221,7 +199,6 @@ pub fn commitCtxParents(c: Commit, repo: []const u8, a: Allocator) ![]S.CommitHt
 }
 
 pub fn commitCtx(c: Commit, repo: []const u8, a: Allocator, io: Io) !S.CommitHtml.Commit {
-    //const clean_body = Verse.abx.Html.cleanAlloc(a, c.body) catch unreachable;
     var r: Reader = .fixed(c.body);
     var w: Writer.Allocating = try .initCapacity(a, c.body.len);
     syntax.Markdown.translate(&r, &w.writer, a, io) catch |err| switch (err) {

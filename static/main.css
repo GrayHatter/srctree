@@ -73,8 +73,14 @@ hint {
 }
 details {
 	padding: 0 0.5rem;
+	span.showopened { display: none; }
+	span.showclosed { display: inline; }
 }
-details:open > summary.hide { display: none; }
+details:open {
+	span.showopened { display: inline; }
+	span.showclosed { display: none; }
+	> summary.hide { display: none; }
+}
 .repo-header  {
 	background:#222;
 	display: flex;

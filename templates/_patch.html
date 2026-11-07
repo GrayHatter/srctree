@@ -1,19 +1,22 @@
       <For Files>
         <patch>
-        <details open="open">
+        <details open=open>
           <summary>
           <header>
             <span><Filename /></span>
-            <strong><DiffStat /></strong>
+            <div>
+              <strong><DiffStat /></strong>
+              <span class="showclosed muted">collapsed</span>
+            </div>
           </header>
           </summary>
           <changes>
             <Switch PatchView>
-              <Case Inlined><DiffLines type="safe" /></Case>
+              <Case Inlined><DiffLinesBoth type="safe" /></Case>
               <Case Split><div class="split">
-              <split><DiffLinesLeft type="safe" /></split>
-              <split><DiffLinesRight type="safe" /></split>
-            </div></Case>
+                <split><DiffLinesLeft type="safe" /></split>
+                <split><DiffLinesRight type="safe" /></split>
+              </div></Case>
             </Switch>
           </changes>
         </details>
