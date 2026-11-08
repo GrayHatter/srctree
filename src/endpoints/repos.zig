@@ -3,12 +3,13 @@ pub const verse_aliases = .{.repo};
 pub const verse_router = &router;
 
 pub const verse_endpoints_ = verse.Endpoints(.{
-    @import("repos/issues.zig"),
-    @import("repos/diffs.zig"),
-    @import("repos/search.zig"),
     @import("repos/artifacts.zig"),
-    @import("repos/hook.zig"),
+    @import("repos/repo_build.zig"), // no... this is not the name, but ZLS is special
     @import("repos/commits.zig"),
+    @import("repos/diffs.zig"),
+    @import("repos/hook.zig"),
+    @import("repos/issues.zig"),
+    @import("repos/search.zig"),
 });
 
 pub const routes = [_]verse.Router.Match{
@@ -40,6 +41,7 @@ pub const Router = struct {
     pub const Verb = enum {
         /// srctree endpoints
         artifacts,
+        build,
         diff,
         diffs,
         docs,
