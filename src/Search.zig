@@ -65,12 +65,12 @@ pub const Magic = enum {
 
     pub const Only = Kind;
 
-    comptime {
-        std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 8);
-        // Don't forget to extend the if tree
-    }
-
     pub fn fromStr(str: []const u8) ?Magic {
+        comptime {
+            // Don't forget to extend the if tree
+            std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 8);
+        }
+
         return if (eql(u8, str, "is"))
             .is
         else if (eql(u8, str, "kind"))

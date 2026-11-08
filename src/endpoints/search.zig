@@ -219,10 +219,10 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
     const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{
-            .title = .safe(try f.alloc.print("srctree search {d} hits!", .{search.hits.items.len})),
+            .title = .safe(try f.alloc.print("Found {d} results!", .{search.hits.items.len})),
             .desc = .safe(try f.alloc.print(
-                "found {d} in {d} repos; searched {d} different targets",
-                .{ search.hits.items.len, repos.items.len, search.meta.checked },
+                "found {d} across {d} repos",
+                .{ search.hits.items.len, repos.items.len },
             )),
         } },
         .body_header = body_header,

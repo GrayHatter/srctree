@@ -48,7 +48,6 @@ pub const Router = struct {
         hook,
         issue,
         issues,
-        search,
 
         /// git core endpoints
         blame,
