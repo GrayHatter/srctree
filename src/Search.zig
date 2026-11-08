@@ -1005,20 +1005,37 @@ fn searchTree(
 }
 
 fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !void {
-    if (find(u8, b.data.blob, "anstehusnaotehn")) |idx| {
-        const found_line = countScalar(u8, b.data.blob[0..idx], '\n');
-        const line_count = countScalar(u8, b.data.blob[idx..], '\n');
-        try search.appendHit(.{ .result = .{
-            .file = .{
-                .repo_name = repo.name.?,
-                .path = path,
-                .sha = b.sha.text(),
-                .hit_idx = idx,
-                .line = @truncate(found_line),
-                .line_count = @truncate(found_line + line_count),
-                .code = b.data.blob,
+    for (search.rules.items) |r| {
+        var idx: usize = 0;
+        switch (r.rule) {
+            .repo, .sort, .kind, .is => {},
+            .owner => {}, // TODO check owners
+            .only => {},
+            .target => {}, // TODO add some magic around target e.g. `function:name`
+            .raw => |str| {
+                while (findPos(u8, b.data.blob, idx, str)) |i| {
+                    const found_line = countScalar(u8, b.data.blob[0..i], '\n');
+                    const line_count = countScalar(u8, b.data.blob[i..], '\n');
+                    if (idx == 0) {
+                        try search.appendHit(.{ .result = .{
+                            .file = .{
+                                .repo_name = repo.name.?,
+                                .path = path,
+                                .sha = b.sha.text(),
+                                .hit_idx = i,
+                                .line = @truncate(found_line),
+                                .line_count = @truncate(found_line + line_count),
+                                .code = b.data.blob,
+                            },
+                        } }, .{ .filename = .{ .repo = repo.name.?, .path = path } });
+                    } else {
+                        try search.appendMeta(.{ .filename = .{ .repo = repo.name.?, .path = path } });
+                    }
+
+                    idx = i + 1;
+                }
             },
-        } }, .{ .filename = .{ .repo = repo.name.?, .path = path } });
+        }
     }
 }
 
@@ -1030,8 +1047,7 @@ const From = union(enum) {
     },
 };
 
-fn appendHit(search: *Search, hit: Hit, from: From) !void {
-    try search.hits.append(search.alloc, hit);
+fn appendMeta(search: *Search, from: From) !void {
     switch (from) {
         .repo => |name| {
             const ptr = try search.meta.repos.getOrPut(search.alloc, name);
@@ -1057,7 +1073,11 @@ fn appendHit(search: *Search, hit: Hit, from: From) !void {
             fptr.value_ptr.* +|= 1;
         },
     }
+}
 
+fn appendHit(search: *Search, hit: Hit, from: From) !void {
+    try search.hits.append(search.alloc, hit);
+    try search.appendMeta(from);
     switch (hit.result) {
         .repo => {},
         .commit => {},
