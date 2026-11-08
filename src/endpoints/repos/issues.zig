@@ -43,8 +43,7 @@ fn new(f: *Frame) Error!void {
     _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
-    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
 
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -58,8 +57,7 @@ fn newRemote(f: *Frame) Error!void {
     _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
-    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
 
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -74,8 +72,7 @@ fn edit(f: *Frame) Error!void {
     std.debug.print("{s}\n", .{f.uri.next().?});
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
-    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
 
     var page = IssueNewPage.init(.{
         .meta_head = meta_head,
@@ -239,9 +236,7 @@ fn view(f: *Frame) Error!void {
     const username = if (f.user) |usr| usr.username.? else "anon";
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
 
-    var body_header: S.BodyHeaderHtml = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) };
-    if (f.user) |usr| body_header.nav_auth = .abx(usr.username.?);
-
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     const now: i64 = Io.Clock.real.now(f.io).toSeconds();
     const created = try f.alloc.print("{f}", .{Humanize.unix(delta.created, now)});
     const updated = try f.alloc.print("{f}", .{Humanize.unix(delta.updated, now)});

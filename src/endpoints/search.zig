@@ -110,10 +110,10 @@ fn fmtRules(rules: []const Search.Rule, w: *std.Io.Writer) !void {
 }
 
 fn errorPage(f: *Frame, search_str: []const u8, err: []const u8) Error!void {
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = (f.template_data.get(S.BodyHeaderHtml) orelse
-            &S.BodyHeaderHtml{ .inbox_count = inboxCount(f.user, f.alloc, f.io) }).*,
+        .body_header = body_header,
         .result_count = 0,
         .checked_count = 0,
         .search = .abx(search_str),
@@ -216,10 +216,16 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
         }
     }
 
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     var page: SearchHtml = .init(.{
-        .meta_head = .{ .open_graph = .{} },
-        .body_header = (f.template_data.get(S.BodyHeaderHtml) orelse
-            &S.BodyHeaderHtml{ .inbox_count = inboxCount(f.user, f.alloc, f.io) }).*,
+        .meta_head = .{ .open_graph = .{
+            .title = .safe(try f.alloc.print("srctree search {d} hits!", .{search.hits.items.len})),
+            .desc = .safe(try f.alloc.print(
+                "found {d} in {d} repos; searched {d} different targets",
+                .{ search.hits.items.len, repos.items.len, search.meta.checked },
+            )),
+        } },
+        .body_header = body_header,
         .result_count = search.hits.items.len,
         .checked_count = search.meta.checked,
         .search = .abx(query_str),

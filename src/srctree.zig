@@ -234,7 +234,7 @@ fn builder(fr: *Frame, call: BuildFn) void {
 
     var bh: S.BodyHeaderHtml = (fr.template_data.get(S.BodyHeaderHtml) orelse &S.BodyHeaderHtml{
         .nav_auth = .safe("Error"),
-        .inbox_count = 999999,
+        .inbox_count = search.inboxCount(fr.user, fr.alloc, fr.io),
     }).*;
 
     if (fr.user) |usr| {

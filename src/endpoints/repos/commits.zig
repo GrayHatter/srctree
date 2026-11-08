@@ -106,6 +106,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
     });
     const og_desc = f.alloc.print("{f}", .{abx.Html{ .text = current.message }}) catch unreachable;
     const count = rd.deltaCount(f);
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     var page = CommitPage.init(.{
         .repo = .safe(repo_name),
         .sha = .safe(current.sha.text().slice()),
@@ -113,7 +114,7 @@ fn commitHtml(f: *Frame, sha: []const u8, repo_name: []const u8, repo: git.Repo)
             .title = .safe(page_title),
             .open_graph = .{ .title = .safe(og_title), .desc = .safe(og_desc) },
         },
-        .body_header = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) },
+        .body_header = body_header,
         .repo_header = .{
             .repo_name = .abx(repo_name),
             .description = .abx(repo.description(f.alloc, f.io) catch ""),
@@ -342,9 +343,10 @@ fn sendCommits(f: *Frame, list: []const S.CommitListHtml.CommitList, repo_name: 
     _ = RouteData.init(f) orelse return error.ServerFault;
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     const sha_text = if (sha) |s| s.text() else Sha.Text.zeros;
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     var page = CommitsListPage.init(.{
         .meta_head = meta_head,
-        .body_header = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) },
+        .body_header = body_header,
         .commit_list = list,
         .after_commits = if (sha) |_| .{
             .repo_name = .safe(repo_name),

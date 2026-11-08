@@ -21,10 +21,11 @@ fn list(f: *Frame) Router.Error!void {
         repo.ci.run(&commit, f.alloc, f.io) catch unreachable;
     }
 
+    const body_header: T.Structs.BodyHeaderHtml = f.template_data.get(T.Structs.BodyHeaderHtml).?.*;
     const count = rd.deltaCount(f);
     var page: ArtifactsHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .inbox_count = search.inboxCount(f.user, f.alloc, f.io) },
+        .body_header = body_header,
         .repo_header = .{
             .repo_name = .abx(rd.name),
             .description = .abx(repo.git.description(f.alloc, f.io) catch ""),

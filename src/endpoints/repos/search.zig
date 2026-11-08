@@ -34,9 +34,11 @@ fn repoSearch(f: *Frame, count: u32) Router.Error!void {
         .{ &.{}, &.{} };
 
     //const dcount = rd.deltaCount(f);
+    //
+    const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     var page: SearchHtml = .init(.{
         .meta_head = .{ .open_graph = .{} },
-        .body_header = .{ .inbox_count = searchEP.inboxCount(f.user, f.alloc, f.io) },
+        .body_header = body_header,
         .result_count = files.len,
         .checked_count = files.len,
         .search = .abx(udata.q orelse &.{}),
