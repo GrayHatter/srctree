@@ -8,14 +8,13 @@ pub const verse_endpoints_ = verse.Endpoints(.{
     @import("repos/search.zig"),
     @import("repos/artifacts.zig"),
     @import("repos/hook.zig"),
+    @import("repos/commits.zig"),
 });
 
 pub const routes = [_]verse.Router.Match{
     ROUTE("blame", blame),
     ROUTE("blob", treeBlob),
     ROUTE("branches", branches.list),
-    ROUTE("commit", &Commits.router),
-    ROUTE("commits", &Commits.router),
     //ROUTE("diffs", &Diffs.router),
     ROUTE("ref", treeBlob),
     ROUTE("tags", tags.list),
@@ -442,7 +441,7 @@ const ROUTE = verse.Router.ROUTE;
 const Humanize = @import("../humanize.zig");
 const Repo = @import("../Repo.zig");
 const Git = @import("../git.zig");
-const Commits = @import("repos/commits.zig");
+//const Commits = @import("repos/commits.zig");
 const Diffs = @import("repos/diffs.zig");
 
 const Delta = @import("../types.zig").Delta;

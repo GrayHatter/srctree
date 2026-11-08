@@ -1,7 +1,15 @@
-pub const routes = [_]Router.MatchRouter{
+pub const verse_name = .commits;
+
+pub const verse_aliases = .{.commit};
+
+pub const verse_router: Router.RouteFn = router;
+
+pub const routes = [_]Router.Match{
     Router.ROUTE("", commitList),
     Router.GET("before", commitsBefore),
 };
+
+pub const index = commitList;
 
 const CommitPage = T.PageData("commit.html");
 const CommitsListPage = T.PageData("commit-list.html");
