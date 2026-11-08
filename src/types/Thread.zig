@@ -93,7 +93,7 @@ pub fn load(t: *Thread, a: Allocator, io: Io) !void {
         var msg_hash: Hash = undefined;
         for (0..32) |i| msg_hash[i] = parseInt(u8, line[i * 2 .. i * 2 + 2], 16) catch 0;
         try t.messages.append(a, Message.open(msg_hash, a, io) catch |err| {
-            log.err("Thread load unable to parse message {} '{any}'", .{ err, msg_hash });
+            log.err("Thread {x} load unable to parse message {} '{any}'", .{ t.index, err, msg_hash });
             continue;
         });
     } else |err| switch (err) {
