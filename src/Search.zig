@@ -32,6 +32,8 @@ pub const Magic = enum {
     repo,
     target,
 
+    sort,
+
     pub const Is = enum {
         open,
         closed,
@@ -45,6 +47,13 @@ pub const Magic = enum {
         issues,
         repos,
         filenames,
+    };
+
+    pub const Sort = enum {
+        comments,
+        default,
+        liveness,
+        views,
     };
 
     pub const Only = Kind;
@@ -106,6 +115,19 @@ pub const Hit = struct {
         max = std.math.maxInt(isize),
         _,
 
+        pub fn fromDelta(d: *const Delta) Liveness {
+            var live: isize = 0;
+            live += @intCast(d.thread.count * 2000);
+            live += @intCast(d.viewers.count * 100);
+            return @fromBackingInt(live);
+        }
+
+        pub fn order(lv: Liveness, new: Liveness) std.math.Order {
+            if (@backingInt(lv) < @backingInt(new)) return .lt;
+            if (@backingInt(lv) > @backingInt(new)) return .gt;
+            return .eq;
+        }
+
         pub fn add(lv: *Liveness, new: Liveness) void {
             lv.* = @fromBackingInt(@backingInt(lv.*) +| @backingInt(new));
         }
@@ -132,6 +154,7 @@ pub const Rule = struct {
             tag: []const u8,
             text: []const u8,
         },
+        sort: Magic.Sort,
 
         pub const empty: Query = .{ .raw = "" };
 
@@ -140,7 +163,9 @@ pub const Rule = struct {
                 .is => |i| try w.print("is:{s}", .{@tagName(i)}),
                 .kind => |k| try w.print("kind:{s}", .{@tagName(k)}),
                 .only => |o| try w.print("only:{s}", .{@tagName(o)}),
+                .sort => |s| try w.print("sort:{s}", .{@tagName(s)}),
                 .owner => |o| try w.print("owner:{s}", .{o}),
+
                 .raw => |s| try w.print("{s}", .{s}),
                 .repo => |rp| try w.print("repo:{s}", .{rp}),
                 .target => |t| try w.print("[{s}]:{s}", .{ t.tag, t.text }),
@@ -182,6 +207,16 @@ pub const Rule = struct {
                 .invert = inv,
             };
         } else return .text(str, inv);
+    }
+
+    pub fn sort(str: []const u8, inv: bool) Rule {
+        const E = @typeInfo(Magic.Sort).@"enum";
+        inline for (E.field_names, E.field_values) |name, val| {
+            if (startsWith(u8, name, str)) return .{
+                .rule = .{ .sort = @fromBackingInt(val) },
+                .invert = inv,
+            };
+        } else return .{ .rule = .{ .sort = .default } };
     }
 
     pub fn owner(str: []const u8, inv: bool) Rule {
@@ -266,7 +301,7 @@ pub const Rule = struct {
             if (match.len > 0 and match[0] == ' ') return .empty;
 
             comptime {
-                std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 7);
+                std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 8);
                 // Don't forget to extend the if tree
             }
 
@@ -282,6 +317,8 @@ pub const Rule = struct {
                 return .repo(match, invert);
             } else if (eql(u8, pre, "owner")) {
                 return .owner(match, invert);
+            } else if (eql(u8, pre, "sort")) {
+                return .sort(match, invert);
             } else return .{
                 .rule = .{ .target = .{ .tag = pre, .text = match } },
                 .invert = invert,
@@ -503,6 +540,7 @@ pub fn Iterator(Itr: type) type {
                         }
                     }
                 } else return false,
+                .sort => return true,
             }
         }
 
@@ -575,6 +613,7 @@ pub fn init(string: []const u8, d: Depth, a: Allocator) !Search {
             .owner => |owner| str = str[6 + owner.len ..],
             .only => |only| str = str[5 + @tagName(only).len ..],
             .kind => |kind| str = str[5 + @tagName(kind).len ..],
+            .sort => |sort| str = str[5 + @tagName(sort).len ..],
             .target => |target| {
                 str = str[target.tag.len + 1 + target.text.len ..];
             },
@@ -638,6 +677,30 @@ pub fn searchAll(search: *Search, io: Io) !void {
         search.searchTrees(io) catch |err| {
             log.err("Search Commit error {} (continuing)", .{err});
         };
+    }
+}
+
+pub fn sortHits(search: *Search) void {
+    for (search.rules.items) |r| switch (r.rule) {
+        .sort => |srt| {
+            search.sortBy(srt);
+        },
+        else => {},
+    };
+}
+
+const sorting = struct {
+    fn liveness(_: void, lhs: Hit, rhs: Hit) bool {
+        return lhs.liveness.order(rhs.liveness) == .gt;
+    }
+};
+
+pub fn sortBy(search: *Search, srt: Magic.Sort) void {
+    switch (srt) {
+        .default, .liveness => {
+            std.sort.heap(Hit, search.hits.items, {}, sorting.liveness);
+        },
+        else => @panic("TODO"),
     }
 }
 
@@ -711,7 +774,7 @@ pub fn searchCommits(search: *Search, age: void, io: Io) !void {
                         } else owner = false;
                     },
                     .target => {},
-                    .is, .kind, .only, .repo => {},
+                    .is, .kind, .only, .repo, .sort => {},
                 }
             }
             if (!matching and (owner == null or owner.?)) {
@@ -735,8 +798,9 @@ pub fn searchDeltas(search: *Search, io: Io) !void {
             checked +|= 1;
             log.debug("delta {}", .{delta.index});
             if (delta.state.embargoed) continue;
+
             try search.appendHit(
-                .{ .result = .{ .delta = delta } },
+                .{ .result = .{ .delta = delta }, .liveness = .fromDelta(&delta) },
                 .{ .repo = repo.name.? },
             );
         }
@@ -830,7 +894,7 @@ fn searchTree(
                             },
                         } }, .{ .filename = .{ .repo = repo.name.?, .path = path } });
                     },
-                    .is, .kind, .repo, .target => {},
+                    .is, .kind, .repo, .target, .sort => {},
                 }
             } else search.searchTree(t, repo, path, limit, io) catch |err| {
                 log.err("search error {}", .{err});
@@ -853,7 +917,7 @@ fn searchTree(
                             },
                         } }, .{ .filename = .{ .repo = repo.name.?, .path = path[0 .. path.len - 1] } });
                     },
-                    .is, .kind, .repo, .target => {},
+                    .is, .kind, .repo, .target, .sort => {},
                 }
             } else try search.searchInBlob(repo, path[0 .. path.len - 1], b),
 

@@ -152,6 +152,8 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
 
     var results: ArrayList(S.SearchHtml.SearchResults) = .empty;
 
+    search.sortBy(.liveness);
+
     for (search.hits.items) |*hit| switch (hit.result) {
         .repo => |repo| try results.append(f.alloc, .{ .search_flavor = .{
             .repo = .{ .name = .safe(repo.name.?) },
