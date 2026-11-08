@@ -314,8 +314,8 @@ pub fn fmtDay(self: DateTime, w: *Writer) !void {
 
 pub fn fmtYMD(self: DateTime, w: *Writer) !void {
     return w.print(
-        "{}-{:0>2}-{:0>2}",
-        .{ self.year, @backingInt(self.month), @backingInt(self.day) },
+        "{d}-{:0>2}-{:0>2}",
+        .{ @backingInt(self.year), @backingInt(self.month), @backingInt(self.day) },
     );
 }
 
@@ -329,16 +329,27 @@ pub fn fmtDTime(self: DateTime, w: *Writer) !void {
 pub fn format(self: DateTime, w: *Writer) !void {
     if (self.flags.has_date) {
         try w.print(
-            "{}-{:0>2}-{:0>2} {s}",
-            .{ self.year, @backingInt(self.month), @backingInt(self.day), Names.Day[self.weekday] },
+            "{d}-{d:0>2}-{d:0>2} {s}",
+            .{ @backingInt(self.year), @backingInt(self.month), @backingInt(self.day), Names.Day[self.weekday] },
         );
     }
+
+    if (self.flags.has_date and self.flags.has_time) try w.writeByte(' ');
+
     if (self.flags.has_time) {
         try w.print(
             "{:0>2}:{:0>2}:{:0>2}",
             .{ self.hour, self.minute, self.second },
         );
     }
+}
+
+test format {
+    const now_ish: DateTime = .fromEpoch(1794092808);
+    var b: [200]u8 = undefined;
+    var w: std.Io.Writer = .fixed(&b);
+    try now_ish.format(&w);
+    try std.testing.expectEqualStrings("2026-11-07 Saturday 23:06:48", w.buffered());
 }
 
 pub fn fromActor(actor: Actor) !DateTime {
