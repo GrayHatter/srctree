@@ -1,4 +1,4 @@
-const BlamePage = PageData("blame.html");
+const BlamePage = Page("blame.html");
 
 const style_blocks: [10][]const u8 = .{
     " blame-age-0",
@@ -269,5 +269,5 @@ const verse = @import("verse");
 const Abx = verse.Antibiotic;
 const Frame = verse.Frame;
 const S = verse.template.Structs;
-const PageData = verse.template.PageData;
+const Page = verse.template.Page;
 const Router = verse.Router;

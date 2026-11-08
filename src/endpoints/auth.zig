@@ -9,7 +9,7 @@ const routes = [_]Router.Match{
 
 pub const index = view;
 
-const AuthPage = T.PageData("auth.html");
+const AuthPage = T.Page("auth.html");
 
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     if (!std.mem.eql(u8, f.uri.next() orelse "", "auth")) return error.Unrouteable;

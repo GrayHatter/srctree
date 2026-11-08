@@ -364,7 +364,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
     };
 }
 
-const ReposPage = PageData("repos.html");
+const ReposPage = Page("repos.html");
 
 const RepoSortReq = struct {
     sort: ?[]const u8,
@@ -436,7 +436,7 @@ const log = std.log.scoped(.srctree);
 const verse = @import("verse");
 const Abx = verse.Antibiotic;
 const Frame = verse.Frame;
-const PageData = verse.template.PageData;
+const Page = verse.template.Page;
 const html = verse.template.html;
 const S = verse.template.Structs;
 const ROUTE = verse.Router.ROUTE;

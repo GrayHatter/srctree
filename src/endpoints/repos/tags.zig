@@ -1,4 +1,4 @@
-const TagPage = PageData("repo-tags.html");
+const TagPage = Page("repo-tags.html");
 
 pub fn list(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
@@ -66,7 +66,7 @@ const std = @import("std");
 const verse = @import("verse");
 const Frame = verse.Frame;
 const S = verse.template.Structs;
-const PageData = verse.template.PageData;
+const Page = verse.template.Page;
 const Router = verse.Router;
 const log = std.log.scoped(.endpoint_tags);
 const Repo = @import("../../Repo.zig");

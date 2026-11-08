@@ -1,4 +1,4 @@
-const TreePage = PageData("tree.html");
+const TreePage = Page("tree.html");
 
 fn filenameIsHidden(name: []const u8) bool {
     if (name.len == 0) return false;
@@ -199,7 +199,7 @@ const html = verse.template.html;
 const DOM = html.DOM;
 const E = html.E;
 
-const PageData = verse.template.PageData;
+const Page = verse.template.Page;
 const Router = verse.Router;
 const Humanize = @import("../../humanize.zig");
 const Git = @import("../../git.zig");

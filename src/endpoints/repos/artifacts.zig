@@ -6,7 +6,7 @@ pub const verse_routes = [_]Router.Match{
 
 pub const index = list;
 
-const ArtifactsHtml = T.PageData("repo/artifacts.html");
+const ArtifactsHtml = T.Page("repo/artifacts.html");
 
 fn list(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.NotFound;

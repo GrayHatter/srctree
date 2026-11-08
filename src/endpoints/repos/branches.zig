@@ -1,4 +1,4 @@
-const BranchPage = PageData("branches.html");
+const BranchPage = Page("branches.html");
 
 pub fn list(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
@@ -99,7 +99,7 @@ const T = verse.template;
 const S = verse.template.Structs;
 const abx = verse.Antibiotic;
 const Frame = verse.Frame;
-const PageData = verse.template.PageData;
+const Page = verse.template.Page;
 const Router = verse.Router;
 const Git = @import("../../git.zig");
 const log = std.log.scoped(.srctree_branches);

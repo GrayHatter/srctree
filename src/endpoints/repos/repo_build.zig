@@ -8,7 +8,7 @@ pub const routes = [_]Router.Match{
 
 pub const index = status;
 
-const BuildPage = T.PageData("build.html");
+const BuildPage = T.Page("build.html");
 
 pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
     const rd = RouteData.init(f) orelse return status;

@@ -37,7 +37,7 @@ pub fn router(ctx: *verse.Frame) Router.RoutingError!Router.BuildFn {
     return Router.defaultRouter(ctx, &routes);
 }
 
-const IssueNewPage = T.PageData("issue-new.html");
+const IssueNewPage = T.Page("issue-new.html");
 
 fn new(f: *Frame) Error!void {
     _ = RouteData.init(f) orelse return error.ServerFault;
@@ -202,7 +202,7 @@ fn addComment(f: *Frame) Error!void {
     return;
 }
 
-const DeltaPage = T.PageData("delta.html");
+const DeltaPage = T.Page("delta.html");
 
 fn view(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;

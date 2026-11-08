@@ -23,7 +23,7 @@ pub const endpoints = verse.Endpoints(.{
     @import("endpoints/debugging.zig"),
 });
 
-const E404Page = template.PageData("4XX.html");
+const E404Page = template.Page("4XX.html");
 
 fn notFound(vrs: *Frame) Router.Error!void {
     vrs.status = .not_found;
@@ -293,7 +293,7 @@ const robots_txt = verse.Robots.RobotsTxt.routerMatch(.{
     .name(.gptbot, .deny), // aggressive, selfish
     .name(.metaexternalagent, .deny), // too aggressive
     .name(.amzn_searchbot, .deny), //  malicious
-    .name(.keenable, .deny), // Ignores robots.txt
+    .name(.keenablebot, .deny), // Ignores robots.txt
     .name(.scrybot, .deny),
     .name(.reflectionbot, .deny),
 

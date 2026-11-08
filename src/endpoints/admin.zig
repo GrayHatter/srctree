@@ -10,7 +10,7 @@ pub const verse_endpoints = verse.Endpoints(.{
     repo,
 });
 
-const AdminPage = template.PageData("admin.html");
+const AdminPage = template.Page("admin.html");
 
 pub fn index(f: *Frame) Error!void {
     try f.requireValidUser();

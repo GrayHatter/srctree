@@ -1,6 +1,6 @@
 pub const verse_name = .network;
 
-const NetworkPage = T.PageData("network.html");
+const NetworkPage = T.Page("network.html");
 
 pub fn index(f: *Frame) Error!void {
     var dom: *DOM = .create(f.alloc);

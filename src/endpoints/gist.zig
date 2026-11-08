@@ -11,8 +11,8 @@ const routes = [_]Router.Match{
 
 pub const index = new;
 
-const GistPage = T.PageData("gist.html");
-const GistNewPage = T.PageData("gist_new.html");
+const GistPage = T.Page("gist.html");
+const GistNewPage = T.Page("gist_new.html");
 
 pub fn router(ctx: *Frame) Router.RoutingError!Router.BuildFn {
     if (!std.mem.eql(u8, ctx.uri.next() orelse "", "gist")) return error.Unrouteable;

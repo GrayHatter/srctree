@@ -11,8 +11,8 @@ pub const routes = [_]Router.Match{
 
 pub const index = commitList;
 
-const CommitPage = T.PageData("commit.html");
-const CommitsListPage = T.PageData("commit-list.html");
+const CommitPage = T.Page("commit.html");
+const CommitsListPage = T.Page("commit-list.html");
 
 const AddComment = struct {
     text: []const u8,

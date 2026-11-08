@@ -362,7 +362,7 @@ pub fn razeCache(a: Allocator) void {
     cached_emails.deinit();
 }
 
-const UserCommitsPage = T.PageData("user_commits.html");
+const UserCommitsPage = T.Page("user_commits.html");
 
 const CommitFlexReq = struct {
     user: ?[]const u8,

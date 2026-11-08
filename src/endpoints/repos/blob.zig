@@ -64,7 +64,7 @@ fn treeOrBlobAtRef(f: *Frame, rd: RouteData, repo: *Git.Repo, cmt: Git.Commit) R
     return treeEndpoint(f, rd, repo, &files);
 }
 
-const BlobPage = PageData("blob.html");
+const BlobPage = Page("blob.html");
 
 fn getBlob(f: *Frame, rd: RouteData, repo: *Git.Repo, tree: Git.Tree) Router.Error!Git.Blob {
     var path = rd.path orelse return error.InvalidURI;
@@ -201,7 +201,7 @@ fn excludedExt(name: []const u8) bool {
     return false;
 }
 
-const NewRepoPage = verse.template.PageData("repo-new.html");
+const NewRepoPage = verse.template.Page("repo-new.html");
 fn newRepo(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;
     f.status = .ok;
@@ -247,7 +247,7 @@ const verse = @import("verse");
 const abx = verse.Antibiotic;
 const Frame = verse.Frame;
 const S = verse.template.Structs;
-const PageData = verse.template.PageData;
+const Page = verse.template.Page;
 const Router = verse.Router;
 const Repo = @import("../../Repo.zig");
 const Git = @import("../../git.zig");

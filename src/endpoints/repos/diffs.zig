@@ -41,7 +41,7 @@ pub fn router(ctx: *Frame) Route.RoutingError!Route.BuildFn {
     return Route.defaultRouter(ctx, &routes);
 }
 
-const DiffNewHtml = Template.PageData("diff-new.html");
+const DiffNewHtml = Template.Page("diff-new.html");
 
 const DiffCreateReq = struct {
     from_network: ?bool = null,
@@ -729,7 +729,7 @@ pub fn translateComment(
     return found_ref;
 }
 
-const DeltaPage = Template.PageData("delta.html");
+const DeltaPage = Template.Page("delta.html");
 
 fn view(f: *Frame) Error!void {
     const rd = RouteData.init(f) orelse return error.ServerFault;

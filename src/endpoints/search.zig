@@ -7,7 +7,7 @@ pub const verse_routes = [_]Routes.Match{
     ROUTE("inbox", inbox),
 };
 
-const SearchHtml = T.PageData("search.html");
+const SearchHtml = T.Page("search.html");
 
 const SearchReq = struct {
     q: ?[]const u8,
