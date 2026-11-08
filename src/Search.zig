@@ -2,6 +2,7 @@ alloc: Allocator,
 depth: Depth,
 string: []const u8,
 rules: ArrayList(Rule),
+ordering: [5]?Magic.Sort = @splat(null),
 full_term_count: usize = 0,
 repos: ArrayList(Repo),
 hits: ArrayList(Hit),
@@ -57,7 +58,34 @@ pub const Magic = enum {
         random,
     };
 
+    comptime {
+        // fix size of .ordering
+        std.debug.assert(@typeInfo(Sort).@"enum".field_values.len == 5);
+    }
+
     pub const Only = Kind;
+
+    comptime {
+        std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 8);
+        // Don't forget to extend the if tree
+    }
+
+    pub fn fromStr(str: []const u8) ?Magic {
+        return if (eql(u8, str, "is"))
+            .is
+        else if (eql(u8, str, "kind"))
+            .kind
+        else if (eql(u8, str, "only"))
+            .only
+        else if (eql(u8, str, "repo"))
+            .repo
+        else if (eql(u8, str, "owner"))
+            .owner
+        else if (eql(u8, str, "sort"))
+            .sort
+        else
+            return null;
+    }
 };
 
 pub const Hit = struct {
@@ -142,7 +170,6 @@ pub const Hit = struct {
 pub const Rule = struct {
     rule: Query,
     invert: bool = false,
-    len: u16 = 0,
 
     pub const Query = union(Magic) {
         is: Magic.Is,
@@ -233,16 +260,11 @@ pub const Rule = struct {
         return .{ .rule = .{ .repo = str }, .invert = inv };
     }
 
-    //pub const ValidOpen = enum(u8) {
-    //    squote = '\'',
-    //    dquote = '"',
-    //    bracket = '[',
-    //    parenth = '(',
-    //    angle = '<',
-    //    curly = '{',
-    //};
+    pub fn target(tag: []const u8, str: []const u8, inv: bool) Rule {
+        return .{ .rule = .{ .target = .{ .tag = tag, .text = str } }, .invert = inv };
+    }
 
-    fn open(in: u8) u8 {
+    fn open(in: u8) ?u8 {
         return switch (in) {
             '\'' => '\'',
             '"' => '"',
@@ -250,136 +272,180 @@ pub const Rule = struct {
             '(' => ')',
             '<' => '>',
             '{' => '}',
-            else => ' ',
-            // TODO extra review
-            ' ' => 0,
+            else => null,
         };
     }
 
-    fn parseFromOpen(str: []const u8) []const u8 {
-        if (str.len < 4) return str;
-        const chr = open(str[0]);
-        const end = findScalarPos(u8, str, 1, chr) orelse return str;
-
-        return if (chr == ' ') str[0..end] else str[1..end];
+    fn parseFromOpen(r: *Io.Reader) []const u8 {
+        const first = r.peekByte() catch return &.{};
+        if (open(first)) |chr| {
+            r.toss(1);
+            if (r.takeDelimiterInclusive(chr)) |line| {
+                return line[0 .. line.len - 1];
+            } else |e| switch (e) {
+                error.EndOfStream => return r.takeDelimiter(' ') catch unreachable orelse &.{},
+                error.ReadFailed => unreachable,
+                error.StreamTooLong => unreachable,
+            }
+        } else return r.takeDelimiter(' ') catch unreachable orelse unreachable;
     }
 
     test parseFromOpen {
-        try std.testing.expectEqualStrings("", parseFromOpen(""));
-        try std.testing.expectEqualStrings("1", parseFromOpen("1"));
-        try std.testing.expectEqualStrings("12", parseFromOpen("12"));
-        try std.testing.expectEqualStrings("'1'", parseFromOpen("'1'"));
-        try std.testing.expectEqualStrings("word", parseFromOpen("\"word\""));
-        try std.testing.expectEqualStrings("word", parseFromOpen("'word'"));
-        try std.testing.expectEqualStrings("word", parseFromOpen("[word]"));
-        try std.testing.expectEqualStrings("word word", parseFromOpen("[word word]"));
-        try std.testing.expectEqualStrings("word", parseFromOpen("{word}"));
-        try std.testing.expectEqualStrings("word word2", parseFromOpen("{word word2}"));
-        try std.testing.expectEqualStrings("word", parseFromOpen("<word>"));
-        try std.testing.expectEqualStrings("word word3", parseFromOpen("<word word3>"));
-        try std.testing.expectEqualStrings("word ", parseFromOpen("(word )"));
-        try std.testing.expectEqualStrings("wordword word 4", parseFromOpen("(wordword word 4)"));
+        const rdr = struct {
+            fn parseFromOpen(str: []const u8) []const u8 {
+                var r: Io.Reader = .fixed(str);
+                return Rule.parseFromOpen(&r);
+            }
+        };
 
-        try std.testing.expectEqualStrings("first", parseFromOpen("first second third forth)"));
-        try std.testing.expectEqualStrings(" second third forth)", parseFromOpen(" second third forth)"));
-        try std.testing.expectEqualStrings("second", parseFromOpen("second third forth)"));
-        try std.testing.expectEqualStrings("third", parseFromOpen("third forth)"));
-        try std.testing.expectEqualStrings("forth)", parseFromOpen("forth)"));
+        try std.testing.expectEqualStrings("", rdr.parseFromOpen(""));
+        try std.testing.expectEqualStrings("1", rdr.parseFromOpen("1"));
+        try std.testing.expectEqualStrings("12", rdr.parseFromOpen("12"));
+        try std.testing.expectEqualStrings("1", rdr.parseFromOpen("'1'"));
+        try std.testing.expectEqualStrings("word", rdr.parseFromOpen("\"word\""));
+        try std.testing.expectEqualStrings("word", rdr.parseFromOpen("'word'"));
+        try std.testing.expectEqualStrings("word", rdr.parseFromOpen("[word]"));
+        try std.testing.expectEqualStrings("word word", rdr.parseFromOpen("[word word]"));
+        try std.testing.expectEqualStrings("word", rdr.parseFromOpen("{word}"));
+        try std.testing.expectEqualStrings("word word2", rdr.parseFromOpen("{word word2}"));
+        try std.testing.expectEqualStrings("word", rdr.parseFromOpen("<word>"));
+        try std.testing.expectEqualStrings("word word3", rdr.parseFromOpen("<word word3>"));
+        try std.testing.expectEqualStrings("word ", rdr.parseFromOpen("(word )"));
+        try std.testing.expectEqualStrings("wordword word 4", rdr.parseFromOpen("(wordword word 4)"));
 
-        try std.testing.expectEqualStrings(" first second third forth", parseFromOpen(" first second third forth"));
+        try std.testing.expectEqualStrings("first", rdr.parseFromOpen("first second third forth)"));
+        var r: Io.Reader = .fixed(" second third forth)");
+        try std.testing.expectEqualStrings("", parseFromOpen(&r));
+        try std.testing.expectEqualStrings("second", parseFromOpen(&r));
+        try std.testing.expectEqualStrings("third", parseFromOpen(&r));
+        try std.testing.expectEqualStrings("forth)", parseFromOpen(&r));
+        try std.testing.expectEqualStrings("", r.buffered());
+
+        try std.testing.expectEqualStrings(" first second third forth)", rdr.parseFromOpen("' first second third forth)'"));
     }
 
-    pub fn parse(str: []const u8) Rule {
-        if (str.len < 3) return .empty;
-        var s = str;
-        const invert = str[0] == '-' or str[0] == '!';
-        if (invert) s = s[1..];
+    /// TODO caller must ensure no invalid bytes in `r.buffer`
+    pub fn parse(r: *Reader) Rule {
+        while (r.peekDelimiterExclusive(' ')) |str| {
+            if (str.len == 0) {
+                r.toss(1);
+                continue;
+            }
+            if (str.len < 3) return .empty;
+            break;
+        } else |_| return .empty;
+        const first = r.peekByte() catch unreachable;
+        const invert = first == '-' or first == '!';
+        if (invert) r.toss(1);
 
-        if (findScalar(u8, s, ':')) |i| {
-            if (i == 0) return .text(s, invert);
-            const pre: []const u8 = s[0..i];
-            const match = parseFromOpen(s[i + 1 ..]);
-            if (match.len > 0 and match[0] == ' ') return .empty;
-
-            comptime {
-                std.debug.assert(@typeInfo(Magic).@"enum".field_names.len == 8);
-                // Don't forget to extend the if tree
+        if (r.peekDelimiterExclusive(' ')) |str| {
+            if (str.len <= 3) {
+                r.toss(str.len);
+                return .text(str, invert);
             }
 
-            if (eql(u8, pre, "is")) {
-                return .is(match, invert);
-            } else if (eql(u8, pre, "kind")) {
-                return .kind(match, invert);
-            } else if (eql(u8, pre, "rude")) {
-                return .kind(match, !invert);
-            } else if (eql(u8, pre, "only")) {
-                return .only(match, invert);
-            } else if (eql(u8, pre, "repo")) {
-                return .repo(match, invert);
-            } else if (eql(u8, pre, "owner")) {
-                return .owner(match, invert);
-            } else if (eql(u8, pre, "sort")) {
-                return .sort(match, invert);
-            } else return .{
-                .rule = .{ .target = .{ .tag = pre, .text = match } },
-                .invert = invert,
-            };
-        } else return .{
-            .rule = .{ .raw = s },
-            .invert = invert,
-        };
+            for (str, 0..) |chr, idx| switch (chr) {
+                'a'...'z', 'A'...'Z', '_' => continue,
+                ':' => {
+                    if (r.bufferedLen() == idx + 1) {
+                        return .text(r.take(r.bufferedLen()) catch unreachable, invert);
+                    }
+                    if (Magic.fromStr(str[0..idx])) |magic| {
+                        r.toss(idx + 1);
+                        const match = parseFromOpen(r);
+
+                        return switch (magic) {
+                            .is => .is(match, invert),
+                            .kind => .kind(match, invert),
+                            .only => .only(match, invert),
+                            .sort => .sort(match, invert),
+                            .owner => .owner(match, invert),
+                            .raw => .text(match, invert),
+                            .repo => .repo(match, invert),
+                            .target => .target("target", match, invert),
+                        };
+                    } else if (eql(u8, str[0..idx], "rude")) {
+                        r.toss(idx + 1);
+                        const match = parseFromOpen(r);
+                        return .kind(match, !invert);
+                    } else {
+                        r.toss(1 + idx);
+                        const match = parseFromOpen(r);
+                        return .target(str[0..idx], match, invert);
+                    }
+                    if (r.bufferedLen() == 0) comptime unreachable;
+
+                    break;
+                },
+                else => {
+                    r.toss(str.len);
+                    const match = parseFromOpen(r);
+                    return .text(match, invert);
+                },
+            } else {
+                r.toss(str.len);
+                return .text(str, invert);
+            }
+        } else |_| return .empty; // unreachable
     }
 
     test parse {
-        const r0 = parse("");
+        const rdr = struct {
+            fn parse(str: []const u8) Rule {
+                var r: Io.Reader = .fixed(str);
+                return Rule.parse(&r);
+            }
+        };
+
+        const r0 = rdr.parse("");
         try std.testing.expectEqualDeep(Rule.empty, r0);
-        const r1 = parse("a");
+        const r1 = rdr.parse("a");
         try std.testing.expectEqualDeep(Rule.empty, r1);
-        const r2 = parse("ab");
+        const r2 = rdr.parse("ab");
         try std.testing.expectEqualDeep(Rule.empty, r2);
 
-        const r3 = parse("abc");
+        const r3 = rdr.parse("abc");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .raw = "abc" } }, r3);
 
-        const r4 = parse("repo:srctree");
+        const r4 = rdr.parse("repo:srctree");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .repo = "srctree" } }, r4);
-        const r5 = parse("repo:verse");
+        const r5 = rdr.parse("repo:verse");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .repo = "verse" } }, r5);
 
-        const r6 = parse("owner:grayhatter");
+        const r6 = rdr.parse("owner:grayhatter");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .owner = "grayhatter" } }, r6);
 
-        const r7 = parse("-owner:grayhatter");
+        const r7 = rdr.parse("-owner:grayhatter");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .owner = "grayhatter" }, .invert = true }, r7);
-        const r8 = parse("!owner:grayhatter");
+        const r8 = rdr.parse("!owner:grayhatter");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .owner = "grayhatter" }, .invert = true }, r8);
 
-        const r9 = parse("-repo:verse");
+        const r9 = rdr.parse("-repo:verse");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .repo = "verse" }, .invert = true }, r9);
-        const r10 = parse("!repo:verse");
+        const r10 = rdr.parse("!repo:verse");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .repo = "verse" }, .invert = true }, r10);
 
-        const r11 = parse("kind:issues");
+        const r11 = rdr.parse("kind:issues");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues } }, r11);
-        const r12 = parse("kind:issue");
+        const r12 = rdr.parse("kind:issue");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues } }, r12);
 
-        const r13 = parse("rude:issues");
+        const r13 = rdr.parse("rude:issues");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = true }, r13);
-        const r14 = parse("!rude:issues");
+        const r14 = rdr.parse("!rude:issues");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = false }, r14);
 
-        const r15 = parse("kind:'issues'");
+        const r15 = rdr.parse("kind:'issues'");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = false }, r15);
-        const r16 = parse("!kind:'issues'");
+        const r16 = rdr.parse("!kind:'issues'");
         try std.testing.expectEqualDeep(Rule{ .rule = .{ .kind = .issues }, .invert = true }, r16);
 
-        const r17 = parse("something_else:'issues or diffs'  ");
+        const r17 = rdr.parse("something_else:'issues or diffs'  ");
         try std.testing.expectEqualDeep(Rule{
             .rule = .{ .target = .{ .tag = "something_else", .text = "issues or diffs" } },
             .invert = false,
         }, r17);
-        const r18 = parse("!something_else:'issues or diffs'  ");
+        const r18 = rdr.parse("!something_else:'issues or diffs'  ");
         try std.testing.expectEqualDeep(Rule{
             .rule = .{ .target = .{ .tag = "something_else", .text = "issues or diffs" } },
             .invert = true,
@@ -596,32 +662,18 @@ pub fn RepoTypeIterator(Type: type, Indexer: type, wrap: fn (Type) Hit.Result) t
 pub fn init(string: []const u8, d: Depth, a: Allocator) !Search {
     var rules: ArrayList(Rule) = .empty;
 
-    var str = string;
-    while (str.len > 2) {
-        const r = Rule.parse(str);
-        log.debug("init {} '{s}' rule {any}", .{ str.len, str, r });
+    var reader: Io.Reader = .fixed(string);
+    while (reader.bufferedLen() > 2) {
+        const r = Rule.parse(&reader);
+        log.debug("init {} '{s}' rule {any}", .{ reader.bufferedLen(), reader.buffered(), r });
 
-        switch (r.rule) {
-            .raw => |raw| {
-                if (raw.len == 0) break;
-                str = str[raw.len..];
-            },
-            .is => |is| switch (is) {
-                .open => str = str[7..],
-                .closed => str = str[9..],
-            },
-            .repo => |repo| str = str[5 + repo.len ..],
-            .owner => |owner| str = str[6 + owner.len ..],
-            .only => |only| str = str[5 + @tagName(only).len ..],
-            .kind => |kind| str = str[5 + @tagName(kind).len ..],
-            .sort => |sort| str = str[5 + @tagName(sort).len ..],
-            .target => |target| {
-                str = str[target.tag.len + 1 + target.text.len ..];
-            },
-        }
         try rules.append(a, r);
 
-        str = trim(u8, str, " \t");
+        while (reader.peekByte()) |chr| switch (chr) {
+            '!'...'~' => break,
+            ' ', '\n' => reader.toss(1),
+            else => return error.InvalidSearchString,
+        } else |_| break;
     }
 
     var term_count: usize = 0;
