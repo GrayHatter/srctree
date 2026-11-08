@@ -54,6 +54,7 @@ pub const Magic = enum {
         default,
         liveness,
         views,
+        random,
     };
 
     pub const Only = Kind;
@@ -683,7 +684,7 @@ pub fn searchAll(search: *Search, io: Io) !void {
 pub fn sortHits(search: *Search) void {
     for (search.rules.items) |r| switch (r.rule) {
         .sort => |srt| {
-            search.sortBy(srt);
+            return search.sortBy(srt);
         },
         else => {},
     };
@@ -693,14 +694,39 @@ const sorting = struct {
     fn liveness(_: void, lhs: Hit, rhs: Hit) bool {
         return lhs.liveness.order(rhs.liveness) == .gt;
     }
+
+    const RandCtx = struct {
+        idx: usize = 0,
+        random: [84]u8 = "eventually I'll put some reasonable random gen thingy here, but for now this will do".*,
+        extra: usize = undefined,
+    };
+
+    fn random(rc: *RandCtx, lhs: Hit, rhs: Hit) bool {
+        const mask: u8 = rc.random[rc.idx % 84];
+        const rand: u8 = @intCast((@backingInt(lhs.liveness) & 0xff) ^ mask);
+        rc.idx +%= rc.extra;
+        rc.idx -|= 3;
+        if (rand < 0x42) return true;
+        rc.idx +%= @intCast(@backingInt(rhs.liveness));
+        if (rand > 0x69) return false;
+        return rand & 1 == 0;
+    }
 };
 
 pub fn sortBy(search: *Search, srt: Magic.Sort) void {
+    const local = struct {
+        var ctx: sorting.RandCtx = .{};
+    };
+
     switch (srt) {
         .default, .liveness => {
             std.sort.heap(Hit, search.hits.items, {}, sorting.liveness);
         },
-        else => @panic("TODO"),
+        .random => {
+            local.ctx.extra = @intFromPtr(search.hits.items.ptr);
+            std.sort.heap(Hit, search.hits.items, &local.ctx, sorting.random);
+        },
+        else => {},
     }
 }
 
