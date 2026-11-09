@@ -53,7 +53,7 @@ pub const Inlined = struct {
 
     /// formatColor leaves lines in an undefined state
     pub fn formatColor(inl: Inlined, a: Allocator, w: *Io.Writer) !void {
-        if (inl.lang != .zig) return inl.format(w);
+        if (!inl.lang.isInternal()) return inl.format(w);
 
         var fnum_b: [10]u8 = undefined;
         var fnum: []const u8 = &.{};
@@ -279,7 +279,7 @@ pub const Split = struct {
     };
 
     pub fn formatColor(split: Split, a: Allocator, left: *Io.Writer, right: *Io.Writer) !void {
-        if (split.lang != .zig) {
+        if (!split.lang.isInternal()) {
             try Split.Left.format(split, left);
             try Split.Right.format(split, right);
             return;
