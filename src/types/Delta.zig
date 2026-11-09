@@ -106,29 +106,34 @@ pub const Comment = struct {
     message: []const u8,
 };
 
-fn setCommon(delta: *Delta, comptime fmt: []const u8, c: Comment, a: Allocator, io: Io) !Message {
-    var m: ?Message = null;
-    if (c.message.len > 0)
-        m = try delta.thread.addComment(c.author, c.message, a, io);
+pub fn setClosed(delta: *Delta, c: Comment, a: Allocator, io: Io) !void {
+    if (c.message.len > 0) {
+        const msg: Message = try .new(.comment, delta.index, c.author, c.message, io);
+        try delta.thread.addMessage(msg, a, io);
+    }
 
     var b: [4096]u8 = undefined;
-    const state_msg = try bufPrint(&b, fmt ++ " by {s}", .{c.author});
-    try delta.thread.addMessage(try .new(.state_change, delta.index, c.author, state_msg, io), a, io);
+    const text = try bufPrint(&b, "closed by {s}", .{c.author});
+    const msg: Message = try .new(.state_change, delta.index, c.author, text, io);
+    try delta.thread.addMessage(msg, a, io);
     delta.updated = delta.thread.updated;
-    try delta.commit(io);
-    return m orelse return error.NoMessage;
-}
-
-pub fn setClosed(delta: *Delta, c: Comment, a: Allocator, io: Io) !Message {
     delta.state.closed = true;
-    const m = try delta.setCommon("closed", c, a, io);
-    return m;
+    try delta.commit(io);
 }
 
-pub fn setOpen(delta: *Delta, c: Comment, a: Allocator, io: Io) !Message {
+pub fn setOpen(delta: *Delta, c: Comment, a: Allocator, io: Io) !void {
+    if (c.message.len > 0) {
+        const msg: Message = try .new(.comment, delta.index, c.author, c.message, io);
+        try delta.thread.addMessage(msg, a, io);
+    }
+
+    var b: [4096]u8 = undefined;
+    const text = try bufPrint(&b, "reopened by {s}", .{c.author});
+    const state_msg: Message = try .new(.state_change, delta.index, c.author, text, io);
+    try delta.thread.addMessage(state_msg, a, io);
+    delta.updated = delta.thread.updated;
     delta.state.closed = false;
-    const m = try delta.setCommon("opened", c, a, io);
-    return m;
+    try delta.commit(io);
 }
 
 pub const CommentsMeta = struct {

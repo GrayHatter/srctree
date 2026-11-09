@@ -64,7 +64,6 @@ pub fn commit(msg: *const Message, io: Io) !void {
     defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;
     writer.interface.buffer = &w_b;
-
     std.debug.assert(!std.mem.eql(u8, msg.hash[0..], &@as([32]u8, @splat(0))));
     try writer.interface.writeAll(msg.message);
     try writer.interface.flush();

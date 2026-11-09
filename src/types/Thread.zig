@@ -113,12 +113,7 @@ fn commitNow(t: *const Thread, io: Io) !void {
     defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;
     writer.interface.buffer = &w_b;
-
-    // Make a best effort to save/protect all data
-    for (t.messages.items) |msg| {
-        try writer.interface.print("{x}\n", .{&msg.hash});
-        msg.commit(io) catch log.err("thread {} unable to commit message {any}", .{ t.index, msg });
-    }
+    for (t.messages.items) |msg| try writer.interface.print("{x}\n", .{&msg.hash});
     try writer.interface.flush();
 }
 
@@ -178,20 +173,12 @@ test fromLine {
     }, v);
 }
 
-pub fn addComment(t: *Thread, author: []const u8, message: []const u8, a: Allocator, io: Io) !Message {
-    if (!t.loaded) unreachable;
-    const msg: Message = try .new(.comment, t.index, author, message, io);
-    log.debug("msg {any}", .{msg});
-    try t.addMessage(msg, a, io);
-    return msg;
-}
-
 pub fn addMessage(t: *Thread, m: Message, a: Allocator, io: Io) !void {
     if (!t.loaded) unreachable;
     try t.messages.append(a, m);
     t.count +|= 1;
     t.updated = Io.Clock.real.now(io).toSeconds();
-    try t.commit(io);
+    try t.commitNow(io);
 }
 
 pub fn raze(self: Thread, a: std.mem.Allocator) void {

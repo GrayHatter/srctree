@@ -267,9 +267,11 @@ fn newComment(f: *Frame) Error!void {
     const did: usize = std.fmt.parseInt(usize, valid.did, 16) catch return error.DataInvalid;
 
     if (try delta_shared.addComment("diffs", rd.name, did, valid, f)) |msgC| {
-        var msg = msgC;
-        msg.extra0 = std.fmt.parseInt(usize, valid.diff_id, 10) catch return error.DataInvalid;
-        msg.commit(f.io) catch return error.ServerFault;
+        _ = msgC;
+        // TODO
+        //var msg = msgC;
+        //msg.extra0 = std.fmt.parseInt(usize, valid.diff_id, 10) catch return error.DataInvalid;
+        //msg.commit(f.io) catch return error.ServerFault;
     }
 }
 

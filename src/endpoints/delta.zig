@@ -15,44 +15,27 @@ pub fn addComment(
     id: usize,
     valid: AddCommentReq,
     f: *Frame,
-) RouterError!?Message {
+) RouterError!?void {
     var delta = Delta.open(repo, id, f.alloc, f.io) catch return error.ServerFault;
     delta.thread.load(f.alloc, f.io) catch return error.ServerFault;
     defer delta.commit(f.io) catch log.err("unable to commit delta", .{});
 
     const user = if (f.user) |usr| usr.username.? else "public";
-    var msg: ?Message = null;
     if (valid.reopen.?) {
-        msg = delta.setOpen(
-            .{ .author = user, .message = valid.comment },
-            f.alloc,
-            f.io,
-        ) catch |e| switch (e) {
-            error.NoMessage => null,
+        delta.setOpen(.{ .author = user, .message = valid.comment }, f.alloc, f.io) catch |e| switch (e) {
             else => return error.ServerFault,
         };
     } else if (valid.close.?) {
-        msg = delta.setClosed(
-            .{ .author = user, .message = valid.comment },
-            f.alloc,
-            f.io,
-        ) catch |e| switch (e) {
-            error.NoMessage => null,
+        delta.setClosed(.{ .author = user, .message = valid.comment }, f.alloc, f.io) catch |e| switch (e) {
             else => return error.ServerFault,
         };
     } else {
-        msg = delta.thread.addComment(
-            user,
-            valid.comment,
-            f.alloc,
-            f.io,
-        ) catch return error.ServerFault;
+        const msg = Message.new(.comment, delta.index, user, valid.comment, f.io) catch unreachable;
+        delta.thread.addMessage(msg, f.alloc, f.io) catch return error.ServerFault;
     }
     var buf: [2048]u8 = undefined;
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/" ++ location ++ "/{x}", .{ repo, id });
-    try events.newComment(repo, id, loc, msg orelse .empty, f.io);
     f.redirect(loc, .see_other) catch unreachable;
-    return msg;
 }
 
 pub fn incrView(d: *Delta, f: *Frame) !void {
