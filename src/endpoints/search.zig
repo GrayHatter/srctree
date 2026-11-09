@@ -170,22 +170,29 @@ pub fn custom(f: *Frame, query_str: []const u8) Error!void {
                 .body = .abx(c.body),
             } },
         }),
-        .file => |*path| try results.append(f.alloc, .{
-            .search_flavor = .{
-                .file = .{
-                    .repo_name = .safe(path.repo_name),
-                    // TODO ref/sha/name
-                    //.sha = .safe(path.sha.slice()[0..10]),
-                    .filename = .abx(path.path),
-                    .code = if (path.code.len == 0) null else .{
-                        .line_count = path.line_count,
-                        .lines = .safe(try syntax.guessAndColorAndWrap(path.path, path.code, f.alloc, f.io)),
-                        .language = .safe((syntax.Language.guessFromName(path.path) orelse syntax.Language.txt).toString()),
+        .file => |*path| {
+            const contents = if (search.hits.items.len > 150)
+                try syntax.guessAndColorAndWrapFast(path.path, path.code, f.alloc, f.io)
+            else
+                try syntax.guessAndColorAndWrap(path.path, path.code, f.alloc, f.io);
+
+            try results.append(f.alloc, .{
+                .search_flavor = .{
+                    .file = .{
+                        .repo_name = .safe(path.repo_name),
+                        // TODO ref/sha/name
+                        //.sha = .safe(path.sha.slice()[0..10]),
+                        .filename = .abx(path.path),
+                        .code = if (path.code.len == 0) null else .{
+                            .line_count = path.line_count,
+                            .lines = .safe(contents),
+                            .language = .safe((syntax.Language.guessFromName(path.path) orelse syntax.Language.txt).toString()),
+                        },
+                        .line = path.line,
                     },
-                    .line = path.line,
                 },
-            },
-        }),
+            });
+        },
     };
 
     var repos: ArrayList(MetaRepo) = .empty;

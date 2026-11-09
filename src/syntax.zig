@@ -88,6 +88,10 @@ pub const Language = enum {
 
         return null;
     }
+
+    pub fn isInternal(name: Language) bool {
+        return name == .zig;
+    }
 };
 
 pub fn wrapLineNumbers(a: Allocator, text: []const u8) error{OutOfMemory}![]u8 {
@@ -104,6 +108,18 @@ pub fn wrapLineNumbers(a: Allocator, text: []const u8) error{OutOfMemory}![]u8 {
         error.EndOfStream => return try w.toOwnedSlice(),
         else => unreachable,
     }
+}
+
+pub fn guessAndColorAndWrapFast(name: []const u8, blob: []const u8, a: Allocator, io: Io) error{OutOfMemory}![]u8 {
+    if (Language.guessFromName(name)) |lang| {
+        if (!lang.isInternal()) {
+            const safer = try a.print("{f}", .{abx.Html.abx(blob)});
+            return try wrapLineNumbers(a, safer);
+        }
+    }
+
+    const colored = try guessAndColor(name, blob, a, io);
+    return try wrapLineNumbers(a, colored);
 }
 
 pub fn guessAndColorAndWrap(name: []const u8, blob: []const u8, a: Allocator, io: Io) error{OutOfMemory}![]u8 {

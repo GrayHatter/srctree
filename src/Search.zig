@@ -1,6 +1,7 @@
 alloc: Allocator,
 depth: Depth,
 string: []const u8,
+quota: usize,
 rules: ArrayList(Rule),
 ordering: [5]?Magic.Sort = @splat(null),
 full_term_count: usize = 0,
@@ -693,6 +694,7 @@ pub fn init(string: []const u8, d: Depth, a: Allocator) !Search {
         .alloc = a,
         .depth = d,
         .string = string,
+        .quota = if (d == .deep) 800_000 else 100_000,
         .rules = rules,
         .full_term_count = term_count,
         .repos = .empty,
@@ -734,6 +736,8 @@ pub fn searchAll(search: *Search, io: Io) !void {
 }
 
 pub fn sortHits(search: *Search) void {
+    if (search.hits.items.len > 200) return;
+
     for (search.rules.items) |r| switch (r.rule) {
         .sort => |srt| {
             return search.sortBy(srt);
@@ -797,12 +801,20 @@ pub fn populateRepos(search: *Search, vis: Repo.Visibility.Select, io: Io) !void
     if (search.repos.items.len > 0) return;
     var repo_iter = Repo.allRepoIterator(vis, io) catch return;
 
-    while (repo_iter.next(io) catch return error.Unknown) |rep_| {
+    next_repo: while (repo_iter.next(io) catch return error.Unknown) |rep_| {
         var repo = rep_;
         if (!repo.pinned and search.depth == .quick) {
             repo.raze(search.alloc, io);
             continue;
         }
+        for (search.rules.items) |r| {
+            if (!r.invert or r.rule != .repo) continue;
+            if (eql(u8, repo_iter.current_name.?, r.rule.repo)) {
+                repo.raze(search.alloc, io);
+                continue :next_repo;
+            }
+        }
+
         repo.name = search.alloc.dupe(u8, repo_iter.current_name.?) catch null;
         try search.repos.append(search.alloc, repo);
     }
@@ -811,33 +823,33 @@ pub fn populateRepos(search: *Search, vis: Repo.Visibility.Select, io: Io) !void
 }
 
 pub fn searchRepos(search: *Search, io: Io) !void {
-    const checked: usize = 0;
-    defer search.meta.checked +|= checked;
+    search.meta.checked +|= 1;
+    search.quota -|= 1;
     // TODO Search repo names
     // TODO Search Readmes
     _ = io;
 }
 
-pub fn searchCommits(search: *Search, age: void, io: Io) !void {
-    var checked: usize = 0;
-    defer search.meta.checked +|= checked;
-    _ = age;
-    for (search.repos.items) |*repo| {
+pub fn searchCommits(search: *Search, _: void, io: Io) !void {
+    // TODO use depth and age here
+    const max: i64 = (std.Io.Clock.real.now(io).toSeconds()) - 86400 * 100;
+
+    next_repo: for (search.repos.items) |*repo| {
         log.debug("search commits in {s}", .{repo.name.?});
         repo.git.loadData(search.alloc, io) catch |err| {
             log.err("Unable to load repo {s} [{}]", .{ repo.name.?, err });
         };
         const head = try repo.git.HEAD(search.alloc, io);
         var itr = head.iterate(&repo.git);
-        var limit: u16 = if (search.only != null and search.only.? == .commits) 1000 else 200;
         while (itr.next(search.alloc, io) catch null) |cmt| {
             log.debug("commit {f}", .{cmt.sha.text()});
-            if (limit == 0) break;
-            limit -|= 1;
+            if (search.quota == 0) return;
+            if (cmt.committer.timestamp < max) continue :next_repo;
             var matching: bool = true;
             var owner: ?bool = null;
             for (search.rules.items) |r| {
-                checked +|= 1;
+                search.meta.checked +|= 1;
+                search.quota -|= 1;
                 switch (r.rule) {
                     .raw => |raw| if (matching) {
                         if (find(u8, cmt.title, raw)) |_| {
@@ -866,14 +878,13 @@ pub fn searchCommits(search: *Search, age: void, io: Io) !void {
 }
 
 pub fn searchDeltas(search: *Search, io: Io) !void {
-    var checked: usize = 0;
-    defer search.meta.checked +|= checked;
     for (search.repos.items) |*repo| {
         log.debug("search delta in {s}", .{repo.name.?});
         var itr = Delta.searchRepo(repo.name.?, search.rules.items, io);
         defer itr.raze(io);
         while (itr.nextDelta(search.alloc, io)) |delta| {
-            checked +|= 1;
+            search.meta.checked +|= 1;
+            search.quota -|= 1;
             log.debug("delta {}", .{delta.index});
             if (delta.state.embargoed) continue;
 
@@ -891,8 +902,6 @@ pub fn reposFor(rules: *const Search) ![]S.SearchHtml.SearchResults {
 }
 
 pub fn searchTrees(search: *Search, io: Io) !void {
-    var limit: u32 = if (search.only != null and search.only.? == .commits) 2000 else 500;
-
     for (search.repos.items) |*repo| {
         log.debug("search tree in {s}", .{repo.name.?});
         repo.git.loadData(search.alloc, io) catch |err| {
@@ -901,7 +910,7 @@ pub fn searchTrees(search: *Search, io: Io) !void {
 
         const head = try repo.git.HEAD(search.alloc, io);
         const tree = try head.loadTree(&repo.git, search.alloc, io);
-        try search.searchTree(&tree, repo, &.{}, &limit, io);
+        try search.searchTree(&tree, repo, &.{}, io);
     }
 }
 
@@ -910,23 +919,21 @@ fn searchTree(
     tree: *const git.Tree,
     repo: *Repo,
     root_path: []const u8,
-    limit: *u32,
     io: Io,
 ) !void {
-    var checked: usize = 0;
-    defer search.meta.checked +|= checked;
     var itr = tree.iterate();
     while (itr.next()) |obj| {
-        if (limit.* == 0) break;
+        if (search.quota == 0) break;
         std.debug.assert(root_path.len == 0 or root_path[root_path.len - 1] == '/');
         const path = try search.alloc.print("{s}{s}/", .{ root_path, obj.name });
         log.debug("tree search {s} -> {s}", .{ repo.name.?, path });
         if (search.excluded.checkSkip(path)) {
+            search.meta.checked +|= 1;
             // TODO optimize this alloc
             search.alloc.free(path);
             continue;
         }
-        limit.* -|= 1;
+        search.quota -|= 1;
         var object = repo.git.objects.load(obj.sha, search.alloc, io) catch |err| switch (err) {
             error.OutOfMemory => return error.OutOfMemory,
             error.ShaNotFound,
@@ -955,7 +962,8 @@ fn searchTree(
         };
         switch (object) {
             .tree => |*t| for (search.rules.items) |r| {
-                checked +|= 1;
+                search.meta.checked +|= 1;
+                search.quota -|= 1;
                 switch (r.rule) {
                     .owner => {}, // TODO check repo owners file
                     .only => |only| if (only != .filenames) return,
@@ -974,30 +982,36 @@ fn searchTree(
                     },
                     .is, .kind, .repo, .target, .sort => {},
                 }
-            } else search.searchTree(t, repo, path, limit, io) catch |err| {
+            } else search.searchTree(t, repo, path, io) catch |err| {
                 log.err("search error {}", .{err});
                 continue;
             },
-            .blob => |*b| for (search.rules.items) |r| {
-                switch (r.rule) {
-                    .owner => {}, // TODO check repo owners file
-                    .only => |only| if (only == .filenames) continue,
-                    .raw => |raw| if (find(u8, path, raw)) |_| {
-                        try search.appendHit(.{ .result = .{
-                            .file = .{
-                                .repo_name = repo.name.?,
-                                .path = path[0 .. path.len - 1],
-                                .sha = b.sha.text(),
-                                .hit_idx = 0,
-                                .line = 0,
-                                .line_count = 0,
-                                .code = &.{},
-                            },
-                        } }, .{ .filename = .{ .repo = repo.name.?, .path = path[0 .. path.len - 1] } });
-                    },
-                    .is, .kind, .repo, .target, .sort => {},
-                }
-            } else try search.searchInBlob(repo, path[0 .. path.len - 1], b),
+            .blob => |*b| {
+                _ = syntax.Language.guessFromName(path[0 .. path.len - 1]) orelse continue;
+                for (search.rules.items) |r| {
+                    search.meta.checked +|= 1;
+                    search.quota -|= 1;
+                    switch (r.rule) {
+                        .owner => {}, // TODO check repo owners file
+                        .only => |only| if (only == .filenames) continue,
+                        .raw => |raw| if (find(u8, path, raw)) |_| {
+                            search.quota -|= 1;
+                            try search.appendHit(.{ .result = .{
+                                .file = .{
+                                    .repo_name = repo.name.?,
+                                    .path = path[0 .. path.len - 1],
+                                    .sha = b.sha.text(),
+                                    .hit_idx = 0,
+                                    .line = 0,
+                                    .line_count = 0,
+                                    .code = &.{},
+                                },
+                            } }, .{ .filename = .{ .repo = repo.name.?, .path = path[0 .. path.len - 1] } });
+                        },
+                        .is, .kind, .repo, .target, .sort => {},
+                    }
+                } else try search.searchInBlob(repo, path[0 .. path.len - 1], b);
+            },
 
             .commit, .tag => return error.CorruptedRepo,
         }
@@ -1006,6 +1020,8 @@ fn searchTree(
 
 fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !void {
     for (search.rules.items) |r| {
+        if (search.quota == 0) return;
+        search.quota -|= 1;
         var idx: usize = 0;
         switch (r.rule) {
             .repo, .sort, .kind, .is => {},
@@ -1014,6 +1030,8 @@ fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !v
             .target => {}, // TODO add some magic around target e.g. `function:name`
             .raw => |str| {
                 while (findPos(u8, b.data.blob, idx, str)) |i| {
+                    search.meta.checked +|= 1;
+                    search.quota -|= 1;
                     const found_line = countScalar(u8, b.data.blob[0..i], '\n');
                     const line_count = countScalar(u8, b.data.blob[i..], '\n');
                     if (idx == 0) {
@@ -1031,7 +1049,6 @@ fn searchInBlob(search: *Search, repo: *Repo, path: []const u8, b: *git.Blob) !v
                     } else {
                         try search.appendMeta(.{ .filename = .{ .repo = repo.name.?, .path = path } });
                     }
-
                     idx = i + 1;
                 }
             },
@@ -1102,9 +1119,7 @@ pub fn searchFiles(
     search: *Search,
     repo: *Repo,
     io: Io,
-    search_limit: u32,
 ) ![]S.SearchFlavor.File {
-    var limit: u32 = search_limit;
     var file_list: ArrayList(Hit.Result.File) = .empty;
     defer file_list.deinit(search.alloc);
     var commit = try repo.git.HEAD(search.alloc, io);
@@ -1115,7 +1130,7 @@ pub fn searchFiles(
     defer excludes.list.deinit(search.alloc);
     for (excludes.list.items) |ex| log.info("tree exclude {s}", .{ex});
     // TODO real tokenization
-    try search.searchTree(&tree, repo, &.{}, &limit, io);
+    try search.searchTree(&tree, repo, &.{}, io);
 
     var hits: ArrayList(S.SearchFlavor.File) = try .initCapacity(search.alloc, file_list.items.len);
     for (file_list.items) |hit| {
@@ -1167,6 +1182,7 @@ test Search {
         .alloc = std.testing.allocator,
         .depth = .deep,
         .string = "repo:srctree owner:grayhatter verse",
+        .quota = 800_000,
         .rules = .{
             .items = @constCast(&[_]Rule{
                 .{ .rule = .{ .repo = "srctree" } },
@@ -1189,6 +1205,7 @@ test Search {
         .alloc = std.testing.allocator,
         .depth = .quick,
         .string = "srctree",
+        .quota = 100_000,
         .rules = .{
             .items = @constCast(&[_]Rule{
                 .{ .rule = .{ .raw = "srctree" } },
