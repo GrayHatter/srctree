@@ -72,18 +72,8 @@ pub fn currentPathAlloc(a: Allocator, io: Io) ![]u8 {
     return storage_dir.realPathFileAlloc(io, ".", a) catch return error.OutOfMemory;
 }
 
-pub fn init(dir: Storage, io: Io) !void {
+pub fn init(dir: Storage, _: Io) !void {
     storage_dir = dir;
-    inline for (.{
-        Artifact, CI,      Delta,  Diff, Gist,
-        Message,  Network, Thread, User, Viewers,
-    }) |inc| {
-        if (@hasDecl(inc, "initType") and @hasDecl(inc, "TYPE_PREFIX")) {
-            try inc.initType(try dir.createDirPathOpen(io, inc.TYPE_PREFIX, .{
-                .open_options = .{ .iterate = true },
-            }));
-        }
-    }
 }
 
 pub fn raze(io: Io) void {
