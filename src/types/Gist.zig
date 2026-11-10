@@ -22,7 +22,6 @@ pub const File = struct {
 
     pub const type_prefix = .gist_file;
     pub const type_version = 0;
-    pub const type_skip_fields: [1][]const u8 = .{"blob"};
 
     const TypeIo = types.TypedIo(File);
 
@@ -72,7 +71,7 @@ pub const File = struct {
     }
 
     pub fn commit(file: *const File, io: Io) !void {
-        var writer = try File.TypeIo.commitExtra(file, io);
+        var writer = try File.TypeIo.commitExtraSkip(file, io, &.{"blob"});
         defer writer.file.close(io);
         var w_b: [2048]u8 = undefined;
         writer.interface.buffer = &w_b;

@@ -243,12 +243,20 @@ pub fn TypedIo(BaseType: type) type {
         }
 
         pub fn write(t: *const BaseType, w: *Writer) error{WriteFailed}!void {
+            return writeSkip(t, w, &.{});
+        }
+
+        pub fn writeSkip(
+            t: *const BaseType,
+            w: *Writer,
+            comptime skips: []const []const u8,
+        ) error{WriteFailed}!void {
             log.debug("writing '{s}'", .{@typeName(BaseType)});
             if (@hasDecl(BaseType, "type_prefix") and @hasDecl(BaseType, "type_version")) {
                 try w.print("# {s}/{d}\n", .{ @tagName(BaseType.type_prefix), BaseType.type_version });
             }
 
-            try writeStruct(BaseType, t, "", w);
+            try writeStruct(BaseType, t, "", skips, w);
             try w.writeAll("\n");
             try w.flush();
         }
@@ -281,11 +289,20 @@ pub fn TypedIo(BaseType: type) type {
 
         /// Doesn't close file descriptor
         pub fn commitExtra(data: *const BaseType, io: Io) CommitError!Io.File.Writer {
+            return commitExtraSkip(data, io, &.{});
+        }
+
+        /// Doesn't close file descriptor
+        pub fn commitExtraSkip(
+            data: *const BaseType,
+            io: Io,
+            comptime skips: []const []const u8,
+        ) CommitError!Io.File.Writer {
             const file = createFile(data, io) catch return error.FSError;
 
             var buf: [2048]u8 = undefined;
             var writer = file.writer(io, &buf);
-            write(data, &writer.interface) catch @panic("TODO");
+            writeSkip(data, &writer.interface, skips) catch @panic("TODO");
             try writer.interface.flush();
             writer.interface.buffer = &.{};
             return writer;
@@ -424,15 +441,28 @@ pub fn TypedIo(BaseType: type) type {
             }
         }
 
-        fn writeStruct(T: type, t: *const T, comptime name: []const u8, w: *Writer) error{WriteFailed}!void {
+        fn omitable(name: []const u8, omits: []const []const u8) bool {
+            inline for (omits) |omit| {
+                if (eql(u8, name, omit)) return true;
+            }
+            return false;
+        }
+
+        fn writeStruct(
+            T: type,
+            t: *const T,
+            comptime name: []const u8,
+            comptime omits: []const []const u8,
+            w: *Writer,
+        ) error{WriteFailed}!void {
             const S = @typeInfo(T).@"struct";
-            all: inline for (S.field_names, S.field_types) |fname, ftype| {
+            inline for (S.field_names, S.field_types) |fname, ftype| {
                 // TODO remove this hack
-                if (comptime @hasDecl(BaseType, "type_skip_fields")) {
-                    inline for (BaseType.type_skip_fields) |skip| {
-                        if (comptime eql(u8, skip, fname)) continue :all;
-                    }
-                }
+                if (comptime @hasDecl(BaseType, "type_skip_fields"))
+                    @compileError("remove type skip hack");
+
+                if (comptime omitable(fname, omits)) continue;
+
                 if (name.len > 0) try w.writeAll(name ++ ".");
 
                 const src = &@field(t, fname);
@@ -503,7 +533,7 @@ pub fn TypedIo(BaseType: type) type {
                         .@"struct" => {
                             if (custom_types.contains(ftype)) {
                                 const prefix = if (name.len > 0) name ++ "." ++ fname else fname;
-                                try writeStruct(ftype, src, prefix, w);
+                                try writeStruct(ftype, src, prefix, omits, w);
                             } else if (comptime type_debugging) log.err(
                                 "building {s} writer skipped `{s}: {s}` (not enabled)",
                                 .{ @typeName(T), fname, @typeName(ftype) },

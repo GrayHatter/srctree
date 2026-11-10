@@ -15,7 +15,6 @@ pub const empty: Step = .{ .index = 0, .ci_index = 0 };
 
 pub const type_prefix = .ci_step;
 pub const type_version = 0;
-pub const type_skip_fields: [1][]const u8 = .{"payload"};
 
 const TypeIo = types.TypedIo(Step);
 
@@ -53,7 +52,7 @@ pub fn open(index: usize, a: Allocator, io: Io) !Step {
 }
 
 pub fn commit(step: *const Step, io: Io) !void {
-    var writer = try TypeIo.commitExtra(step, io);
+    var writer = try TypeIo.commitExtraSkip(step, io, &.{"payload"});
     defer writer.file.close(io);
     var w_b: [4096]u8 = undefined;
     writer.interface.buffer = &w_b;

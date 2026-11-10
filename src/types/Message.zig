@@ -34,7 +34,6 @@ pub const Kind = enum(u16) {
 
 pub const type_prefix = .messages;
 pub const type_version = 0;
-pub const type_skip_fields: [1][]const u8 = .{"message"};
 
 const TypeIo = types.TypedIo(Message);
 
@@ -60,7 +59,7 @@ pub fn new(kind: Kind, tid: usize, author: []const u8, message: []const u8, io: 
 }
 
 pub fn commit(msg: *const Message, io: Io) !void {
-    var writer = try TypeIo.commitExtra(msg, io);
+    var writer = try TypeIo.commitExtraSkip(msg, io, &.{"message"});
     defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;
     writer.interface.buffer = &w_b;
@@ -145,7 +144,8 @@ test "comment" {
         filename,
     );
 
-    try TypeIo.commit(&c, io);
+    const w = try TypeIo.commitExtraSkip(&c, io, &.{"message"});
+    defer w.file.close(io);
 
     const reader = try TypeIo.loadData(&c, a, io);
     defer reader.file.close(io);
@@ -180,7 +180,7 @@ test Message {
     defer tempdir.cleanup();
     try types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
 
-    var c = try Message.new(.comment, 0, "author", "message", io);
+    var c = try Message.new(.comment, 0, "author", "this is the full message", io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
@@ -190,19 +190,10 @@ test Message {
     c.hash = @splat(0);
     _ = c.genHash();
     try c.commit(io);
-    var writer = std.Io.Writer.Allocating.init(a);
-    defer writer.deinit();
-    try TypeIo.write(&c, &writer.writer);
-
-    var b: [4086]u8 = undefined;
-    var fba: std.heap.FixedBufferAllocator = .init(&b);
-    const aa = fba.allocator();
-    const new_ut = try Message.open(c.hash, aa, io);
-    try std.testing.expectEqualDeep(c, new_ut);
 
     const v0_text =
         \\# messages/0
-        \\hash: 0cd7f83061495c5f82703d436a18d8d7545fd64d1c8d5c109539c216f72b7859
+        \\hash: 962d2f6dbe47041b81219edb326a4ea7a83af380dffc89442a53ad0780c0acac
         \\state.closed: false
         \\state.draft: false
         \\state.embargoed: false
@@ -216,10 +207,22 @@ test Message {
         \\author: author
         \\extra0: 0
         \\
-        \\message
+        \\this is the full message
     ;
 
+    var b: [4086]u8 = undefined;
+    var fba: std.heap.FixedBufferAllocator = .init(&b);
+    const aa = fba.allocator();
+    const new_ut = try Message.open(c.hash, aa, io);
+    try std.testing.expectEqualDeep(c, new_ut);
+
     try std.testing.expectEqualStrings(v0_text, b[0..v0_text.len]);
+
+    const v0_text_min = v0_text[0 .. v0_text.len - 24];
+    var writer = std.Io.Writer.Allocating.init(a);
+    defer writer.deinit();
+    try TypeIo.writeSkip(&c, &writer.writer, &.{"message"});
+    try std.testing.expectEqualStrings(v0_text_min, writer.writer.buffered());
 }
 
 const std = @import("std");
