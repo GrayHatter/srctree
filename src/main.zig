@@ -13,6 +13,7 @@ pub const std_options: std.Options = .{
         .{ .scope = .srctypes, .level = .info },
         .{ .scope = .types_search, .level = .info },
         .{ .scope = .search, .level = .info },
+        .{ .scope = .ci, .level = .info },
     },
 };
 

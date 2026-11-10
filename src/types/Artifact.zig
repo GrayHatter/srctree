@@ -1,11 +1,8 @@
-index: usize,
 repo: []const u8,
-filename: []const u8,
+commit_sha: GitSha = .zeros,
 state: State = .default,
 created: i64 = 0,
 updated: i64 = 0,
-source_commit_hash: Hash = @splat(0),
-artifact_hash: Hash = @splat(0),
 blob: []u8 = &.{},
 
 const Artifact = @This();
@@ -18,7 +15,8 @@ const State = @import("common.zig").State;
 const TypeIo = types.TypedIo(Artifact);
 
 pub fn typeIdent(a: Artifact, w: *Io.Writer) !void {
-    try w.print("{d}", .{a.index});
+    std.debug.assert(a.repo.len > 0);
+    try w.print("{s}.{f}", .{ a.repo, std.fmt.alt(a.commit_sha, .fmtHex) });
 }
 
 pub const blank: Artifact = .{
@@ -27,20 +25,15 @@ pub const blank: Artifact = .{
     .repo = &.{},
 };
 
-pub fn new(repo: []const u8, filename: []const u8, blob: []u8, src_hash: Hash, io: Io) !Artifact {
-    const idx: usize = try TypeIo.Index.scoped.next(repo, io);
+pub fn new(repo: []const u8, sha: GitSha, io: Io) !Artifact {
     const now = Io.Clock.real.now(io).toSeconds();
     var art = Artifact{
-        .index = idx,
         .repo = repo,
-        .filename = filename,
+        .commit_sha = sha,
         .state = .default,
         .created = now,
         .updated = now,
-        .source_commit_hash = src_hash,
-        .blob = blob,
     };
-    art.genHash();
     try art.commit(io);
     return art;
 }
@@ -59,14 +52,11 @@ pub fn commit(art_: *const Artifact, io: Io) !void {
     try writer.interface.flush();
 }
 
-pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Artifact {
-    const max = TypeIo.Index.scoped.current(repo, io) catch return error.FSFault;
-    if (index > max) return error.DeltaDoesNotExist;
-
+pub fn open(repo: []const u8, sha: GitSha, a: Allocator, io: Io) !Artifact {
     var artifact: Artifact = .blank;
 
-    artifact.index = index;
     artifact.repo = repo;
+    artifact.commit_sha = sha;
 
     var reader = TypeIo.loadData(&artifact, a, io) catch return error.FSFault;
     defer reader.file.close(io);
@@ -78,10 +68,6 @@ pub fn open(repo: []const u8, index: usize, a: Allocator, io: Io) !Artifact {
     }
 }
 
-pub fn genHash(art: *Artifact) void {
-    Sha256.hash(art.blob, &art.artifact_hash, .{});
-}
-
 test Artifact {
     const a = std.testing.allocator;
     const io = std.testing.io;
@@ -89,8 +75,7 @@ test Artifact {
     defer tempdir.cleanup();
     try types.init((try tempdir.dir.createDirPathOpen(io, "datadir", .{ .open_options = .{ .iterate = true } })), io);
 
-    var art = try Artifact.new("srctree", "blob.txt", @constCast("this is the blob"), @splat('A'), io);
-    art.index = 0x10;
+    var art = try Artifact.new("srctree", .{ .hash = .{ .sha1 = @splat('A') } }, io);
 
     // LOL, you thought
     const mask: i64 = ~@as(i64, 0x7ffffff);
@@ -104,9 +89,8 @@ test Artifact {
 
     const expected =
         \\# artifact/0
-        \\index: 16
         \\repo: srctree
-        \\filename: blob.txt
+        \\commit_sha: 4141414141414141414141414141414141414141
         \\state.closed: false
         \\state.draft: false
         \\state.embargoed: false
@@ -114,10 +98,8 @@ test Artifact {
         \\state.removed: false
         \\created: 1744830464
         \\updated: 1744830464
-        \\source_commit_hash: 4141414141414141414141414141414141414141414141414141414141414141
-        \\artifact_hash: 3b84182326903ab652731619f265f6e6000e168734ba53c248a3b8b3b802e49c
         \\
-        \\this is the blob
+        \\
     ;
 
     try std.testing.expectEqualStrings(expected, reader.interface.buffered());
@@ -132,6 +114,6 @@ const bufPrint = std.fmt.bufPrint;
 const asBytes = std.mem.asBytes;
 const find = std.mem.find;
 const parseInt = std.fmt.parseInt;
-const Hash = types.DefaultHash;
+const GitSha = types.GitSha;
 
 const types = @import("../types.zig");

@@ -117,13 +117,13 @@ pub fn raze(r: *Repo, a: Allocator, io: Io) void {
     r.ci.raze(a, io);
 }
 
-pub fn open(name: []const u8, vis: Vis.Select, io: Io) !?Repo {
-    if (!Vis.fromConfig(name).isVisible(vis)) return null;
+pub fn open(name: []const u8, vis: Vis.Select, io: Io) !Repo {
+    if (!Vis.fromConfig(name).isVisible(vis)) return error.NotFound;
     var root = try dirs.directory(.public, io);
     defer root.close(io);
     const dir = root.openDir(io, name, .{}) catch |err| switch (err) {
-        error.FileNotFound => return null,
-        error.NotDir => return null,
+        error.FileNotFound => return error.NotFound,
+        error.NotDir => return error.NotFound,
         else => return err,
     };
     return try .init(name, dir, io);

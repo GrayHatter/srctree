@@ -2,6 +2,12 @@ hash: Hash,
 
 const Sha = @This();
 
+pub const empty: Sha = .{ .hash = .{ .sha1 = @splat(0) } };
+pub const zeros: Sha = .{ .hash = .{ .sha1 = @splat(0) } };
+pub const sha2_empty: Sha = .{ .hash = .{ .sha256 = @splat(0) } };
+pub const sha1_ff: Sha = .{ .hash = .{ .sha1 = @splat(0xff) } };
+pub const sha2_ff: Sha = .{ .hash = .{ .sha256 = @splat(0xff) } };
+
 pub const Partial = struct {
     bytes: [31]u8,
     /// Unfortunately Git thinks returning 7 ascii is reasonable;
@@ -145,12 +151,6 @@ pub const Text = union(enum) {
         }
     }
 };
-
-pub const empty: Sha = .{ .hash = .{ .sha1 = @splat(0) } };
-pub const zeros: Sha = .{ .hash = .{ .sha1 = @splat(0) } };
-pub const sha2_empty: Sha = .{ .hash = .{ .sha256 = @splat(0) } };
-pub const sha1_ff: Sha = .{ .hash = .{ .sha1 = @splat(0xff) } };
-pub const sha2_ff: Sha = .{ .hash = .{ .sha256 = @splat(0xff) } };
 
 pub fn init(sha: []const u8) Sha {
     return switch (sha.len) {

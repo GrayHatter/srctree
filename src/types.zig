@@ -22,6 +22,9 @@ pub const Sha1Bin = [20]u8;
 pub const Sha256Hex = [64]u8;
 pub const Sha256Bin = [32]u8;
 
+// Reexposed in case it needs to become an "internal type"
+pub const GitSha = git.Sha;
+
 pub const Timestamp = i64;
 
 pub const Storage = Io.Dir;
@@ -370,6 +373,7 @@ pub fn TypedIo(BaseType: type) type {
                         User.Type => dst.* = stringToEnum(ftype, value) orelse dst.*,
                         CI.Step => dst.* = stringToEnum(ftype, value) orelse dst.*,
                         CI.Result => dst.* = stringToEnum(ftype, value) orelse dst.*,
+                        GitSha => dst.* = .init(value),
 
                         std.debug.SafetyLock => unreachable,
                         std.debug.SafetyLock.State => unreachable,
@@ -485,6 +489,7 @@ pub fn TypedIo(BaseType: type) type {
                     User.Type => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
                     CI.Step => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
                     CI.Result => try w.print("{s}: {s}\n", .{ fname, @tagName(src.*) }),
+                    GitSha => try w.print("{s}: {f}\n", .{ fname, std.fmt.alt(src.*, .fmtHex) }),
 
                     ?Io.File,
                     ?Io.Writer,

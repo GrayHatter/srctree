@@ -18,13 +18,24 @@ pub fn router(f: *Frame) Router.RoutingError!Router.BuildFn {
 }
 
 fn status(f: *Frame) Error!void {
-    _ = RouteData.init(f) orelse return error.ServerFault;
+    const rd = RouteData.init(f) orelse return error.ServerFault;
+
+    var repo = Repo.open(rd.name, .public_only, f.io) catch unreachable;
+    repo.git.loadData(f.alloc, f.io) catch unreachable;
+    const head = repo.git.HEAD(f.alloc, f.io) catch unreachable;
+    _ = repo.ci.status(f.alloc, f.io) catch unreachable;
+    _ = repo.ci.prepare(f.io) catch unreachable;
+    var results = repo.ci.run(&head, f.alloc, f.io) catch unreachable;
+    defer results.raze();
+
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
     var page = BuildPage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
-        .build_output = .safe("build status"),
+        .build_output = .safe(results.build.err.written()),
+        .test_output = .safe(results.tests.err.written()),
+        .docs_output = .safe(results.docs.err.written()),
     });
 
     try f.sendPage(&page);

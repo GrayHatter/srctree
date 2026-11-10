@@ -81,7 +81,19 @@ pub fn prepare(ci: *Ci, io: Io) !void {
     } else return error.ConfigMissing;
 }
 
-pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
+pub const RunResults = struct {
+    build: Source.Stdio,
+    tests: Source.Stdio,
+    docs: Source.Stdio,
+
+    pub fn raze(rr: *RunResults) void {
+        rr.build.raze();
+        rr.tests.raze();
+        rr.docs.raze();
+    }
+};
+
+pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !RunResults {
     const repo: *Repo = @fieldParentPtr("ci", ci);
     if (!ci.enabled) return error.Disabled;
     // load instructions
@@ -100,15 +112,13 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !void {
     try ci.cache.inject(ci.source.dir, a, io);
     defer ci.cache.backup(ci.source.dir, a, io);
 
-    try ci.artifacts.init(ci.source.dir, commit.sha, a, io);
-    defer ci.artifacts.save(a, io);
-
     try ci.source.setup(a, io);
-    try ci.source.buildMain(a, io);
-    try ci.source.buildTests(a, io);
-    try ci.source.buildDocs(a, io);
+    const rr = ci.source.buildAll(a, io);
 
-    // save build output
+    try ci.artifacts.init(ci.source.dir, commit.sha, a, io);
+    _ = try ci.artifacts.saveAll(a, io);
+
+    return rr;
 }
 
 pub fn raze(ci: *Ci, a: Allocator, io: Io) void {
@@ -130,6 +140,16 @@ pub const Artifacts = struct {
     src: Io.Dir = undefined,
     sha: git.Sha = undefined,
 
+    pub const Output = struct {
+        files: ArrayList([]u8) = .empty,
+        prefix: []const u8 = &.{},
+
+        pub fn append(out: *Output, a: Allocator, name: []const u8) !void {
+            const pathname = try a.print("{s}{s}", .{ out.prefix, name });
+            try out.files.append(a, pathname);
+        }
+    };
+
     pub fn init(art: *Artifacts, src_dir: Io.Dir, sha: git.Sha, _: Allocator, _: Io) !void {
         art.* = .{
             .src = src_dir,
@@ -137,35 +157,71 @@ pub const Artifacts = struct {
         };
     }
 
-    pub fn save(art: *Artifacts, a: Allocator, io: Io) void {
-        const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
+    pub fn saveAll(art: *Artifacts, a: Allocator, io: Io) !Output {
+        log.info("Artifacts saveAll", .{});
+        //const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
         //const repo: *Repo = @fieldParentPtr("ci", ci);
-        if (ci.zon_conf.?.srctree) |zon| {
-            if (zon.docs) |_| art.saveDocs(a, io);
+        const output: Output = .{};
+
+        if (art.src.openDir(io, "zig-out", .{ .iterate = true })) |zig_out| {
+            defer zig_out.close(io);
+            var walker = try zig_out.walk(a);
+            defer walker.deinit();
+            while (walker.next(io)) |next| {
+                const dir = next orelse break;
+
+                log.warn("walker '{s}' '{s}'", .{ dir.basename, dir.path });
+                //output.append(a,);
+
+            } else |_| {}
+            try art.saveDocs(zig_out, a, io);
+            try art.saveBin(a, io);
+            try art.saveLib(a, io);
+        } else |err| switch (err) {
+            error.NotDir => log.err("unable to open `zig-out' {}", .{err}),
+
+            error.Canceled => return error.Canceled,
+            error.SystemResources => unreachable,
+            error.AccessDenied => unreachable,
+            error.Unexpected => unreachable,
+            error.PermissionDenied => unreachable,
+            error.NoDevice => unreachable,
+            error.ProcessFdQuotaExceeded => unreachable,
+            error.SystemFdQuotaExceeded => unreachable,
+            error.SymLinkLoop => unreachable,
+            error.FileNotFound => unreachable,
+            error.NetworkNotFound => unreachable,
+            error.NameTooLong => unreachable,
+            error.BadPathName => unreachable,
         }
+
+        return output;
     }
 
-    fn saveDocs(art: *Artifacts, _: Allocator, io: Io) void {
-        const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
-        const repo: *Repo = @fieldParentPtr("ci", ci);
-        const zig_out = art.src.openDir(io, "zig-out", .{}) catch |err| {
-            if (err != error.NotDir)
-                log.err("unable to open `zig-out' {}", .{err});
-            return;
-        };
-        _ = zig_out.statFile(io, "docs", .{}) catch |err| {
+    fn saveDocs(_: *Artifacts, zig_out: Io.Dir, _: Allocator, io: Io) !void {
+        log.info("Artifacts saveDocs", .{});
+        //const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
+        //const repo: *Repo = @fieldParentPtr("ci", ci);
+        const stat = zig_out.statFile(io, "docs", .{}) catch |err| {
             log.err("Unable to stat docs {}", .{err});
             return;
         };
+        log.err("stat {any}", .{stat});
+    }
 
-        _ = repo;
-        unreachable; // TODO
-        //const dest = types.TypedIo(types.Artifact).iterableDir(.artifiact, io) catch unreachable;
-        //const repo_dir = dest.createDirPathOpen(io, repo.name.?, .{}) catch unreachable;
-        //zig_out.renamePreserve("docs", repo_dir, "docs", io) catch |err| {
-        //    if (err == error.NotDir) return; // expected
-        //    log.err("unable to inject cache {}", .{err});
-        //};
+    fn saveBin(art: *Artifacts, _: Allocator, _: Io) !void {
+        log.info("Artifacts saveBin", .{});
+        _ = art;
+    }
+
+    fn saveLib(art: *Artifacts, _: Allocator, _: Io) !void {
+        log.info("Artifacts saveLib", .{});
+        _ = art;
+    }
+
+    fn saveOther(art: *Artifacts, other: []const u8, _: Allocator, _: Io) !void {
+        log.info("Artifacts saveOther '{s}'", .{other});
+        _ = art;
     }
 };
 
@@ -173,6 +229,23 @@ pub const Source = struct {
     dir: Io.Dir = undefined,
     commit: *const git.Commit = undefined,
     tree: git.Tree = undefined,
+
+    pub const Stdio = struct {
+        out: Io.Writer.Allocating,
+        err: Io.Writer.Allocating,
+
+        pub fn init(a: Allocator) Stdio {
+            return .{
+                .out = .init(a),
+                .err = .init(a),
+            };
+        }
+
+        pub fn raze(sio: *Stdio) void {
+            sio.out.deinit();
+            sio.err.deinit();
+        }
+    };
 
     pub fn init(src: *Source, name: []const u8, commit: *const git.Commit, a: Allocator, io: Io) !void {
         const ci: *Ci = @fieldParentPtr("source", src);
@@ -196,6 +269,7 @@ pub const Source = struct {
     pub fn checkout(src: *Source, a: Allocator, io: Io) !void {
         const ci: *Ci = @fieldParentPtr("source", src);
         const r: *Repo = @fieldParentPtr("ci", ci);
+        log.info("Source Checkout", .{});
         try src.tree.checkout(src.dir, &r.git, a, io);
     }
 
@@ -205,34 +279,43 @@ pub const Source = struct {
         _ = io;
     }
 
-    pub fn buildMain(src: *Source, a: Allocator, io: Io) !void {
-        var stdout: Io.Writer.Allocating = .init(a);
-        var stderr: Io.Writer.Allocating = .init(a);
-        defer stdout.deinit();
-        defer stderr.deinit();
-        try src.exec(&.{ "zig", "build", "--summary", "all" }, &stdout.writer, &stderr.writer, null, a, io);
-        std.debug.print("stdout: '{s}'\n", .{stdout.written()});
-        std.debug.print("stderr: '{s}'\n", .{stderr.written()});
+    pub fn buildAll(src: *Source, a: Allocator, io: Io) !RunResults {
+        const mbuild = try src.buildMain(a, io);
+        const tests = try src.buildTests(a, io);
+        const docs = try src.buildDocs(a, io);
+        // save build output
+        return .{
+            .build = mbuild,
+            .tests = tests,
+            .docs = docs,
+        };
     }
 
-    pub fn buildTests(src: *Source, a: Allocator, io: Io) !void {
-        var stdout: Io.Writer.Allocating = .init(a);
-        var stderr: Io.Writer.Allocating = .init(a);
-        defer stdout.deinit();
-        defer stderr.deinit();
-        try src.exec(&.{ "zig", "build", "--summary", "all", "test" }, &stdout.writer, &stderr.writer, null, a, io);
-        std.debug.print("stdout: '{s}'\n", .{stdout.written()});
-        std.debug.print("stderr: '{s}'\n", .{stderr.written()});
+    pub fn buildMain(src: *Source, a: Allocator, io: Io) !Stdio {
+        log.info("CI.Source buildMain", .{});
+        var stdio: Stdio = .init(a);
+        try src.exec(&.{ "zig", "build", "--summary", "all" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
+        log.debug("stdout: '{s}'", .{stdio.out.written()});
+        log.debug("stderr: '{s}'", .{stdio.err.written()});
+        return stdio;
     }
 
-    pub fn buildDocs(src: *Source, a: Allocator, io: Io) !void {
-        var stdout: Io.Writer.Allocating = .init(a);
-        var stderr: Io.Writer.Allocating = .init(a);
-        defer stdout.deinit();
-        defer stderr.deinit();
-        try src.exec(&.{ "zig", "build", "--summary", "all", "docs" }, &stdout.writer, &stderr.writer, null, a, io);
-        std.debug.print("stdout: '{s}'\n", .{stdout.written()});
-        std.debug.print("stderr: '{s}'\n", .{stderr.written()});
+    pub fn buildTests(src: *Source, a: Allocator, io: Io) !Stdio {
+        log.info("CI.Source buildTests", .{});
+        var stdio: Stdio = .init(a);
+        try src.exec(&.{ "zig", "build", "--summary", "all", "test" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
+        log.debug("stdout: '{s}'", .{stdio.out.written()});
+        log.debug("stderr: '{s}'", .{stdio.err.written()});
+        return stdio;
+    }
+
+    pub fn buildDocs(src: *Source, a: Allocator, io: Io) !Stdio {
+        log.info("CI.Source buildDocs", .{});
+        var stdio: Stdio = .init(a);
+        try src.exec(&.{ "zig", "build", "--summary", "all", "docs" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
+        log.debug("stdout: '{s}'", .{stdio.out.written()});
+        log.debug("stderr: '{s}'", .{stdio.err.written()});
+        return stdio;
     }
 
     pub fn raze(src: *Source, a: Allocator, io: Io) void {
@@ -314,6 +397,7 @@ pub const Cache = struct {
     }
 
     pub fn inject(c: *Cache, dest_dir: Io.Dir, _: Allocator, io: Io) !void {
+        log.info("CI.Cache inject", .{});
         if (!Cache.enabled()) return;
         c.dir.renamePreserve("zig-cache", dest_dir, ".zig-cache", io) catch |err| {
             if (err == error.NotDir) return; // expected
@@ -322,6 +406,7 @@ pub const Cache = struct {
     }
 
     pub fn backup(c: *Cache, src_dir: Io.Dir, _: Allocator, io: Io) void {
+        log.info("CI.Cache backup", .{});
         if (!Cache.enabled()) return;
         _ = src_dir.statFile(io, ".zig-cache", .{}) catch |err| {
             log.err("Unable to stat cache dir {}", .{err});

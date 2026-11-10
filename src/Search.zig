@@ -790,7 +790,7 @@ pub fn populateRepos(search: *Search, vis: Repo.Visibility.Select, io: Io) !void
     for (search.rules.items) |r| switch (r.rule) {
         .repo => |name| {
             if (r.invert) continue;
-            var repo = (Repo.open(name, vis, io) catch continue) orelse continue;
+            var repo = Repo.open(name, vis, io) catch continue;
             repo.name = search.alloc.dupe(u8, name) catch null;
             try search.repos.append(search.alloc, repo);
         },

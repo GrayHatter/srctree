@@ -11,14 +11,14 @@ const ArtifactsHtml = T.Page("repo/artifacts.html");
 fn list(f: *Frame) Router.Error!void {
     const rd = RouteData.init(f) orelse return error.NotFound;
     const vis: Repo.Visibility.Select = if (f.user) |_| .all else .public_only;
-    var repo = (Repo.open(rd.name, vis, f.io) catch return error.ServerFault) orelse return error.NotFound;
+    var repo = (Repo.open(rd.name, vis, f.io) catch return error.ServerFault);
     repo.git.loadData(f.alloc, f.io) catch return error.ServerFault;
 
     if (repo.ci.status(f.alloc, f.io) catch unreachable) {
         repo.ci.prepare(f.io) catch unreachable;
         var commit = repo.git.HEAD(f.alloc, f.io) catch unreachable;
         defer commit.raze(f.alloc);
-        repo.ci.run(&commit, f.alloc, f.io) catch unreachable;
+        _ = repo.ci.run(&commit, f.alloc, f.io) catch unreachable;
     }
 
     const body_header: T.Structs.BodyHeaderHtml = f.template_data.get(T.Structs.BodyHeaderHtml).?.*;
