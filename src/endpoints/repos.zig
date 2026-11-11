@@ -343,7 +343,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
             if (srctree.pinned orelse false) repo_class = null;
         }
     }
-    const status = repo.ci.status(a, io) catch unreachable;
+    const status = repo.ci.status(a, io) catch false;
 
     const commit_uri = try a.print("/repo/{s}/commit/{f}", .{ name, std.fmt.alt(sha, .fmtHex) });
     const sha_str = try sha.text().dupe(a);
@@ -359,7 +359,7 @@ fn repoBlock(name: []const u8, repo: *Repo, a: Allocator, io: Io) !S.ReposHtml.R
         .updated = .safe(updated),
         .tag_blk = tag,
         .svg_points = try cachedSvgPoints(repo, a, io),
-        .ci_status = if (status) .broken else .disabled,
+        .ci_status = if (status) .success else .disabled,
     };
 }
 

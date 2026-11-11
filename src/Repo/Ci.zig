@@ -37,8 +37,7 @@ pub fn status(ci: *Ci, a: Allocator, io: Io) !bool {
     const commit = try repo.git.HEAD(a, io); // empty or broken repo
     defer commit.raze(a);
 
-    if (types.CI.open(repo.name.?, commit.sha, a, io)) |saved| {
-        log.err("saved {any}", .{saved});
+    if (types.CI.open(repo.name.?, commit.sha, a, io)) |_| {
         return true;
     } else |_| {}
 
@@ -118,13 +117,11 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !RunResults
     const repo: *Repo = @fieldParentPtr("ci", ci);
 
     if (types.CI.open(repo.name.?, commit.sha, a, io)) |saved| {
-        log.err("saved {any}", .{saved});
         return .{ .saved = saved };
     } else |_| if (!ci.enabled) return error.Disabled;
 
     var saved = try types.CI.new(repo.name.?, "undefined", commit.sha, io);
     defer saved.commit(io) catch {};
-    log.err("new ci {any}", .{saved});
 
     try ci.source.init(repo.name.?, commit, a, io);
     defer ci.source.raze(a, io);
