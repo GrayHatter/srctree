@@ -446,7 +446,10 @@ pub const Source = struct {
             return err;
         };
 
-        return term.exited == 0;
+        return switch (term) {
+            .exited => |t| t == 0,
+            else => false,
+        };
     }
 };
 
