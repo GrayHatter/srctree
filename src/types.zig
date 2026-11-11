@@ -87,14 +87,16 @@ pub fn split(line: []u8) ?struct { []u8, [:'\n']u8 } {
 
 pub const CommitError = error{
     Canceled,
-    FSError,
+    OtherFileSystem,
     NoSpaceLeft,
     WriteFailed,
 };
 
 pub const ReadError = error{
+    Canceled,
     EndOfStream,
-    FSError,
+    NotFound,
+    OtherFileSystem,
     OutOfMemory,
     ReadFailed,
 };
@@ -138,7 +140,7 @@ pub fn TypedIo(BaseType: type) type {
                     error.FileNotFound => return new(io),
                     else => {
                         log.err(@typeName(BaseType) ++ ".Index.scoped.next not found {}", .{err});
-                        return error.FSError;
+                        return error.OtherFileSystem;
                     },
                 };
                 defer index_file.close(io);
@@ -155,7 +157,7 @@ pub fn TypedIo(BaseType: type) type {
 
                 var index_file = openIndexFile(io) catch |err| idxf: {
                     log.info(@typeName(BaseType) ++ ".Index.next failed {}", .{err});
-                    break :idxf createIndexFile(io) catch return error.FSError;
+                    break :idxf createIndexFile(io) catch return error.OtherFileSystem;
                 };
                 defer index_file.close(io);
                 var r_b: [10]u8 = undefined;
@@ -199,7 +201,7 @@ pub fn TypedIo(BaseType: type) type {
                         error.FileNotFound => return scoped.new(scope, io),
                         else => {
                             log.err(@typeName(BaseType) ++ ".Index.scoped.next not found {}", .{err});
-                            return error.FSError;
+                            return error.OtherFileSystem;
                         },
                     };
                     defer index_file.close(io);
@@ -224,7 +226,7 @@ pub fn TypedIo(BaseType: type) type {
                         },
                         else => {
                             log.err(@typeName(BaseType) ++ ".Index.next failed {}", .{err});
-                            return error.FSError;
+                            return error.OtherFileSystem;
                         },
                     };
                     defer index_file.close(io);
@@ -269,11 +271,42 @@ pub fn TypedIo(BaseType: type) type {
 
         pub fn loadData(data: *const BaseType, a: Allocator, io: Io) ReadError!Io.File.Reader {
             log.debug("loadData '{s}'", .{@typeName(BaseType)});
-            const file = openFile(data, io) catch |err| {
-                log.debug(@typeName(BaseType) ++ " loadData failed: {}", .{err});
-                return error.FSError;
+            const file = openFile(data, io) catch |e| switch (e) {
+                error.BadPathName,
+                error.AccessDenied,
+                error.FileNotFound,
+                error.PermissionDenied,
+                => return error.NotFound,
+                error.Canceled => return error.Canceled,
+                error.AntivirusInterference,
+                error.DeviceBusy,
+                error.DiskQuota,
+                error.FileBusy,
+                error.FileLocksUnsupported,
+                error.FileTooBig,
+                error.IsDir,
+                error.LinkQuotaExceeded,
+                error.NameTooLong,
+                error.NetworkNotFound,
+                error.NoDevice,
+                error.NoSpaceLeft,
+                error.NotDir,
+                error.PathAlreadyExists,
+                error.PipeBusy,
+                error.ProcessFdQuotaExceeded,
+                error.ReadOnlyFileSystem,
+                error.Streaming,
+                error.SymLinkLoop,
+                error.SystemFdQuotaExceeded,
+                error.SystemResources,
+                error.Unexpected,
+                error.WouldBlock,
+                => {
+                    log.err(@typeName(BaseType) ++ " loadData failed: {}", .{e});
+                    return error.OtherFileSystem;
+                },
             };
-            const stat = file.stat(io) catch return error.FSError;
+            const stat = file.stat(io) catch return error.OtherFileSystem;
             const buf = try a.alloc(u8, stat.size);
             errdefer a.free(buf);
             log.debug("loadData alloc '{}'", .{stat.size});
@@ -298,7 +331,7 @@ pub fn TypedIo(BaseType: type) type {
             io: Io,
             comptime skips: []const []const u8,
         ) CommitError!Io.File.Writer {
-            const file = createFile(data, io) catch return error.FSError;
+            const file = createFile(data, io) catch return error.OtherFileSystem;
 
             var buf: [2048]u8 = undefined;
             var writer = file.writer(io, &buf);

@@ -34,11 +34,18 @@ pub fn status(ci: *Ci, a: Allocator, io: Io) !bool {
     const repo: *Repo = @fieldParentPtr("ci", ci);
     ci.zon_arena = .init(a);
     ci.enabled = false;
-    const commit = repo.git.HEAD(a, io) catch return false; // empty or broken repo
+    const commit = try repo.git.HEAD(a, io); // empty or broken repo
     defer commit.raze(a);
+
+    if (types.CI.open(repo.name.?, commit.sha, a, io)) |saved| {
+        log.err("saved {any}", .{saved});
+        return true;
+    } else |_| {}
+
     const tree = try commit.loadTree(&repo.git, a, io);
     defer tree.raze(a);
     var itr = tree.iterate();
+
     while (itr.next()) |next| {
         if (eql(u8, next.name, "build.zig.zon")) {
             const blob = try repo.git.objects.load(next.sha, a, io);
@@ -81,26 +88,43 @@ pub fn prepare(ci: *Ci, io: Io) !void {
     } else return error.ConfigMissing;
 }
 
-pub const RunResults = struct {
-    build: Source.Stdio,
-    tests: Source.Stdio,
-    docs: Source.Stdio,
+pub const RunResults = union(enum) {
+    saved: types.CI,
+    active: struct {
+        build: Source.Stdio,
+        tests: Source.Stdio,
+        docs: Source.Stdio,
+    },
 
-    pub fn raze(rr: *RunResults) void {
-        rr.build.raze();
-        rr.tests.raze();
-        rr.docs.raze();
+    pub fn save(rr: *const RunResults, ci: *types.CI, a: Allocator, io: Io) !void {
+        try ci.addStep(try .new(ci, "build", rr.active.build.err.writer.buffered(), io), a);
+        try ci.addStep(try .new(ci, "tests", rr.active.tests.err.writer.buffered(), io), a);
+        try ci.addStep(try .new(ci, "docs", rr.active.docs.err.writer.buffered(), io), a);
+    }
+
+    pub fn raze(rr_: *RunResults) void {
+        switch (rr_.*) {
+            .saved => {},
+            .active => |*rr| {
+                rr.build.raze();
+                rr.tests.raze();
+                rr.docs.raze();
+            },
+        }
     }
 };
 
 pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !RunResults {
     const repo: *Repo = @fieldParentPtr("ci", ci);
-    if (!ci.enabled) return error.Disabled;
-    // load instructions
-    try ci.validate(a, io);
 
-    var ci_res = try types.CI.new(repo.name.?, "[undefined]", types.shaToHash(commit.sha), io);
-    _ = &ci_res;
+    if (types.CI.open(repo.name.?, commit.sha, a, io)) |saved| {
+        log.err("saved {any}", .{saved});
+        return .{ .saved = saved };
+    } else |_| if (!ci.enabled) return error.Disabled;
+
+    var saved = try types.CI.new(repo.name.?, "undefined", commit.sha, io);
+    defer saved.commit(io) catch {};
+    log.err("new ci {any}", .{saved});
 
     try ci.source.init(repo.name.?, commit, a, io);
     defer ci.source.raze(a, io);
@@ -113,10 +137,12 @@ pub fn run(ci: *Ci, commit: *const git.Commit, a: Allocator, io: Io) !RunResults
     defer ci.cache.backup(ci.source.dir, a, io);
 
     try ci.source.setup(a, io);
-    const rr = ci.source.buildAll(a, io);
+    const rr = try ci.source.buildAll(a, io);
 
     try ci.artifacts.init(ci.source.dir, commit.sha, a, io);
     _ = try ci.artifacts.saveAll(a, io);
+
+    try rr.save(&saved, a, io);
 
     return rr;
 }
@@ -128,12 +154,6 @@ pub fn raze(ci: *Ci, a: Allocator, io: Io) void {
         arena.deinit();
         ci.zon_conf = null;
     }
-}
-
-pub fn validate(ci: *Ci, a: Allocator, io: Io) !void {
-    _ = ci;
-    _ = a;
-    _ = io;
 }
 
 pub const Artifacts = struct {
@@ -165,17 +185,28 @@ pub const Artifacts = struct {
 
         if (art.src.openDir(io, "zig-out", .{ .iterate = true })) |zig_out| {
             defer zig_out.close(io);
+            var size: usize = 0;
             var walker = try zig_out.walk(a);
             defer walker.deinit();
             while (walker.next(io)) |next| {
                 const dir = next orelse break;
-
                 log.warn("walker '{s}' '{s}'", .{ dir.basename, dir.path });
+                const stat = dir.dir.statFile(io, dir.basename, .{}) catch continue;
+                size += stat.size;
+                log.warn(
+                    "walker '{s}' {Bi: >1.0} ({Bi: >1.0})",
+                    .{ dir.path, stat.size, size },
+                );
                 //output.append(a,);
 
             } else |_| {}
+
+            if (zig_out.openDir(io, "bin", .{ .iterate = true })) |bin_dir| {
+                try art.saveBin(bin_dir, a, io);
+            } else |e| {
+                log.warn("unable to open zig-out/bin' {}", .{e});
+            }
             try art.saveDocs(zig_out, a, io);
-            try art.saveBin(a, io);
             try art.saveLib(a, io);
         } else |err| switch (err) {
             error.NotDir => log.err("unable to open `zig-out' {}", .{err}),
@@ -209,9 +240,36 @@ pub const Artifacts = struct {
         log.err("stat {any}", .{stat});
     }
 
-    fn saveBin(art: *Artifacts, _: Allocator, _: Io) !void {
+    fn saveBin(art: *Artifacts, bin_dir: Io.Dir, a: Allocator, io: Io) !void {
+        const ci: *Ci = @alignCast(@fieldParentPtr("artifacts", art));
+        const repo: *Repo = @fieldParentPtr("ci", ci);
         log.info("Artifacts saveBin", .{});
-        _ = art;
+
+        var size: usize = 0;
+        var walker = try bin_dir.walk(a);
+        defer walker.deinit();
+        while (walker.next(io)) |next| {
+            const dir = next orelse break;
+            log.warn("walker '{s}' '{s}'", .{ dir.basename, dir.path });
+            const stat = dir.dir.statFile(io, dir.basename, .{}) catch continue;
+            size += stat.size;
+            log.warn(
+                " bin walker '{s}' {Bi: >1.0} ({Bi: >1.0})",
+                .{ dir.path, stat.size, size },
+            );
+            if (eql(u8, dir.path, "srctree")) {
+                if (dir.dir.openFile(io, dir.basename, .{})) |file| {
+                    defer file.close(io);
+                    var r_b: [4096]u8 = undefined;
+                    var reader = file.reader(io, &r_b);
+
+                    var artifact: types.Artifact = try .new(repo.name.?, art.sha, io);
+                    try artifact.commit(&reader.interface, io);
+                } else |e| {
+                    log.err("Unable to save artifact {}", .{e});
+                }
+            }
+        } else |_| {}
     }
 
     fn saveLib(art: *Artifacts, _: Allocator, _: Io) !void {
@@ -231,8 +289,14 @@ pub const Source = struct {
     tree: git.Tree = undefined,
 
     pub const Stdio = struct {
+        success: bool = false,
         out: Io.Writer.Allocating,
         err: Io.Writer.Allocating,
+
+        pub const typed: Stdio = .{
+            .out = undefined,
+            .err = undefined,
+        };
 
         pub fn init(a: Allocator) Stdio {
             return .{
@@ -244,6 +308,14 @@ pub const Source = struct {
         pub fn raze(sio: *Stdio) void {
             sio.out.deinit();
             sio.err.deinit();
+        }
+
+        pub fn term(sio: Stdio, t: bool) Stdio {
+            return .{
+                .success = t,
+                .out = sio.out,
+                .err = sio.err,
+            };
         }
     };
 
@@ -281,41 +353,44 @@ pub const Source = struct {
 
     pub fn buildAll(src: *Source, a: Allocator, io: Io) !RunResults {
         const mbuild = try src.buildMain(a, io);
+        log.info("build {s}", .{if (mbuild.success) "successful" else "failed"});
         const tests = try src.buildTests(a, io);
+        log.info("tests {s}", .{if (mbuild.success) "successful" else "failed"});
         const docs = try src.buildDocs(a, io);
+        log.info("docs {s}", .{if (mbuild.success) "successful" else "failed"});
         // save build output
-        return .{
+        return .{ .active = .{
             .build = mbuild,
             .tests = tests,
             .docs = docs,
-        };
+        } };
     }
 
     pub fn buildMain(src: *Source, a: Allocator, io: Io) !Stdio {
         log.info("CI.Source buildMain", .{});
         var stdio: Stdio = .init(a);
-        try src.exec(&.{ "zig", "build", "--summary", "all" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
+        const term = try src.exec(&.{ "zig", "build", "--summary", "all" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
         log.debug("stdout: '{s}'", .{stdio.out.written()});
         log.debug("stderr: '{s}'", .{stdio.err.written()});
-        return stdio;
+        return stdio.term(term);
     }
 
     pub fn buildTests(src: *Source, a: Allocator, io: Io) !Stdio {
         log.info("CI.Source buildTests", .{});
         var stdio: Stdio = .init(a);
-        try src.exec(&.{ "zig", "build", "--summary", "all", "test" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
+        const term = try src.exec(&.{ "zig", "build", "--summary", "all", "test" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
         log.debug("stdout: '{s}'", .{stdio.out.written()});
         log.debug("stderr: '{s}'", .{stdio.err.written()});
-        return stdio;
+        return stdio.term(term);
     }
 
     pub fn buildDocs(src: *Source, a: Allocator, io: Io) !Stdio {
         log.info("CI.Source buildDocs", .{});
         var stdio: Stdio = .init(a);
-        try src.exec(&.{ "zig", "build", "--summary", "all", "docs" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
+        const term = try src.exec(&.{ "zig", "build", "--summary", "all", "docs" }, &stdio.out.writer, &stdio.err.writer, null, a, io);
         log.debug("stdout: '{s}'", .{stdio.out.written()});
         log.debug("stderr: '{s}'", .{stdio.err.written()});
-        return stdio;
+        return stdio.term(term);
     }
 
     pub fn raze(src: *Source, a: Allocator, io: Io) void {
@@ -331,7 +406,7 @@ pub const Source = struct {
         stdin: ?[]const u8,
         a: Allocator,
         io: Io,
-    ) !void {
+    ) !bool {
         const map: std.process.Environ.Map = .{
             .array_hash_map = try .init(
                 a,
@@ -366,10 +441,12 @@ pub const Source = struct {
         var errr = child.stderr.?.reader(io, &.{});
         _ = try errr.interface.streamRemaining(stderr);
 
-        _ = child.wait(io) catch |err| {
+        const term = child.wait(io) catch |err| {
             log.warn("{any}: {}", .{ argv, err });
             return err;
         };
+
+        return term.exited == 0;
     }
 };
 

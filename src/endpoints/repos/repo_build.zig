@@ -30,12 +30,26 @@ fn status(f: *Frame) Error!void {
 
     const meta_head = S.MetaHeadHtml{ .open_graph = .{} };
     const body_header: S.BodyHeaderHtml = f.template_data.get(S.BodyHeaderHtml).?.*;
+
+    const build, const tests, const docs = switch (results) {
+        .saved => |saved| .{
+            saved.steps.items[0].payload,
+            saved.steps.items[1].payload,
+            saved.steps.items[2].payload,
+        },
+        .active => |*active| .{
+            active.build.err.written(),
+            active.tests.err.written(),
+            active.docs.err.written(),
+        },
+    };
+
     var page = BuildPage.init(.{
         .meta_head = meta_head,
         .body_header = body_header,
-        .build_output = .safe(results.build.err.written()),
-        .test_output = .safe(results.tests.err.written()),
-        .docs_output = .safe(results.docs.err.written()),
+        .build_output = .safe(build),
+        .test_output = .safe(tests),
+        .docs_output = .safe(docs),
     });
 
     try f.sendPage(&page);

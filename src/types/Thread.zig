@@ -67,9 +67,9 @@ pub fn new(T: type, src: *const T, io: Io) !Thread {
             const ci: *const types.CI = src;
             var h: Hasher = .init(.{});
             h.update(ci.repo);
-            h.update(asBytes(&ci.index));
-            h.update(asBytes(&ci.created));
+            h.update(ci.commit_sha.hash.bytes());
             h.update(ci.trigger);
+            h.update(asBytes(&ci.created));
             h.final(&thread.src_hash);
         },
         //        types.RepoMeta => thread.src_hash = @splat('0'),
@@ -108,7 +108,7 @@ pub fn commit(t: *const Thread, io: Io) !void {
     try t.commitNow(io);
 }
 
-fn commitNow(t: *const Thread, io: Io) !void {
+pub fn commitNow(t: *const Thread, io: Io) !void {
     var writer = try TypeIo.commitExtra(t, io);
     defer writer.file.close(io);
     var w_b: [2048]u8 = undefined;

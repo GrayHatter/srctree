@@ -35,6 +35,8 @@ pub fn addComment(
     }
     var buf: [2048]u8 = undefined;
     const loc = try std.fmt.bufPrint(&buf, "/repo/{s}/" ++ location ++ "/{x}", .{ repo, id });
+
+    //try events.newComment(repo, id, loc, msg orelse .empty, f.io);
     f.redirect(loc, .see_other) catch unreachable;
 }
 

@@ -1,22 +1,18 @@
-index: usize,
+repo: []const u8,
+commit_sha: GitSha = .zeros,
 created: types.Timestamp = 0,
 updated: types.Timestamp = 0,
-repo: []const u8,
-hash: Hash = @splat(0),
-revision: usize = 0,
 trigger: []const u8 = &.{},
 result: Result = .unknown,
-thread_id: usize = 0,
+thread: Thread = .empty,
 
-thread: ?*Thread = null,
 steps: ArrayList(Step) = .empty,
 
 pub const CI = @This();
 pub const Hash = types.DefaultHash;
 pub const Step = @import("CI/Step.zig");
 
-pub const empty: CI = .{
-    .index = 0,
+pub const blank: CI = .{
     .repo = &.{},
 };
 
@@ -38,42 +34,36 @@ pub const type_version = 0;
 const TypeIo = types.TypedIo(CI);
 
 pub fn typeIdent(ci: CI, w: *Io.Writer) !void {
-    try w.print("{x}", .{ci.index});
+    try w.print("{s}.{x}", .{ ci.repo, ci.commit_sha.hash.bytes() });
 }
 
-pub fn new(repo: []const u8, trigger: []const u8, src_hash: Hash, io: Io) !CI {
-    const max: usize = try TypeIo.Index.next(io);
+pub fn new(repo: []const u8, trigger: []const u8, sha: GitSha, io: Io) !CI {
     const now = Io.Clock.real.now(io).toSeconds();
     var ci = CI{
-        .index = max,
+        .repo = repo,
+        .commit_sha = sha,
         .created = now,
         .updated = now,
-        .repo = repo,
-        .hash = src_hash,
-        .revision = 0,
         .trigger = trigger,
         .result = .pending,
     };
+    defer ci.commit(io) catch {};
 
-    var thread: Thread = try .new(CI, &ci, io);
-    try thread.commit(io);
-    ci.thread_id = thread.index;
-    try ci.commit(io);
+    ci.thread = try .new(CI, &ci, io);
     return ci;
 }
 
-pub fn open(index: usize, a: Allocator, io: Io) !CI {
-    const max = TypeIo.Index.current(io) catch return error.FSFault;
-    if (index > max) return error.CIDoesNotExist;
-    const reader = try TypeIo.Index.readerByIndex(index, a, io);
-    var ci: CI = try TypeIo.read(&reader);
+pub fn open(repo: []const u8, sha: GitSha, a: Allocator, io: Io) !CI {
+    var ci: CI = .blank;
+    ci.repo = repo;
+    ci.commit_sha = sha;
+    var reader = try TypeIo.loadData(&ci, a, io);
+    defer reader.file.close(io);
+    TypeIo.read(&ci, &reader.interface);
 
-    while (reader.takeDelimiterInclusive('\n') catch null) |line| {
-        if (std.mem.cutPrefix(u8, line[0 .. line.len - 1], "step: ")) |prefix| {
-            const step_index: usize = parseInt(usize, prefix, 0) catch 0;
-            try ci.steps.append(a, try .open(step_index, a, io));
-        }
-    }
+    try ci.steps.append(a, try .open(repo, sha, "build", a, io));
+    try ci.steps.append(a, try .open(repo, sha, "tests", a, io));
+    try ci.steps.append(a, try .open(repo, sha, "docs", a, io));
     return ci;
 }
 
@@ -88,29 +78,9 @@ pub fn commit(ci: *const CI, io: Io) !void {
     writer.interface.buffer = &w_b;
 
     for (ci.steps.items) |step| {
-        step.commit(io) catch continue;
         try writer.interface.print("{f}\n", .{step});
     }
     try writer.interface.flush();
-}
-
-pub fn loadThread(ci: *CI, a: Allocator, io: Io) !*Thread {
-    if (ci.thread) |thr| return thr;
-    const t = try a.create(Thread);
-    t.* = Thread.open(ci.thread_id, a, io) catch |err| t: {
-        log.err("Error loading thread!! {} old_id: {}", .{ err, ci.thread_id });
-        const thread = Thread.new(CI, ci, io) catch |err2| {
-            log.err(" unable to create new {}", .{err2});
-            return error.UnableToLoadThread;
-        };
-        log.err("new thread_id {}", .{thread.index});
-        ci.thread_id = thread.index;
-        try ci.commit(io);
-        break :t thread;
-    };
-
-    ci.thread = t;
-    return t;
 }
 
 pub const Comment = struct {
@@ -123,10 +93,16 @@ test CI {
     const io = std.testing.io;
     var tempdir = std.testing.tmpDir(.{});
     defer tempdir.cleanup();
-    try types.init(try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } }), io);
+    try types.init(
+        try tempdir.dir.createDirPathOpen(io, @tagName(type_prefix), .{ .open_options = .{ .iterate = true } }),
+        io,
+    );
 
-    var ci = try CI.new("srctree", "trigger", @splat('z'), io);
+    var ci = try CI.new("srctree", "trigger", .{ .hash = .{ .sha1 = @splat('G') } }, io);
     types.testing.maskTime(&ci, io);
+    ci.thread.src_hash = @splat('9');
+    ci.thread.created = 0;
+    ci.thread.updated = ci.updated;
     ci.result = .err;
 
     var writer = std.Io.Writer.Allocating.init(a);
@@ -135,15 +111,13 @@ test CI {
 
     const v1_text: []const u8 =
         \\# continuous_integration/0
-        \\index: 1
+        \\repo: srctree
+        \\commit_sha: 4747474747474747474747474747474747474747
         \\created: 1744830464
         \\updated: 1744830464
-        \\repo: srctree
-        \\hash: 7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a7a
-        \\revision: 0
         \\trigger: trigger
         \\result: err
-        \\thread_id: 1
+        \\thread: idx=1 count=0 updated=1744830464 hash=3939393939393939393939393939393939393939393939393939393939393939
         \\
         \\
     ;
@@ -151,7 +125,7 @@ test CI {
     try std.testing.expectEqualStrings(v1_text, writer.written());
 
     var r: Io.Reader = .fixed(writer.written());
-    var read: CI = .empty;
+    var read: CI = .blank;
     TypeIo.read(&read, &r);
     try std.testing.expectEqualDeep(ci, read);
 }
@@ -165,5 +139,6 @@ const bufPrint = std.fmt.bufPrint;
 const parseInt = std.fmt.parseInt;
 
 const types = @import("../types.zig");
+const GitSha = types.GitSha;
 const Viewers = types.Viewers;
 const Thread = types.Thread;
